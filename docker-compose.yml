@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  ton618-pkm:
+    build: .
+    container_name: ton618-pkm
+    restart: unless-stopped
+    ports:
+      - "6180:6180"
+    environment:
+      - PORT=6180
+      - POLL_INTERVAL_SEC=30
+      - AUTH_USER=admin
+      - AUTH_PASS=ton618_secret
+      - BLEVE_INDEX_DIR=/app/data/ton618.bleve
+      - OLLAMA_HOST=http://192.168.15.6:11434
+      - OLLAMA_MODEL=nomic-embed-text
+    volumes:
+      - ./docs:/docs
+      - ./state:/app/state
+      - ./data:/app/data
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama

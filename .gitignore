@@ -1,0 +1,43 @@
+# === Go ===
+etl/vortex_bin
+etl/.test-data/
+etl/*.test
+etl/*.out
+*.exe
+
+# === Node / Frontend ===
+web/node_modules/
+web/dist/
+web/.vite/
+
+# === Runtime Data (fingerprint do usuario) ===
+docs/
+data/
+state/
+ton618_data/
+/home/giobon/ton618_data/
+*.db
+*.bleve/
+
+# === Environment ===
+.env
+.env.local
+
+# === Docker ===
+ollama_data/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Build artifacts ===
+*.zip
+*.tar.gz
+vortex_bin

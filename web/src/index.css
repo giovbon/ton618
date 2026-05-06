@@ -1,0 +1,363 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+    --font-sans: "Inter", system-ui, sans-serif;
+
+    @keyframes chaos {
+        0% {
+            transform: translate(0, 0) scale(1.25);
+        }
+
+        20% {
+            transform: translate(-1.5px, 1.5px) scale(1.25);
+        }
+
+        40% {
+            transform: translate(-1.5px, -1.5px) scale(1.25);
+        }
+
+        60% {
+            transform: translate(1.5px, 1.5px) scale(1.25);
+        }
+
+        80% {
+            transform: translate(1.5px, -1.5px) scale(1.25);
+        }
+
+        100% {
+            transform: translate(0, 0) scale(1.25);
+        }
+    }
+
+    @keyframes fast-spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    --animate-chaos: chaos 0.1s linear infinite;
+    --animate-fast-spin: fast-spin 0.4s linear infinite;
+}
+
+html {
+    color-scheme: dark;
+}
+
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: thin;
+    scrollbar-color: #27272a transparent;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background-color: #09090b;
+    /* zinc-950 matched */
+}
+
+#app {
+    width: 100%;
+    min-height: 100vh;
+    margin: 0 auto;
+}
+
+/* ProseMirror Tiptap Overrides */
+.ProseMirror hr {
+    cursor: pointer;
+    padding: 8px 0;
+    margin: 2em 0;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background-clip: content-box;
+    transition: all 0.2s ease;
+}
+
+.ProseMirror hr.ProseMirror-selectednode {
+    outline: 2px solid #0ea5e9;
+    border-top-color: #0ea5e9;
+    border-radius: 2px;
+}
+
+/* ZincSearch Highlighting Styles */
+.zinc-hl {
+    background-color: rgba(14, 165, 233, 0.25);
+    /* sky-500/25 */
+    color: #38bdf8;
+    /* sky-400 */
+    font-weight: 700;
+    padding: 0 4px;
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.1);
+    font-style: normal;
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.grainy {
+    /* Efeito removido a pedido do usuário */
+}
+
+.premium-card {
+    box-shadow:
+        inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+/* ─────────── Editor Overlay (tela cheia, não usa .grainy) ─────────── */
+/* position:fixed no elemento raiz NÃO pode ter um ancestral com position:relative */
+/* Por isso o editor usa esta classe separada, que não define position */
+.editor-root {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    background-color: #282c34;
+    animation: editorFadeIn 0.15s ease-out both;
+}
+
+@keyframes editorFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Animações usadas por outros componentes */
+.animate-in.fade-in {
+    animation: editorFadeIn 0.2s ease-out both;
+}
+
+.animate-in.duration-300 {
+    animation-duration: 0.3s;
+}
+
+.animate-in.duration-500 {
+    animation-duration: 0.5s;
+}
+
+.animate-in.duration-700 {
+    animation-duration: 0.7s;
+}
+
+.animate-in.zoom-in-95 {
+    animation: zoomIn95 0.2s ease-out both;
+}
+
+@keyframes highlightBorder {
+    0% {
+        border-color: #0ea5e9;
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.4);
+        transform: scale(1.01);
+    }
+
+    100% {
+        border-color: rgba(39, 39, 42, 0.6);
+        box-shadow: none;
+        transform: scale(1);
+    }
+}
+
+.note-highlight {
+    animation: highlightBorder 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 20;
+}
+
+/* Esconder barra de rolagem mas manter funcionalidade */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Customização Driver.js (Tutorial) */
+.driver-popover {
+    background-color: rgba(24, 24, 27, 0.9) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5) !important;
+    color: #f4f4f5 !important;
+    padding: 24px !important;
+    max-width: 320px !important;
+}
+
+.driver-popover-title {
+    font-family: "Inter", sans-serif !important;
+    font-weight: 900 !important;
+    font-size: 18px !important;
+    color: #fff !important;
+    letter-spacing: -0.02em !important;
+    margin-bottom: 8px !important;
+}
+
+.driver-popover-description {
+    font-family: "Inter", sans-serif !important;
+    font-size: 14px !important;
+    color: #a1a1aa !important;
+    line-height: 1.6 !important;
+}
+
+.driver-popover-progress-text {
+    color: #71717a !important;
+    font-weight: 800 !important;
+    font-size: 10px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+}
+
+.driver-popover-next-btn,
+.driver-popover-prev-btn,
+.driver-popover-close-btn {
+    background: #27272a !important;
+    color: #e4e4e7 !important;
+    border: 1px solid #3f3f46 !important;
+    text-shadow: none !important;
+    font-weight: 800 !important;
+    font-size: 11px !important;
+    text-transform: uppercase !important;
+    padding: 8px 16px !important;
+    border-radius: 10px !important;
+    transition: all 0.2s !important;
+}
+
+.driver-popover-next-btn:hover {
+    background: #0ea5e9 !important;
+    color: #fff !important;
+    border-color: #38bdf8 !important;
+}
+
+.driver-popover-arrow-side-bottom {
+    border-bottom-color: rgba(24, 24, 27, 0.9) !important;
+}
+
+.driver-popover-arrow-side-top {
+    border-top-color: rgba(24, 24, 27, 0.9) !important;
+}
+
+.driver-popover-arrow-side-left {
+    border-left-color: rgba(24, 24, 27, 0.9) !important;
+}
+
+.driver-popover-arrow-side-right {
+    border-right-color: rgba(24, 24, 27, 0.9) !important;
+}
+
+/* TipTap Table Styles */
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+  font-size: 0.875rem;
+}
+.prose th {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid #27272a;
+}
+.prose td {
+  padding: 8px 14px;
+  border: 1px solid #27272a;
+  color: #a1a1aa;
+}
+.prose tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+.ProseMirror .selectedCell {
+  background: rgba(14, 165, 233, 0.1);
+  outline: 2px solid #0ea5e9;
+}
+
+/* TipTap Table Controls */
+.ProseMirror .tableWrapper {
+  position: relative;
+}
+.ProseMirror .tableWrapper .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #0ea5e9;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: all;
+  z-index: 20;
+}
+.ProseMirror .tableWrapper:hover .column-resize-handle {
+  opacity: 0.5;
+}
+.ProseMirror .selectedCell::after {
+  background: rgba(14, 165, 233, 0.15);
+  z-index: 2;
+}
+/* Table add column/row buttons */
+.ProseMirror .grip-column,
+.ProseMirror .grip-row {
+  z-index: 10;
+}
+.ProseMirror .grip-column::before {
+  content: '+';
+  color: #0ea5e9;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ProseMirror .grip-column:hover::before,
+.ProseMirror .grip-row:hover::before {
+  background: #0ea5e9;
+  color: #fff;
+  border-color: #0ea5e9;
+}
