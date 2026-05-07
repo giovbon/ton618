@@ -99,6 +99,7 @@ func main() {
 	mux.HandleFunc("/api/graph/map", apiCtx.HandleKnowledgeMap)
 	mux.HandleFunc("/api/graph/reindex", apiCtx.HandleReindexVectors)
 	mux.HandleFunc("/api/graph/status", apiCtx.HandleKnowledgeMapStatus)
+	mux.HandleFunc("/api/graph/query-point", apiCtx.HandleGraphQueryPoint)
 	mux.HandleFunc("/api/bundle", apiCtx.HandleBundleUpload)
 	mux.HandleFunc("/api/backup/download", apiCtx.HandleDownloadBackup)
 	mux.HandleFunc("/api/backup/size", apiCtx.HandleGetBackupSize)
@@ -138,6 +139,7 @@ func main() {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
+
 		protectedHandler.ServeHTTP(w, r)
 	})
 

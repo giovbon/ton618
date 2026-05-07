@@ -37,7 +37,7 @@ PKM (Personal Knowledge Management) de alta performance. Motor de busca Bleve em
 | Build Vite | ✅ OK | ~5s, ~8 arquivos JS, ~5MB |
 | Editor TipTap | ✅ OK | WYSIWYG, slash commands, tabelas (add/delete linhas/colunas), BubbleMenu |
 | Busca | ✅ OK | Virtualizada com Virtuoso, compacta e global |
-| Knowledge Map | ✅ OK | PCA + K-Means, nome no hover |
+| Knowledge Map | ✅ OK | PCA + K-Means, pesquisa semântica visual (Query Point), hover dinâmico |
 | Configurações | ✅ OK | Abas estáveis (Pesos, Visão, Backup, Manutenção) |
 | Tags | ✅ OK | Autocomplete |
 | Upload | ✅ OK | PDF + Imagem com OCR |
@@ -185,6 +185,7 @@ docker compose -f docker-compose.prod.yml up -d  # Produção
 
 | Data | Descrição |
 |------|-----------|
+| 2026-05-07 | **Pesquisa no Mapa Semântico (Query Point).** Nova funcionalidade "Consultar o Mapa" (?) que projeta uma consulta de texto diretamente no mapa semântico. Exibe conexões visuais animadas para as 3 notas mais relevantes (top-3 similares). Botão dedicado na UI do mapa e endpoint `/api/graph/query-point`. |
 | 2026-05-06 | **Busca por frase exata corrigida.** `NewPhraseQuery` trocado por `NewMatchPhraseQuery` (analisador Portugues estava quebrando stemming). `IncludeTermVectors` removido (ja era default). Teste `TestExecuteSearch_PhraseExact` adicionado para regressao. |
 | 2026-05-06 | **Tabelas no editor TipTap.** Implementação completa: extensões `Table/TableCell/TableHeader/TableRow`, slash command `/table`, BubbleMenu com add/delete linha/coluna, CSS escuro para tabelas, botão deletar tabela inteira. |
 | 2026-05-06 | **DocsPanel (documentação interna).** Componente que lê `web/public/help/README.md` e renderiza via função inline `renderMarkdown()`. Suporta SVGs reais dos botões via `:icon-nome:`. Botão 📖 no painel superior. Documento inclui guia de busca, super busca (Dataview), editor, WikiLinks, upload, configurações. |

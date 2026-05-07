@@ -19,6 +19,7 @@
     "@tanstack/react-query": "^5.99.2",
     "@tiptap/extension-bubble-menu": "^3.22.5",
     "@tiptap/extension-floating-menu": "^3.22.5",
+    "@tiptap/extension-image": "^3.22.5",
     "@tiptap/extension-mention": "^3.22.5",
     "@tiptap/extension-placeholder": "^3.22.5",
     "@tiptap/extension-table": "^3.22.5",

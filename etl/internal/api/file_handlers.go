@@ -363,8 +363,10 @@ func (ctx *HandlerContext) createOCRNote(imageRelPath, text string) {
 	noteName := fmt.Sprintf("ocr_%s_%s.md", time.Now().Format("20060102_150405"), cleanName)
 	notePath := filepath.Join(notesDir, noteName)
 
-
 	var sb strings.Builder
+	sb.WriteString("---\n")
+	sb.WriteString("tags: [imagem]\n")
+	sb.WriteString("---\n\n")
 	sb.WriteString(fmt.Sprintf("# OCR: %s\n\n", cleanName))
 	sb.WriteString(fmt.Sprintf("![%s](/api/file?name=%s)\n\n", cleanName, imageRelPath))
 	sb.WriteString("## Texto Extraído\n\n")
@@ -408,10 +410,9 @@ func (ctx *HandlerContext) createPDFNote(pdfRelPath, text string) {
 	noteName := fmt.Sprintf("doc_%s_%s.md", time.Now().Format("20060102_150405"), cleanName)
 	notePath := filepath.Join(notesDir, noteName)
 
-
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("# PDF: %s\n\n", cleanName))
-	sb.WriteString(fmt.Sprintf("[📖 Abrir Documento PDF](/api/file?name=%s)\n\n", pdfRelPath))
+	sb.WriteString(fmt.Sprintf("[📖 Abrir Documento PDF](/docs/%s)\n\n", pdfRelPath))
 	sb.WriteString("## Conteúdo Extraído\n\n")
 	sb.WriteString(text)
 

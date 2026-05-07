@@ -63,16 +63,15 @@ export const SearchResultCard = ({
     <li
       ref={ref as any}
       className={`relative premium-card bg-zinc-900/80 p-5 rounded-2xl border transition-all duration-300 group overflow-hidden scroll-mt-[160px]
-        ${
-          isLastCollapsed
-            ? isArquivos
-              ? 'border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/20'
-              : isImagem
-                ? 'border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20'
-                : isPDF
-                  ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.15)] ring-1 ring-red-500/20'
-                  : 'border-sky-500/50 shadow-[0_0_20px_rgba(14,165,233,0.15)] ring-1 ring-sky-500/20'
-            : `border-zinc-800/60 ${isArquivos ? 'hover:border-indigo-500/30' : isImagem ? 'hover:border-emerald-500/30' : isPDF ? 'hover:border-red-500/30' : 'hover:border-zinc-700/60'}`
+        ${isLastCollapsed
+          ? isArquivos
+            ? 'border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/20'
+            : isImagem
+              ? 'border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20'
+              : isPDF
+                ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.15)] ring-1 ring-red-500/20'
+                : 'border-sky-500/50 shadow-[0_0_20px_rgba(14,165,233,0.15)] ring-1 ring-sky-500/20'
+          : `border-zinc-800/60 ${isArquivos ? 'hover:border-indigo-500/30' : isImagem ? 'hover:border-emerald-500/30' : isPDF ? 'hover:border-red-500/30' : 'hover:border-zinc-700/60'}`
         }
       `}
     >
@@ -146,11 +145,10 @@ export const SearchResultCard = ({
               <div className="flex flex-col gap-4">
                 <div
                   className={`flex flex-col gap-3 bg-zinc-950/80 p-5 rounded-xl border-2 group/ocr relative overflow-hidden order-first
-                  ${
-                    doc.tipo === 'pdf'
+                  ${doc.tipo === 'pdf'
                       ? 'border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
                       : 'border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
-                  }
+                    }
                 `}
                 >
                   <div className="flex items-center justify-between mb-1">

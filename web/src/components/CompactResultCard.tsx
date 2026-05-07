@@ -34,24 +34,24 @@ export const CompactResultCard = memo(
     isIndexing,
     isHighlighted,
   }: CompactResultCardProps) => {
-  const liRef = useRef<HTMLLIElement>(null);
+    const liRef = useRef<HTMLLIElement>(null);
 
-  useEffect(() => {
-    if (isHighlighted && liRef.current) {
-      const el = liRef.current;
-      el.style.borderColor = "#0ea5e9";
-      el.style.boxShadow = "0 0 20px rgba(14,165,233,0.4)";  
-      el.style.transform = "scale(1.01)";
-      el.style.transition = "all 2.5s cubic-bezier(0.4,0,0.2,1)";
-      // After animation, reset to normal
-      setTimeout(() => {
-        el.style.borderColor = "";
-        el.style.boxShadow = "";
-        el.style.transform = "";
-        el.style.transition = "";
-      }, 2500);
-    }
-  }, [isHighlighted]);
+    useEffect(() => {
+      if (isHighlighted && liRef.current) {
+        const el = liRef.current;
+        el.style.borderColor = "#0ea5e9";
+        el.style.boxShadow = "0 0 20px rgba(14,165,233,0.4)";
+        el.style.transform = "scale(1.01)";
+        el.style.transition = "all 2.5s cubic-bezier(0.4,0,0.2,1)";
+        // After animation, reset to normal
+        setTimeout(() => {
+          el.style.borderColor = "";
+          el.style.boxShadow = "";
+          el.style.transform = "";
+          el.style.transition = "";
+        }, 2500);
+      }
+    }, [isHighlighted]);
     const { ref, isInView } = useIntersectionObserver({ threshold: 0.1 });
 
     const isMedia = doc.tipo === "image" || doc.tipo === "pdf";

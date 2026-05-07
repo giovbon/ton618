@@ -61,6 +61,16 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
   const [reindexing, setReindexing] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [reindexStatus, setReindexStatus] = useState<ReindexStatus | null>(null);
 
+  // Query-point state
+  interface QueryPoint { x: number; y: number; nearest_notes: { id: string; x: number; y: number; dist: number }[]; query: string; }
+  const [queryPoint, setQueryPoint] = useState<QueryPoint | null>(null);
+  const [showQueryModal, setShowQueryModal] = useState(false);
+  const [queryInput, setQueryInput] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const queryPointRef = useRef<QueryPoint | null>(null);
+  queryPointRef.current = queryPoint;
+
   // Worker state
   const workerRef = useRef<Worker | null>(null);
   const [workerData, setWorkerData] = useState<{
@@ -203,88 +213,7 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
         ctx.shadowBlur = 0;
       });
 
-      // Render Labels with Collision Prevention and LOD
-      ctx.globalCompositeOperation = 'source-over';
-      const clusterAlpha = Math.max(0, Math.min(1, (8 - transform.k) / 4));
-      if (clusterAlpha > 0 || hoveredCluster) {
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // 1. Prepare labels and sort by importance (size)
-        const maxClusterSize = Math.max(...data.clusters.map((c) => c.size)) || 1;
-        const labels = data.clusters
-          .map((c) => {
-            const fs = Math.max(2, 14 / transform.k);
-
-            // LOD: Visibilidade baseada no peso (size) e zoom
-            const importance = c.size / maxClusterSize;
-            const lodScore = importance * transform.k;
-            const lodThreshold = 0.3;
-            const lodAlpha = Math.max(0, Math.min(1, (lodScore - lodThreshold) * 4));
-
-            const currentAlpha = clusterAlpha * lodAlpha;
-            return {
-              ...c,
-              fs,
-              currentAlpha,
-              width: c.label.length * fs * 0.55, // Estimated width
-              height: fs,
-              drawX: c.x,
-              drawY: c.y,
-            };
-          })
-          .filter((l) => l.currentAlpha > 0.05)
-          .sort((a, b) => b.size - a.size);
-
-        // 2. Simple Greedy Collision Resolver
-        const occupied: any[] = [];
-        labels.forEach((l) => {
-          const padding = 6 / transform.k;
-          const rect = {
-            x1: l.drawX - l.width / 2 - padding,
-            y1: l.drawY - l.height / 2 - padding,
-            x2: l.drawX + l.width / 2 + padding,
-            y2: l.drawY + l.height / 2 + padding,
-          };
-
-          const offsets = [0, l.height + padding * 2, -(l.height + padding * 2)];
-          for (const dy of offsets) {
-            const testY1 = rect.y1 + dy;
-            const testY2 = rect.y2 + dy;
-
-            const collision = occupied.find(
-              (r) => rect.x1 < r.x2 && rect.x2 > r.x1 && testY1 < r.y2 && testY2 > r.y1,
-            );
-
-            if (!collision || l.isHovered) {
-              l.drawY += dy;
-              occupied.push({ ...rect, y1: testY1, y2: testY2 });
-              break;
-            }
-          }
-        });
-
-        labels.forEach((l) => {
-          ctx.font = `900 ${l.fs}px "Inter", sans-serif`;
-
-          // Background glow/mask
-          ctx.fillStyle = `rgba(2, 6, 23, ${0.6 * l.currentAlpha})`;
-          ctx.beginPath();
-          const bgPadding = 4 / transform.k;
-          ctx.roundRect(
-            l.drawX - l.width / 2 - bgPadding,
-            l.drawY - l.height / 2 - bgPadding,
-            l.width + bgPadding * 2,
-            l.height + bgPadding * 2,
-            4 / transform.k,
-          );
-          ctx.fill();
-
-          ctx.fillStyle = `rgba(255, 255, 255, ${0.45 * l.currentAlpha})`;
-          ctx.fillText(l.label, l.drawX, l.drawY);
-          ctx.shadowBlur = 0;
-        });
-      }
+      // Labels were removed here
 
       const noteAlpha = Math.max(0, Math.min(1, (transform.k - 4) / 2));
       if (noteAlpha > 0 || hoveredNote) {
@@ -311,6 +240,48 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
           ctx.fillStyle = isHovered ? '#fff' : `rgba(148, 163, 184, ${0.7 * currentAlpha})`;
           ctx.fillText(display, note.x, note.y + 2 / transform.k);
         });
+      }
+
+      // Render Query Point
+      const qp = queryPointRef.current;
+      if (qp) {
+        const time = performance.now() / 1000;
+        const pulse = Math.sin(time * 3) * 0.5 + 0.5;
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Lines to nearest notes
+        qp.nearest_notes.forEach((n, i) => {
+          const alpha = [0.7, 0.5, 0.35][i] ?? 0.3;
+          const dashOffset = -time * 30;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(qp.x, qp.y);
+          ctx.lineTo(n.x, n.y);
+          ctx.strokeStyle = '#a78bfa';
+          ctx.lineWidth = (1.5 - i * 0.3) / transform.k;
+          ctx.globalAlpha = alpha * (0.6 + pulse * 0.4);
+          ctx.setLineDash([8 / transform.k, 14 / transform.k]);
+          ctx.lineDashOffset = dashOffset / transform.k;
+          ctx.shadowBlur = 12 / transform.k;
+          ctx.shadowColor = '#a78bfa';
+          ctx.stroke();
+          ctx.restore();
+        });
+
+        // Glowing query dot
+        ctx.save();
+        const dotR = 6 / transform.k;
+        ctx.beginPath();
+        ctx.arc(qp.x, qp.y, dotR * (1.4 + pulse * 0.6), 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(167,139,250,0.15)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(qp.x, qp.y, dotR, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.shadowBlur = 20 / transform.k;
+        ctx.shadowColor = '#a78bfa';
+        ctx.fill();
+        ctx.restore();
       }
 
       ctx.restore();
@@ -519,16 +490,101 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
           className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 px-4 py-2.5 rounded-2xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all shadow-2xl flex items-center gap-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           <span className="font-bold text-xs uppercase tracking-widest">Voltar</span>
         </button>
+
+        {/* Query button */}
+        {data && data.notes.length > 0 && (
+          <button
+            id="map-query-btn"
+            onClick={() => { setShowQueryModal(true); setQueryError(null); }}
+            title="Perguntar ao mapa"
+            className="bg-zinc-900/80 backdrop-blur-xl border border-violet-500/40 w-10 h-10 rounded-2xl text-violet-400 hover:text-white hover:bg-violet-900/40 transition-all shadow-2xl flex items-center justify-center text-lg font-bold"
+          >
+            ?
+          </button>
+        )}
+
+        {/* Clear query button */}
+        {queryPoint && (
+          <button
+            id="map-clear-query-btn"
+            onClick={() => setQueryPoint(null)}
+            title="Limpar pergunta"
+            className="bg-zinc-900/80 backdrop-blur-xl border border-violet-500/40 px-3 py-2.5 rounded-2xl text-violet-300 hover:text-white hover:bg-violet-900/40 transition-all shadow-2xl flex items-center gap-1.5 text-xs font-bold"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Limpar
+          </button>
+        )}
       </div>
+
+      {/* Query Modal */}
+      {showQueryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-violet-500/30 rounded-2xl shadow-2xl shadow-violet-900/30 p-6 w-full max-w-md mx-4">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-violet-300 mb-1">Consultar o Mapa</h3>
+            <p className="text-zinc-500 text-xs mb-4">Digite uma pergunta ou tema. O mapa mostrará as notas mais relevantes.</p>
+            <textarea
+              id="map-query-input"
+              autoFocus
+              rows={3}
+              value={queryInput}
+              onInput={(e) => setQueryInput((e.target as HTMLTextAreaElement).value)}
+              placeholder="Ex: Como funciona a memória de longo prazo?"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 resize-none outline-none focus:border-violet-500 transition-colors"
+            />
+            {queryError && <p className="text-red-400 text-xs mt-2">{queryError}</p>}
+            {queryPoint && (
+              <p className="text-violet-400/70 text-xs mt-2 truncate">✦ Mapeado: &quot;{queryPoint.query}&quot;</p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => { setShowQueryModal(false); setQueryInput(''); }}
+                className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl hover:bg-zinc-700 transition-all text-sm"
+              >Cancelar</button>
+              <button
+                id="map-query-submit"
+                disabled={queryLoading || !queryInput.trim()}
+                onClick={async () => {
+                  if (!queryInput.trim()) return;
+                  setQueryLoading(true);
+                  setQueryError(null);
+                  try {
+                    const res = await fetch('/api/graph/query-point', {
+                      method: 'POST',
+                      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ query: queryInput.trim() }),
+                    });
+                    if (!res.ok) {
+                      const txt = await res.text();
+                      setQueryError(txt || 'Erro ao processar pergunta.');
+                    } else {
+                      const result = await res.json();
+                      setQueryPoint({ ...result, query: queryInput.trim() });
+                      setShowQueryModal(false);
+                      setQueryInput('');
+                    }
+                  } catch {
+                    setQueryError('Erro de conexão.');
+                  } finally {
+                    setQueryLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2 bg-violet-600 border border-violet-500/50 text-white rounded-xl hover:bg-violet-500 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {queryLoading ? (
+                  <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processando...</>
+                ) : '✦ Mapear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {data && data.notes.length > 0 && (
         <div className="absolute bottom-6 left-6 z-20 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 px-4 py-2 rounded-2xl text-[10px] text-sky-400/60 font-bold uppercase tracking-widest">

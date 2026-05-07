@@ -49,9 +49,9 @@ export const ResultActions = memo(
     return (
       <div className="flex items-center gap-1.5 shrink-0 transition-opacity opacity-100">
         {doc.tipo === 'note' ||
-        doc.tipo === 'link' ||
-        doc.tipo === 'markdown' ||
-        doc.tipo === 'documento' ? (
+          doc.tipo === 'link' ||
+          doc.tipo === 'markdown' ||
+          doc.tipo === 'documento' ? (
           <button
             onClick={handleEdit as any}
             disabled={isOpening}

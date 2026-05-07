@@ -131,9 +131,8 @@ export const ResultIcon = memo(({ doc, isIndexing }: ResultIconProps) => {
       {renderBaseIcon()}
       {isVectorizable && (
         <div
-          className={`absolute bottom-0.5 right-0.5 w-2 h-2 flex-none aspect-square rounded-full border border-zinc-950 shadow-sm z-30 ${
-            isIndexing ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'
-          }`}
+          className={`absolute bottom-0.5 right-0.5 w-2 h-2 flex-none aspect-square rounded-full border border-zinc-950 shadow-sm z-30 ${isIndexing ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'
+            }`}
           title={isIndexing ? 'Vetorizando (Ollama)...' : 'Vetorização concluída'}
         />
       )}

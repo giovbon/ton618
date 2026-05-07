@@ -77,9 +77,9 @@ const TiptapEditor = ({
     const checkMobile = () => {
       setIsMobile(
         window.innerWidth < 768 ||
-          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-            navigator.userAgent,
-          ),
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent,
+        ),
       );
     };
     checkMobile();
@@ -361,11 +361,10 @@ const TiptapEditor = ({
           >
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded-lg transition-all ${
-                editor.isActive("bold")
-                  ? "bg-sky-500 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-              }`}
+              className={`p-1.5 rounded-lg transition-all ${editor.isActive("bold")
+                ? "bg-sky-500 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
               title="Negrito"
             >
               <svg
@@ -384,11 +383,10 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded-lg transition-all ${
-                editor.isActive("italic")
-                  ? "bg-sky-500 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-              }`}
+              className={`p-1.5 rounded-lg transition-all ${editor.isActive("italic")
+                ? "bg-sky-500 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
               title="Itálico"
             >
               <svg
@@ -407,11 +405,10 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={`p-1.5 rounded-lg transition-all ${
-                editor.isActive("strike")
-                  ? "bg-sky-500 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-              }`}
+              className={`p-1.5 rounded-lg transition-all ${editor.isActive("strike")
+                ? "bg-sky-500 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
               title="Tachado"
             >
               <svg
@@ -433,11 +430,10 @@ const TiptapEditor = ({
 
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-1.5 rounded-lg transition-all ${
-                editor.isActive("code")
-                  ? "bg-emerald-500 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-              }`}
+              className={`p-1.5 rounded-lg transition-all ${editor.isActive("code")
+                ? "bg-emerald-500 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
               title="Código Inline"
             >
               <svg
@@ -634,11 +630,10 @@ const TiptapEditor = ({
           <div className="fixed bottom-0 left-0 right-0 z-[110] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 p-3 flex items-center justify-around animate-in slide-in-from-bottom-full duration-200 pb-safe">
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-2 rounded-xl transition-all ${
-                editor.isActive("bold")
-                  ? "bg-sky-500 text-white shadow-lg scale-110"
-                  : "text-zinc-400"
-              }`}
+              className={`p-2 rounded-xl transition-all ${editor.isActive("bold")
+                ? "bg-sky-500 text-white shadow-lg scale-110"
+                : "text-zinc-400"
+                }`}
             >
               <svg
                 className="w-5 h-5"
@@ -656,11 +651,10 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-2 rounded-xl transition-all ${
-                editor.isActive("italic")
-                  ? "bg-sky-500 text-white shadow-lg scale-110"
-                  : "text-zinc-400"
-              }`}
+              className={`p-2 rounded-xl transition-all ${editor.isActive("italic")
+                ? "bg-sky-500 text-white shadow-lg scale-110"
+                : "text-zinc-400"
+                }`}
             >
               <svg
                 className="w-5 h-5"
@@ -678,11 +672,10 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={`p-2 rounded-xl transition-all ${
-                editor.isActive("strike")
-                  ? "bg-sky-500 text-white shadow-lg scale-110"
-                  : "text-zinc-400"
-              }`}
+              className={`p-2 rounded-xl transition-all ${editor.isActive("strike")
+                ? "bg-sky-500 text-white shadow-lg scale-110"
+                : "text-zinc-400"
+                }`}
             >
               <svg
                 className="w-5 h-5"
@@ -700,11 +693,10 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-2 rounded-xl transition-all ${
-                editor.isActive("code")
-                  ? "bg-emerald-500 text-white shadow-lg scale-110"
-                  : "text-zinc-400"
-              }`}
+              className={`p-2 rounded-xl transition-all ${editor.isActive("code")
+                ? "bg-emerald-500 text-white shadow-lg scale-110"
+                : "text-zinc-400"
+                }`}
             >
               <svg
                 className="w-5 h-5"
