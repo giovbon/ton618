@@ -553,7 +553,9 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 					return
 				}
 
-				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, cfg.OllamaHost)
+				effectiveHost := appState.GetEffectiveOllamaHost(cfg)
+				log.Printf("[Sync] Usando Ollama em %s para vetorizar: %s\n", effectiveHost, fname)
+				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
 				vec, err := embFunc(context.Background(), string(content))
 				if err != nil {
 					log.Printf("[Sync] Erro ao gerar embedding para %s: %v\n", fname, err)
@@ -562,6 +564,7 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 					for _, doc := range fragments {
 						appState.SetVectorHash(doc.ID, doc.VectorHash)
 					}
+					appState.ClearNoteProjections() // Força recalcular PCA no próximo acesso ao mapa
 					log.Printf("[Sync] Vetorização concluída para: %s\n", fname)
 				}
 				SetFileIndexing(fname, false)

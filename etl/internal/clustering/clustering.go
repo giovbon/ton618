@@ -49,8 +49,12 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 
 	for i, id := range ids {
 		vec := noteVectors[id]
-		for j, v := range vec {
-			data[i*cols+j] = float64(v)
+		for j := 0; j < cols; j++ {
+			if j < len(vec) {
+				data[i*cols+j] = float64(vec[j])
+			} else {
+				data[i*cols+j] = 0 // Padding se a dimensão for menor
+			}
 		}
 	}
 

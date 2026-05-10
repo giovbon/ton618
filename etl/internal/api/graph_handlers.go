@@ -67,11 +67,16 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 	for id, vec := range allVectors {
 		// 1. Verificar tags (rápido - cache em RAM)
 		tags := ctx.State.GetFileTags(id)
-		hasEmbed := false
-		for _, t := range tags {
-			if strings.ToLower(t) == "embed" {
-				hasEmbed = true
-				break
+		hasEmbed := ingest.HasEmbedTag(tags)
+
+		if !hasEmbed {
+			// Fallback: Verificar se o texto bruto no arquivo contém #embed (Modo lento mas seguro para notas novas)
+			absPath := filepath.Join(ctx.Cfg.DocsDir, id)
+			content, err := os.ReadFile(absPath)
+			if err == nil {
+				if strings.Contains(string(content), "#embed") {
+					hasEmbed = true
+				}
 			}
 		}
 
@@ -80,7 +85,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 			continue
 		}
 
-		// 2. Fallback: Verificar se o texto bruto em algum fragmento contém #embed
+		// 2. Fallback Bleve: Verificar se algum fragmento contém #embed
 		q := bleve.NewTermQuery(id)
 		q.SetField("arquivo")
 		searchReq := bleve.NewSearchRequest(q)
@@ -301,9 +306,18 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 
 				// Whitelist obrigatório: Apenas notas com #embed são reindexadas
 				tags := ctx.State.GetFileTags(arquivo)
-				if ingest.HasEmbedTag(tags) {
-					absPath := filepath.Join(cfg.DocsDir, arquivo)
-					content, err := os.ReadFile(absPath)
+				hasEmbed := ingest.HasEmbedTag(tags)
+
+				// Se não estiver no cache, tenta ler o arquivo diretamente
+				absPath := filepath.Join(cfg.DocsDir, arquivo)
+				content, err := os.ReadFile(absPath)
+				if !hasEmbed && err == nil {
+					if strings.Contains(string(content), "#embed") {
+						hasEmbed = true
+					}
+				}
+
+				if hasEmbed {
 					if err == nil {
 						filesToProcess[arquivo] = string(content)
 					} else {
@@ -348,7 +362,9 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 				ctxEmbed, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 				defer cancel()
 
-				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, cfg.OllamaHost)
+				effectiveHost := ctx.State.GetEffectiveOllamaHost(cfg)
+				log.Printf("[Reindex] Usando Ollama em %s para reindexar: %s\n", effectiveHost, fname)
+				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
 				vec, err := embFunc(ctxEmbed, txt)
 				if err != nil {
 					log.Printf("[Reindex] ERRO em %s: %v\n", fname, err)

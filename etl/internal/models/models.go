@@ -39,10 +39,12 @@ type SearchHit struct {
 }
 
 type AppSettings struct {
-	GoogleVisionKey  string `json:"google_vision_key"`
-	SemanticEnable   bool   `json:"semantic_enable"`
-	SemanticStrategy string `json:"semantic_strategy"` // "whitelist" ou "blacklist"
-	Language         string `json:"language"`          // "pt-BR", "en-US"
+	GoogleVisionKey  string   `json:"google_vision_key"`
+	SemanticEnable   bool     `json:"semantic_enable"`
+	SemanticStrategy string   `json:"semantic_strategy"` // "whitelist" ou "blacklist"
+	Language         string   `json:"language"`          // "pt-BR", "en-US"
+	OllamaHosts      []string `json:"ollama_hosts"`       // Lista de URLs do Ollama
+	OllamaHostActive string   `json:"ollama_host_active"` // URL ativa no momento
 }
 
 type SystemState struct {

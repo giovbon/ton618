@@ -125,7 +125,10 @@ export const WeightsSettings = ({
     semantic_enable: true,
     semantic_strategy: 'whitelist',
     language: 'pt-BR',
+    ollama_hosts: [] as string[],
+    ollama_host_active: '',
   });
+  const [newHost, setNewHost] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('backup'); // 'backup' | 'pesos' | 'apis' | 'manutencao'
@@ -804,20 +807,101 @@ export const WeightsSettings = ({
                   </div>
                 </div>
 
-                <div className="p-10 bg-zinc-900/30 border border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center gap-4 group hover:bg-zinc-900/40 transition-all">
-                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-600 group-hover:scale-110 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                      />
+                <div className="p-6 bg-zinc-900/60 border border-zinc-800 rounded-3xl relative overflow-hidden group flex flex-col gap-6">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <svg
+                      className="w-12 h-12 text-sky-500"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                     </svg>
                   </div>
-                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest italic">
-                    {'Novas Integrações em Breve'}
-                  </p>
+
+                  <div className="relative z-10">
+                    <h3 className="text-zinc-100 font-black text-xs uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                      {'Ollama Embeddings'}
+                      <span className="text-[10px] bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/20 font-black tracking-normal">
+                        Vetorização
+                      </span>
+                    </h3>
+                    <p className="text-zinc-500 text-sm leading-relaxed mb-4">
+                      {'Gerencie os endpoints do Ollama para geração de embeddings e busca semântica.'}
+                    </p>
+
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newHost}
+                          onInput={(e: any) => setNewHost(e.target.value)}
+                          placeholder="http://192.168.1.50:11434"
+                          className="flex-1 bg-zinc-950 border border-zinc-800 text-zinc-100 px-3 py-2 rounded-xl focus:ring-1 focus:ring-sky-500 outline-none font-mono text-xs shadow-inner transition-all hover:border-zinc-700"
+                        />
+                        <button
+                          onClick={() => {
+                            if (newHost.trim()) {
+                              setSettings({
+                                ...settings,
+                                ollama_hosts: [...(settings.ollama_hosts || []), newHost.trim()],
+                              });
+                              setNewHost('');
+                            }
+                          }}
+                          className="px-3 py-2 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-xl font-black text-[10px] uppercase hover:bg-sky-500/20 transition-all"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-2 mt-2">
+                        {settings.ollama_hosts && settings.ollama_hosts.length > 0 ? (
+                          settings.ollama_hosts.map((host, idx) => (
+                            <div
+                              key={idx}
+                              className={`flex items-center justify-between p-2 rounded-xl border transition-all ${settings.ollama_host_active === host ? 'bg-sky-500/5 border-sky-500/30' : 'bg-zinc-950/50 border-zinc-800 hover:border-zinc-700'}`}
+                            >
+                              <div
+                                className="flex-1 cursor-pointer flex items-center gap-2"
+                                onClick={() => setSettings({ ...settings, ollama_host_active: settings.ollama_host_active === host ? '' : host })}
+                              >
+                                <div
+                                  className={`w-2 h-2 rounded-full ${settings.ollama_host_active === host ? 'bg-sky-500 animate-pulse' : 'bg-zinc-700'}`}
+                                />
+                                <span className={`text-[10px] font-mono ${settings.ollama_host_active === host ? 'text-sky-400 font-bold' : 'text-zinc-500'}`}>
+                                  {host}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const filtered = settings.ollama_hosts?.filter((_, i) => i !== idx);
+                                  setSettings({
+                                    ...settings,
+                                    ollama_hosts: filtered,
+                                    ollama_host_active: settings.ollama_host_active === host ? '' : settings.ollama_host_active,
+                                  });
+                                }}
+                                className="p-1 text-zinc-600 hover:text-rose-400 transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 border border-dashed border-zinc-800 rounded-xl text-center">
+                            <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest italic">
+                              {'Nenhum host cadastrado'}
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-[9px] text-zinc-600 mt-1 italic">
+                          {'Dica: Deixe vazio para usar o host padrão do sistema.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

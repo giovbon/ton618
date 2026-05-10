@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"etl/internal/models"
@@ -80,6 +81,9 @@ func (ctx *HandlerContext) HandleSaveSettings(w http.ResponseWriter, r *http.Req
 	}
 	ctx.State.SetSettings(newSettings)
 	ctx.State.Save(ctx.Cfg)
+
+	effectiveHost := ctx.State.GetEffectiveOllamaHost(ctx.Cfg)
+	log.Printf("[Settings] Configurações salvas. Host Ollama Ativo: %s\n", effectiveHost)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})

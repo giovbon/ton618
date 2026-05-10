@@ -10,6 +10,8 @@ export interface AppSettings {
   semantic_threshold: number;
   google_vision_key?: string;
   semantic_strategy?: string;
+  ollama_hosts?: string[];
+  ollama_host_active?: string;
 }
 
 export interface Toast {

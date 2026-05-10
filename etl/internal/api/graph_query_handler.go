@@ -71,7 +71,8 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	embedCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, cfg.OllamaHost)
+	effectiveHost := ctx.State.GetEffectiveOllamaHost(cfg)
+	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
 	queryVec, err := embFunc(embedCtx, req.Query)
 	if err != nil {
 		log.Printf("[QueryPoint] Erro ao gerar embedding: %v\n", err)
