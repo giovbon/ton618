@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"sort"
@@ -75,7 +75,7 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
 	queryVec, err := embFunc(embedCtx, req.Query)
 	if err != nil {
-		log.Printf("[QueryPoint] Erro ao gerar embedding: %v\n", err)
+		slog.Error("Erro ao gerar embedding no query point", "error", err)
 		http.Error(w, "Erro ao gerar embedding da pergunta", http.StatusInternalServerError)
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 	"sync"
@@ -382,12 +383,37 @@ func ClearCache() {
 	defer cacheMu.Unlock()
 	cache = make(map[string]cacheEntry)
 	keys = make([]string, 0)
-	log.Println("[Search] Cache de busca limpo (Global)")
+	slog.Debug("Cache de busca limpo (Global)")
 }
 
 func InvalidateFile(filename string) {
-	// Para garantir que buscas amplas (como '*') sejam invalidadas quando um novo arquivo
-	// é adicionado ou deletado, limpamos o cache global. Como o limite de entradas é
-	// pequeno (15), o custo de reconstrução é desprezível comparado ao benefício de dados frescos.
-	ClearCache()
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+
+	removed := 0
+	newKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		entry, exists := cache[key]
+		if !exists {
+			continue
+		}
+		shouldRemove := false
+		for _, fid := range entry.FileIDs {
+			if fid == filename {
+				shouldRemove = true
+				break
+			}
+		}
+		if shouldRemove {
+			delete(cache, key)
+			removed++
+		} else {
+			newKeys = append(newKeys, key)
+		}
+	}
+	keys = newKeys
+
+	if removed > 0 {
+		slog.Debug("Cache invalidated by file change", "file", filename, "removed", removed)
+	}
 }

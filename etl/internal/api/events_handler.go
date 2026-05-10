@@ -2,7 +2,7 @@ package api
 
 import (
 	"etl/internal/events"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -37,12 +37,12 @@ func (ctx *HandlerContext) HandleEvents(w http.ResponseWriter, r *http.Request) 
 		case event := <-clientChan:
 			msg, err := events.FormatSSE(event)
 			if err != nil {
-				log.Printf("[SSE] Erro ao formatar evento: %v\n", err)
+				slog.Error("Erro ao formatar evento", "error", err)
 				continue
 			}
 			_, err = w.Write(msg)
 			if err != nil {
-				log.Printf("[SSE] Erro ao enviar dado (cliente provavelmente fechou): %v\n", err)
+				slog.Error("Erro ao enviar dado", "error", err)
 				return
 			}
 			flusher.Flush()

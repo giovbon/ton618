@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -116,7 +116,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	log.Printf("[KnowledgeMap] Vetores com #embed: %d (2D cached: %v)\n", len(noteVectors), all2DCached)
+	slog.Info("Map notes filtered", "count", len(noteVectors), "cached2d", all2DCached)
 	if len(noteVectors) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(KnowledgeMapResponse{Notes: []clustering.Point{}, Clusters: []clustering.Cluster{}})
@@ -126,7 +126,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 	// Projecao 2D: usar cache do NoteVector ou calcular t-SNE
 	var projections map[string][]float64
 	if all2DCached && len(coords2D) == len(noteVectors) {
-		log.Printf("[KnowledgeMap] Usando %d coords 2D do cache NoteVector\n", len(coords2D))
+		slog.Info("Using NoteVector 2D cache", "count", len(coords2D))
 		projections = make(map[string][]float64)
 		for id, c := range coords2D {
 			projections[id] = []float64{c[0], c[1]}
@@ -145,7 +145,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 		}
 
 		if !useCache {
-			log.Printf("[KnowledgeMap] Calculando t-SNE para %d notas...\n", len(noteVectors))
+			slog.Info("Calculating t-SNE projection", "count", len(noteVectors))
 			rawProjections := clustering.ProjectTSNE(noteVectors)
 			projections = make(map[string][]float64)
 			for id, coords := range rawProjections {
@@ -156,7 +156,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 				for id, c := range rawProjections {
 					ctx.State.SetNoteVectors2D(id, c[0], c[1])
 				}
-				log.Printf("[KnowledgeMap] t-SNE + coords 2D persistidos.\n")
+				slog.Info("t-SNE and 2D coordinates persisted")
 			}()
 		}
 		pcaCacheMu.Unlock()
@@ -189,7 +189,7 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 	}
 	k := clustering.BestK(points, maxK)
 	points = clustering.KMeans(points, k, 20)
-	log.Printf("[KnowledgeMap] K adaptativo: %d clusters (maxK=%d)\n", k, maxK)
+	slog.Info("Adaptive K clustering result", "clusters", k, "maxK", maxK)
 
 	// Cluster labeling (batch DisjunctionQuery)
 	clusterMap := make(map[int]*clustering.Cluster)
@@ -282,13 +282,13 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 
 		cfg := ctx.Cfg
 		if cfg == nil {
-			log.Println("[Reindex] Motor vetorial nao configurado, abortando.")
+			slog.Warn("Motor vetorial nao configurado, abortando")
 			events.GetHub().Broadcast("sync:error", map[string]string{"message": "Motor vetorial desativado"})
 			return
 		}
 
 		events.GetHub().Broadcast("sync:started", map[string]string{"mode": "reindex"})
-		log.Println("[Reindex] Iniciando varredura profunda de arquivos...")
+		slog.Info("Starting deep file scan")
 
 		idx := ctx.Index
 		req := bleve.NewSearchRequest(bleve.NewMatchAllQuery())
@@ -296,13 +296,13 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 		req.Fields = []string{"arquivo"}
 		searchRes, err := idx.Search(req)
 		if err != nil {
-			log.Printf("[Reindex] Erro critico ao buscar documentos no Bleve: %v\n", err)
+			slog.Error("Erro ao buscar documentos no Bleve", "error", err)
 			events.GetHub().Broadcast("sync:error", map[string]string{"message": "Erro ao acessar indice"})
 			return
 		}
 
 		filesToProcess := make(map[string]string)
-		log.Printf("[Reindex] Varrendo %d fragmentos do Bleve...\n", searchRes.Total)
+		slog.Info("Scanning Bleve fragments", "count", searchRes.Total)
 
 		for _, hit := range searchRes.Hits {
 			var arquivo string
@@ -330,7 +330,7 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 					if err == nil {
 						filesToProcess[arquivo] = string(content)
 					} else {
-						log.Printf("[Reindex] Aviso: Nao foi possivel ler arquivo %s: %v\n", arquivo, err)
+						slog.Warn("Failed to read file", "file", arquivo, "error", err)
 					}
 				}
 			}
@@ -338,10 +338,10 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 
 		total := len(filesToProcess)
 		atomic.StoreInt32(&reindexTotal, int32(total))
-		log.Printf("[Reindex] Total de notas elegiveis para o mapa: %d\n", total)
+		slog.Info("Total eligible notes for map", "total", total)
 
 		if total == 0 {
-			log.Println("[Reindex] Nenhuma nota encontrada com tag de mapa. Verifique se usou #embed.")
+			slog.Warn("No notes found with map tag. Check if #embed is used.")
 			events.GetHub().Broadcast("sync:finished", map[string]interface{}{"new_docs": 0, "mode": "reindex"})
 			return
 		}
@@ -364,7 +364,7 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 			}
 			batchFiles := filenames[i:end]
 			batchTexts := contents[i:end]
-			log.Printf("[Reindex] Lote %d/%d (%d notas)...\n", i/batchSize+1, (len(filenames)+batchSize-1)/batchSize, len(batchFiles))
+			slog.Info("Processing batch", "batch", i/batchSize+1, "totalBatches", (len(filenames)+batchSize-1)/batchSize, "notes", len(batchFiles))
 
 			ctxEmbed, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			effectiveHost := cfg.OllamaHost
@@ -372,12 +372,12 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 			cancel()
 
 			if err != nil {
-				log.Printf("[Reindex] ERRO no lote: %v. Fallback individual...\n", err)
+				slog.Error("Erro no lote, fallback individual", "error", err)
 				for j, fname := range batchFiles {
 					embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
 					vec, err := embFunc(context.Background(), batchTexts[j])
 					if err != nil {
-						log.Printf("[Reindex] ERRO em %s: %v\n", fname, err)
+						slog.Error("ERRO em embedding", "file", fname, "error", err)
 					} else {
 						title := extractTitle(batchTexts[j], fname)
 						mu.Lock()
@@ -408,7 +408,7 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 			}
 		}
 
-		log.Printf("[Reindex] Concluido. Sucesso: %d/%d\n", len(newVectors), total)
+		slog.Info("Reindex completed", "success", len(newVectors), "total", total)
 
 		if len(newVectors) > 0 {
 			ctx.State.ClearNoteVectors()

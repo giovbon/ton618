@@ -1,12 +1,16 @@
 name: Deploy Docker
 
 on:
+  push:
+    branches:
+      - main
+  # Mantemos o dispatch caso você queira forçar um build manual
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag da imagem (default: latest)'
+        description: "Tag da imagem (default: latest)"
         required: false
-        default: 'latest'
+        default: "latest"
 
 jobs:
   deploy:
@@ -26,6 +30,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Definir Tag da Imagem
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "DOCKER_TAG=${{ inputs.tag }}" >> $GITHUB_ENV
+          else
+            # Usa os 7 primeiros caracteres do commit SHA para a tag automática
+            echo "DOCKER_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+
       - name: Build e Push multi-arch
         uses: docker/build-push-action@v6
         with:
@@ -33,6 +47,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: SKIP_TESTS=true
           tags: |
-            giovbon/ton618pkm:${{ inputs.tag }}
+            giovbon/ton618pkm:${{ env.DOCKER_TAG }}
             giovbon/ton618pkm:latest
           push: true

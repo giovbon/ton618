@@ -147,12 +147,12 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
       if (workerData.voronoiPaths.length > 0) {
         const time = performance.now() / 1000;
         ctx.globalCompositeOperation = 'source-over';
-        
+
         workerData.voronoiPaths.forEach((path, i) => {
           const color = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
           const clusterId = data.clusters[i]?.id;
           const isHovered = hoveredCluster?.id === clusterId;
-          
+
           const pulse = Math.sin(time * 1.2 + i * 0.5) * 0.5 + 0.5;
           const flowOffset = -time * 25;
 
@@ -181,7 +181,7 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
           ctx.fillStyle = color;
           ctx.globalAlpha = (isHovered ? 0.08 : 0.03);
           ctx.fill(path);
-          
+
           ctx.restore();
         });
       }

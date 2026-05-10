@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -76,7 +75,7 @@ func (ctx *HandlerContext) HandleRename(w http.ResponseWriter, r *http.Request) 
 	os.Remove(fromPath)
 	search.InvalidateFile(fromRel)
 	search.InvalidateFile(toRel)
-	log.Printf("[API] Rename: %s → %s\n", fromRel, toRel)
+	slog.Info("Note renamed", "from", fromRel, "to", toRel)
 
 	// Bug 2 Fix: coletar e limpar estado do arquivo ANTIGO antes de deletar do Bleve
 	deletedIDs := ingest.CollectBleveIDsForFile(ctx.Cfg, fromRel)
@@ -152,11 +151,11 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 			Content string `json:"content"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("[API] Erro ao decodificar JSON no POST: %v\n", err)
+			slog.Error("Erro ao decodificar JSON no POST", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		log.Printf("[API] Recebido POST para arquivo: %s (Content length: %d)\n", relPath, len(req.Content))
+		slog.Info("Received POST for file", "file", relPath, "contentLength", len(req.Content))
 
 		if relPath == "" {
 			relPath = req.Name
@@ -227,7 +226,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		defer ctx.Coordinator.Unlock()
 
 		deletedIDs := ingest.CollectBleveIDsForFile(ctx.Cfg, relPath)
-		log.Printf("[API] Identificados %d fragmentos no Bleve para %s\n", len(deletedIDs), relPath)
+		slog.Info("Identified Bleve fragments", "count", len(deletedIDs), "file", relPath)
 
 		ingest.DeleteFileFromBleve(ctx.Cfg, relPath)
 		ctx.State.DeleteVectorHash(relPath)
@@ -240,7 +239,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 				if strings.HasPrefix(link, "attachments/") || strings.HasPrefix(link, "pdfs/") || strings.HasPrefix(link, "assets/") {
 					targetPath := filepath.Join(ctx.Cfg.DocsDir, link)
 					if err := os.Remove(targetPath); err == nil {
-						log.Printf("[API] Exclusão em Cascata: %s (vinculado a %s)\n", link, relPath)
+						slog.Info("Cascade deletion", "link", link, "parent", relPath)
 						// Limpar rastros do arquivo deletado em cascata
 						ingest.DeleteFileFromBleve(ctx.Cfg, link)
 						ctx.State.DeleteVectorHash(link)
@@ -264,7 +263,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		search.InvalidateFile(relPath)
 
 		w.WriteHeader(http.StatusOK)
-		log.Printf("[API] Exclusão concluída com sucesso: %s\n", relPath)
+		slog.Info("File deleted successfully", "file", relPath)
 
 	default:
 		http.Error(w, "Método não suportado", http.StatusMethodNotAllowed)
@@ -340,13 +339,13 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 }
 
 func (ctx *HandlerContext) runOCRInBackground(imagePath, relFilename string) {
-	log.Printf("[OCR] Iniciando processamento em background: %s\n", relFilename)
+	slog.Info("Starting OCR background processing", "file", relFilename)
 
 	docs := ingest.ProcessImage(imagePath, relFilename, time.Now(), ctx.State)
 	if len(docs) > 0 {
 		// Não indexamos a imagem original, apenas a nota gerada
 		ingest.UpdateStateAfterOCR(imagePath, relFilename, docs, ctx.State)
-		log.Printf("[OCR] Imagem %s processada. Criando nota...\n", relFilename)
+		slog.Info("Image processed, creating note", "file", relFilename)
 
 		// Criar nota Markdown automática vinculada à imagem
 		ctx.createOCRNote(relFilename, docs[0].Texto)
@@ -373,19 +372,19 @@ func (ctx *HandlerContext) createOCRNote(imageRelPath, text string) {
 	sb.WriteString(text)
 
 	if err := os.WriteFile(notePath, []byte(sb.String()), 0644); err != nil {
-		log.Printf("[OCR] Erro ao criar nota MD: %v\n", err)
+		slog.Error("Erro ao criar nota MD", "error", err)
 	} else if ctx.Coordinator != nil {
 		ctx.Coordinator.Push(noteName, ingest.JobFileUpdate, false)
 	}
 }
 
 func (ctx *HandlerContext) runPDFProcessingInBackground(pdfPath, relFilename string) {
-	log.Printf("[PDF] Iniciando processamento em background: %s\n", relFilename)
+	slog.Info("Starting PDF background processing", "file", relFilename)
 
 	docs := ingest.ProcessPDF(pdfPath, relFilename, time.Now(), ctx.State)
 	if len(docs) > 0 {
 		// Não indexamos o PDF original, apenas a nota gerada
-		log.Printf("[PDF] PDF %s processado. Criando nota...\n", relFilename)
+		slog.Info("PDF processed, creating note", "file", relFilename)
 
 		// Unir o texto de todas as páginas para a nota principal
 		var fullText strings.Builder
@@ -417,7 +416,7 @@ func (ctx *HandlerContext) createPDFNote(pdfRelPath, text string) {
 	sb.WriteString(text)
 
 	if err := os.WriteFile(notePath, []byte(sb.String()), 0644); err != nil {
-		log.Printf("[PDF] Erro ao criar nota MD: %v\n", err)
+		slog.Error("Erro ao criar nota MD", "error", err)
 	} else if ctx.Coordinator != nil {
 		ctx.Coordinator.Push(noteName, ingest.JobFileUpdate, false)
 	}

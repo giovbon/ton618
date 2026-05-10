@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,7 +21,7 @@ func (ctx *HandlerContext) HandleDownloadBackup(w http.ResponseWriter, r *http.R
 	// 1. Configurar headers para download de arquivo
 	timestamp := time.Now().Format("20060102_150405")
 	filename := fmt.Sprintf("ton618_backup_%s.zip", timestamp)
-	
+
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 
@@ -67,7 +67,7 @@ func (ctx *HandlerContext) HandleDownloadBackup(w http.ResponseWriter, r *http.R
 	})
 
 	if err != nil {
-		log.Printf("[Backup] Erro ao gerar backup: %v\n", err)
+		slog.Error("Erro ao gerar backup", "error", err)
 		// Aqui o header já pode ter sido enviado, então o erro vai corromper o zip,
 		// o que é o comportamento esperado se houver falha no meio do stream.
 	}
