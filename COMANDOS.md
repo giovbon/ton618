@@ -1,3 +1,5 @@
+https://ollama.com/library/nomic-embed-text
+
 INSTALAÇÂO:
 sudo pacman -S --needed poppler go nodejs npm
 cd etl
@@ -16,6 +18,6 @@ sudo systemctl enable --now docker
 docker-compose up --build
 
 docker login
-./deploy.sh v1.2.0 1
+./deploy.sh v1.3.0 1
 
 documentação em web/public/help/README.md

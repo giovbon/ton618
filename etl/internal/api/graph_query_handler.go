@@ -30,7 +30,7 @@ type QueryPointResponse struct {
 	NearestNotes []NearestNote `json:"nearest_notes"`
 }
 
-// cosineSimilarity returns cosine similarity in [−1, 1].
+// cosineSimilarity returns cosine similarity in [-1, 1].
 func cosineSimilarity(a, b []float32) float64 {
 	if len(a) != len(b) || len(a) == 0 {
 		return 0
@@ -51,19 +51,19 @@ func cosineSimilarity(a, b []float32) float64 {
 // vectors, and returns an interpolated 2-D position + the 3 nearest notes.
 func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Método não suportado", http.StatusMethodNotAllowed)
+		http.Error(w, "Metodo nao suportado", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req QueryPointRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Query) == "" {
-		http.Error(w, "Payload inválido ou query vazia", http.StatusBadRequest)
+		http.Error(w, "Payload invalido ou query vazia", http.StatusBadRequest)
 		return
 	}
 
 	cfg := ctx.Cfg
 	if cfg == nil {
-		http.Error(w, "Motor semântico não configurado", http.StatusServiceUnavailable)
+		http.Error(w, "Motor semantico nao configurado", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -71,8 +71,8 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	embedCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	effectiveHost := ctx.State.GetEffectiveOllamaHost(cfg)
-	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
+	effectiveHost := cfg.OllamaHost
+	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
 	queryVec, err := embFunc(embedCtx, req.Query)
 	if err != nil {
 		log.Printf("[QueryPoint] Erro ao gerar embedding: %v\n", err)
@@ -85,7 +85,7 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	projections := ctx.State.GetAllNoteProjections()
 
 	if len(allVectors) == 0 || len(projections) == 0 {
-		http.Error(w, "Mapa semântico vazio — execute o reindex primeiro", http.StatusConflict)
+		http.Error(w, "Mapa semantico vazio - execute o reindex primeiro", http.StatusConflict)
 		return
 	}
 
@@ -97,17 +97,17 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	}
 	var candidates []scored
 
-	for id, vec := range allVectors {
+	for id, nv := range allVectors {
 		coords, ok := projections[id]
 		if !ok || len(coords) < 2 {
 			continue
 		}
-		sim := cosineSimilarity(queryVec, vec)
+		sim := cosineSimilarity(queryVec, nv.Vector)
 		candidates = append(candidates, scored{id: id, sim: sim, x: coords[0], y: coords[1]})
 	}
 
 	if len(candidates) == 0 {
-		http.Error(w, "Nenhuma nota com projeção disponível", http.StatusConflict)
+		http.Error(w, "Nenhuma nota com projecao disponivel", http.StatusConflict)
 		return
 	}
 
@@ -117,8 +117,6 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	})
 
 	// 5. Use top-3 by similarity for both position AND nearest-notes.
-	// Using fewer, higher-quality candidates keeps the dot close to the
-	// actual relevant notes instead of drifting to a cluster boundary.
 	topK := 3
 	if len(candidates) < topK {
 		topK = len(candidates)
@@ -126,8 +124,6 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 
 	var sumX, sumY, totalWeight float64
 	for i := 0; i < topK; i++ {
-		// Similarity is already in [0,1] range for well-matched notes;
-		// square it to bias strongly toward the closest match.
 		w := math.Max(0, candidates[i].sim)
 		w = w * w
 		sumX += candidates[i].x * w
@@ -140,7 +136,6 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 		qx = sumX / totalWeight
 		qy = sumY / totalWeight
 	} else {
-		// fallback: plain average of top-K
 		for i := 0; i < topK; i++ {
 			qx += candidates[i].x
 			qy += candidates[i].y

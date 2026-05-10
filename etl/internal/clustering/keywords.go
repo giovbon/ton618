@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/blevesearch/bleve/v2"
@@ -104,7 +105,9 @@ func GenerateClusterLabel(texts []string, index bleve.Index) (string, []string) 
 		tf := candidates[i].Value
 
 		// Consultar a frequência do termo no dicionário global (IDF)
-		tfr, err := reader.TermFieldReader(context.TODO(), []byte(word), "texto", false, false, false)
+		termCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		tfr, err := reader.TermFieldReader(termCtx, []byte(word), "texto", false, false, false)
+		cancel()
 		if err != nil || tfr == nil {
 			continue
 		}

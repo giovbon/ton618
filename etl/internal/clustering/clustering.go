@@ -1,6 +1,8 @@
 package clustering
 
 import (
+	"log"
+	"math"
 	"math/rand"
 	"sort"
 
@@ -36,7 +38,6 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 		return result
 	}
 
-	// 1. Converter para matriz Gonum (ORDENADO para determinismo)
 	rows := len(noteVectors)
 	ids := make([]string, 0, rows)
 	for id := range noteVectors {
@@ -44,33 +45,38 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 	}
 	sort.Strings(ids)
 
-	cols := len(noteVectors[ids[0]])
+	cols := 0
+	for _, id := range ids {
+		if len(noteVectors[id]) > cols {
+			cols = len(noteVectors[id])
+		}
+	}
 	data := make([]float64, rows*cols)
 
 	for i, id := range ids {
 		vec := noteVectors[id]
+		if len(vec) != cols {
+			log.Printf("[PCA] Aviso: Vetor %s tem dimensao %d (esperado %d).\n", id, len(vec), cols)
+		}
 		for j := 0; j < cols; j++ {
 			if j < len(vec) {
 				data[i*cols+j] = float64(vec[j])
 			} else {
-				data[i*cols+j] = 0 // Padding se a dimensão for menor
+				data[i*cols+j] = 0
 			}
 		}
 	}
 
 	matrix := mat.NewDense(rows, cols, data)
 
-	// 2. Usar SVD para redução de dimensionalidade (Mais robusto que PCA para rows < cols)
 	var svd mat.SVD
 	ok := svd.Factorize(matrix, mat.SVDThin)
 	if !ok {
 		return make(map[string][2]float64)
 	}
 
-	// Pegar as 2 primeiras componentes (U * Sigma)
 	var s mat.Dense
 	svd.UTo(&s)
-
 	sigma := svd.Values(nil)
 	k := 2
 	if len(sigma) < k {
@@ -79,7 +85,6 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 
 	result := make(map[string][2]float64)
 	minX, maxX, minY, maxY := 0.0, 0.0, 0.0, 0.0
-
 	coords := make([][2]float64, rows)
 	for i := 0; i < rows; i++ {
 		x := s.At(i, 0) * sigma[0]
@@ -88,7 +93,6 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 			y = s.At(i, 1) * sigma[1]
 		}
 		coords[i] = [2]float64{x, y}
-
 		if i == 0 || x < minX {
 			minX = x
 		}
@@ -113,9 +117,10 @@ func ProjectPCA(noteVectors map[string][]float32) map[string][2]float64 {
 	}
 
 	for i, id := range ids {
-		x := (coords[i][0] - minX) / rangeX * 100
-		y := (coords[i][1] - minY) / rangeY * 100
-		result[id] = [2]float64{x, y}
+		result[id] = [2]float64{
+			(coords[i][0] - minX) / rangeX * 100,
+			(coords[i][1] - minY) / rangeY * 100,
+		}
 	}
 
 	return result
@@ -130,17 +135,39 @@ func KMeans(points []Point, k int, iterations int) []Point {
 		return points
 	}
 
-	// 1. Inicializar centroides aleatórios com semente local fixa
 	localRand := rand.New(rand.NewSource(42))
 	centroids := make([][2]float64, k)
-	for i := 0; i < k; i++ {
-		p := points[localRand.Intn(len(points))]
-		centroids[i] = [2]float64{p.X, p.Y}
+
+	first := points[localRand.Intn(len(points))]
+	centroids[0] = [2]float64{first.X, first.Y}
+
+	for c := 1; c < k; c++ {
+		var totalDist float64
+		dists := make([]float64, len(points))
+		for i, p := range points {
+			minDist := -1.0
+			for j := 0; j < c; j++ {
+				d := distSq(p.X, p.Y, centroids[j][0], centroids[j][1])
+				if minDist == -1 || d < minDist {
+					minDist = d
+				}
+			}
+			dists[i] = minDist
+			totalDist += minDist
+		}
+
+		threshold := localRand.Float64() * totalDist
+		var cumulative float64
+		for i, d := range dists {
+			cumulative += d
+			if cumulative >= threshold {
+				centroids[c] = [2]float64{points[i].X, points[i].Y}
+				break
+			}
+		}
 	}
 
-	// 2. Iterar
 	for iter := 0; iter < iterations; iter++ {
-		// Atribuir cada ponto ao centroide mais próximo
 		changed := false
 		for i, p := range points {
 			minDist := -1.0
@@ -162,7 +189,6 @@ func KMeans(points []Point, k int, iterations int) []Point {
 			break
 		}
 
-		// Atualizar centroides
 		newCentroids := make([][2]float64, k)
 		counts := make([]int, k)
 		for _, p := range points {
@@ -179,6 +205,97 @@ func KMeans(points []Point, k int, iterations int) []Point {
 	}
 
 	return points
+}
+
+// BestK encontra o K otimo usando silhouette score.
+// Testa de 2 ate maxK e retorna o K com melhor coesao/separacao.
+func BestK(points []Point, maxK int) int {
+	n := len(points)
+	if n <= 2 {
+		return n
+	}
+	if maxK > n {
+		maxK = n
+	}
+	if maxK < 2 {
+		maxK = 2
+	}
+
+	bestK := 2
+	bestScore := -1.0
+
+	for k := 2; k <= maxK; k++ {
+		clone := make([]Point, n)
+		copy(clone, points)
+		KMeans(clone, k, 15)
+
+		score := silhouetteScore(clone)
+		if score > bestScore {
+			bestScore = score
+			bestK = k
+		}
+	}
+
+	return bestK
+}
+
+func silhouetteScore(points []Point) float64 {
+	n := len(points)
+	if n <= 1 {
+		return 0
+	}
+
+	clusters := make(map[int][]int)
+	for i, p := range points {
+		clusters[p.ClusterID] = append(clusters[p.ClusterID], i)
+	}
+
+	if len(clusters) <= 1 {
+		return 0
+	}
+
+	totalScore := 0.0
+	for i, p := range points {
+		a := 0.0
+		cluster := clusters[p.ClusterID]
+		if len(cluster) > 1 {
+			for _, j := range cluster {
+				if i != j {
+					a += math.Sqrt(distSq(p.X, p.Y, points[j].X, points[j].Y))
+				}
+			}
+			a /= float64(len(cluster) - 1)
+		}
+
+		b := math.MaxFloat64
+		for cid, members := range clusters {
+			if cid == p.ClusterID {
+				continue
+			}
+			dist := 0.0
+			for _, j := range members {
+				dist += math.Sqrt(distSq(p.X, p.Y, points[j].X, points[j].Y))
+			}
+			dist /= float64(len(members))
+			if dist < b {
+				b = dist
+			}
+		}
+
+		if b == math.MaxFloat64 {
+			b = 0
+		}
+
+		maxAB := a
+		if b > maxAB {
+			maxAB = b
+		}
+		if maxAB > 0 {
+			totalScore += (b - a) / maxAB
+		}
+	}
+
+	return totalScore / float64(n)
 }
 
 func distSq(x1, y1, x2, y2 float64) float64 {

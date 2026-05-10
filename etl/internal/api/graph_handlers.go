@@ -24,6 +24,7 @@ import (
 var (
 	reindexTotal     int32
 	reindexProcessed int32
+	pcaCacheMu       sync.Mutex
 )
 
 type KnowledgeMapResponse struct {
@@ -57,35 +58,33 @@ func (ctx *HandlerContext) HandleKnowledgeMapStatus(w http.ResponseWriter, r *ht
 }
 
 func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Request) {
-	// 1. Recuperar todos os vetores de notas do BBolt
 	allVectors := ctx.State.GetAllNoteVectors()
 
-	// Filtrar apenas notas que possuem a tag #embed
 	noteVectors := make(map[string][]float32)
+	titles := make(map[string]string)
+	coords2D := make(map[string][2]float64)
+	all2DCached := true
 	index := ctx.Index
 
-	for id, vec := range allVectors {
-		// 1. Verificar tags (rápido - cache em RAM)
+	for id, nv := range allVectors {
+		if nv.Title != "" {
+			titles[id] = nv.Title
+		}
+		if nv.X != 0 || nv.Y != 0 {
+			coords2D[id] = [2]float64{nv.X, nv.Y}
+		}
+
 		tags := ctx.State.GetFileTags(id)
 		hasEmbed := ingest.HasEmbedTag(tags)
 
-		if !hasEmbed {
-			// Fallback: Verificar se o texto bruto no arquivo contém #embed (Modo lento mas seguro para notas novas)
-			absPath := filepath.Join(ctx.Cfg.DocsDir, id)
-			content, err := os.ReadFile(absPath)
-			if err == nil {
-				if strings.Contains(string(content), "#embed") {
-					hasEmbed = true
-				}
-			}
-		}
-
 		if hasEmbed {
-			noteVectors[id] = vec
+			noteVectors[id] = nv.Vector
+			if nv.X == 0 && nv.Y == 0 {
+				all2DCached = false
+			}
 			continue
 		}
 
-		// 2. Fallback Bleve: Verificar se algum fragmento contém #embed
 		q := bleve.NewTermQuery(id)
 		q.SetField("arquivo")
 		searchReq := bleve.NewSearchRequest(q)
@@ -95,116 +94,135 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 		if err == nil && searchRes.Total > 0 {
 			for _, hit := range searchRes.Hits {
 				if txt, ok := hit.Fields["texto"].(string); ok {
-					if strings.Contains(txt, "#embed") {
-						noteVectors[id] = vec
-						break
+					if titles[id] == "" {
+						lines := strings.Split(txt, "\n")
+						for _, line := range lines {
+							clean := strings.TrimSpace(strings.TrimLeft(line, "# "))
+							if clean != "" {
+								titles[id] = clean
+								break
+							}
+						}
+					}
+					if !hasEmbed && strings.Contains(txt, "#embed") {
+						hasEmbed = true
+						noteVectors[id] = nv.Vector
+						if nv.X == 0 && nv.Y == 0 {
+							all2DCached = false
+						}
 					}
 				}
 			}
 		}
 	}
 
-	log.Printf("[KnowledgeMap] Vetores com #embed encontrados: %d\n", len(noteVectors))
+	log.Printf("[KnowledgeMap] Vetores com #embed: %d (2D cached: %v)\n", len(noteVectors), all2DCached)
 	if len(noteVectors) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(KnowledgeMapResponse{Notes: []clustering.Point{}, Clusters: []clustering.Cluster{}})
 		return
 	}
 
-	// 2. Tentar carregar projeções do cache
-	projections := ctx.State.GetAllNoteProjections()
-	useCache := len(projections) == len(noteVectors) && len(noteVectors) > 0
-
-	// Validar se os IDs no cache batem com os IDs atuais
-	if useCache {
-		for id := range noteVectors {
-			if _, ok := projections[id]; !ok {
-				useCache = false
-				break
-			}
-		}
-	}
-
-	if useCache {
-		log.Printf("[KnowledgeMap] Usando %d projeções do cache persistente\n", len(projections))
-	} else {
-		// 3. Projetar para 2D usando PCA (Cálculo pesado)
-		log.Printf("[KnowledgeMap] Calculando novas projeções PCA para %d notas...\n", len(noteVectors))
-		rawProjections := clustering.ProjectPCA(noteVectors)
-
-		// Converter map[string][2]float64 para map[string][]float64 para o cache
+	// Projecao 2D: usar cache do NoteVector ou calcular t-SNE
+	var projections map[string][]float64
+	if all2DCached && len(coords2D) == len(noteVectors) {
+		log.Printf("[KnowledgeMap] Usando %d coords 2D do cache NoteVector\n", len(coords2D))
 		projections = make(map[string][]float64)
-		for id, coords := range rawProjections {
-			projections[id] = []float64{coords[0], coords[1]}
+		for id, c := range coords2D {
+			projections[id] = []float64{c[0], c[1]}
 		}
-		ctx.State.SetNoteProjections(projections)
-	}
-
-	// 4. Preparar pontos para Clustering (Ordenação determinística é vital aqui!)
-	var points []clustering.Point
-	for id, coords := range projections {
-		points = append(points, clustering.Point{
-			ID: id,
-			X:  coords[0],
-			Y:  coords[1],
-		})
-	}
-	// IMPORTANTE: Ordenar por ID garante que o K-Means receba os mesmos dados na mesma ordem
-	sort.Slice(points, func(i, j int) bool { return points[i].ID < points[j].ID })
-
-	// 4. Executar K-Means
-	k := int(3.0 + 0.5*float64(len(points))/5.0)
-	if k > 10 {
-		k = 10
-	}
-	if k > len(points) {
-		k = len(points)
-	}
-
-	points = clustering.KMeans(points, k, 20)
-	log.Printf("[KnowledgeMap] Pontos agrupados em %d clusters\n", k)
-
-	// 5. Gerar Labels para os Clusters via TF-IDF
-	clusterMap := make(map[int]*clustering.Cluster)
-	clusterTexts := make(map[int][]string)
-
-	// Usar o índice já obtido
-	for i, p := range points {
-		// Buscar o conteúdo real fazendo uma query pelo nome do arquivo
-		docContent := p.ID
-		q := bleve.NewTermQuery(p.ID)
-		q.SetField("arquivo")
-		searchReq := bleve.NewSearchRequest(q)
-		searchReq.Fields = []string{"texto"}
-		searchRes, err := index.Search(searchReq)
-
-		if err == nil && searchRes.Total > 0 {
-			if txt, ok := searchRes.Hits[0].Fields["texto"].(string); ok {
-				docContent = txt
-				// Extrair a primeira linha para ser o título do ponto
-				lines := strings.Split(txt, "\n")
-				for _, line := range lines {
-					clean := strings.TrimSpace(strings.TrimLeft(line, "# "))
-					if clean != "" {
-						points[i].Title = clean
-						break
-					}
+	} else {
+		pcaCacheMu.Lock()
+		projections = ctx.State.GetAllNoteProjections()
+		useCache := len(projections) == len(noteVectors) && len(noteVectors) > 0
+		if useCache {
+			for id := range noteVectors {
+				if _, ok := projections[id]; !ok {
+					useCache = false
+					break
 				}
 			}
 		}
 
-		if points[i].Title == "" {
-			parts := strings.Split(p.ID, "/")
-			points[i].Title = parts[len(parts)-1]
+		if !useCache {
+			log.Printf("[KnowledgeMap] Calculando t-SNE para %d notas...\n", len(noteVectors))
+			rawProjections := clustering.ProjectTSNE(noteVectors)
+			projections = make(map[string][]float64)
+			for id, coords := range rawProjections {
+				projections[id] = []float64{coords[0], coords[1]}
+			}
+			go func() {
+				ctx.State.SetNoteProjections(projections)
+				for id, c := range rawProjections {
+					ctx.State.SetNoteVectors2D(id, c[0], c[1])
+				}
+				log.Printf("[KnowledgeMap] t-SNE + coords 2D persistidos.\n")
+			}()
 		}
+		pcaCacheMu.Unlock()
+	}
 
-		preview := docContent
-		if len(preview) > 50 {
-			preview = preview[:50]
+	// Pontos para clustering
+	var points []clustering.Point
+	for id, coords := range projections {
+		title := titles[id]
+		if title == "" {
+			parts := strings.Split(id, "/")
+			title = strings.TrimSuffix(parts[len(parts)-1], ".md")
 		}
-		log.Printf("[KnowledgeMap] Batizando com conteúdo de %s: %s...\n", p.ID, preview)
+		points = append(points, clustering.Point{
+			ID:    id,
+			Title: title,
+			X:     coords[0],
+			Y:     coords[1],
+		})
+	}
+	sort.Slice(points, func(i, j int) bool { return points[i].ID < points[j].ID })
+
+	// K adaptativo via silhouette score
+	maxK := int(3.0 + 0.5*float64(len(points))/5.0)
+	if maxK > 10 {
+		maxK = 10
+	}
+	if maxK > len(points) {
+		maxK = len(points)
+	}
+	k := clustering.BestK(points, maxK)
+	points = clustering.KMeans(points, k, 20)
+	log.Printf("[KnowledgeMap] K adaptativo: %d clusters (maxK=%d)\n", k, maxK)
+
+	// Cluster labeling (batch DisjunctionQuery)
+	clusterMap := make(map[int]*clustering.Cluster)
+	clusterTexts := make(map[int][]string)
+
+	disjQuery := bleve.NewDisjunctionQuery()
+	for _, p := range points {
+		q := bleve.NewTermQuery(p.ID)
+		q.SetField("arquivo")
+		disjQuery.AddQuery(q)
+	}
+	batchReq := bleve.NewSearchRequest(disjQuery)
+	batchReq.Size = len(points) + 10
+	batchReq.Fields = []string{"arquivo", "texto"}
+	batchRes, err := index.Search(batchReq)
+
+	textByFile := make(map[string]string)
+	if err == nil {
+		for _, hit := range batchRes.Hits {
+			if arquivo, ok := hit.Fields["arquivo"].(string); ok {
+				if txt, ok := hit.Fields["texto"].(string); ok {
+					textByFile[arquivo] = txt
+				}
+			}
+		}
+	}
+
+	for _, p := range points {
+		docContent := p.ID
+		if txt, exists := textByFile[p.ID]; exists {
+			docContent = txt
+		}
 		clusterTexts[p.ClusterID] = append(clusterTexts[p.ClusterID], docContent)
-
 		if clusterMap[p.ClusterID] == nil {
 			clusterMap[p.ClusterID] = &clustering.Cluster{ID: p.ClusterID}
 		}
@@ -222,18 +240,14 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 		label, keywords := clustering.GenerateClusterLabel(clusterTexts[id], index)
 		cluster.Label = label
 		cluster.Keywords = keywords
-		log.Printf("[KnowledgeMap] ILHA %d BATIZADA COMO: %s (Size: %d, Keywords: %v)\n", id, cluster.Label, cluster.Size, cluster.Keywords)
 	}
 
 	var clusters []clustering.Cluster
 	for _, c := range clusterMap {
 		clusters = append(clusters, *c)
 	}
-	sort.Slice(clusters, func(i, j int) bool {
-		return clusters[i].ID < clusters[j].ID
-	})
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].ID < clusters[j].ID })
 
-	// 6. Responder
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(KnowledgeMapResponse{
 		Notes:    points,
@@ -241,20 +255,18 @@ func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// reindexRunning impede execuções paralelas do reindex
 var reindexRunning int32
 
-// HandleReindexVectors popula o bucket note_vectors para todas as notas já no Bleve.
 func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Método não suportado", http.StatusMethodNotAllowed)
+		http.Error(w, "Metodo nao suportado", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if !atomic.CompareAndSwapInt32(&reindexRunning, 0, 1) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]string{"status": "já em execução"})
+		json.NewEncoder(w).Encode(map[string]string{"status": "ja em execucao"})
 		return
 	}
 
@@ -265,13 +277,12 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 	go func() {
 		defer atomic.StoreInt32(&reindexRunning, 0)
 
-		atomic.StoreInt32(&reindexRunning, 1)
 		atomic.StoreInt32(&reindexProcessed, 0)
 		atomic.StoreInt32(&reindexTotal, 0)
 
 		cfg := ctx.Cfg
 		if cfg == nil {
-			log.Println("[Reindex] Motor vetorial não configurado, abortando.")
+			log.Println("[Reindex] Motor vetorial nao configurado, abortando.")
 			events.GetHub().Broadcast("sync:error", map[string]string{"message": "Motor vetorial desativado"})
 			return
 		}
@@ -285,8 +296,8 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 		req.Fields = []string{"arquivo"}
 		searchRes, err := idx.Search(req)
 		if err != nil {
-			log.Printf("[Reindex] Erro crítico ao buscar documentos no Bleve: %v\n", err)
-			events.GetHub().Broadcast("sync:error", map[string]string{"message": "Erro ao acessar índice"})
+			log.Printf("[Reindex] Erro critico ao buscar documentos no Bleve: %v\n", err)
+			events.GetHub().Broadcast("sync:error", map[string]string{"message": "Erro ao acessar indice"})
 			return
 		}
 
@@ -304,11 +315,9 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 					continue
 				}
 
-				// Whitelist obrigatório: Apenas notas com #embed são reindexadas
 				tags := ctx.State.GetFileTags(arquivo)
 				hasEmbed := ingest.HasEmbedTag(tags)
 
-				// Se não estiver no cache, tenta ler o arquivo diretamente
 				absPath := filepath.Join(cfg.DocsDir, arquivo)
 				content, err := os.ReadFile(absPath)
 				if !hasEmbed && err == nil {
@@ -321,18 +330,15 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 					if err == nil {
 						filesToProcess[arquivo] = string(content)
 					} else {
-						log.Printf("[Reindex] Aviso: Não foi possível ler arquivo %s: %v\n", arquivo, err)
+						log.Printf("[Reindex] Aviso: Nao foi possivel ler arquivo %s: %v\n", arquivo, err)
 					}
-				} else {
-					// Log opcional para depuração (pode ser ruidoso)
-					// log.Printf("[Reindex] Ignorando %s (Tags: %v, Estratégia: %s)\n", arquivo, tags, strategy)
 				}
 			}
 		}
 
 		total := len(filesToProcess)
 		atomic.StoreInt32(&reindexTotal, int32(total))
-		log.Printf("[Reindex] Total de notas elegíveis para o mapa: %d\n", total)
+		log.Printf("[Reindex] Total de notas elegiveis para o mapa: %d\n", total)
 
 		if total == 0 {
 			log.Println("[Reindex] Nenhuma nota encontrada com tag de mapa. Verifique se usou #embed.")
@@ -340,65 +346,90 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		newVectors := make(map[string][]float32)
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		sem := make(chan struct{}, 2)
-
-		for filename, content := range filesToProcess {
-			wg.Add(1)
-			go func(fname, txt string) {
-				defer wg.Done()
-				select {
-				case sem <- struct{}{}:
-					defer func() { <-sem }()
-				case <-time.After(1 * time.Minute): // Timeout para pegar slot
-					log.Printf("[Reindex] Timeout ao aguardar slot para %s\n", fname)
-					return
-				}
-
-				log.Printf("[Reindex] Processando embedding para: %s (%d chars)...\n", fname, len(txt))
-
-				ctxEmbed, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-				defer cancel()
-
-				effectiveHost := ctx.State.GetEffectiveOllamaHost(cfg)
-				log.Printf("[Reindex] Usando Ollama em %s para reindexar: %s\n", effectiveHost, fname)
-				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
-				vec, err := embFunc(ctxEmbed, txt)
-				if err != nil {
-					log.Printf("[Reindex] ERRO em %s: %v\n", fname, err)
-				} else {
-					mu.Lock()
-					newVectors[fname] = vec
-					mu.Unlock()
-					log.Printf("[Reindex] SUCESSO: %s vetorizada.\n", fname)
-				}
-				atomic.AddInt32(&reindexProcessed, 1)
-				events.GetHub().Broadcast("sync:progress", map[string]interface{}{
-					"filename": fname,
-					"current":  atomic.LoadInt32(&reindexProcessed),
-					"total":    total,
-				})
-			}(filename, content)
+		const batchSize = 10
+		var filenames []string
+		var contents []string
+		for fname, content := range filesToProcess {
+			filenames = append(filenames, fname)
+			contents = append(contents, content)
 		}
 
-		wg.Wait()
+		newVectors := make(map[string]ingest.NoteVector)
+		var mu sync.Mutex
 
-		log.Printf("[Reindex] Processamento concluído. Sucesso em %d de %d notas.\n", len(newVectors), total)
+		for i := 0; i < len(filenames); i += batchSize {
+			end := i + batchSize
+			if end > len(filenames) {
+				end = len(filenames)
+			}
+			batchFiles := filenames[i:end]
+			batchTexts := contents[i:end]
+			log.Printf("[Reindex] Lote %d/%d (%d notas)...\n", i/batchSize+1, (len(filenames)+batchSize-1)/batchSize, len(batchFiles))
+
+			ctxEmbed, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			effectiveHost := cfg.OllamaHost
+			vecs, err := semantic.EmbedBatch(ctxEmbed, effectiveHost, cfg.OllamaModel, batchTexts, ctx.State.GetSettings().EmbeddingDimension)
+			cancel()
+
+			if err != nil {
+				log.Printf("[Reindex] ERRO no lote: %v. Fallback individual...\n", err)
+				for j, fname := range batchFiles {
+					embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
+					vec, err := embFunc(context.Background(), batchTexts[j])
+					if err != nil {
+						log.Printf("[Reindex] ERRO em %s: %v\n", fname, err)
+					} else {
+						title := extractTitle(batchTexts[j], fname)
+						mu.Lock()
+						newVectors[fname] = ingest.NoteVector{Vector: vec, Title: title}
+						mu.Unlock()
+					}
+					atomic.AddInt32(&reindexProcessed, 1)
+					events.GetHub().Broadcast("sync:progress", map[string]interface{}{
+						"filename": fname, "current": atomic.LoadInt32(&reindexProcessed), "total": total,
+					})
+				}
+				continue
+			}
+
+			for j, fname := range batchFiles {
+				vec, ok := vecs[batchTexts[j]]
+				if !ok {
+					continue
+				}
+				title := extractTitle(batchTexts[j], fname)
+				mu.Lock()
+				newVectors[fname] = ingest.NoteVector{Vector: vec, Title: title}
+				mu.Unlock()
+				atomic.AddInt32(&reindexProcessed, 1)
+				events.GetHub().Broadcast("sync:progress", map[string]interface{}{
+					"filename": fname, "current": atomic.LoadInt32(&reindexProcessed), "total": total,
+				})
+			}
+		}
+
+		log.Printf("[Reindex] Concluido. Sucesso: %d/%d\n", len(newVectors), total)
 
 		if len(newVectors) > 0 {
 			ctx.State.ClearNoteVectors()
 			ctx.State.ClearNoteProjections()
-			for fname, vec := range newVectors {
-				ctx.State.SetNoteVector(fname, vec)
+			for fname, nv := range newVectors {
+				ctx.State.SetNoteVector(fname, nv.Vector, nv.Title)
 			}
-			log.Println("[Reindex] Mapa atualizado com novos vetores.")
-		} else {
-			log.Println("[Reindex] NENHUM vetor foi gerado com sucesso. Mantendo estado anterior.")
 		}
 
 		events.GetHub().Broadcast("sync:finished", map[string]interface{}{"new_docs": len(newVectors), "mode": "reindex"})
-		log.Println("[Reindex] Procedimento finalizado.")
 	}()
+}
+
+func extractTitle(content, filename string) string {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		clean := strings.TrimSpace(strings.TrimLeft(line, "# "))
+		if clean != "" {
+			return clean
+		}
+	}
+	parts := strings.Split(filename, "/")
+	return strings.TrimSuffix(parts[len(parts)-1], ".md")
 }

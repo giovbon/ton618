@@ -553,19 +553,22 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 					return
 				}
 
-				effectiveHost := appState.GetEffectiveOllamaHost(cfg)
+				effectiveHost := cfg.OllamaHost
 				log.Printf("[Sync] Usando Ollama em %s para vetorizar: %s\n", effectiveHost, fname)
-				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost)
+				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, appState.GetSettings().EmbeddingDimension)
 				vec, err := embFunc(context.Background(), string(content))
 				if err != nil {
 					log.Printf("[Sync] Erro ao gerar embedding para %s: %v\n", fname, err)
 				} else {
-					appState.SetNoteVector(fname, vec)
+					// Extrair titulo da primeira linha
+					title := extractFirstLineTitle(string(content), fname)
+					appState.SetNoteVector(fname, vec, title)
 					for _, doc := range fragments {
 						appState.SetVectorHash(doc.ID, doc.VectorHash)
 					}
-					appState.ClearNoteProjections() // Força recalcular PCA no próximo acesso ao mapa
-					log.Printf("[Sync] Vetorização concluída para: %s\n", fname)
+					// Invalidar apenas a projecao desta nota (P3.2: granular)
+					appState.DeleteNoteProjection(fname)
+					log.Printf("[Sync] Vetorizacao concluida para: %s\n", fname)
 				}
 				SetFileIndexing(fname, false)
 			}(filename, docs)
@@ -573,4 +576,18 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 	}
 
 	log.Printf("[Sync] %d fragmentos sincronizados (Vetores processados arquivo por arquivo).\n", len(bleveDocs))
+}
+
+// extractFirstLineTitle extrai o titulo da primeira linha nao-vazia do conteudo.
+func extractFirstLineTitle(content, filename string) string {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		clean := strings.TrimSpace(strings.TrimLeft(line, "# "))
+		if clean != "" {
+			return clean
+		}
+	}
+	// Fallback: nome do arquivo
+	parts := strings.Split(filename, "/")
+	return strings.TrimSuffix(parts[len(parts)-1], ".md")
 }

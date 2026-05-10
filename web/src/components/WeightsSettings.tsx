@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'preact/hooks';
+import { useCallback, useEffect, useState } from "preact/hooks";
 
-import type { RankingWeights } from '../types';
+import type { RankingWeights } from "../types";
 
 interface WeightInputProps {
   label: string;
@@ -19,52 +19,54 @@ const WeightInput = ({
   onChange,
   name,
   icon,
-  color = 'sky',
+  color = "sky",
 }: WeightInputProps) => {
-  const [inputValue, setInputValue] = useState(value.toString().replace('.', ','));
+  const [inputValue, setInputValue] = useState(
+    value.toString().replace(".", ","),
+  );
 
   const colorStyles: Record<string, string> = {
-    sky: 'group-hover:text-sky-400 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 shadow-sky-500/5',
+    sky: "group-hover:text-sky-400 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 shadow-sky-500/5",
     amber:
-      'group-hover:text-amber-400 group-hover:bg-amber-500/10 group-hover:border-amber-500/20 shadow-amber-500/5',
+      "group-hover:text-amber-400 group-hover:bg-amber-500/10 group-hover:border-amber-500/20 shadow-amber-500/5",
     indigo:
-      'group-hover:text-indigo-400 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/20 shadow-indigo-500/5',
+      "group-hover:text-indigo-400 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/20 shadow-indigo-500/5",
     violet:
-      'group-hover:text-violet-400 group-hover:bg-violet-500/10 group-hover:border-violet-500/20 shadow-violet-500/5',
+      "group-hover:text-violet-400 group-hover:bg-violet-500/10 group-hover:border-violet-500/20 shadow-violet-500/5",
     emerald:
-      'group-hover:text-emerald-400 group-hover:bg-emerald-500/10 group-hover:border-emerald-500/20 shadow-emerald-500/5',
-    cyan: 'group-hover:text-cyan-400 group-hover:bg-cyan-500/10 group-hover:border-cyan-500/20 shadow-cyan-500/5',
+      "group-hover:text-emerald-400 group-hover:bg-emerald-500/10 group-hover:border-emerald-500/20 shadow-emerald-500/5",
+    cyan: "group-hover:text-cyan-400 group-hover:bg-cyan-500/10 group-hover:border-cyan-500/20 shadow-cyan-500/5",
     fuchsia:
-      'group-hover:text-fuchsia-400 group-hover:bg-fuchsia-500/10 group-hover:border-fuchsia-500/20 shadow-fuchsia-500/5',
+      "group-hover:text-fuchsia-400 group-hover:bg-fuchsia-500/10 group-hover:border-fuchsia-500/20 shadow-fuchsia-500/5",
     orange:
-      'group-hover:text-orange-400 group-hover:bg-orange-500/10 group-hover:border-orange-500/20 shadow-orange-500/5',
-    rose: 'group-hover:text-rose-400 group-hover:bg-rose-500/10 group-hover:border-rose-500/20 shadow-rose-500/5',
+      "group-hover:text-orange-400 group-hover:bg-orange-500/10 group-hover:border-orange-500/20 shadow-orange-500/5",
+    rose: "group-hover:text-rose-400 group-hover:bg-rose-500/10 group-hover:border-rose-500/20 shadow-rose-500/5",
   };
 
   const currentStyle = colorStyles[color] || colorStyles.sky;
 
   useEffect(() => {
-    setInputValue(value.toString().replace('.', ','));
+    setInputValue(value.toString().replace(".", ","));
   }, [value]);
 
   const handleChange = (e: any) => {
     const rawValue = e.target.value;
     setInputValue(rawValue);
-    const normalizedValue = rawValue.replace(',', '.');
+    const normalizedValue = rawValue.replace(",", ".");
     const parsed = parseFloat(normalizedValue);
     if (!Number.isNaN(parsed)) onChange(name, parsed);
   };
 
   const labelColors: Record<string, string> = {
-    sky: 'text-sky-400/70 group-hover:text-sky-400',
-    amber: 'text-amber-400/70 group-hover:text-amber-400',
-    indigo: 'text-indigo-400/70 group-hover:text-indigo-400',
-    violet: 'text-violet-400/70 group-hover:text-violet-400',
-    emerald: 'text-emerald-400/70 group-hover:text-emerald-400',
-    cyan: 'text-cyan-400/70 group-hover:text-cyan-400',
-    fuchsia: 'text-fuchsia-400/70 group-hover:text-fuchsia-400',
-    orange: 'text-orange-400/70 group-hover:text-orange-400',
-    rose: 'text-rose-400/70 group-hover:text-rose-400',
+    sky: "text-sky-400/70 group-hover:text-sky-400",
+    amber: "text-amber-400/70 group-hover:text-amber-400",
+    indigo: "text-indigo-400/70 group-hover:text-indigo-400",
+    violet: "text-violet-400/70 group-hover:text-violet-400",
+    emerald: "text-emerald-400/70 group-hover:text-emerald-400",
+    cyan: "text-cyan-400/70 group-hover:text-cyan-400",
+    fuchsia: "text-fuchsia-400/70 group-hover:text-fuchsia-400",
+    orange: "text-orange-400/70 group-hover:text-orange-400",
+    rose: "text-rose-400/70 group-hover:text-rose-400",
   };
 
   const currentLabelColor = labelColors[color] || labelColors.sky;
@@ -72,7 +74,7 @@ const WeightInput = ({
   return (
     <div className="flex flex-col gap-1 p-3 bg-zinc-900/40 border border-zinc-800/60 rounded-xl hover:border-zinc-700/60 transition-all group relative overflow-hidden">
       <div
-        className={`absolute top-0 right-0 w-20 h-20 blur-2xl rounded-full -mr-10 -mt-10 transition-opacity opacity-0 group-hover:opacity-100 ${currentStyle.split(' ').pop()}`}
+        className={`absolute top-0 right-0 w-20 h-20 blur-2xl rounded-full -mr-10 -mt-10 transition-opacity opacity-0 group-hover:opacity-100 ${currentStyle.split(" ").pop()}`}
       />
 
       <div className="flex items-center justify-between gap-3 relative z-10">
@@ -120,18 +122,16 @@ export const WeightsSettings = ({
 }: WeightsSettingsProps) => {
   const [weights, setWeights] = useState<RankingWeights | null>(null);
   const [settings, setSettings] = useState({
-    google_vision_key: '',
+    google_vision_key: "",
     semantic_threshold: 0.2,
     semantic_enable: true,
-    semantic_strategy: 'whitelist',
-    language: 'pt-BR',
-    ollama_hosts: [] as string[],
-    ollama_host_active: '',
+    semantic_strategy: "whitelist",
+    embedding_dimension: 512,
+    language: "pt-BR",
   });
-  const [newHost, setNewHost] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('backup'); // 'backup' | 'pesos' | 'apis' | 'manutencao'
+  const [activeTab, setActiveTab] = useState("backup"); // 'backup' | 'pesos' | 'apis' | 'manutencao'
 
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
@@ -146,8 +146,8 @@ export const WeightsSettings = ({
     captures: false,
     inactivity: true,
     minSizeMb: 0,
-    targetTags: '',
-    tagMode: 'any', // "any" | "only"
+    targetTags: "",
+    tagMode: "any", // "any" | "only"
   });
   const [staleInfo, setStaleInfo] = useState<any>(null);
   const [backupSize, setBackupSize] = useState<number | null>(null);
@@ -158,32 +158,32 @@ export const WeightsSettings = ({
 
   const fetchBackupSize = useCallback(async () => {
     try {
-      const res = await fetchWithAuth('/api/backup/size');
+      const res = await fetchWithAuth("/api/backup/size");
       if (res?.ok) {
         const data = await res.json();
         setBackupSize(data.totalSize);
       }
     } catch (err) {
-      console.error('Erro ao carregar tamanho do backup:', err);
+      console.error("Erro ao carregar tamanho do backup:", err);
     }
   }, [fetchWithAuth]);
 
   const fetchSettings = useCallback(async () => {
     try {
-      const res = await fetchWithAuth('/api/settings');
+      const res = await fetchWithAuth("/api/settings");
       if (res?.ok) {
         const data = await res.json();
         setSettings(data);
       }
     } catch (err) {
-      console.error('Erro ao carregar APIs:', err);
+      console.error("Erro ao carregar APIs:", err);
     }
   }, [fetchWithAuth]);
 
   const fetchWeights = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetchWithAuth('/api/weights');
+      const res = await fetchWithAuth("/api/weights");
       if (res?.ok) {
         const data = await res.json();
         setWeights(data);
@@ -199,7 +199,7 @@ export const WeightsSettings = ({
     if (isOpen) {
       fetchWeights();
       fetchSettings();
-      if (activeTab === 'backup') fetchBackupSize();
+      if (activeTab === "backup") fetchBackupSize();
     }
   }, [isOpen, activeTab, fetchWeights, fetchSettings, fetchBackupSize]);
 
@@ -211,16 +211,16 @@ export const WeightsSettings = ({
     setIsSaving(true);
     try {
       // Salvar Pesos
-      const resWeights = await fetchWithAuth('/api/weights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const resWeights = await fetchWithAuth("/api/weights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(weights),
       });
 
       // Salvar Configurações de API
-      const resSettings = await fetchWithAuth('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const resSettings = await fetchWithAuth("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
 
@@ -228,10 +228,10 @@ export const WeightsSettings = ({
         if (onUpdate) onUpdate();
         onClose();
       } else {
-        alert('Erro ao salvar algumas configurações.');
+        alert("Erro ao salvar algumas configurações.");
       }
     } catch (_err) {
-      alert('Erro de conexão ao salvar.');
+      alert("Erro de conexão ao salvar.");
     } finally {
       setIsSaving(false);
     }
@@ -241,14 +241,14 @@ export const WeightsSettings = ({
     setIsResetConfirmOpen(false);
     setIsLoading(true);
     try {
-      const res = await fetchWithAuth('/api/weights', { method: 'DELETE' });
+      const res = await fetchWithAuth("/api/weights", { method: "DELETE" });
       if (res?.ok) {
         const data = await res.json();
         setWeights(data);
         if (onUpdate) onUpdate();
       }
     } catch (_err) {
-      alert('Erro ao resetar.');
+      alert("Erro ao resetar.");
     } finally {
       setIsLoading(false);
     }
@@ -258,7 +258,12 @@ export const WeightsSettings = ({
 
   const ICONS = {
     exact: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -268,7 +273,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     partial: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -278,7 +288,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     phrase: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -288,7 +303,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     path: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -298,7 +318,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     h1: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -308,7 +333,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     clock: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -318,7 +348,12 @@ export const WeightsSettings = ({
       </svg>
     ),
     semantic: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -340,7 +375,12 @@ export const WeightsSettings = ({
             onClick={onClose}
             className="hidden md:flex w-fit items-center gap-2 py-2 px-3 mb-8 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-[10px] font-black uppercase tracking-widest transition-all border border-zinc-700/30 active:scale-95"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -348,22 +388,22 @@ export const WeightsSettings = ({
                 d="M10 19l-7-7m0 0l7-7m-7 7h18"
               />
             </svg>
-            {'Cancelar'}
+            {"Cancelar"}
           </button>
 
           <div className="mb-4 md:mb-6 px-1 md:px-2">
             <h2 className="text-zinc-100 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.25em]">
-              {'Backup'}
+              {"Backup"}
             </h2>
             <p className="text-zinc-600 text-[8px] md:text-[10px] font-bold mt-1 uppercase tracking-widest">
-              {'Segurança de Dados'}
+              {"Segurança de Dados"}
             </p>
           </div>
 
           <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0">
             <button
-              onClick={() => setActiveTab('backup')}
-              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'backup' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg' : 'text-zinc-500 hover:text-zinc-400'}`}
+              onClick={() => setActiveTab("backup")}
+              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "backup" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg" : "text-zinc-500 hover:text-zinc-400"}`}
             >
               <svg
                 className="w-3.5 h-3.5 md:w-4 md:h-4"
@@ -378,11 +418,11 @@ export const WeightsSettings = ({
                   d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
                 />
               </svg>
-              {'Backup'}
+              {"Backup"}
             </button>
             <button
-              onClick={() => setActiveTab('pesos')}
-              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pesos' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg' : 'text-zinc-500 hover:text-zinc-400'}`}
+              onClick={() => setActiveTab("pesos")}
+              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "pesos" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-lg" : "text-zinc-500 hover:text-zinc-400"}`}
             >
               <svg
                 className="w-3.5 h-3.5 md:w-4 md:h-4"
@@ -397,11 +437,11 @@ export const WeightsSettings = ({
                   d="M3 6l3 12h12l3-12H3z"
                 />
               </svg>
-              {'Pesos e Semântica'}
+              {"Pesos e Semântica"}
             </button>
             <button
-              onClick={() => setActiveTab('apis')}
-              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'apis' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-lg' : 'text-zinc-500 hover:text-zinc-400'}`}
+              onClick={() => setActiveTab("apis")}
+              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "apis" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-lg" : "text-zinc-500 hover:text-zinc-400"}`}
             >
               <svg
                 className="w-3.5 h-3.5 md:w-4 md:h-4"
@@ -419,8 +459,8 @@ export const WeightsSettings = ({
               APIs
             </button>
             <button
-              onClick={() => setActiveTab('manutencao')}
-              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'manutencao' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-lg' : 'text-zinc-500 hover:text-zinc-400'}`}
+              onClick={() => setActiveTab("manutencao")}
+              className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "manutencao" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-lg" : "text-zinc-500 hover:text-zinc-400"}`}
             >
               <svg
                 className="w-3.5 h-3.5 md:w-4 md:h-4"
@@ -435,7 +475,7 @@ export const WeightsSettings = ({
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                 />
               </svg>
-              {'Limpeza'}
+              {"Limpeza"}
             </button>
           </nav>
 
@@ -448,20 +488,20 @@ export const WeightsSettings = ({
               disabled={isSaving}
               className="w-full py-4 rounded-2xl bg-sky-500 text-white text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sky-500/20 hover:bg-sky-400 active:scale-[0.95] transition-all disabled:bg-zinc-800 disabled:text-zinc-600"
             >
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              {isSaving ? "Salvando..." : "Salvar"}
             </button>
             <div className="flex gap-2">
               <button
                 onClick={onClose}
                 className="flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-all border border-zinc-800/50 hover:bg-zinc-800"
               >
-                {'Cancelar'}
+                {"Cancelar"}
               </button>
               <button
                 onClick={() => setIsResetConfirmOpen(true)}
                 className="flex-1 py-2.5 rounded-xl border border-zinc-800/50 text-zinc-600 text-[9px] font-black uppercase tracking-widest hover:bg-zinc-800 hover:text-rose-400 transition-all active:scale-95"
               >
-                {'Resetar'}
+                {"Resetar"}
               </button>
             </div>
 
@@ -482,7 +522,7 @@ export const WeightsSettings = ({
                   d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                 />
               </svg>
-              {'Sair da Conta'}
+              {"Sair da Conta"}
             </button>
           </div>
         </aside>
@@ -494,26 +534,31 @@ export const WeightsSettings = ({
             disabled={isSaving}
             className="w-full py-3 rounded-xl bg-sky-500 text-white text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sky-500/20 active:scale-[0.95] transition-all disabled:bg-zinc-800"
           >
-            {isSaving ? 'Salvando...' : 'Salvar'}
+            {isSaving ? "Salvando..." : "Salvar"}
           </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 bg-zinc-900/50"
             >
-              {'Cancelar'}
+              {"Cancelar"}
             </button>
             <button
               onClick={() => setIsResetConfirmOpen(true)}
               className="flex-1 py-2 rounded-lg border border-zinc-800 text-zinc-600 text-[9px] font-black uppercase tracking-widest bg-zinc-900/50"
             >
-              {'Resetar'}
+              {"Resetar"}
             </button>
             <button
               onClick={onLogout}
               className="flex-1 py-2 rounded-lg border border-rose-500/20 text-rose-500/50 bg-rose-500/5 flex items-center justify-center"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -529,22 +574,22 @@ export const WeightsSettings = ({
           <header className="px-4 py-3 md:p-10 flex justify-between items-start">
             <div>
               <h1 className="text-xl md:text-5xl font-black text-zinc-100 tracking-tighter uppercase">
-                {activeTab === 'pesos'
-                  ? 'Pesos e Semântica'
-                  : activeTab === 'apis'
-                    ? 'Integração de APIs'
-                    : activeTab === 'backup'
-                      ? 'Backup e Segurança'
-                      : 'Manutenção de Disco'}
+                {activeTab === "pesos"
+                  ? "Pesos e Semântica"
+                  : activeTab === "apis"
+                    ? "Integração de APIs"
+                    : activeTab === "backup"
+                      ? "Backup e Segurança"
+                      : "Manutenção de Disco"}
               </h1>
               <p className="hidden md:block text-zinc-500 text-sm mt-3 font-medium max-w-2xl">
-                {activeTab === 'pesos'
-                  ? 'Ajuste como os resultados são priorizados pelo motor de busca.'
-                  : activeTab === 'apis'
-                    ? 'Configure chaves de serviços externos para expandir as capacidades do PKM.'
-                    : activeTab === 'backup'
-                      ? 'Exporte seu conhecimento para um arquivo seguro.'
-                      : 'Remova conteúdo antigo ou não utilizado para otimizar o espaço e a performance.'}
+                {activeTab === "pesos"
+                  ? "Ajuste como os resultados são priorizados pelo motor de busca."
+                  : activeTab === "apis"
+                    ? "Configure chaves de serviços externos para expandir as capacidades do PKM."
+                    : activeTab === "backup"
+                      ? "Exporte seu conhecimento para um arquivo seguro."
+                      : "Remova conteúdo antigo ou não utilizado para otimizar o espaço e a performance."}
               </p>
             </div>
           </header>
@@ -552,43 +597,49 @@ export const WeightsSettings = ({
           <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 md:pb-6 custom-scrollbar">
             {isLoading || !weights ? (
               <div className="flex items-center justify-center h-full text-zinc-700 animate-pulse text-[10px] font-black uppercase tracking-widest">
-                {'Carregando...'}
+                {"Carregando..."}
               </div>
-            ) : activeTab === 'backup' ? (
+            ) : activeTab === "backup" ? (
               <div className="flex flex-col gap-6">
                 <div className="p-10 bg-zinc-900/60 border border-zinc-800 rounded-[40px] relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <svg className="w-32 h-32 text-sky-500" fill="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className="w-32 h-32 text-sky-500"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
                     </svg>
                   </div>
 
                   <div className="max-w-md relative z-10">
                     <h3 className="text-zinc-100 font-black text-2xl uppercase tracking-tighter mb-4 flex items-center gap-3">
-                      {'Baixar Backup Completo'}
+                      {"Baixar Backup Completo"}
                     </h3>
                     <p className="text-zinc-500 text-sm leading-relaxed mb-8">
                       {
-                        'Gera um arquivo compactado (.zip) contendo todas as suas notas, anexos e imagens da pasta /docs. Seus dados são seus, leve-os para onde quiser.'
+                        "Gera um arquivo compactado (.zip) contendo todas as suas notas, anexos e imagens da pasta /docs. Seus dados são seus, leve-os para onde quiser."
                       }
                     </p>
 
                     <button
                       onClick={async () => {
                         try {
-                          const res = await fetchWithAuth('/api/backup/download');
+                          const res = await fetchWithAuth(
+                            "/api/backup/download",
+                          );
                           if (res?.ok) {
                             const blob = await res.blob();
                             const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
+                            const a = document.createElement("a");
                             a.href = url;
-                            a.download = `ton618_backup_${new Date().toISOString().split('T')[0]}.zip`;
+                            a.download = `ton618_backup_${new Date().toISOString().split("T")[0]}.zip`;
                             document.body.appendChild(a);
                             a.click();
                             window.URL.revokeObjectURL(url);
                           }
                         } catch (_err) {
-                          alert('Erro ao gerar backup.');
+                          alert("Erro ao gerar backup.");
                         }
                       }}
                       className="group relative flex items-center gap-3 px-8 py-4 bg-sky-500 hover:bg-sky-400 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-xl shadow-sky-500/20 active:scale-95"
@@ -606,16 +657,16 @@ export const WeightsSettings = ({
                           d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                         />
                       </svg>
-                      {'Gerar ZIP Agora'}
+                      {"Gerar ZIP Agora"}
                     </button>
 
                     <div className="mt-8 flex items-center gap-3 p-4 bg-zinc-950/50 border border-zinc-800 rounded-2xl">
                       <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                        {'Tamanho estimado: '}
+                        {"Tamanho estimado: "}
                         <span className="text-zinc-100">
                           {backupSize === null
-                            ? 'Calculando...'
+                            ? "Calculando..."
                             : backupSize < 1024 * 1024
                               ? `${(backupSize / 1024).toFixed(1)} KB`
                               : backupSize < 1024 * 1024 * 1024
@@ -627,19 +678,19 @@ export const WeightsSettings = ({
                   </div>
                 </div>
               </div>
-            ) : activeTab === 'pesos' ? (
+            ) : activeTab === "pesos" ? (
               <div className="flex flex-col gap-6">
                 {/* Grid de Pesos de Relevância */}
                 <div className="p-6 bg-zinc-900/40 border border-zinc-800/60 rounded-3xl relative overflow-hidden group">
                   <h3 className="text-zinc-100 font-black text-xs uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                    {'Pesos e Semântica'}
+                    {"Pesos e Semântica"}
                     <span className="text-[10px] bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/20 font-black tracking-normal">
                       Fine Tuning
                     </span>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <WeightInput
-                      label={'Peso da Base'}
+                      label={"Peso da Base"}
                       name="base_multiplier"
                       value={weights?.base_multiplier}
                       onChange={handleUpdateWeight}
@@ -659,59 +710,67 @@ export const WeightsSettings = ({
                         </svg>
                       }
                       color="sky"
-                      description={'Influência do motor estatístico (Bleve) no score final.'}
+                      description={
+                        "Influência do motor estatístico (Bleve) no score final."
+                      }
                     />
                     <WeightInput
-                      label={'Título (Bônus %)'}
+                      label={"Título (Bônus %)"}
                       name="boost_title_exact"
                       value={weights?.boost_title_exact}
                       onChange={handleUpdateWeight}
                       icon={ICONS.exact}
                       color="amber"
                       description={
-                        'Multiplicador aplicado se o termo for idêntico ao título da seção.'
+                        "Multiplicador aplicado se o termo for idêntico ao título da seção."
                       }
                     />
                     <WeightInput
-                      label={'Título Parcial (%)'}
+                      label={"Título Parcial (%)"}
                       name="boost_title_partial"
                       value={weights?.boost_title_partial}
                       onChange={handleUpdateWeight}
                       icon={ICONS.partial}
                       color="orange"
-                      description={'Multiplicador aplicado se o termo estiver contido no título.'}
+                      description={
+                        "Multiplicador aplicado se o termo estiver contido no título."
+                      }
                     />
                     <WeightInput
-                      label={'Frase Exata (%)'}
+                      label={"Frase Exata (%)"}
                       name="boost_phrase"
                       value={weights?.boost_phrase}
                       onChange={handleUpdateWeight}
                       icon={ICONS.phrase}
                       color="indigo"
-                      description={'Multiplicador massivo para encontrar a frase exata pesquisada.'}
+                      description={
+                        "Multiplicador massivo para encontrar a frase exata pesquisada."
+                      }
                     />
                     <WeightInput
-                      label={'Nome Arquivo (%)'}
+                      label={"Nome Arquivo (%)"}
                       name="boost_path_context"
                       value={weights?.boost_path_context}
                       onChange={handleUpdateWeight}
                       icon={ICONS.path}
                       color="cyan"
-                      description={'Prioridade extra se o termo estiver no nome do arquivo.'}
+                      description={
+                        "Prioridade extra se o termo estiver no nome do arquivo."
+                      }
                     />
                     <WeightInput
-                      label={'Recência (Bônus %)'}
+                      label={"Recência (Bônus %)"}
                       name="boost_freshness_max"
                       value={weights?.boost_freshness_max}
                       onChange={handleUpdateWeight}
                       icon={ICONS.clock}
                       color="emerald"
                       description={
-                        'Multiplicador máximo para notas criadas ou editadas recentemente.'
+                        "Multiplicador máximo para notas criadas ou editadas recentemente."
                       }
                     />
                     <WeightInput
-                      label={'Riqueza Técnica'}
+                      label={"Riqueza Técnica"}
                       name="boost_technical"
                       value={weights?.boost_technical}
                       onChange={handleUpdateWeight}
@@ -732,11 +791,11 @@ export const WeightsSettings = ({
                       }
                       color="fuchsia"
                       description={
-                        'Bônus cumulativo por categoria (tabelas, código, links internos e externos).'
+                        "Bônus cumulativo por categoria (tabelas, código, links internos e externos)."
                       }
                     />
                     <WeightInput
-                      label={'Autoridade de Links'}
+                      label={"Autoridade de Links"}
                       name="boost_link_authority"
                       value={weights?.boost_link_authority}
                       onChange={handleUpdateWeight}
@@ -757,13 +816,13 @@ export const WeightsSettings = ({
                       }
                       color="violet"
                       description={
-                        'Bônus logarítmico para notas que são muito citadas por outras notas.'
+                        "Bônus logarítmico para notas que são muito citadas por outras notas."
                       }
                     />
                   </div>
                 </div>
               </div>
-            ) : activeTab === 'apis' ? (
+            ) : activeTab === "apis" ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="p-6 bg-zinc-900/60 border border-zinc-800 rounded-3xl relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -777,130 +836,38 @@ export const WeightsSettings = ({
                   </div>
 
                   <h3 className="text-zinc-100 font-black text-xs uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                    {'Google Cloud Vision'}
+                    {"Google Cloud Vision"}
                     <span className="text-[10px] bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/20 font-black tracking-normal">
                       OCR
                     </span>
                   </h3>
                   <p className="text-zinc-500 text-sm leading-relaxed mb-6">
                     {
-                      'Extrai texto de imagens e fotos automaticamente usando IA avançada. Sem chave, o processamento de texto é ignorado.'
+                      "Extrai texto de imagens e fotos automaticamente usando IA avançada. Sem chave, o processamento de texto é ignorado."
                     }
                   </p>
 
                   <div className="flex flex-col gap-2">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                      {'API Key'}
+                      {"API Key"}
                     </label>
                     <input
                       type="password"
                       value={settings.google_vision_key}
                       onInput={(e: any) =>
-                        setSettings({ ...settings, google_vision_key: e.target.value })
+                        setSettings({
+                          ...settings,
+                          google_vision_key: e.target.value,
+                        })
                       }
                       placeholder="AIzaSy..."
                       className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 px-4 py-3 rounded-xl focus:ring-1 focus:ring-sky-500 outline-none font-mono text-sm shadow-inner transition-all hover:border-zinc-700"
                     />
                     <p className="text-[9px] text-zinc-600 mt-1 italic">
-                      {"Dica: Ative a 'Cloud Vision API' no console do Google Cloud."}
+                      {
+                        "Dica: Ative a 'Cloud Vision API' no console do Google Cloud."
+                      }
                     </p>
-                  </div>
-                </div>
-
-                <div className="p-6 bg-zinc-900/60 border border-zinc-800 rounded-3xl relative overflow-hidden group flex flex-col gap-6">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <svg
-                      className="w-12 h-12 text-sky-500"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-                    </svg>
-                  </div>
-
-                  <div className="relative z-10">
-                    <h3 className="text-zinc-100 font-black text-xs uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                      {'Ollama Embeddings'}
-                      <span className="text-[10px] bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/20 font-black tracking-normal">
-                        Vetorização
-                      </span>
-                    </h3>
-                    <p className="text-zinc-500 text-sm leading-relaxed mb-4">
-                      {'Gerencie os endpoints do Ollama para geração de embeddings e busca semântica.'}
-                    </p>
-
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={newHost}
-                          onInput={(e: any) => setNewHost(e.target.value)}
-                          placeholder="http://192.168.1.50:11434"
-                          className="flex-1 bg-zinc-950 border border-zinc-800 text-zinc-100 px-3 py-2 rounded-xl focus:ring-1 focus:ring-sky-500 outline-none font-mono text-xs shadow-inner transition-all hover:border-zinc-700"
-                        />
-                        <button
-                          onClick={() => {
-                            if (newHost.trim()) {
-                              setSettings({
-                                ...settings,
-                                ollama_hosts: [...(settings.ollama_hosts || []), newHost.trim()],
-                              });
-                              setNewHost('');
-                            }
-                          }}
-                          className="px-3 py-2 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-xl font-black text-[10px] uppercase hover:bg-sky-500/20 transition-all"
-                        >
-                          Add
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col gap-2 mt-2">
-                        {settings.ollama_hosts && settings.ollama_hosts.length > 0 ? (
-                          settings.ollama_hosts.map((host, idx) => (
-                            <div
-                              key={idx}
-                              className={`flex items-center justify-between p-2 rounded-xl border transition-all ${settings.ollama_host_active === host ? 'bg-sky-500/5 border-sky-500/30' : 'bg-zinc-950/50 border-zinc-800 hover:border-zinc-700'}`}
-                            >
-                              <div
-                                className="flex-1 cursor-pointer flex items-center gap-2"
-                                onClick={() => setSettings({ ...settings, ollama_host_active: settings.ollama_host_active === host ? '' : host })}
-                              >
-                                <div
-                                  className={`w-2 h-2 rounded-full ${settings.ollama_host_active === host ? 'bg-sky-500 animate-pulse' : 'bg-zinc-700'}`}
-                                />
-                                <span className={`text-[10px] font-mono ${settings.ollama_host_active === host ? 'text-sky-400 font-bold' : 'text-zinc-500'}`}>
-                                  {host}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const filtered = settings.ollama_hosts?.filter((_, i) => i !== idx);
-                                  setSettings({
-                                    ...settings,
-                                    ollama_hosts: filtered,
-                                    ollama_host_active: settings.ollama_host_active === host ? '' : settings.ollama_host_active,
-                                  });
-                                }}
-                                className="p-1 text-zinc-600 hover:text-rose-400 transition-colors"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="p-4 border border-dashed border-zinc-800 rounded-xl text-center">
-                            <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest italic">
-                              {'Nenhum host cadastrado'}
-                            </p>
-                          </div>
-                        )}
-                        <p className="text-[9px] text-zinc-600 mt-1 italic">
-                          {'Dica: Deixe vazio para usar o host padrão do sistema.'}
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -911,7 +878,7 @@ export const WeightsSettings = ({
                   <div className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-[24px]">
                     <div className="flex items-center justify-between mb-4">
                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block">
-                        {'Corte de Inatividade'}
+                        {"Corte de Inatividade"}
                       </label>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -919,14 +886,17 @@ export const WeightsSettings = ({
                           className="sr-only peer"
                           checked={cleanupSettings.inactivity}
                           onChange={(e: any) =>
-                            setCleanupSettings({ ...cleanupSettings, inactivity: e.target.checked })
+                            setCleanupSettings({
+                              ...cleanupSettings,
+                              inactivity: e.target.checked,
+                            })
                           }
                         />
                         <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-zinc-400 peer-checked:after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500/50"></div>
                       </label>
                     </div>
                     <div
-                      className={`flex flex-col gap-4 transition-opacity duration-300 ${cleanupSettings.inactivity ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}
+                      className={`flex flex-col gap-4 transition-opacity duration-300 ${cleanupSettings.inactivity ? "opacity-100" : "opacity-40 pointer-events-none"}`}
                     >
                       <input
                         type="range"
@@ -943,27 +913,29 @@ export const WeightsSettings = ({
                       />
                       <div className="flex justify-between items-center">
                         <span className="text-xl font-black text-zinc-100 italic tracking-tighter">
-                          {cleanupSettings.years === 0 ? 'Qualquer' : cleanupSettings.years}
+                          {cleanupSettings.years === 0
+                            ? "Qualquer"
+                            : cleanupSettings.years}
                           <span className="text-xs text-zinc-500 uppercase ml-1 not-italic">
                             {cleanupSettings.years === 0
-                              ? ''
+                              ? ""
                               : cleanupSettings.years === 1
-                                ? 'ano'
-                                : 'anos'}
+                                ? "ano"
+                                : "anos"}
                           </span>
                         </span>
                         <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-tighter italic">
-                          {'Última edição'}
+                          {"Última edição"}
                         </span>
                       </div>
 
                       <div className="pt-4 border-t border-zinc-800/50 mt-2">
                         <div className="flex justify-between items-center mb-3">
                           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block">
-                            {'Tamanho Mínimo'}
+                            {"Tamanho Mínimo"}
                           </label>
                           <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-tighter italic">
-                            {'Ignorar menores'}
+                            {"Ignorar menores"}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
@@ -990,7 +962,7 @@ export const WeightsSettings = ({
 
                   <div className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-[24px] flex flex-col gap-3">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1">
-                      {'Tipos de Arquivo'}
+                      {"Tipos de Arquivo"}
                     </label>
                     <div className="grid grid-cols-1 gap-2">
                       <label className="flex items-center gap-3 cursor-pointer group p-2 rounded-xl hover:bg-zinc-800/30 transition-all border border-transparent hover:border-zinc-800">
@@ -998,12 +970,15 @@ export const WeightsSettings = ({
                           type="checkbox"
                           checked={cleanupSettings.photos}
                           onChange={(e: any) =>
-                            setCleanupSettings({ ...cleanupSettings, photos: e.target.checked })
+                            setCleanupSettings({
+                              ...cleanupSettings,
+                              photos: e.target.checked,
+                            })
                           }
                           className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-rose-500 focus:ring-rose-500"
                         />
                         <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-200 transition-colors flex-1">
-                          {'Anexos & Fotos (.png, .jpg)'}
+                          {"Anexos & Fotos (.png, .jpg)"}
                         </span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group p-2 rounded-xl hover:bg-zinc-800/30 transition-all border border-transparent hover:border-zinc-800">
@@ -1011,12 +986,15 @@ export const WeightsSettings = ({
                           type="checkbox"
                           checked={cleanupSettings.pdfs}
                           onChange={(e: any) =>
-                            setCleanupSettings({ ...cleanupSettings, pdfs: e.target.checked })
+                            setCleanupSettings({
+                              ...cleanupSettings,
+                              pdfs: e.target.checked,
+                            })
                           }
                           className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-rose-500 focus:ring-rose-500"
                         />
                         <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-200 transition-colors flex-1">
-                          {'Relatórios & PDFs (.pdf)'}
+                          {"Relatórios & PDFs (.pdf)"}
                         </span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group p-2 rounded-xl hover:bg-zinc-800/30 transition-all border border-transparent hover:border-zinc-800">
@@ -1024,12 +1002,15 @@ export const WeightsSettings = ({
                           type="checkbox"
                           checked={cleanupSettings.notes}
                           onChange={(e: any) =>
-                            setCleanupSettings({ ...cleanupSettings, notes: e.target.checked })
+                            setCleanupSettings({
+                              ...cleanupSettings,
+                              notes: e.target.checked,
+                            })
                           }
                           className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-rose-500 focus:ring-rose-500"
                         />
                         <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-200 transition-colors flex-1">
-                          {'Notas Markdown (.md)'}
+                          {"Notas Markdown (.md)"}
                         </span>
                       </label>
                     </div>
@@ -1041,12 +1022,15 @@ export const WeightsSettings = ({
                             type="checkbox"
                             checked={cleanupSettings.zombies}
                             onChange={(e: any) =>
-                              setCleanupSettings({ ...cleanupSettings, zombies: e.target.checked })
+                              setCleanupSettings({
+                                ...cleanupSettings,
+                                zombies: e.target.checked,
+                              })
                             }
                             className="w-3 h-3 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500"
                           />
                           <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors tracking-tighter">
-                            {'Notas Zumbis (Vazias)'}
+                            {"Notas Zumbis (Vazias)"}
                           </span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer group">
@@ -1062,7 +1046,7 @@ export const WeightsSettings = ({
                             className="w-3 h-3 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500"
                           />
                           <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors tracking-tighter">
-                            {'Tarefas Abandonadas'}
+                            {"Tarefas Abandonadas"}
                           </span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer group">
@@ -1070,12 +1054,15 @@ export const WeightsSettings = ({
                             type="checkbox"
                             checked={cleanupSettings.captures}
                             onChange={(e: any) =>
-                              setCleanupSettings({ ...cleanupSettings, captures: e.target.checked })
+                              setCleanupSettings({
+                                ...cleanupSettings,
+                                captures: e.target.checked,
+                              })
                             }
                             className="w-3 h-3 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500"
                           />
                           <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors tracking-tighter">
-                            {'Capturas (Artigos + YouTube)'}
+                            {"Capturas (Artigos + YouTube)"}
                           </span>
                         </label>
                       </div>
@@ -1087,24 +1074,30 @@ export const WeightsSettings = ({
                     <div className="p-5 bg-rose-500/5 border border-rose-500/10 rounded-[24px] flex flex-col gap-4 animate-in fade-in duration-200">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block">
-                          {'Exclusão por Hashtag'}
+                          {"Exclusão por Hashtag"}
                         </label>
                         <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
                           <button
                             onClick={() =>
-                              setCleanupSettings({ ...cleanupSettings, tagMode: 'any' })
+                              setCleanupSettings({
+                                ...cleanupSettings,
+                                tagMode: "any",
+                              })
                             }
-                            className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${cleanupSettings.tagMode === 'any' ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'text-zinc-600 hover:text-zinc-400'}`}
+                            className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${cleanupSettings.tagMode === "any" ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20" : "text-zinc-600 hover:text-zinc-400"}`}
                           >
-                            {'Qualquer'}
+                            {"Qualquer"}
                           </button>
                           <button
                             onClick={() =>
-                              setCleanupSettings({ ...cleanupSettings, tagMode: 'only' })
+                              setCleanupSettings({
+                                ...cleanupSettings,
+                                tagMode: "only",
+                              })
                             }
-                            className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${cleanupSettings.tagMode === 'only' ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20' : 'text-zinc-600 hover:text-zinc-400'}`}
+                            className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${cleanupSettings.tagMode === "only" ? "bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20" : "text-zinc-600 hover:text-zinc-400"}`}
                           >
-                            {'Exata'}
+                            {"Exata"}
                           </button>
                         </div>
                       </div>
@@ -1129,7 +1122,10 @@ export const WeightsSettings = ({
                           type="text"
                           value={cleanupSettings.targetTags}
                           onChange={(e: any) =>
-                            setCleanupSettings({ ...cleanupSettings, targetTags: e.target.value })
+                            setCleanupSettings({
+                              ...cleanupSettings,
+                              targetTags: e.target.value,
+                            })
                           }
                           placeholder="#temp, #rascunho..."
                           className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 pl-9 pr-4 py-3 rounded-xl focus:ring-1 focus:ring-rose-500/50 outline-none font-mono text-sm shadow-inner group-hover:border-zinc-700 transition-all placeholder:text-zinc-800"
@@ -1161,7 +1157,9 @@ export const WeightsSettings = ({
                             tagMode: cleanupSettings.tagMode,
                           }).toString();
 
-                          const res = await fetchWithAuth(`/api/maintenance/stale?${qs}`);
+                          const res = await fetchWithAuth(
+                            `/api/maintenance/stale?${qs}`,
+                          );
                           if (res?.ok) {
                             const data = await res.json();
                             setStaleInfo(data);
@@ -1176,10 +1174,14 @@ export const WeightsSettings = ({
                       className="py-6 rounded-3xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/80 text-zinc-300 font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-3 shadow-xl"
                     >
                       <div
-                        className={`w-10 h-10 rounded-2xl bg-zinc-800 flex items-center justify-center text-zinc-400 ${isAnalyzing ? 'animate-pulse' : ''}`}
+                        className={`w-10 h-10 rounded-2xl bg-zinc-800 flex items-center justify-center text-zinc-400 ${isAnalyzing ? "animate-pulse" : ""}`}
                       >
                         {isAnalyzing ? (
-                          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <svg
+                            className="w-5 h-5 animate-spin"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
                             <circle
                               className="opacity-25"
                               cx="12"
@@ -1210,16 +1212,16 @@ export const WeightsSettings = ({
                           </svg>
                         )}
                       </div>
-                      {'Analisar Espaço'}
+                      {"Analisar Espaço"}
                     </button>
 
                     <button
                       onClick={() => setIsCleanupConfirmOpen(true)}
                       disabled={!staleInfo || staleInfo.totalCount === 0}
-                      className={`py-6 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-3 shadow-xl ${!staleInfo || staleInfo.totalCount === 0 ? 'bg-zinc-900/50 text-zinc-700 border border-zinc-800 cursor-not-allowed' : 'bg-rose-500/10 border border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white shadow-rose-500/20'}`}
+                      className={`py-6 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-3 shadow-xl ${!staleInfo || staleInfo.totalCount === 0 ? "bg-zinc-900/50 text-zinc-700 border border-zinc-800 cursor-not-allowed" : "bg-rose-500/10 border border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white shadow-rose-500/20"}`}
                     >
                       <div
-                        className={`w-10 h-10 rounded-2xl flex items-center justify-center ${!staleInfo || staleInfo.totalCount === 0 ? 'bg-zinc-800' : 'bg-rose-500/20'}`}
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center ${!staleInfo || staleInfo.totalCount === 0 ? "bg-zinc-800" : "bg-rose-500/20"}`}
                       >
                         <svg
                           className="w-5 h-5"
@@ -1235,7 +1237,7 @@ export const WeightsSettings = ({
                           />
                         </svg>
                       </div>
-                      {'Executar Limpeza'}
+                      {"Executar Limpeza"}
                     </button>
                   </div>
 
@@ -1243,10 +1245,10 @@ export const WeightsSettings = ({
                     <div className="flex items-center justify-between mb-8">
                       <div>
                         <h4 className="text-zinc-100 font-black text-xs uppercase tracking-[0.3em] mb-1">
-                          {'Resultado da Análise'}
+                          {"Resultado da Análise"}
                         </h4>
                         <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">
-                          {'Detalhamento por arquivo'}
+                          {"Detalhamento por arquivo"}
                         </p>
                       </div>
                       {staleInfo && (
@@ -1309,43 +1311,52 @@ export const WeightsSettings = ({
                               <tr>
                                 <th className="pb-4 pl-4">Caminho</th>
                                 <th className="pb-4">Motivo Principal</th>
-                                <th className="pb-4 text-right pr-4">Tamanho</th>
+                                <th className="pb-4 text-right pr-4">
+                                  Tamanho
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {staleInfo.files.slice(0, 100).map((f: any, i: number) => (
-                                <tr key={i} className="group">
-                                  <td className="py-3 pl-4 bg-zinc-950/40 rounded-l-xl border-l border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
-                                    <div className="flex flex-col">
-                                      <span
-                                        className="text-zinc-300 font-bold max-w-[200px] truncate"
-                                        title={f.name}
-                                      >
-                                        {f.name.split('/').pop()}
+                              {staleInfo.files
+                                .slice(0, 100)
+                                .map((f: any, i: number) => (
+                                  <tr key={i} className="group">
+                                    <td className="py-3 pl-4 bg-zinc-950/40 rounded-l-xl border-l border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
+                                      <div className="flex flex-col">
+                                        <span
+                                          className="text-zinc-300 font-bold max-w-[200px] truncate"
+                                          title={f.name}
+                                        >
+                                          {f.name.split("/").pop()}
+                                        </span>
+                                        <span className="text-[9px] text-zinc-600 truncate max-w-[180px] font-mono italic">
+                                          {f.name.substring(
+                                            0,
+                                            f.name.lastIndexOf("/"),
+                                          )}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 bg-zinc-950/40 border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 text-[9px] font-black uppercase tracking-tighter transition-all border border-rose-500/10">
+                                          {f.reason || "Inatividade"}
+                                        </span>
+                                        <span className="text-zinc-600 font-bold italic">
+                                          ({f.ageDays} dias)
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 pr-4 text-right bg-zinc-950/40 rounded-r-xl border-r border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
+                                      <span className="text-zinc-400 font-black">
+                                        {(f.size / 1024).toFixed(1)}{" "}
+                                        <span className="text-[8px] text-zinc-600">
+                                          KB
+                                        </span>
                                       </span>
-                                      <span className="text-[9px] text-zinc-600 truncate max-w-[180px] font-mono italic">
-                                        {f.name.substring(0, f.name.lastIndexOf('/'))}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="py-3 bg-zinc-950/40 border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
-                                    <div className="flex items-center gap-2">
-                                      <span className="px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 text-[9px] font-black uppercase tracking-tighter transition-all border border-rose-500/10">
-                                        {f.reason || 'Inatividade'}
-                                      </span>
-                                      <span className="text-zinc-600 font-bold italic">
-                                        ({f.ageDays} dias)
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="py-3 pr-4 text-right bg-zinc-950/40 rounded-r-xl border-r border-y border-zinc-800/50 group-hover:border-zinc-700 group-hover:bg-zinc-800/20 transition-all">
-                                    <span className="text-zinc-400 font-black">
-                                      {(f.size / 1024).toFixed(1)}{' '}
-                                      <span className="text-[8px] text-zinc-600">KB</span>
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
+                                    </td>
+                                  </tr>
+                                ))}
                             </tbody>
                           </table>
                         </div>
@@ -1353,19 +1364,21 @@ export const WeightsSettings = ({
                         <div className="mt-8 pt-6 border-t border-zinc-800 flex justify-between items-end">
                           <div className="flex flex-col gap-1">
                             <span className="text-[10px] text-zinc-600 font-black tracking-widest uppercase">
-                              {'Otimização Possível'}
+                              {"Otimização Possível"}
                             </span>
                             <div className="flex items-baseline gap-2">
                               <span className="text-3xl font-black text-rose-500 tracking-tighter">
                                 {(staleInfo.totalSize / 1024 / 1024).toFixed(2)}
                               </span>
                               <span className="text-xs font-black text-rose-500 opacity-50 uppercase">
-                                {'MB de Espaço'}
+                                {"MB de Espaço"}
                               </span>
                             </div>
                           </div>
                           <p className="text-[9px] text-zinc-600 italic">
-                            {'Varredura completa em todos os setores habilitados.'}
+                            {
+                              "Varredura completa em todos os setores habilitados."
+                            }
                           </p>
                         </div>
                       </div>
@@ -1404,7 +1417,8 @@ export const WeightsSettings = ({
               Restaurar Padrões?
             </h4>
             <p className="text-zinc-400 text-sm leading-relaxed mb-8 text-center px-2">
-              Esta ação irá voltar todos os pesos para os valores de fábrica. Não pode ser desfeito.
+              Esta ação irá voltar todos os pesos para os valores de fábrica.
+              Não pode ser desfeito.
             </p>
             <div className="flex gap-3">
               <button
@@ -1457,7 +1471,7 @@ export const WeightsSettings = ({
               Vaporizar Arquivos
             </h4>
             <p className="text-zinc-400 text-sm leading-relaxed mb-8">
-              Você está prestes a excluir definitivamente{' '}
+              Você está prestes a excluir definitivamente{" "}
               <strong className="text-white px-1.5 py-0.5 rounded bg-zinc-800">
                 {staleInfo?.totalCount} arquivo(s)
               </strong>
@@ -1481,11 +1495,14 @@ export const WeightsSettings = ({
                     };
                     delete payload.years;
 
-                    const res = await fetchWithAuth('/api/maintenance/cleanup', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(payload),
-                    });
+                    const res = await fetchWithAuth(
+                      "/api/maintenance/cleanup",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                      },
+                    );
                     if (res?.ok) {
                       setIsSuccess(true);
                       setTimeout(() => {
@@ -1495,7 +1512,7 @@ export const WeightsSettings = ({
                         if (onUpdate) onUpdate();
                       }, 1500);
                     } else {
-                      console.error('Erro ao limpar arquivos.');
+                      console.error("Erro ao limpar arquivos.");
                     }
                   } catch (err) {
                     console.error(err);
@@ -1505,8 +1522,8 @@ export const WeightsSettings = ({
                 }}
                 className={`w-full relative group overflow-hidden py-4 rounded-2xl text-white text-[10px] font-black tracking-widest uppercase active:scale-[0.98] transition-all disabled:opacity-100 disabled:cursor-wait ${
                   isSuccess
-                    ? 'bg-emerald-500 shadow-[0_0_30px_-5px_rgba(16,185,129,0.6)]'
-                    : 'bg-rose-500 hover:bg-rose-600 shadow-[0_0_20px_-5px_rgba(244,63,94,0.5)]'
+                    ? "bg-emerald-500 shadow-[0_0_30px_-5px_rgba(16,185,129,0.6)]"
+                    : "bg-rose-500 hover:bg-rose-600 shadow-[0_0_20px_-5px_rgba(244,63,94,0.5)]"
                 }`}
               >
                 {!isSuccess && (
@@ -1536,7 +1553,7 @@ export const WeightsSettings = ({
                       Desintegrando...
                     </>
                   ) : (
-                    'Sim, Confirmar'
+                    "Sim, Confirmar"
                   )}
                 </span>
               </button>

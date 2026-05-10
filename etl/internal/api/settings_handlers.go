@@ -82,8 +82,7 @@ func (ctx *HandlerContext) HandleSaveSettings(w http.ResponseWriter, r *http.Req
 	ctx.State.SetSettings(newSettings)
 	ctx.State.Save(ctx.Cfg)
 
-	effectiveHost := ctx.State.GetEffectiveOllamaHost(ctx.Cfg)
-	log.Printf("[Settings] Configurações salvas. Host Ollama Ativo: %s\n", effectiveHost)
+	log.Printf("[Settings] Configurações salvas.\n")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})

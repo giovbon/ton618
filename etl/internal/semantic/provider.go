@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -95,22 +96,27 @@ func (cb *circuitBreaker) isHalfOpen() bool {
 }
 
 var (
-	// Cache de embeddings: mapa + fila de chaves para evicção ordenada (FIFO)
+	// Cache de embeddings: mapa + fila de chaves para eviccao ordenada (FIFO)
 	queryCache      = make(map[string][]float32)
 	queryCacheKeys  []string
 	queryCacheMu    sync.RWMutex
 	queryCacheLimit = 200
 	cacheFilePath   string
 
-	// Semáforo para controlar concorrência no Ollama
+	// Semaforo para controlar concorrencia no Ollama
 	ollamaSem = make(chan struct{}, 2)
 
-	// Métricas do semáforo
+	// Circuit breaker GLOBAL compartilhado entre todas as chamadas Ollama.
+	// Anteriormente cada NewOllamaEmbedding criava seu proprio circuit breaker,
+	// anulando a protecao (nunca acumulava falhas suficientes para abrir).
+	globalCB = newCircuitBreaker()
+
+	// Metricas do semaforo
 	ollamaActive  int32
 	ollamaWaiting int32
 )
 
-// Metrics contém estatísticas de uso do motor semântico
+// Metrics contem estatisticas de uso do motor semantico
 type Metrics struct {
 	Active  int32 `json:"active"`
 	Waiting int32 `json:"waiting"`
@@ -186,9 +192,11 @@ func SaveCache() {
 	os.WriteFile(cacheFilePath, data, 0644)
 }
 
-func NewOllamaEmbedding(model, host string) func(ctx context.Context, text string) ([]float32, error) {
+// NewOllamaEmbedding cria uma funcao de embedding que usa o circuit breaker
+// GLOBAL compartilhado entre todas as chamadas, garantindo protecao real
+// contra falhas consecutivas no Ollama.
+func NewOllamaEmbedding(model, host string, dimension int) func(ctx context.Context, text string) ([]float32, error) {
 	client := &http.Client{Timeout: 5 * time.Minute}
-	cb := newCircuitBreaker()
 
 	return func(ctx context.Context, text string) ([]float32, error) {
 		cleanText := strings.TrimSpace(text)
@@ -196,12 +204,12 @@ func NewOllamaEmbedding(model, host string) func(ctx context.Context, text strin
 			return nil, fmt.Errorf("texto curto demais para embedding")
 		}
 
-		// Circuit breaker: verificar se o serviço está disponível
-		if !cb.allow() {
+		// Circuit breaker global: verificar se o servico esta disponivel
+		if !globalCB.allow() {
 			return nil, fmt.Errorf("ollama service unavailable (circuit open)")
 		}
 
-		// 1. Verificar cache primeiro (usando o texto original como chave para evitar colisões de truncamento)
+		// 1. Verificar cache primeiro (usando o texto original como chave para evitar colisoes de truncamento)
 		queryCacheMu.RLock()
 		if cached, exists := queryCache[cleanText]; exists {
 			queryCacheMu.RUnlock()
@@ -209,24 +217,28 @@ func NewOllamaEmbedding(model, host string) func(ctx context.Context, text strin
 		}
 		queryCacheMu.RUnlock()
 
-		// 2. Estratégia de Chunking para Textos Longos
+		// 2. Estrategia de Chunking para Textos Longos
 		// Reduzido para 1000 chars para garantir compatibilidade TOTAL mesmo com modelos pequenos
 		var finalEmbedding []float32
 		const maxChunkSize = 1000
+		const maxChunks = 8 // Limite aumentado de 5 para 8 (8000 chars) com warning
 
 		if len(cleanText) > maxChunkSize {
 			log.Printf("[Semantic] Texto longo detectado (%d chars). Fatiando em blocos de %d...\n", len(cleanText), maxChunkSize)
 			chunks := chunkByChars(cleanText, maxChunkSize)
 
-			// Processar apenas os primeiros 5 chunks (40k chars) para evitar loop infinito/demora excessiva no mapa
-			if len(chunks) > 5 {
-				chunks = chunks[:5]
+			// Limitar numero de chunks com warning explicito
+			if len(chunks) > maxChunks {
+				log.Printf("[Semantic] AVISO: Texto de %d chars truncado para %d chunks (%d chars). "+
+					"Considere reduzir o tamanho da nota para embeddings mais precisos.\n",
+					len(cleanText), maxChunks, maxChunks*maxChunkSize)
+				chunks = chunks[:maxChunks]
 			}
 
 			var sumVec []float32
 			count := 0
 			for _, chunk := range chunks {
-				vec, err := getSingleEmbedding(ctx, client, host, model, chunk, cb)
+				vec, err := getSingleEmbedding(ctx, client, host, model, chunk, globalCB)
 				if err != nil {
 					continue
 				}
@@ -240,30 +252,37 @@ func NewOllamaEmbedding(model, host string) func(ctx context.Context, text strin
 			}
 
 			if count == 0 {
-				cb.failure()
+				globalCB.failure()
 				return nil, fmt.Errorf("falha ao gerar embedding para todos os fatias")
 			}
 
-			// Calcular média
+			// Calcular media
 			for i := range sumVec {
 				sumVec[i] /= float32(count)
 			}
 			finalEmbedding = sumVec
+			globalCB.success()
 		} else {
 			// Texto pequeno: processamento normal
 			var err error
-			finalEmbedding, err = getSingleEmbedding(ctx, client, host, model, cleanText, cb)
+			finalEmbedding, err = getSingleEmbedding(ctx, client, host, model, cleanText, globalCB)
 			if err != nil {
-				cb.failure()
+				globalCB.failure()
 				return nil, err
 			}
-			cb.success()
+			globalCB.success()
 		}
 
-		// 3. Matryoshka Optimization (se necessário)
-		if len(finalEmbedding) > 512 {
-			finalEmbedding = finalEmbedding[:512]
+		// 3. Matryoshka Optimization (se necessario)
+		if dimension <= 0 {
+			dimension = 512
 		}
+		if len(finalEmbedding) > dimension {
+			finalEmbedding = finalEmbedding[:dimension]
+		}
+
+		// Normalizar vetor antes de cache (P5.1)
+		normalizeVector(finalEmbedding)
 
 		// 4. Atualizar Cache
 		queryCacheMu.Lock()
@@ -282,7 +301,7 @@ func NewOllamaEmbedding(model, host string) func(ctx context.Context, text strin
 	}
 }
 
-// getSingleEmbedding gerencia o semáforo e retries para uma única chamada ao Ollama
+// getSingleEmbedding gerencia o semaforo e retries para uma unica chamada ao Ollama
 func getSingleEmbedding(ctx context.Context, client *http.Client, host, model, text string, cb *circuitBreaker) ([]float32, error) {
 	atomic.AddInt32(&ollamaWaiting, 1)
 	select {
@@ -305,14 +324,14 @@ func getSingleEmbedding(ctx context.Context, client *http.Client, host, model, t
 
 	var embedding []float32
 	var err error
-	maxRetries := 2 // Reduzido retries para falhar mais rápido em caso de erro real
+	maxRetries := 2 // Reduzido retries para falhar mais rapido em caso de erro real
 
 	for i := 0; i < maxRetries; i++ {
 		embedding, err = callOllamaEmbed(ctx, client, host, model, text)
 		if err == nil {
 			return embedding, nil
 		}
-		// Se for erro de contexto, não adianta tentar de novo
+		// Se for erro de contexto, nao adianta tentar de novo
 		if strings.Contains(err.Error(), "context length") {
 			return nil, err
 		}
@@ -378,4 +397,88 @@ func callOllamaEmbed(ctx context.Context, client *http.Client, host, model, text
 	}
 
 	return res.Embeddings[0], nil
+}
+
+// EmbedBatch envia multiplos textos em uma unica chamada HTTP ao Ollama.
+// Muito mais eficiente que chamadas individuais (P4.2).
+func EmbedBatch(ctx context.Context, host, model string, texts []string, dimension int) (map[string][]float32, error) {
+	if len(texts) == 0 {
+		return nil, fmt.Errorf("nenhum texto para embedding")
+	}
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+
+	url := fmt.Sprintf("%s/api/embed", host)
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"model":      model,
+		"input":      texts,
+		"keep_alive": "10m",
+		"options": map[string]interface{}{
+			"num_ctx": 8192,
+		},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		globalCB.failure()
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		globalCB.failure()
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var res struct {
+		Embeddings [][]float32 `json:"embeddings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		globalCB.failure()
+		return nil, err
+	}
+
+	globalCB.success()
+
+	if len(res.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("numero de embeddings retornados (%d) difere do enviado (%d)", len(res.Embeddings), len(texts))
+	}
+
+	if dimension <= 0 {
+		dimension = 512
+	}
+
+	result := make(map[string][]float32, len(texts))
+	for i, text := range texts {
+		vec := res.Embeddings[i]
+		if len(vec) > dimension {
+			vec = vec[:dimension]
+		}
+		normalizeVector(vec)
+		result[text] = vec
+	}
+
+	return result, nil
+}
+
+// normalizeVector normaliza um vetor para comprimento unitario (L2 norm).
+// Evita distorcoes no cosine similarity quando o modelo nao entrega vetores normalizados.
+func normalizeVector(vec []float32) {
+	var sum float64
+	for _, v := range vec {
+		sum += float64(v) * float64(v)
+	}
+	norm := float32(math.Sqrt(sum))
+	if norm > 0 {
+		for i := range vec {
+			vec[i] /= norm
+		}
+	}
 }

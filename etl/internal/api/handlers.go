@@ -55,7 +55,7 @@ func (ctx *HandlerContext) HandleHealth(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check Ollama
-	effectiveHost := ctx.State.GetEffectiveOllamaHost(ctx.Cfg)
+	effectiveHost := ctx.Cfg.OllamaHost
 	if err := semantic.Ping(effectiveHost); err != nil {
 		slog.Warn("ollama health check failed", "error", err, "host", effectiveHost)
 		health["status"] = "degraded"
