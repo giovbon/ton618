@@ -20,6 +20,7 @@ interface CompactResultCardProps {
   ) => Promise<Response | null>;
   auth: string | null;
   isIndexing?: boolean;
+  isHighlighted?: boolean;
 }
 
 export const CompactResultCard = memo(
@@ -108,7 +109,10 @@ export const CompactResultCard = memo(
 
     return (
       <li
-        ref={(el) => { (ref as any).current = el; liRef.current = el; }}
+        ref={(el) => {
+          (ref as any).current = el;
+          liRef.current = el;
+        }}
         onClick={isMedia ? (handleOpenAsset as any) : (handleOpen as any)}
         className={`group relative flex flex-col gap-2 p-3 bg-zinc-900/40 hover:bg-zinc-800/60 border border-zinc-800/50 ${isArquivos ? "hover:border-indigo-500/30" : isImagem ? "hover:border-emerald-500/30" : isPDF ? "hover:border-red-500/30" : "hover:border-sky-500/30"} rounded-xl transition-all duration-300 cursor-pointer overflow-hidden shadow-sm`}
       >

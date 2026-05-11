@@ -47,12 +47,14 @@ type AppSettings struct {
 }
 
 type SystemState struct {
-	FileModCache map[string]time.Time `json:"file_mod_cache"`
-	HashCache    map[string]string    `json:"hash_cache"`
-	Popularity   map[string]int       `json:"popularity"`
-	KnownTags    map[string]bool      `json:"known_tags"`
-	FileTags     map[string][]string  `json:"file_tags"`
-	LinkCounts   map[string]int       `json:"link_counts"`
-	FileLinks    map[string][]string  `json:"file_links"`
-	Settings     AppSettings          `json:"settings"`
+	FileModCache      map[string]time.Time `json:"file_mod_cache"`
+	HashCache         map[string]string    `json:"hash_cache"`
+	Popularity        map[string]int       `json:"popularity"`
+	KnownTags         map[string]bool      `json:"known_tags"`
+	FileTags          map[string][]string  `json:"file_tags"`
+	LinkCounts        map[string]int       `json:"link_counts"`
+	FileLinks         map[string][]string  `json:"file_links"`
+	SemanticTopics    map[string]bool      `json:"semantic_topics"`
+	FileSemanticLinks map[string][]string  `json:"file_semantic_links"`
+	Settings          AppSettings          `json:"settings"`
 }

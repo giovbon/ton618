@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,6 +40,23 @@ type KnowledgeMapStatusResponse struct {
 	Percent      int  `json:"percent"`
 }
 
+type ManualMapResponse struct {
+	Topics []ManualTopic `json:"topics"`
+	Links  []ManualLink  `json:"links"`
+}
+
+type ManualTopic struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Level int    `json:"level"`
+}
+
+type ManualLink struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Type   string `json:"type"` // "hierarchy" or "note"
+}
+
 func (ctx *HandlerContext) HandleKnowledgeMapStatus(w http.ResponseWriter, r *http.Request) {
 	total := atomic.LoadInt32(&reindexTotal)
 	processed := atomic.LoadInt32(&reindexProcessed)
@@ -55,6 +73,66 @@ func (ctx *HandlerContext) HandleKnowledgeMapStatus(w http.ResponseWriter, r *ht
 		Processed:    int(processed),
 		Percent:      percent,
 	})
+}
+
+func (ctx *HandlerContext) HandleSemanticTopics(w http.ResponseWriter, r *http.Request) {
+	topics := ctx.State.GetAllSemanticTopics()
+	sort.Strings(topics)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"topics": topics})
+}
+
+func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *http.Request) {
+	topics := ctx.State.GetAllSemanticTopics()
+	allNoteLinks := ctx.State.GetAllFileSemanticLinks()
+
+	log.Printf("[ManualMap] Topics do BBolt: %d | Files com links: %d\n", len(topics), len(allNoteLinks))
+
+	resp := ManualMapResponse{
+		Topics: []ManualTopic{},
+		Links:  []ManualLink{},
+	}
+
+	topicMap := make(map[string]bool)
+
+	for _, topic := range topics {
+		parts := strings.Split(topic, "/")
+		currentPath := ""
+		for i, part := range parts {
+			parentPath := currentPath
+			if currentPath == "" {
+				currentPath = part
+			} else {
+				currentPath = currentPath + "/" + part
+				resp.Links = append(resp.Links, ManualLink{
+					Source: parentPath,
+					Target: currentPath,
+					Type:   "hierarchy",
+				})
+			}
+			if !topicMap[currentPath] {
+				resp.Topics = append(resp.Topics, ManualTopic{
+					ID:    currentPath,
+					Label: part,
+					Level: i,
+				})
+				topicMap[currentPath] = true
+			}
+		}
+	}
+
+	for note, noteTopics := range allNoteLinks {
+		for _, topic := range noteTopics {
+			resp.Links = append(resp.Links, ManualLink{
+				Source: note,
+				Target: topic,
+				Type:   "note",
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (ctx *HandlerContext) HandleKnowledgeMap(w http.ResponseWriter, r *http.Request) {

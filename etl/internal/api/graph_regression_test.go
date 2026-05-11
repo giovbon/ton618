@@ -357,3 +357,155 @@ func TestHandleKnowledgeMap_MultipleNotes(t *testing.T) {
 		t.Error("Nenhum cluster gerado para 3 notas")
 	}
 }
+
+func TestHandleManualSemanticMap_Empty(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	ctx := &HandlerContext{
+		Cfg:   &config.AppConfig{},
+		State: appState,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/graph/manual-map", nil)
+	w := httptest.NewRecorder()
+	ctx.HandleManualSemanticMap(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Esperado 200, obteve %d", w.Code)
+	}
+
+	var resp ManualMapResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(resp.Topics) != 0 {
+		t.Errorf("Esperava 0 topicos (vazio), obteve %d", len(resp.Topics))
+	}
+	if len(resp.Links) != 0 {
+		t.Errorf("Esperava 0 links (vazio), obteve %d", len(resp.Links))
+	}
+}
+
+func TestHandleManualSemanticMap_Hierarchy(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	// Adicionar topicos aninhados via SetFileSemanticLinks
+	appState.SetFileSemanticLinks("nota1.md", []string{"brasil/politica", "saude"})
+	appState.SetFileSemanticLinks("nota2.md", []string{"brasil/economia", "educacao"})
+
+	ctx := &HandlerContext{
+		Cfg:   &config.AppConfig{},
+		State: appState,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/graph/manual-map", nil)
+	w := httptest.NewRecorder()
+	ctx.HandleManualSemanticMap(w, req)
+
+	var resp ManualMapResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deve ter 4 topicos: brasil, brasil/politica, brasil/economia, saude, educacao
+	if len(resp.Topics) != 5 {
+		t.Errorf("Esperava 5 topicos, obteve %d: %+v", len(resp.Topics), resp.Topics)
+	}
+
+	topicIDs := make(map[string]bool)
+	for _, tp := range resp.Topics {
+		topicIDs[tp.ID] = true
+	}
+	for _, expected := range []string{"brasil", "brasil/politica", "brasil/economia", "saude", "educacao"} {
+		if !topicIDs[expected] {
+			t.Errorf("Topico esperado nao encontrado: %s", expected)
+		}
+	}
+
+	// Hierarquia: 2 links internos (brasil > politica, brasil > economia) + 4 note links
+	if len(resp.Links) != 6 {
+		t.Errorf("Esperava 6 links, obteve %d: %+v", len(resp.Links), resp.Links)
+	}
+
+	// Verifica Content-Type
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("Content-Type esperado application/json, obteve %s", ct)
+	}
+}
+
+func TestHandleManualSemanticMap_DeleteCleansOrphans(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	appState.SetFileSemanticLinks("nota1.md", []string{"saude", "educacao"})
+	appState.SetFileSemanticLinks("nota2.md", []string{"educacao"})
+
+	// Deletar nota1 — "saude" deve sumir, "educacao" deve ficar (nota2 ainda referencia)
+	appState.DeleteFileSemanticLinks("nota1.md")
+
+	topics := appState.GetAllSemanticTopics()
+	if len(topics) != 1 || topics[0] != "educacao" {
+		t.Errorf("Esperava apenas 'educacao', obteve %v", topics)
+	}
+}
+
+func TestExtractSemanticLinks(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"link simples", "texto @[brasil/politica] fim", []string{"brasil/politica"}},
+		{"multiplos links", "@[saude] e @[educacao]", []string{"saude", "educacao"}},
+		{"sem link", "apenas texto normal", nil},
+		{"com html no meio", "<span>@\\[saude</span>]", []string{"saude"}},
+		{"topicos com acentos", "@[educacao/saude]", []string{"educacao/saude"}},
+		{"link unico sem espaco", "@[teste]", []string{"teste"}},
+		{"backslash escapado", "@\\[teste\\]", []string{"teste"}},
+		{"texto vazio", "", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ingest.ExtractSemanticLinks(tt.input)
+			if len(got) != len(tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got %v, want %v", got, tt.want)
+					return
+				}
+			}
+		})
+	}
+}
+
+func TestSemanticTopics_SortedOrder(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	appState.SetFileSemanticLinks("nota.md", []string{"zeta", "alpha", "beta"})
+
+	topics := appState.GetAllSemanticTopics()
+	for i := 1; i < len(topics); i++ {
+		if topics[i-1] > topics[i] {
+			t.Errorf("topicos fora de ordem: %v", topics)
+			break
+		}
+	}
+
+	// Mesma ordem em chamada repetida
+	topics2 := appState.GetAllSemanticTopics()
+	for i := range topics {
+		if topics[i] != topics2[i] {
+			t.Errorf("ordem diferente entre chamadas: %v vs %v", topics, topics2)
+			break
+		}
+	}
+}

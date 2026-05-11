@@ -1,5 +1,7 @@
 # === Go ===
 etl/vortex_bin
+etl/etl
+etl/ton618
 etl/.test-data/
 etl/*.test
 etl/*.out

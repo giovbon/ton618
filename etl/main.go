@@ -100,6 +100,8 @@ func main() {
 	mux.HandleFunc("/api/graph/reindex", apiCtx.HandleReindexVectors)
 	mux.HandleFunc("/api/graph/status", apiCtx.HandleKnowledgeMapStatus)
 	mux.HandleFunc("/api/graph/query-point", apiCtx.HandleGraphQueryPoint)
+	mux.HandleFunc("/api/graph/semantic-topics", apiCtx.HandleSemanticTopics)
+	mux.HandleFunc("/api/graph/manual-map", apiCtx.HandleManualSemanticMap)
 	mux.HandleFunc("/api/bundle", apiCtx.HandleBundleUpload)
 	mux.HandleFunc("/api/backup/download", apiCtx.HandleDownloadBackup)
 	mux.HandleFunc("/api/backup/size", apiCtx.HandleGetBackupSize)

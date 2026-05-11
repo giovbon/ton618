@@ -82,6 +82,7 @@ func (ctx *HandlerContext) HandleRename(w http.ResponseWriter, r *http.Request) 
 	ingest.DeleteFileFromBleve(ctx.Cfg, fromRel)
 	ctx.State.DeleteVectorHash(fromRel)
 	ctx.State.DeleteFileTags(fromRel)
+	ctx.State.DeleteFileSemanticLinks(fromRel)
 	ctx.State.DeleteHashesByIDs(deletedIDs)
 	ctx.State.DeleteFileMod(fromPath)
 
@@ -181,7 +182,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 			ctx.Coordinator.Push(relPath, ingest.JobFileUpdate, false)
 		} else {
 			// Fallback síncrono (usado em testes sem coordenador)
-			docs, _, _, _ := ingest.ProcessMarkdown(fullPath, relPath, time.Now(), ctx.State)
+			docs, _, _, _, _ := ingest.ProcessMarkdown(fullPath, relPath, time.Now(), ctx.State)
 			for _, doc := range docs {
 				search.IndexDocument(doc.ID, doc)
 				ctx.State.SetHash(doc.ID, doc.Hash)
@@ -254,6 +255,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 
 		// Limpar state completo do arquivo deletado
 		ctx.State.DeleteFileTags(relPath)
+		ctx.State.DeleteFileSemanticLinks(relPath)
 		ctx.State.DeleteHashesByIDs(deletedIDs)
 		ctx.State.DeleteFileMod(fullPath)
 		ctx.State.Save(ctx.Cfg)

@@ -132,10 +132,10 @@ func GetMetrics() Metrics {
 }
 
 func Ping(host string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	url := fmt.Sprintf("%s/", host)
+	url := fmt.Sprintf("%s/", strings.TrimSuffix(host, "/"))
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -317,9 +317,12 @@ func getSingleEmbedding(ctx context.Context, client *http.Client, host, model, t
 		return nil, ctx.Err()
 	}
 
-	// Se o circuito estiver half-open (teste), reduzir timeout para 10s
+	// Se o circuito estiver half-open (teste), reduzir timeout para 10s via contexto
+	callCtx := ctx
 	if cb.isHalfOpen() {
-		client.Timeout = 10 * time.Second
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
 	}
 
 	var embedding []float32
@@ -327,7 +330,7 @@ func getSingleEmbedding(ctx context.Context, client *http.Client, host, model, t
 	maxRetries := 2 // Reduzido retries para falhar mais rapido em caso de erro real
 
 	for i := 0; i < maxRetries; i++ {
-		embedding, err = callOllamaEmbed(ctx, client, host, model, text)
+		embedding, err = callOllamaEmbed(callCtx, client, host, model, text)
 		if err == nil {
 			return embedding, nil
 		}
@@ -358,7 +361,7 @@ func chunkByChars(s string, size int) []string {
 }
 
 func callOllamaEmbed(ctx context.Context, client *http.Client, host, model, text string) ([]float32, error) {
-	url := fmt.Sprintf("%s/api/embed", host)
+	url := fmt.Sprintf("%s/api/embed", strings.TrimSuffix(host, "/"))
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"model":      model,
 		"input":      text,
@@ -408,7 +411,7 @@ func EmbedBatch(ctx context.Context, host, model string, texts []string, dimensi
 
 	client := &http.Client{Timeout: 5 * time.Minute}
 
-	url := fmt.Sprintf("%s/api/embed", host)
+	url := fmt.Sprintf("%s/api/embed", strings.TrimSuffix(host, "/"))
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"model":      model,
 		"input":      texts,

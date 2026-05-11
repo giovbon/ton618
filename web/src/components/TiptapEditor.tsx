@@ -8,8 +8,10 @@ import { useEffect, useRef, useState, useCallback } from "preact/hooks";
 import { EditorHeader } from "./editor/EditorHeader";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
 import { WikiLinkNode } from "./editor/WikiLinkExtension";
+import { SemanticLinkMark } from "./editor/SemanticLinkExtension";
 import Mention from "@tiptap/extension-mention";
 import { getSuggestionConfig } from "./editor/wikiLinkSuggestion";
+import { HashtagMark } from "./editor/HashtagExtension";
 import { SlashCommandExtension } from "./editor/SlashCommandExtension";
 import { getSlashCommandConfig } from "./editor/slashCommandSuggestion";
 import { Table } from "@tiptap/extension-table";
@@ -77,9 +79,9 @@ const TiptapEditor = ({
     const checkMobile = () => {
       setIsMobile(
         window.innerWidth < 768 ||
-        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent,
-        ),
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent,
+          ),
       );
     };
     checkMobile();
@@ -90,14 +92,19 @@ const TiptapEditor = ({
   const cleanInitialContent = useRef(() => {
     const match = initialContent.match(FRONTMATTER_REGEX);
     let base = match ? match[2] : initialContent;
-    return base.replace(
+    base = base.replace(
       /\[\[([^\]]+)\]\]/g,
       '<span data-wikilink="$1"></span>',
+    );
+    return base.replace(
+      /@\[([^\]]+)\]/g,
+      '<span data-semantic-link="$1"></span>',
     );
   }).current();
 
   // WikiLink Notes list for suggestions
   const notesRef = useRef<string[]>([]);
+  const semanticTopicsRef = useRef<string[]>([]);
 
   useEffect(() => {
     fetchWithAuth("/api/notes")
@@ -108,6 +115,15 @@ const TiptapEditor = ({
             const clean = n.split("/").pop() || n;
             return clean.replace(/\.md$/, "");
           });
+        }
+      })
+      .catch(console.error);
+
+    fetchWithAuth("/api/graph/semantic-topics")
+      .then((res) => (res?.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.topics) {
+          semanticTopicsRef.current = data.topics;
         }
       })
       .catch(console.error);
@@ -141,6 +157,8 @@ const TiptapEditor = ({
         },
       }),
       WikiLinkNode,
+      SemanticLinkMark,
+      HashtagMark,
       Markdown.configure({
         html: true,
         transformPastedText: true,
@@ -165,6 +183,7 @@ const TiptapEditor = ({
           return `[[${node.attrs.id ?? node.attrs.label}]]`;
         },
       }),
+
       SlashCommandExtension.configure({
         suggestion: getSlashCommandConfig(),
       }),
@@ -191,6 +210,10 @@ const TiptapEditor = ({
           /<span data-wikilink="([^"]+)".*?<\/span>/g,
           "[[$1]]",
         );
+        content = content.replace(
+          /<span data-semantic-link="([^"]+)".*?<\/span>/g,
+          "@[$1]",
+        );
 
         const fm = frontmatterRef.current;
         const finalContent = fm.trim()
@@ -207,6 +230,7 @@ const TiptapEditor = ({
       attributes: {
         class:
           "prose prose-invert max-w-2xl mx-auto focus:outline-none min-h-[500px] font-sans pb-32",
+        spellcheck: "false",
       },
     },
   });
@@ -286,6 +310,10 @@ const TiptapEditor = ({
         /<span data-wikilink="([^"]+)".*?<\/span>/g,
         "[[$1]]",
       );
+      content = content.replace(
+        /<span data-semantic-link="([^"]+)".*?<\/span>/g,
+        "@[$1]",
+      );
       const finalContent = val.trim()
         ? `---\n${val}\n---\n${content}`
         : content;
@@ -354,17 +382,20 @@ const TiptapEditor = ({
           <BubbleMenu
             editor={editor}
             shouldShow={({ editor }) =>
-              !isMobile && !editor.state.selection.empty && !editor.isActive('table')
+              !isMobile &&
+              !editor.state.selection.empty &&
+              !editor.isActive("table")
             }
             tippyOptions={{ duration: 150, animation: "scale" }}
             className="flex items-center gap-1 p-1 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]"
           >
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded-lg transition-all ${editor.isActive("bold")
-                ? "bg-sky-500 text-white shadow-md"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                }`}
+              className={`p-1.5 rounded-lg transition-all ${
+                editor.isActive("bold")
+                  ? "bg-sky-500 text-white shadow-md"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
               title="Negrito"
             >
               <svg
@@ -383,10 +414,11 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded-lg transition-all ${editor.isActive("italic")
-                ? "bg-sky-500 text-white shadow-md"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                }`}
+              className={`p-1.5 rounded-lg transition-all ${
+                editor.isActive("italic")
+                  ? "bg-sky-500 text-white shadow-md"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
               title="Itálico"
             >
               <svg
@@ -405,10 +437,11 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={`p-1.5 rounded-lg transition-all ${editor.isActive("strike")
-                ? "bg-sky-500 text-white shadow-md"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                }`}
+              className={`p-1.5 rounded-lg transition-all ${
+                editor.isActive("strike")
+                  ? "bg-sky-500 text-white shadow-md"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
               title="Tachado"
             >
               <svg
@@ -430,10 +463,11 @@ const TiptapEditor = ({
 
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-1.5 rounded-lg transition-all ${editor.isActive("code")
-                ? "bg-emerald-500 text-white shadow-md"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                }`}
+              className={`p-1.5 rounded-lg transition-all ${
+                editor.isActive("code")
+                  ? "bg-emerald-500 text-white shadow-md"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
               title="Código Inline"
             >
               <svg
@@ -503,7 +537,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M4 4h16M4 20h16M4 4v16M20 4v16"
+                  stroke-width="2"
+                  d="M4 4h16M4 20h16M4 4v16M20 4v16"
                   d="M13 5l-7 7 7 7M3 5v14"
                 />
               </svg>
@@ -522,7 +557,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M4 4h16M4 12h16M4 20h16"
+                  stroke-width="2"
+                  d="M4 4h16M4 12h16M4 20h16"
                   d="M11 5l7 7-7 7M21 5v14"
                 />
               </svg>
@@ -541,7 +577,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M9 3v18M3 9h18"
+                  stroke-width="2"
+                  d="M9 3v18M3 9h18"
                   d="M5 13l7-7 7 7M5 3v18"
                 />
               </svg>
@@ -560,7 +597,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M9 3v18M3 9h18"
+                  stroke-width="2"
+                  d="M9 3v18M3 9h18"
                   d="M5 11l7 7 7-7M5 21V3"
                 />
               </svg>
@@ -580,7 +618,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M9 3v18M3 9h18"
+                  stroke-width="2"
+                  d="M9 3v18M3 9h18"
                 />
               </svg>
             </button>
@@ -598,7 +637,8 @@ const TiptapEditor = ({
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2" d="M9 3v18M3 9h18"
+                  stroke-width="2"
+                  d="M9 3v18M3 9h18"
                 />
               </svg>
             </button>
@@ -630,10 +670,11 @@ const TiptapEditor = ({
           <div className="fixed bottom-0 left-0 right-0 z-[110] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 p-3 flex items-center justify-around animate-in slide-in-from-bottom-full duration-200 pb-safe">
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-2 rounded-xl transition-all ${editor.isActive("bold")
-                ? "bg-sky-500 text-white shadow-lg scale-110"
-                : "text-zinc-400"
-                }`}
+              className={`p-2 rounded-xl transition-all ${
+                editor.isActive("bold")
+                  ? "bg-sky-500 text-white shadow-lg scale-110"
+                  : "text-zinc-400"
+              }`}
             >
               <svg
                 className="w-5 h-5"
@@ -651,10 +692,11 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-2 rounded-xl transition-all ${editor.isActive("italic")
-                ? "bg-sky-500 text-white shadow-lg scale-110"
-                : "text-zinc-400"
-                }`}
+              className={`p-2 rounded-xl transition-all ${
+                editor.isActive("italic")
+                  ? "bg-sky-500 text-white shadow-lg scale-110"
+                  : "text-zinc-400"
+              }`}
             >
               <svg
                 className="w-5 h-5"
@@ -672,10 +714,11 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={`p-2 rounded-xl transition-all ${editor.isActive("strike")
-                ? "bg-sky-500 text-white shadow-lg scale-110"
-                : "text-zinc-400"
-                }`}
+              className={`p-2 rounded-xl transition-all ${
+                editor.isActive("strike")
+                  ? "bg-sky-500 text-white shadow-lg scale-110"
+                  : "text-zinc-400"
+              }`}
             >
               <svg
                 className="w-5 h-5"
@@ -693,10 +736,11 @@ const TiptapEditor = ({
             </button>
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-2 rounded-xl transition-all ${editor.isActive("code")
-                ? "bg-emerald-500 text-white shadow-lg scale-110"
-                : "text-zinc-400"
-                }`}
+              className={`p-2 rounded-xl transition-all ${
+                editor.isActive("code")
+                  ? "bg-emerald-500 text-white shadow-lg scale-110"
+                  : "text-zinc-400"
+              }`}
             >
               <svg
                 className="w-5 h-5"

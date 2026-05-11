@@ -7,10 +7,17 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import {
+  Virtuoso as VirtuosoOriginal,
+  type VirtuosoHandle,
+} from "react-virtuoso";
+// react-virtuoso usa tipos React; Preact retorna VNode em vez de ReactNode.
+// Cast necessario para compatibilidade em tempo de compilacao (runtime funciona).
+const Virtuoso = VirtuosoOriginal as any;
 import { CompactResultCard } from "./components/CompactResultCard";
 import { DataviewSearchView } from "./components/DataviewSearchView";
 import { KnowledgeMap } from "./components/KnowledgeMap";
+import { ManualSemanticMap } from "./components/ManualSemanticMap";
 import Login from "./components/Login";
 import { Logo } from "./components/Logo";
 import { CaptureLinkModal } from "./components/modals/CaptureLinkModal";
@@ -27,7 +34,12 @@ import { useSearchManager } from "./hooks/useSearchManager";
 import { useSSE } from "./hooks/useSSE";
 import { useTagManager } from "./hooks/useTagManager";
 import { useWikiNavigation } from "./hooks/useWikiNavigation";
-import type { AppSettings, FileObject, LastEditedFile } from "./types";
+import type {
+  AppSettings,
+  FileObject,
+  LastEditedFile,
+  SearchResult,
+} from "./types";
 
 const TiptapEditor = lazy(() => import("./components/TiptapEditor"));
 const WeightsSettings = lazy(() => import("./components/WeightsSettings"));
@@ -65,6 +77,7 @@ function AppContent() {
   const [editingFile, setEditingFile] = useState<FileObject | null>(null);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [isManualMapOpen, setIsManualMapOpen] = useState(false);
 
   // 2. UI Hook
   const { state: uiState, actions: uiActions } = useAppUI();
@@ -233,25 +246,23 @@ function AppContent() {
   );
 
   useSSE(auth, sseHandlers);
-
   // 8. Navigation & Interaction
   const handleOpenWikiLink = useCallback(
-    async (noteName: string) => {
-      const fileName = noteName.toLowerCase().endsWith(".md")
-        ? noteName
-        : `${noteName}.md`;
+    async (filename: string) => {
+      console.log("Abrindo nota do mapa:", filename);
+      if (isManualMapOpen) setIsManualMapOpen(false);
       try {
         const res = await fetchWithAuth(
-          `/api/file?name=${encodeURIComponent(fileName)}`,
+          `/api/file?name=${encodeURIComponent(filename)}`,
         );
         if (res?.ok) {
-          const text = await res.text();
-          setEditingFile({ name: fileName, content: text });
+          const content = await res.text();
+          setEditingFile({ name: filename, content });
         } else {
-          const newPath = `notes/${fileName}`;
+          const newPath = `notes/${filename}`;
           setEditingFile({
             name: newPath,
-            content: `# ${noteName.replace(/\.md$/, "")}\n\n`,
+            content: `# ${filename.replace(/\.md$/, "")}\n\n`,
             isNew: true,
           });
         }
@@ -270,6 +281,15 @@ function AppContent() {
     window.addEventListener("open-note", handleOpenNote);
     return () => window.removeEventListener("open-note", handleOpenNote);
   }, [handleOpenWikiLink]);
+
+  useEffect(() => {
+    const handleOpenTopic = (_e: Event) => {
+      setIsManualMapOpen(true);
+    };
+    window.addEventListener("open-semantic-topic", handleOpenTopic);
+    return () =>
+      window.removeEventListener("open-semantic-topic", handleOpenTopic);
+  }, []);
 
   useWikiNavigation(handleOpenWikiLink, !!auth);
 
@@ -421,6 +441,41 @@ function AppContent() {
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => setIsManualMapOpen(true)}
+                  title="Mapa Estruturado"
+                  className="flex items-center justify-center w-12 h-12 sm:w-10 sm:h-10 rounded-xl transition-all duration-300 text-zinc-600 hover:text-violet-400 hover:bg-violet-500/10 group"
+                >
+                  <svg
+                    className="w-5 h-5 sm:w-5 sm:h-5 transform group-hover:scale-110 transition-transform duration-300"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path
+                      d="M12 2L2 7L12 12L22 7L12 2Z"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-violet-400"
+                    />
+                    <path
+                      d="M2 17L12 22L22 17"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-violet-500"
+                    />
+                    <path
+                      d="M2 12L12 17L22 12"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-violet-600"
                     />
                   </svg>
                 </button>
@@ -709,59 +764,63 @@ function AppContent() {
                     )
                       searchActions.fetchNextPage();
                   }}
-                  itemContent={(index, doc) => (
-                    <div className="pb-4" key={doc.id || index}>
-                      {searchState.isCompactMode ? (
-                        <CompactResultCard
-                          doc={doc}
-                          query={searchState.debouncedQuery}
-                          searchTerms={searchState.searchTerms}
-                          onEdit={setEditingFile}
-                          onDeleteFile={fileOpsActions.setFileToDelete}
-                          fetchWithAuth={fetchWithAuth}
-                          auth={auth}
-                          isIndexing={
-                            indexingFiles[doc.arquivo] || doc.is_indexing
-                          }
-                          isHighlighted={
-                            uiState.highlightedFile === doc.arquivo
-                          }
-                        />
-                      ) : (
-                        <SearchResultCard
-                          doc={doc}
-                          index={index}
-                          query={searchState.debouncedQuery}
-                          searchTerms={searchState.searchTerms}
-                          onEdit={setEditingFile}
-                          isCompact={false}
-                          toggleExpandText={toggleExpandText}
-                          isExpanded={!!expandedIds[doc.id]}
-                          onDeleteFile={fileOpsActions.setFileToDelete}
-                          fetchWithAuth={fetchWithAuth}
-                          auth={auth}
-                          isIndexing={
-                            indexingFiles[doc.arquivo] || doc.is_indexing
-                          }
-                        />
-                      )}
-                    </div>
-                  )}
+                  itemContent={
+                    ((index: number, doc: SearchResult) => (
+                      <div className="pb-4" key={doc.id || index}>
+                        {searchState.isCompactMode ? (
+                          <CompactResultCard
+                            doc={doc}
+                            index={index}
+                            query={searchState.debouncedQuery}
+                            searchTerms={searchState.searchTerms}
+                            onEdit={setEditingFile}
+                            onDeleteFile={fileOpsActions.setFileToDelete}
+                            fetchWithAuth={fetchWithAuth}
+                            auth={auth}
+                            isIndexing={
+                              indexingFiles[doc.arquivo] || doc.is_indexing
+                            }
+                            isHighlighted={
+                              uiState.highlightedFile === doc.arquivo
+                            }
+                          />
+                        ) : (
+                          <SearchResultCard
+                            doc={doc}
+                            index={index}
+                            query={searchState.debouncedQuery}
+                            searchTerms={searchState.searchTerms}
+                            onEdit={setEditingFile}
+                            isCompact={false}
+                            isLastCollapsed={false}
+                            toggleExpandText={toggleExpandText}
+                            isExpanded={!!expandedIds[doc.id]}
+                            onDeleteFile={fileOpsActions.setFileToDelete}
+                            fetchWithAuth={fetchWithAuth}
+                            auth={auth}
+                            isIndexing={
+                              indexingFiles[doc.arquivo] || doc.is_indexing
+                            }
+                          />
+                        )}
+                      </div>
+                    )) as any
+                  }
                   components={{
-                    Footer: () => (
+                    Footer: (() => (
                       <div className="h-20 flex items-center justify-center">
                         {" "}
                         {(searchState.isLoading ||
                           searchState.isFetchingNextPage) && (
-                            <div className="flex gap-1">
-                              {" "}
-                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />{" "}
-                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />{" "}
-                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce" />{" "}
-                            </div>
-                          )}{" "}
+                          <div className="flex gap-1">
+                            {" "}
+                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />{" "}
+                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />{" "}
+                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce" />{" "}
+                          </div>
+                        )}{" "}
                       </div>
-                    ),
+                    )) as any,
                   }}
                 />
               )
@@ -775,6 +834,14 @@ function AppContent() {
           auth={auth}
           onOpenNote={handleOpenWikiLink}
           onClose={() => uiActions.setIsMapOpen(false)}
+        />
+      )}
+
+      {isManualMapOpen && (
+        <ManualSemanticMap
+          auth={auth}
+          onOpenNote={handleOpenWikiLink}
+          onClose={() => setIsManualMapOpen(false)}
         />
       )}
 

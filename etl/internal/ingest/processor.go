@@ -23,8 +23,36 @@ var (
 	headerRegex    = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
 	hashtagRegex   = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
 	wikilinkRegex  = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	semanticRegex  = regexp.MustCompile(`@\\?\[([^\]]+?)\\?\]`) // Aceita @[texto] e @\[texto\] com backslash opcional antes dos colchetes
 	mediaLinkRegex = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
 )
+
+var stripHTMLRe = regexp.MustCompile(`<[^>]*>`)
+
+// Auxiliar para remover tags HTML simples
+func stripHTML(s string) string {
+	return stripHTMLRe.ReplaceAllString(s, "")
+}
+
+// ExtractSemanticLinks extrai links semanticos @[topico] do texto.
+// Primeiro remove HTML (o serializador markdown envolve @[texto] em <span>),
+// depois aplica regex que aceita @[texto] e @\[texto\] com backslash opcional.
+func ExtractSemanticLinks(text string) []string {
+	cleanText := stripHTML(text)
+	cleanText = strings.ReplaceAll(cleanText, "\n", " ")
+	matches := semanticRegex.FindAllStringSubmatch(cleanText, -1)
+	var links []string
+	for _, m := range matches {
+		if len(m) > 1 {
+			target := strings.TrimSpace(m[1])
+			if target != "" {
+				target = strings.ReplaceAll(target, "\\", "")
+				links = append(links, strings.TrimSpace(target))
+			}
+		}
+	}
+	return links
+}
 
 func ReadFileWithRetry(path string, retries int) ([]byte, error) {
 	var content []byte
@@ -39,7 +67,8 @@ func ReadFileWithRetry(path string, retries int) ([]byte, error) {
 	return nil, err
 }
 
-func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppState) ([]models.Document, []string, map[string]interface{}, []string) {
+func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppState) ([]models.Document, []string, []string, map[string]interface{}, []string) {
+	log.Printf("[Sync] ProcessMarkdown: processando %s\n", filename)
 	timestampStr := modTime.UTC().Format(time.RFC3339)
 
 	// Recuperar data de criação original (se existir)
@@ -52,7 +81,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 	content, err := ReadFileWithRetry(path, 3)
 	if err != nil {
 		log.Printf("Erro ao ler %s: %v\n", path, err)
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 
 	var docs []models.Document
@@ -138,6 +167,11 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 				links = append(links, target)
 			}
 		}
+	}
+
+	semanticLinks := ExtractSemanticLinks(text)
+	if len(semanticLinks) > 0 {
+		log.Printf("[Sync] LINKS SEMANTICOS EXTRAIDOS em %s: %v\n", filename, semanticLinks)
 	}
 
 	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)
@@ -227,7 +261,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 		})
 	}
 
-	return docs, links, metadata, fileTags
+	return docs, links, semanticLinks, metadata, fileTags
 }
 
 func ExtractPDFText(path string) ([]string, error) {

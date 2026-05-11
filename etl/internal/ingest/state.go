@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -28,9 +29,15 @@ type AppState struct {
 	fileMetadataMu sync.RWMutex
 	db             *bolt.DB
 
-	tags    *TagManager
-	links   *LinkManager
-	vectors *VectorManager
+	tags     *TagManager
+	links    *LinkManager
+	vectors  *VectorManager
+	semantic *SemanticManager
+
+	// Cache da funcao de embedding para preservar HTTP client e connection pooling
+	embCacheFunc func(context.Context, string) ([]float32, error)
+	embCacheMu   sync.Mutex
+	embCacheKey  string
 }
 
 func openDB(dbPath string) (db *bolt.DB, err error) {
@@ -49,6 +56,11 @@ func NewAppState(cfg *config.AppConfig) *AppState {
 
 	db, err := openDB(dbPath)
 	if err != nil {
+		// Se for apenas timeout, falha sem apagar (provavelmente já aberto)
+		if strings.Contains(err.Error(), "timeout") {
+			log.Fatalf("[DB] Erro: Banco de dados já está em uso por outro processo: %v", err)
+		}
+
 		log.Printf("[DB] Erro ao abrir banco de dados: %v. Tentando recriar...", err)
 		os.Remove(dbPath)
 		db, err = openDB(dbPath)
@@ -68,6 +80,7 @@ func NewAppState(cfg *config.AppConfig) *AppState {
 		tags:         newTagManager(db),
 		links:        newLinkManager(db),
 		vectors:      newVectorManager(db),
+		semantic:     newSemanticManager(db),
 	}
 
 	db.Update(func(tx *bolt.Tx) error {
@@ -75,7 +88,7 @@ func NewAppState(cfg *config.AppConfig) *AppState {
 			bucketFileMods, bucketHashes, bucketPopularity, bucketKnownTags,
 			bucketFileTags, bucketLinkCounts, bucketFileLinks, bucketSettings,
 			bucketFileMetadata, bucketVectorHashes, bucketNoteVectors,
-			bucketNoteProjections,
+			bucketNoteProjections, bucketSemanticTopics, bucketFileSemanticLinks,
 		}
 		for _, b := range buckets {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {

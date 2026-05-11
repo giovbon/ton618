@@ -78,13 +78,26 @@ func GlobalVacuum(cfg *config.AppConfig, appState *AppState) {
 				log.Printf("[Vacuum] Removendo metadados órfãos do Estado: %s\n", relPath)
 				appState.DeleteFileTags(relPath)
 				appState.DeleteFileLinks(relPath)
+				appState.DeleteFileSemanticLinks(relPath)
 				appState.DeleteFileMetadata(relPath)
 				appState.DeleteVectorHash(relPath)
+				
 				
 				// Limpar também do cache de modificação
 				appState.DeleteFileMod(absPath)
 			}
 		}
+
+		allSemanticLinks := appState.GetAllFileSemanticLinks()
+		for relPath := range allSemanticLinks {
+			absPath := filepath.Join(cfg.DocsDir, relPath)
+			if _, err := os.Stat(absPath); os.IsNotExist(err) {
+				log.Printf("[Vacuum] Limpando links semânticos órfãos: %s\n", relPath)
+				appState.DeleteFileSemanticLinks(relPath)
+			}
+		}
+
+		appState.RebuildSemanticTopics()
 		appState.RebuildKnownTagsCache()
 	}
 }

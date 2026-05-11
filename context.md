@@ -1,6 +1,6 @@
 # TON-618 — Contexto do Projeto
 
-**Ultima atualizacao:** 2026-05-10
+**Ultima atualizacao:** 2026-05-11
 
 > ⚠️ **INSTRUCAO AO AGENTE:** Sempre que realizar qualquer alteracao no projeto, ADICIONE UMA ENTRADA no final da secao `## HISTORICO DE ALTERACOES` abaixo.
 
@@ -46,5 +46,6 @@ Troque `OLLAMA_MODEL` + ajuste `EmbeddingDimension` nas Settings.
 | 2026-05-09 | Multiplos Provedores Ollama, Visibilidade Mapa, slog. |
 | 2026-05-07 | Query Point no mapa. |
 | 2026-05-06 | Busca exata, Tabelas TipTap, DocsPanel. |
-| 2026-05-05 | WeightsSettings, CodeMirror→TipTap. |
+| 2026-05-11 | **Grafo Estruturado + Links Semânticos.** Implementação do `ManualSemanticMap` (D3 Canvas) com arraste, zoom e quebra de linha inteligente. Extração via regex `@\[...\]` no Go (`processor.go`) com limpeza de HTML e proteção multi-linha. Persistência em BBolt (`semantic_topics`, `file_semantic_links`). Editor TipTap atualizado com `SemanticLinkMark` (não-inclusivo) e `HashtagMark`. |
+| 2026-05-10 | **WeightsSettings, CodeMirror→TipTap.** |
 | 2026-05-04 | SPA fallback, Circuit breaker, BBolt testes, state.go fatiado. |

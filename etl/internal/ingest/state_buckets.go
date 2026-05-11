@@ -15,4 +15,6 @@ var (
 	bucketVectorHashes    = []byte("vector_hashes")
 	bucketNoteVectors     = []byte("note_vectors")
 	bucketNoteProjections = []byte("note_projections")
+	bucketSemanticTopics  = []byte("semantic_topics")
+	bucketFileSemanticLinks = []byte("file_semantic_links")
 )

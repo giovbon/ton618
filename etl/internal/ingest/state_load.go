@@ -106,6 +106,31 @@ func (s *AppState) Load(cfg *config.AppConfig) {
 			s.vectors.setVectorHashes(vecHashes)
 		}
 
+		bST := tx.Bucket(bucketSemanticTopics)
+		if bST != nil {
+			topics := make(map[string]bool)
+			bST.ForEach(func(k, v []byte) error {
+				topics[string(k)] = true
+				return nil
+			})
+			s.semantic.setTopics(topics)
+		}
+
+		bSL := tx.Bucket(bucketFileSemanticLinks)
+		if bSL != nil {
+			links := make(map[string][]string)
+			bSL.ForEach(func(k, v []byte) error {
+				var l []string
+				json.Unmarshal(v, &l)
+				links[string(k)] = l
+				return nil
+			})
+			s.semantic.setFileSemanticLinksMap(links)
+		}
+
+		// Reconstroi topicos no startup para eliminar orfaos residuais
+		s.semantic.RebuildSemanticTopics()
+
 		return nil
 	})
 

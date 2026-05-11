@@ -64,7 +64,7 @@ Conteudo [[Outra Nota]]`
 	modTime := time.Now()
 	appState := NewAppState(&config.AppConfig{StateDir: t.TempDir()})
 	defer appState.Close()
-	docs, links, _, _ := ProcessMarkdown(mdPath, "test.md", modTime, appState)
+	docs, links, _, _, _ := ProcessMarkdown(mdPath, "test.md", modTime, appState)
 
 	if len(docs) == 0 {
 		t.Fatalf("ProcessMarkdown não gerou nenhum documento")
@@ -105,7 +105,7 @@ Conteúdo de teste para garantir processamento.`
 
 	appState := NewAppState(&config.AppConfig{StateDir: t.TempDir()})
 	defer appState.Close()
-	docs, _, _, _ := ProcessMarkdown(mdPath, "dirty.md", time.Now(), appState)
+	docs, _, _, _, _ := ProcessMarkdown(mdPath, "dirty.md", time.Now(), appState)
 	if len(docs) == 0 {
 		t.Fatalf("ProcessMarkdown não gerou docs")
 	}

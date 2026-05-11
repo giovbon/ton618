@@ -50,3 +50,24 @@ func (s *AppState) GetAllNoteProjections() map[string][]float64 {
 func (s *AppState) ClearNoteProjections() error              { return s.vectors.ClearNoteProjections() }
 func (s *AppState) DeleteNoteProjection(id string)           { s.vectors.DeleteNoteProjection(id) }
 func (s *AppState) SetNoteVectors2D(id string, x, y float64) { s.vectors.SetNoteVectors2D(id, x, y) }
+
+// -- Semantic Links (delegacao para SemanticManager) --
+
+func (s *AppState) SetFileSemanticLinks(filename string, links []string) {
+	s.semantic.SetFileSemanticLinks(filename, links)
+}
+func (s *AppState) GetFileSemanticLinks(filename string) []string {
+	return s.semantic.GetFileSemanticLinks(filename)
+}
+func (s *AppState) GetAllFileSemanticLinks() map[string][]string {
+	return s.semantic.GetAllFileSemanticLinks()
+}
+func (s *AppState) GetAllSemanticTopics() []string {
+	return s.semantic.GetAllSemanticTopics()
+}
+func (s *AppState) DeleteFileSemanticLinks(filename string) {
+	s.semantic.DeleteFileSemanticLinks(filename)
+}
+func (s *AppState) RebuildSemanticTopics() {
+	s.semantic.RebuildSemanticTopics()
+}

@@ -136,7 +136,7 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
 
       const transform = transformRef.current;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#020617';
+      ctx.fillStyle = '#0a0a0c';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
@@ -422,11 +422,11 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-[#020617] overflow-hidden"
+      className="fixed inset-0 z-[60] bg-[#0a0a0c] overflow-hidden"
       style={{ cursor: hoveredNote ? 'pointer' : 'grab' }}
     >
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#020617]/50 backdrop-blur-md z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0c]/50 backdrop-blur-md z-10">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
             <span className="text-sky-400/60 font-medium animate-pulse tracking-widest text-xs uppercase">
@@ -586,11 +586,6 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
         </div>
       )}
 
-      {data && data.notes.length > 0 && (
-        <div className="absolute bottom-6 left-6 z-20 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 px-4 py-2 rounded-2xl text-[10px] text-sky-400/60 font-bold uppercase tracking-widest">
-          {data.notes.length} Notas · {data.clusters.length} Agrupamentos
-        </div>
-      )}
 
       {hoveredNote && tooltipPos && (
         <div

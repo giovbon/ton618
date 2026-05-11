@@ -250,7 +250,7 @@ func RunSync(cfg *config.AppConfig, forceScanIndex bool, mode string, appState *
 			}
 
 			// 2. Verificar se precisa vetorizar (semântico)
-			if appState.GetSettings().SemanticEnable {
+			if appState.IsSemanticEnabled() {
 				oldVecHash, vecExists := appState.GetVectorHash(doc.ID)
 				if !vecExists || oldVecHash != doc.VectorHash {
 					vectorDocs = append(vectorDocs, doc)
@@ -429,10 +429,11 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 
 				var docs []models.Document
 				var links []string
+				var semanticLinks []string
 				var metadata map[string]interface{}
 				var tags []string
 				if isMD {
-					docs, links, metadata, tags = ProcessMarkdown(p, f, mt, appState)
+					docs, links, semanticLinks, metadata, tags = ProcessMarkdown(p, f, mt, appState)
 				} else if isPDF {
 					docs = ProcessPDF(p, f, mt, appState)
 					tags = appState.GetFileTags(f)
@@ -450,6 +451,12 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 					appState.SetFileLinks(f, links)
 				} else if isMD {
 					appState.DeleteFileLinks(f)
+				}
+
+				if len(semanticLinks) > 0 {
+					appState.SetFileSemanticLinks(f, semanticLinks)
+				} else if isMD {
+					appState.DeleteFileSemanticLinks(f)
 				}
 
 				if metadata == nil {
@@ -497,7 +504,7 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 }
 
 func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDocs []models.Document, appState *AppState) {
-	semanticEnabled := cfg.SemanticEnable && appState.GetSettings().SemanticEnable
+	semanticEnabled := cfg.SemanticEnable && appState.IsSemanticEnabled()
 
 	bleveBatch := make(map[string]interface{})
 	for _, doc := range bleveDocs {
@@ -555,7 +562,7 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 
 				effectiveHost := cfg.OllamaHost
 				log.Printf("[Sync] Usando Ollama em %s para vetorizar: %s\n", effectiveHost, fname)
-				embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, appState.GetSettings().EmbeddingDimension)
+				embFunc := appState.GetEmbeddingFunc(cfg)
 				vec, err := embFunc(context.Background(), string(content))
 				if err != nil {
 					log.Printf("[Sync] Erro ao gerar embedding para %s: %v\n", fname, err)
