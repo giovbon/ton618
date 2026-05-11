@@ -509,3 +509,137 @@ func TestSemanticTopics_SortedOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestRebuildSemanticTopics_CleansOrphansOnStartup(t *testing.T) {
+	// Simula o que acontece no Load(): topicos orfaos no BBolt sao removidos
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	// Adiciona links para duas notas
+	appState.SetFileSemanticLinks("nota.md", []string{"saude"})
+	appState.SetFileSemanticLinks("outra.md", []string{"educacao"})
+
+	// Remove uma nota manualmente (simula crash sem limpeza)
+	appState.DeleteFileSemanticLinks("nota.md")
+
+	// O RebuildSemanticTopics rodou dentro do Delete. "saude" deve ter sumido
+	topics := appState.GetAllSemanticTopics()
+	if len(topics) != 1 || topics[0] != "educacao" {
+		t.Errorf("Esperava apenas 'educacao' apos rebuild, obteve %v", topics)
+	}
+
+	// Simula startup: se rebuild for chamado de novo, resultado deve ser o mesmo
+	appState.RebuildSemanticTopics()
+	topics2 := appState.GetAllSemanticTopics()
+	if len(topics2) != 1 || topics2[0] != "educacao" {
+		t.Errorf("Segundo rebuild mudou o resultado: %v", topics2)
+	}
+}
+
+func TestSetFileSemanticLinks_Overwrite(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	appState.SetFileSemanticLinks("nota.md", []string{"saude"})
+	appState.SetFileSemanticLinks("nota.md", []string{"educacao"})
+
+	topics := appState.GetAllSemanticTopics()
+	if len(topics) != 1 || topics[0] != "educacao" {
+		t.Errorf("Esperava apenas 'educacao' apos sobrescrita, obteve %v", topics)
+	}
+
+	links := appState.GetFileSemanticLinks("nota.md")
+	if len(links) != 1 || links[0] != "educacao" {
+		t.Errorf("Links da nota nao foram sobrescritos: %v", links)
+	}
+}
+
+func TestRebuildSemanticTopics_Empty(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	appState.SetFileSemanticLinks("nota.md", []string{"saude"})
+	appState.SetFileSemanticLinks("outra.md", []string{"educacao"})
+
+	appState.DeleteFileSemanticLinks("nota.md")
+	appState.DeleteFileSemanticLinks("outra.md")
+
+	topics := appState.GetAllSemanticTopics()
+	if len(topics) != 0 {
+		t.Errorf("Esperava 0 topicos apos deletar tudo, obteve %d: %v", len(topics), topics)
+	}
+
+	allLinks := appState.GetAllFileSemanticLinks()
+	if len(allLinks) != 0 {
+		t.Errorf("Esperava 0 file links, obteve %d", len(allLinks))
+	}
+}
+
+func TestExtractSemanticLinks_Malformed(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"incompleto sem ]", "@[incompleto"},
+		{"so @[", "@["},
+		{"vazio @[]", "@[]"},
+		{"sem @", "[teste]"},
+		{"um valido um incompleto", "@[saude] @[incompleto"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			links := ingest.ExtractSemanticLinks(tc.input)
+			for _, l := range links {
+				if l == "" {
+					t.Errorf("link vazio para input: %q", tc.input)
+				}
+			}
+		})
+	}
+}
+
+func TestHandleManualSemanticMap_DuplicateLabels(t *testing.T) {
+	appState := ingest.NewAppState(&config.AppConfig{StateDir: t.TempDir()})
+	defer appState.Close()
+
+	appState.SetFileSemanticLinks("n1.md", []string{"brasil/politica"})
+	appState.SetFileSemanticLinks("n2.md", []string{"economia/politica"})
+
+	ctx := &HandlerContext{
+		Cfg:   &config.AppConfig{},
+		State: appState,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/graph/manual-map", nil)
+	w := httptest.NewRecorder()
+	ctx.HandleManualSemanticMap(w, req)
+
+	var resp ManualMapResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(resp.Topics) != 4 {
+		t.Fatalf("Esperava 4 topicos (brasil, brasil/politica, economia, economia/politica), obteve %d: %+v",
+			len(resp.Topics), resp.Topics)
+	}
+
+	labels := make(map[string]bool)
+	for _, tp := range resp.Topics {
+		if tp.Label == "politica" {
+			if tp.ID != "brasil/politica" && tp.ID != "economia/politica" {
+				t.Errorf("Label 'politica' com ID inesperado: %s", tp.ID)
+			}
+		}
+		labels[tp.ID] = true
+	}
+	for _, expected := range []string{"brasil", "brasil/politica", "economia", "economia/politica"} {
+		if !labels[expected] {
+			t.Errorf("Topico esperado nao encontrado: %s", expected)
+		}
+	}
+
+	if len(resp.Links) != 4 {
+		t.Errorf("Esperava 4 links, obteve %d: %+v", len(resp.Links), resp.Links)
+	}
+}

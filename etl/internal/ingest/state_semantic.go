@@ -26,33 +26,14 @@ func newSemanticManager(db *bolt.DB) *SemanticManager {
 }
 
 func (sm *SemanticManager) SetFileSemanticLinks(filename string, links []string) {
-	// Lock ordering: sempre fileLinksMu primeiro, depois topicsMu.
-	// DeleteFileSemanticLinks segue a mesma ordem — evita deadlock.
 	sm.fileLinksMu.Lock()
 	sm.fileSemanticLinks[filename] = links
 	sm.fileLinksMu.Unlock()
 
-	sm.topicsMu.Lock()
-	for _, link := range links {
-		sm.topics[link] = true
-	}
-	sm.topicsMu.Unlock()
-
-	sm.db.Update(func(tx *bolt.Tx) error {
-		val, err := json.Marshal(links)
-		if err != nil {
-			log.Printf("[DB] Erro ao serializar links semanticos para %s: %v\n", filename, err)
-			return nil
-		}
-		tx.Bucket(bucketFileSemanticLinks).Put([]byte(filename), val)
-
-		bt := tx.Bucket(bucketSemanticTopics)
-		for _, link := range links {
-			bt.Put([]byte(link), []byte("true"))
-		}
-		return nil
-	})
-	log.Printf("[DB] Salvos %d links semanticos para o arquivo: %s\n", len(links), filename)
+	// Rebuild completo para remover topicos que nao sao mais referenciados.
+	// Isso garante que ao sobrescrever links de um arquivo, topicos antigos
+	// que sumiram nao permanecam no cache.
+	sm.RebuildSemanticTopics()
 }
 
 func (sm *SemanticManager) GetFileSemanticLinks(filename string) []string {
@@ -89,12 +70,6 @@ func (sm *SemanticManager) DeleteFileSemanticLinks(filename string) {
 	delete(sm.fileSemanticLinks, filename)
 	sm.fileLinksMu.Unlock()
 
-	sm.db.Update(func(tx *bolt.Tx) error {
-		tx.Bucket(bucketFileSemanticLinks).Delete([]byte(filename))
-		return nil
-	})
-
-	// Rebuild eficiente: O(N+M) em vez de O(N*M)
 	sm.RebuildSemanticTopics()
 }
 
@@ -118,8 +93,10 @@ func (sm *SemanticManager) RebuildSemanticTopics() {
 	validTopics := make(map[string]bool)
 
 	sm.fileLinksMu.RLock()
-	for _, links := range sm.fileSemanticLinks {
-		for _, link := range links {
+	cp := make(map[string][]string, len(sm.fileSemanticLinks))
+	for k, v := range sm.fileSemanticLinks {
+		cp[k] = v
+		for _, link := range v {
 			validTopics[link] = true
 		}
 	}
@@ -130,10 +107,19 @@ func (sm *SemanticManager) RebuildSemanticTopics() {
 	sm.topicsMu.Unlock()
 
 	sm.db.Update(func(tx *bolt.Tx) error {
+		// Persiste links de arquivo
+		tx.DeleteBucket(bucketFileSemanticLinks)
+		bFL, _ := tx.CreateBucketIfNotExists(bucketFileSemanticLinks)
+		for filename, links := range cp {
+			val, _ := json.Marshal(links)
+			bFL.Put([]byte(filename), val)
+		}
+
+		// Persiste topicos
 		tx.DeleteBucket(bucketSemanticTopics)
-		bt, _ := tx.CreateBucketIfNotExists(bucketSemanticTopics)
+		bT, _ := tx.CreateBucketIfNotExists(bucketSemanticTopics)
 		for topic := range validTopics {
-			bt.Put([]byte(topic), []byte("true"))
+			bT.Put([]byte(topic), []byte("true"))
 		}
 		return nil
 	})

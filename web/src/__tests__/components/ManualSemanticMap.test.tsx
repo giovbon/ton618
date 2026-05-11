@@ -56,6 +56,11 @@ vi.mock("d3-selection", () => ({
   select: () => ({ call: () => ({ call: () => {} }) }),
 }));
 
+// Polyfill globals para JSDOM (necessario mesmo apos cleanup dos tests)
+window.requestAnimationFrame = ((cb: any) =>
+  window.setTimeout(() => cb(Date.now()), 16)) as any;
+window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as any;
+
 // ─── Tests ──────────────────────────────────────────────────────────
 
 describe("ManualSemanticMap", () => {
@@ -83,12 +88,6 @@ describe("ManualSemanticMap", () => {
           textAlign: "",
           textBaseline: "",
         }) as any,
-    );
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation(
-      (cb) => window.setTimeout(() => cb(Date.now()), 16) as any,
-    );
-    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) =>
-      clearTimeout(id),
     );
   });
 
