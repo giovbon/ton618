@@ -812,13 +812,13 @@ function AppContent() {
                         {" "}
                         {(searchState.isLoading ||
                           searchState.isFetchingNextPage) && (
-                          <div className="flex gap-1">
-                            {" "}
-                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />{" "}
-                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />{" "}
-                            <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce" />{" "}
-                          </div>
-                        )}{" "}
+                            <div className="flex gap-1">
+                              {" "}
+                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />{" "}
+                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />{" "}
+                              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce" />{" "}
+                            </div>
+                          )}{" "}
                       </div>
                     )) as any,
                   }}

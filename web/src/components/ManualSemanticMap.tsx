@@ -179,8 +179,12 @@ export function ManualSemanticMap({
 
     // drag manual (estilo Obsidian): clica e arrasta, no fica onde soltou
     let dragNode: Node | null = null;
+    let mouseDownPos = { x: 0, y: 0 };
+    let mouseDownTime = 0;
     const rect = canvas.getBoundingClientRect();
     const onMouseDown = (e: MouseEvent) => {
+      mouseDownPos = { x: e.clientX, y: e.clientY };
+      mouseDownTime = Date.now();
       const t = zoomTransformRef.current;
       const px = t.invertX(e.clientX - rect.left);
       const py = t.invertY(e.clientY - rect.top);
@@ -211,6 +215,10 @@ export function ManualSemanticMap({
 
     // click → open note
     const handleClick = (event: MouseEvent) => {
+      const dist = Math.hypot(event.clientX - mouseDownPos.x, event.clientY - mouseDownPos.y);
+      const timeElapsed = Date.now() - mouseDownTime;
+      if (dist > 5 || timeElapsed > 300) return;
+
       const t = zoomTransformRef.current;
       const rect = canvas.getBoundingClientRect();
       const px = t.invertX(event.clientX - rect.left);
@@ -229,15 +237,16 @@ export function ManualSemanticMap({
       const node = simulation.find(px, py, 15);
       if (node) {
         setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.id });
+        canvas.style.cursor = "pointer";
       } else {
         setTooltip(null);
+        canvas.style.cursor = "";
       }
     };
     canvas.addEventListener("mousemove", handleMouseMove);
 
     // render loop — para automaticamente quando a simulação esfria
     let renderId = 0;
-    let lastAlpha = 1;
     const render = () => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
@@ -290,16 +299,7 @@ export function ManualSemanticMap({
 
       ctx.restore();
 
-      const alpha = simulation.alpha();
-      if (alpha > 0.01) {
-        lastAlpha = alpha;
-        renderId = requestAnimationFrame(render);
-      } else if (lastAlpha > 0.01) {
-        // one last frame after alpha settles
-        lastAlpha = 0;
-        renderId = requestAnimationFrame(render);
-      }
-      // else: render loop stops — CPU idle
+      renderId = requestAnimationFrame(render);
     };
 
     render();

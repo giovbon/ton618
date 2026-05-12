@@ -412,6 +412,9 @@ func (ctx *HandlerContext) createPDFNote(pdfRelPath, text string) {
 	notePath := filepath.Join(notesDir, noteName)
 
 	var sb strings.Builder
+	sb.WriteString("---\n")
+	sb.WriteString("tags: [pdf]\n")
+	sb.WriteString("---\n\n")
 	sb.WriteString(fmt.Sprintf("# PDF: %s\n\n", cleanName))
 	sb.WriteString(fmt.Sprintf("[📖 Abrir Documento PDF](/docs/%s)\n\n", pdfRelPath))
 	sb.WriteString("## Conteúdo Extraído\n\n")

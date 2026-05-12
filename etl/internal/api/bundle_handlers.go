@@ -94,7 +94,6 @@ func (ctx *HandlerContext) HandleBundleUpload(w http.ResponseWriter, r *http.Req
 	sb.WriteString("---\n")
 	sb.WriteString(fmt.Sprintf("tags: [%s]\n", utils.GetTag(lang, "arquivos")))
 	sb.WriteString("---\n\n")
-	sb.WriteString(fmt.Sprintf("# Arquivos: %s\n\n", bundleID))
 	sb.WriteString("Arquivos contidos neste pacote:\n")
 	for _, f := range fileList {
 		sb.WriteString(fmt.Sprintf("- %s\n", f))

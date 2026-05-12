@@ -111,6 +111,13 @@ func ScoreFragment(hit *models.SearchHit, queryTerms []string, rawQuery string, 
 		richnessBonus += w.BoostTechnical
 	}
 
+	// Bônus adicional pelo tamanho do texto (0.5 a cada 500 palavras, máx 2.0)
+	lengthBonus := (float64(totalWords) / 500.0) * 0.5
+	if lengthBonus > 2.0 {
+		lengthBonus = 2.0
+	}
+	richnessBonus += lengthBonus
+
 	// --- 3. APLICAÇÃO DOS PESOS (MODO ESTRITO) ---
 
 	// 1. Título
