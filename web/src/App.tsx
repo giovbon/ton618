@@ -209,6 +209,7 @@ function AppContent() {
           );
         queryClient.invalidateQueries({ queryKey: ["search"] });
         tagActions.refreshAvailableTags();
+        window.dispatchEvent(new CustomEvent("graph-updated"));
       },
       "ocr:started": (data: any) => {
         uiActions.addToast(
@@ -223,6 +224,7 @@ function AppContent() {
             "success",
           );
           queryClient.invalidateQueries({ queryKey: ["search"] });
+          window.dispatchEvent(new CustomEvent("graph-updated"));
         } else {
           uiActions.addToast(
             `Erro no OCR: ${data.filename.split("/").pop()}`,
@@ -240,6 +242,7 @@ function AppContent() {
           return next;
         });
         queryClient.invalidateQueries({ queryKey: ["search"] });
+        window.dispatchEvent(new CustomEvent("graph-updated"));
       },
     }),
     [queryClient, tagActions.refreshAvailableTags, uiActions],

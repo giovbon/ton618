@@ -98,8 +98,19 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
   }, []);
 
   // 2. Load Data and offload to worker
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
-    fetch('/api/graph/map', { headers: { Authorization: auth } })
+    const handleUpdate = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("graph-updated", handleUpdate);
+    return () => window.removeEventListener("graph-updated", handleUpdate);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/graph/map', { 
+      headers: { Authorization: auth },
+      cache: "no-store" 
+    })
       .then((res) => res.json())
       .then((d) => {
         setData(d);
@@ -108,7 +119,7 @@ export function KnowledgeMap({ auth, onOpenNote, onClose }: KnowledgeMapProps) {
         }
       })
       .finally(() => setLoading(false));
-  }, [auth]);
+  }, [auth, refreshKey]);
 
   // 3. Canvas Resizing
   useEffect(() => {

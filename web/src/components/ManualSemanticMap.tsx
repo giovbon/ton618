@@ -54,6 +54,13 @@ function useSemanticMapData(auth: string) {
   const [data, setData] = useState<ManualMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("graph-updated", handleUpdate);
+    return () => window.removeEventListener("graph-updated", handleUpdate);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,6 +69,7 @@ function useSemanticMapData(auth: string) {
     fetch("/api/graph/manual-map", {
       headers: { Authorization: auth },
       signal: controller.signal,
+      cache: "no-store",
     })
       .then((res) => res.json())
       .then((d) => {
@@ -75,7 +83,7 @@ function useSemanticMapData(auth: string) {
         }
       });
     return () => controller.abort();
-  }, [auth]);
+  }, [auth, refreshKey]);
 
   return { data, loading, error };
 }
@@ -98,10 +106,34 @@ export function ManualSemanticMap({
   } | null>(null);
   const [visible, setVisible] = useState(false);
 
+  // visual configurations
+  const [linkDistanceMult, setLinkDistanceMult] = useState(1);
+  const [lineWidthMult, setLineWidthMult] = useState(1);
+  const [nodeRadiusMult, setNodeRadiusMult] = useState(1);
+  const [showControls, setShowControls] = useState(false);
+
+  const visualConfig = useRef({ linkDistanceMult, lineWidthMult, nodeRadiusMult });
+  useEffect(() => {
+    visualConfig.current = { linkDistanceMult, lineWidthMult, nodeRadiusMult };
+  }, [linkDistanceMult, lineWidthMult, nodeRadiusMult]);
+
   // fade-in entry animation
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
   }, []);
+
+  // update force distance when linkDistanceMult changes
+  useEffect(() => {
+    if (simulationRef.current) {
+      const linkForce = simulationRef.current.force("link");
+      if (linkForce) {
+        linkForce.distance((d: any) =>
+          d.type === "hierarchy" ? 60 * linkDistanceMult : 100 * linkDistanceMult
+        );
+        simulationRef.current.alpha(0.3).restart();
+      }
+    }
+  }, [linkDistanceMult]);
 
   // ── initialize / update force graph ──────────────────────────
   useEffect(() => {
@@ -145,7 +177,11 @@ export function ManualSemanticMap({
         "link",
         forceLink<Node, Link>(links)
           .id((d) => d.id)
-          .distance((d) => (d.type === "hierarchy" ? 60 : 100)),
+          .distance((d) =>
+            d.type === "hierarchy"
+              ? 60 * visualConfig.current.linkDistanceMult
+              : 100 * visualConfig.current.linkDistanceMult
+          ),
       )
       .force("charge", forceManyBody().strength(-300))
       .force(
@@ -168,7 +204,7 @@ export function ManualSemanticMap({
           const r = canvas.getBoundingClientRect();
           const px = t.invertX(event.clientX - r.left);
           const py = t.invertY(event.clientY - r.top);
-          if (simulation.find(px, py, 20)) return false; // no sob cursor → drag manual
+          if (simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult)) return false; // no sob cursor → drag manual
         }
         return true;
       })
@@ -188,7 +224,7 @@ export function ManualSemanticMap({
       const t = zoomTransformRef.current;
       const px = t.invertX(e.clientX - rect.left);
       const py = t.invertY(e.clientY - rect.top);
-      const node = simulation.find(px, py, 20);
+      const node = simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult);
       if (node) {
         dragNode = node as Node;
         dragNode.fx = dragNode.x;
@@ -223,7 +259,7 @@ export function ManualSemanticMap({
       const rect = canvas.getBoundingClientRect();
       const px = t.invertX(event.clientX - rect.left);
       const py = t.invertY(event.clientY - rect.top);
-      const node = simulation.find(px, py, 20);
+      const node = simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult);
       if (node && node.type === "note") onOpenNote(node.id);
     };
     canvas.addEventListener("click", handleClick);
@@ -234,7 +270,7 @@ export function ManualSemanticMap({
       const rect = canvas.getBoundingClientRect();
       const px = t.invertX(event.clientX - rect.left);
       const py = t.invertY(event.clientY - rect.top);
-      const node = simulation.find(px, py, 15);
+      const node = simulation.find(px, py, 15 * visualConfig.current.nodeRadiusMult);
       if (node) {
         setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.id });
         canvas.style.cursor = "pointer";
@@ -267,7 +303,7 @@ export function ManualSemanticMap({
             ? "rgba(167,139,250,0.4)"
             : "rgba(56,189,248,0.2)";
         ctx.setLineDash(link.type === "note" ? [2, 2] : []);
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1 * visualConfig.current.lineWidthMult;
         ctx.stroke();
       });
       ctx.setLineDash([]);
@@ -275,7 +311,7 @@ export function ManualSemanticMap({
       // nodes
       nodes.forEach((node) => {
         const isTopic = node.type === "topic";
-        const radius = isTopic ? 6 : 4;
+        const radius = (isTopic ? 6 : 4) * visualConfig.current.nodeRadiusMult;
         ctx.beginPath();
         ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI);
         ctx.fillStyle = isTopic ? "#a78bfa" : "#38bdf8";
@@ -283,7 +319,7 @@ export function ManualSemanticMap({
 
         if (t.k < 0.6 && !isTopic) return;
 
-        const fontSize = isTopic ? 12 : 10;
+        const fontSize = (isTopic ? 12 : 10) * Math.min(1.5, Math.max(0.8, visualConfig.current.nodeRadiusMult));
         ctx.font = `${isTopic ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
         ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.textAlign = "center";
@@ -348,7 +384,7 @@ export function ManualSemanticMap({
     <div
       className={`fixed inset-0 z-[50] bg-[#0a0a0c] overflow-hidden transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
     >
-      <div className="absolute top-6 left-6 z-10">
+      <div className="absolute top-6 left-6 z-10 flex gap-2">
         <button
           onClick={onClose}
           className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all flex items-center gap-2 text-sm font-medium backdrop-blur-md"
@@ -364,7 +400,47 @@ export function ManualSemanticMap({
           </svg>
           VOLTAR
         </button>
+        <button
+          onClick={() => setShowControls(!showControls)}
+          className={`px-3 py-2 border rounded-xl transition-all flex items-center gap-2 text-sm font-medium backdrop-blur-md ${showControls ? 'bg-sky-500/20 text-sky-400 border-sky-500/50' : 'bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border-white/10'}`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          </svg>
+          CONTROLES
+        </button>
       </div>
+
+      {showControls && (
+        <div className="absolute top-20 left-6 z-20 bg-zinc-900/90 backdrop-blur-xl border border-zinc-700/50 p-5 rounded-2xl flex flex-col gap-5 min-w-[240px] shadow-2xl animate-in slide-in-from-top-2">
+          <h3 className="text-[11px] font-bold text-zinc-300 uppercase tracking-widest border-b border-zinc-700/50 pb-2 flex items-center justify-between">
+            Visualização
+            <button onClick={() => { setLinkDistanceMult(1); setLineWidthMult(1); setNodeRadiusMult(1); }} className="text-[9px] text-sky-400 hover:text-sky-300 px-2 py-0.5 bg-sky-500/10 rounded">RESET</button>
+          </h3>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Espaçamento (Proximidade)</span>
+              <span className="text-sky-400">{linkDistanceMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0.2" max="3" step="0.1" value={linkDistanceMult} onChange={e => setLinkDistanceMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Espessura das Linhas</span>
+              <span className="text-sky-400">{lineWidthMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0.1" max="5" step="0.1" value={lineWidthMult} onChange={e => setLineWidthMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Tamanho dos Nós</span>
+              <span className="text-sky-400">{nodeRadiusMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0.2" max="4" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center text-white/20 uppercase tracking-[0.2em] text-[10px] animate-pulse">
           Sincronizando Grafo Estruturado...
