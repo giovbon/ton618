@@ -6,6 +6,8 @@ import {
   forceManyBody,
   forceCenter,
   forceCollide,
+  forceX,
+  forceY,
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
@@ -120,15 +122,25 @@ export function ManualSemanticMap({
     const saved = localStorage.getItem('manualMap_nodeRadiusMult');
     return saved ? parseFloat(saved) : 1;
   });
+  const [chargeStrengthMult, setChargeStrengthMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_chargeStrengthMult');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [gravityMult, setGravityMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_gravityMult');
+    return saved ? parseFloat(saved) : 1;
+  });
   const [showControls, setShowControls] = useState(false);
 
-  const visualConfig = useRef({ linkDistanceMult, lineWidthMult, nodeRadiusMult });
+  const visualConfig = useRef({ linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult });
   useEffect(() => {
-    visualConfig.current = { linkDistanceMult, lineWidthMult, nodeRadiusMult };
+    visualConfig.current = { linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult };
     localStorage.setItem('manualMap_linkDistanceMult', linkDistanceMult.toString());
     localStorage.setItem('manualMap_lineWidthMult', lineWidthMult.toString());
     localStorage.setItem('manualMap_nodeRadiusMult', nodeRadiusMult.toString());
-  }, [linkDistanceMult, lineWidthMult, nodeRadiusMult]);
+    localStorage.setItem('manualMap_chargeStrengthMult', chargeStrengthMult.toString());
+    localStorage.setItem('manualMap_gravityMult', gravityMult.toString());
+  }, [linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult]);
 
   // fade-in entry animation
   useEffect(() => {
@@ -147,6 +159,29 @@ export function ManualSemanticMap({
       }
     }
   }, [linkDistanceMult]);
+
+  // update charge/repulsion strength when chargeStrengthMult changes
+  useEffect(() => {
+    if (simulationRef.current) {
+      const chargeForce = simulationRef.current.force("charge");
+      const collideForce = simulationRef.current.force("collide");
+      if (chargeForce) chargeForce.strength(-300 * chargeStrengthMult);
+      if (collideForce) collideForce.radius(50 * chargeStrengthMult);
+      simulationRef.current.alpha(0.3).restart();
+    }
+  }, [chargeStrengthMult]);
+
+  // update gravity/centering force when gravityMult changes
+  useEffect(() => {
+    if (simulationRef.current && canvasRef.current) {
+      const dpr = window.devicePixelRatio || 1;
+      const xForce = simulationRef.current.force("x");
+      const yForce = simulationRef.current.force("y");
+      if (xForce) xForce.strength(0.01 * gravityMult);
+      if (yForce) yForce.strength(0.01 * gravityMult);
+      simulationRef.current.alpha(0.3).restart();
+    }
+  }, [gravityMult]);
 
   // ── initialize / update force graph ──────────────────────────
   useEffect(() => {
@@ -196,12 +231,14 @@ export function ManualSemanticMap({
               : 100 * visualConfig.current.linkDistanceMult
           ),
       )
-      .force("charge", forceManyBody().strength(-300))
+      .force("charge", forceManyBody().strength(-300 * visualConfig.current.chargeStrengthMult))
       .force(
         "center",
         forceCenter(canvas.width / dpr / 2, canvas.height / dpr / 2),
       )
-      .force("collide", forceCollide().radius(50));
+      .force("x", forceX(canvas.width / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
+      .force("y", forceY(canvas.height / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
+      .force("collide", forceCollide().radius(50 * visualConfig.current.chargeStrengthMult));
 
     simulationRef.current = simulation;
 
@@ -383,11 +420,12 @@ export function ManualSemanticMap({
         canvasRef.current.width = window.innerWidth * dpr;
         canvasRef.current.height = window.innerHeight * dpr;
         if (simulationRef.current) {
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
           simulationRef.current
-            .force(
-              "center",
-              forceCenter(window.innerWidth / 2, window.innerHeight / 2),
-            )
+            .force("center", forceCenter(centerX, centerY))
+            .force("x", simulationRef.current.force("x")?.x(centerX))
+            .force("y", simulationRef.current.force("y")?.y(centerY))
             .alpha(0.3)
             .restart();
         }
@@ -437,7 +475,13 @@ export function ManualSemanticMap({
         <div className="absolute top-20 left-6 z-20 bg-zinc-900/90 backdrop-blur-xl border border-zinc-700/50 p-5 rounded-2xl flex flex-col gap-5 min-w-[240px] shadow-2xl animate-in slide-in-from-top-2">
           <h3 className="text-[11px] font-bold text-zinc-300 uppercase tracking-widest border-b border-zinc-700/50 pb-2 flex items-center justify-between">
             Visualização
-            <button onClick={() => { setLinkDistanceMult(1); setLineWidthMult(1); setNodeRadiusMult(1); }} className="text-[9px] text-sky-400 hover:text-sky-300 px-2 py-0.5 bg-sky-500/10 rounded">RESET</button>
+            <button onClick={() => { 
+              setLinkDistanceMult(1); 
+              setLineWidthMult(1); 
+              setNodeRadiusMult(1); 
+              setChargeStrengthMult(1); 
+              setGravityMult(1);
+            }} className="text-[9px] text-sky-400 hover:text-sky-300 px-2 py-0.5 bg-sky-500/10 rounded">RESET</button>
           </h3>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
@@ -459,6 +503,20 @@ export function ManualSemanticMap({
               <span className="text-sky-400">{nodeRadiusMult.toFixed(1)}x</span>
             </div>
             <input type="range" min="0.2" max="4" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Expansão (Repulsão)</span>
+              <span className="text-sky-400">{chargeStrengthMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0.1" max="5" step="0.1" value={chargeStrengthMult} onChange={e => setChargeStrengthMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Agrupamento (Gravidade)</span>
+              <span className="text-sky-400">{gravityMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0" max="5" step="0.1" value={gravityMult} onChange={e => setGravityMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
           </div>
         </div>
       )}

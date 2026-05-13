@@ -86,9 +86,8 @@ func (ctx *HandlerContext) HandleSemanticTopics(w http.ResponseWriter, r *http.R
 func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *http.Request) {
 	topics := ctx.State.GetAllSemanticTopics()
 	allNoteLinks := ctx.State.GetAllFileSemanticLinks()
-	allTags := ctx.State.GetAllFileTags()
 
-	log.Printf("[ManualMap] Topics do BBolt: %d | Files com links: %d | Files com tags: %d\n", len(topics), len(allNoteLinks), len(allTags))
+	log.Printf("[ManualMap] Topics do BBolt: %d | Files com links: %d\n", len(topics), len(allNoteLinks))
 
 	resp := ManualMapResponse{
 		Topics: []ManualTopic{},
@@ -130,29 +129,6 @@ func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *htt
 				Source: note,
 				Target: topic,
 				Type:   "note",
-			})
-		}
-	}
-
-	for note, tags := range allTags {
-		for _, tag := range tags {
-			if tag == "" {
-				continue
-			}
-			tagID := "tag:" + tag
-			if !topicMap[tagID] {
-				resp.Topics = append(resp.Topics, ManualTopic{
-					ID:    tagID,
-					Label: "#" + tag,
-					Level: 1,
-					Type:  "tag",
-				})
-				topicMap[tagID] = true
-			}
-			resp.Links = append(resp.Links, ManualLink{
-				Source: note,
-				Target: tagID,
-				Type:   "tag",
 			})
 		}
 	}
