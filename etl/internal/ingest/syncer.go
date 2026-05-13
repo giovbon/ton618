@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -422,7 +423,7 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 				sem <- struct{}{}
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[ERRO CRÍTICO] Panic detectado ao processar %s: %v\n", f, r)
+						log.Printf("[ERRO CRÍTICO] Panic detectado ao processar %s: %v\nStack:\n%s\n", f, r, debug.Stack())
 					}
 					<-sem
 				}()

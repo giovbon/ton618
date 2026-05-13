@@ -126,7 +126,8 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 		}
 	}
 
-	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
+	cleanTextForTags := stripHTML(text)
+	tagMatches := hashtagRegex.FindAllStringSubmatch(cleanTextForTags, -1)
 	for _, m := range tagMatches {
 		if len(m) > 1 {
 			tag := strings.ToLower(m[1])

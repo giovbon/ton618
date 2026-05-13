@@ -1,12 +1,15 @@
-import type { QueryClient } from '@tanstack/react-query';
-import type { Dispatch, SetStateAction } from 'preact/compat';
-import { useCallback, useMemo, useState } from 'preact/compat';
-import type { FileObject } from '../types';
+import type { QueryClient } from "@tanstack/react-query";
+import type { Dispatch, SetStateAction } from "preact/compat";
+import { useCallback, useMemo, useState } from "preact/compat";
+import type { FileObject } from "../types";
 
 interface UseFileOperationsProps {
-  fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response | null>;
+  fetchWithAuth: (
+    url: string,
+    options?: RequestInit,
+  ) => Promise<Response | null>;
   queryClient: QueryClient;
-  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  addToast: (message: string, type: "success" | "error" | "info") => void;
   setEditingFile: Dispatch<SetStateAction<FileObject | null>>;
   editingFile: FileObject | null;
   handleDeleteFromList: (filename: string) => void;
@@ -36,13 +39,15 @@ export const useFileOperations = ({
     setIsSyncing(true);
     setSyncSuccess(false);
     try {
-      const resp = await fetchWithAuth('/api/sync?force=true', { method: 'POST' });
+      const resp = await fetchWithAuth("/api/sync?force=true", {
+        method: "POST",
+      });
       if (resp?.ok) {
         setSyncSuccess(true);
         setTimeout(() => setSyncSuccess(false), 3000);
       }
     } catch (err) {
-      console.error('Erro na sincronização:', err);
+      console.error("Erro na sincronização:", err);
     } finally {
       setIsSyncing(false);
     }
@@ -51,8 +56,8 @@ export const useFileOperations = ({
   const handleCreateNote = useCallback(
     (title: string) => {
       if (!title) return;
-      const cleanName = title.split('/').pop() || '';
-      const fileName = `notes/${cleanName.replace(/\.md$/, '')}.md`;
+      const cleanName = title.split("/").pop() || "";
+      const fileName = `notes/${cleanName.replace(/\.md$/, "")}.md`;
       const template = `# ${title}\n\n`;
       setIsCreatingNote(false);
       setEditingFile({ name: fileName, content: template, isNew: true });
@@ -64,14 +69,17 @@ export const useFileOperations = ({
     const now = new Date();
     const ymd = now.toISOString().slice(0, 10);
     const hm =
-      now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-    const s = now.getSeconds().toString().padStart(2, '0');
+      now.getHours().toString().padStart(2, "0") +
+      now.getMinutes().toString().padStart(2, "0");
+    const s = now.getSeconds().toString().padStart(2, "0");
     const fileName = `notes/${ymd}-${hm}${s}.md`;
-    let content = '';
+    let content = "";
     let isNew = true;
 
     try {
-      const readRes = await fetchWithAuth(`/api/file?name=${encodeURIComponent(fileName)}`);
+      const readRes = await fetchWithAuth(
+        `/api/file?name=${encodeURIComponent(fileName)}`,
+      );
 
       if (readRes?.ok) {
         content = await readRes.text();
@@ -79,7 +87,7 @@ export const useFileOperations = ({
       }
       setEditingFile({ name: fileName, content, scrollToText: null, isNew });
     } catch (err) {
-      console.error('Erro ao abrir nota rápida:', err);
+      console.error("Erro ao abrir nota rápida:", err);
     }
   }, [fetchWithAuth, setEditingFile]);
 
@@ -88,26 +96,39 @@ export const useFileOperations = ({
       try {
         const res = await fetchWithAuth(
           `/api/rename?from=${encodeURIComponent(oldName)}&to=${encodeURIComponent(newName)}`,
-          { method: 'PUT' },
+          { method: "PUT" },
         );
 
         if (res?.ok) {
           if (editingFile && editingFile.name === oldName) {
             setEditingFile((prev) =>
-              prev ? { ...prev, name: newName, content: currentContent, isNew: false } : null,
+              prev
+                ? {
+                    ...prev,
+                    name: newName,
+                    content: currentContent,
+                    isNew: false,
+                  }
+                : null,
             );
           }
           handleDeleteFromList(oldName);
-          queryClient.invalidateQueries({ queryKey: ['search'] });
+          queryClient.invalidateQueries({ queryKey: ["search"] });
           return true;
         }
         return false;
       } catch (err) {
-        console.error('Erro ao renomear:', err);
+        console.error("Erro ao renomear:", err);
         return false;
       }
     },
-    [fetchWithAuth, editingFile, setEditingFile, handleDeleteFromList, queryClient],
+    [
+      fetchWithAuth,
+      editingFile,
+      setEditingFile,
+      handleDeleteFromList,
+      queryClient,
+    ],
   );
 
   const handleCaptureLink = useCallback(
@@ -115,15 +136,18 @@ export const useFileOperations = ({
       if (!url) return;
       setIsProcessingLink(true);
       try {
-        const res = await fetchWithAuth('/api/link', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetchWithAuth("/api/link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
         });
         if (res?.ok) {
           const data = await res.json();
           setIsCapturingLink(false);
-          addToast('Link capturado! O conteúdo está sendo processado.', 'success');
+          addToast(
+            "Link capturado! O conteúdo está sendo processado.",
+            "success",
+          );
           try {
             const fileRes = await fetchWithAuth(
               `/api/file?name=${encodeURIComponent(data.filename)}`,
@@ -133,14 +157,16 @@ export const useFileOperations = ({
               setEditingFile({ name: data.filename, content });
             }
           } catch (e) {
-            console.error('Erro ao abrir nota capturada:', e);
+            console.error("Erro ao abrir nota capturada:", e);
           }
         } else {
-          alert('Erro ao capturar link. O site pode estar bloqueando o acesso.');
+          alert(
+            "Erro ao capturar link. O site pode estar bloqueando o acesso.",
+          );
         }
       } catch (err) {
-        console.error('Erro Pocket:', err);
-        alert('Erro de conexão ao capturar link.');
+        console.error("Erro Pocket:", err);
+        alert("Erro de conexão ao capturar link.");
       } finally {
         setIsProcessingLink(false);
       }
@@ -150,24 +176,27 @@ export const useFileOperations = ({
 
   const handleFileUpload = useCallback(
     async (e: any) => {
-      const mode = e.target.getAttribute('data-mode');
+      const mode = e.target.getAttribute("data-mode");
       const file = e.target.files[0];
       if (!file) return;
 
       const name = file.name.toLowerCase();
-      const isPdf = name.endsWith('.pdf');
-      const isImage = name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg');
+      const isPdf = name.endsWith(".pdf");
+      const isImage =
+        name.endsWith(".png") ||
+        name.endsWith(".jpg") ||
+        name.endsWith(".jpeg");
 
-      if (mode === 'pdf' && !isPdf) {
+      if (mode === "pdf" && !isPdf) {
         window.alert(
-          'Este botão é exclusivo para PDFs. Para fotos ou imagens, use o botão ao lado (Imagem / Câmera).',
+          "Este botão é exclusivo para PDFs. Para fotos ou imagens, use o botão ao lado (Imagem / Câmera).",
         );
         e.target.value = null;
         return;
       }
-      if (mode === 'image' && !isImage) {
+      if (mode === "image" && !isImage) {
         window.alert(
-          'Este botão é exclusivo para Imagens / Câmera. Para documentos PDF, use o botão de Upload PDF.',
+          "Este botão é exclusivo para Imagens / Câmera. Para documentos PDF, use o botão de Upload PDF.",
         );
         e.target.value = null;
         return;
@@ -175,11 +204,11 @@ export const useFileOperations = ({
 
       setIsUploading(true);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append("file", file);
 
       try {
-        const res = await fetchWithAuth('/api/upload', {
-          method: 'POST',
+        const res = await fetchWithAuth("/api/upload", {
+          method: "POST",
           body: formData,
         });
 
@@ -187,11 +216,11 @@ export const useFileOperations = ({
           handleManualSync();
           e.target.value = null;
         } else {
-          alert('Erro no upload.');
+          alert("Erro no upload.");
         }
       } catch (err) {
-        console.error('Erro no upload:', err);
-        alert('Erro de conexão ao enviar arquivo.');
+        console.error("Erro no upload:", err);
+        alert("Erro de conexão ao enviar arquivo.");
       } finally {
         setIsUploading(false);
       }
@@ -207,18 +236,18 @@ export const useFileOperations = ({
       setIsUploading(true);
       const formData = new FormData();
       for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
+        formData.append("files", files[i]);
       }
 
       try {
-        const res = await fetchWithAuth('/api/bundle', {
-          method: 'POST',
+        const res = await fetchWithAuth("/api/bundle", {
+          method: "POST",
           body: formData,
         });
 
         if (res?.ok) {
           const data = await res.json();
-          addToast('Arquivos enviados com sucesso!', 'success');
+          addToast("Arquivos enviados com sucesso!", "success");
           handleManualSync();
           e.target.value = null;
           if (data.note) {
@@ -231,15 +260,15 @@ export const useFileOperations = ({
                 setEditingFile({ name: data.note, content });
               }
             } catch (e) {
-              console.error('Erro ao abrir nota do bundle:', e);
+              console.error("Erro ao abrir nota do bundle:", e);
             }
           }
         } else {
-          alert('Erro ao criar pacote.');
+          alert("Erro ao criar pacote.");
         }
       } catch (err) {
-        console.error('Erro no bundle upload:', err);
-        alert('Erro de conexão ao enviar pacote.');
+        console.error("Erro no bundle upload:", err);
+        alert("Erro de conexão ao enviar pacote.");
       } finally {
         setIsUploading(false);
       }
@@ -254,43 +283,57 @@ export const useFileOperations = ({
       if (editingFile && editingFile.name === fileToDelete) {
         setEditingFile(null);
       }
-      const res = await fetchWithAuth(`/api/file?name=${encodeURIComponent(fileToDelete)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetchWithAuth(
+        `/api/file?name=${encodeURIComponent(fileToDelete)}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (res?.ok) {
         handleDeleteFromList(fileToDelete);
         setFileToDelete(null);
       } else {
-        alert('Erro ao excluir arquivo.');
+        alert("Erro ao excluir arquivo.");
       }
     } catch (err) {
-      console.error('Erro na exclusão:', err);
+      console.error("Erro na exclusão:", err);
     } finally {
       setIsDeletingFile(false);
     }
-  }, [fileToDelete, editingFile, fetchWithAuth, handleDeleteFromList, setEditingFile]);
+  }, [
+    fileToDelete,
+    editingFile,
+    fetchWithAuth,
+    handleDeleteFromList,
+    setEditingFile,
+  ]);
 
   const handleSaveFile = useCallback(
     async (fileName: string, content: string, isAuto: boolean = false) => {
       if (isSaving) return false;
       setIsSaving(true);
       try {
-        const res = await fetchWithAuth(`/api/file?name=${encodeURIComponent(fileName)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-        });
+        const res = await fetchWithAuth(
+          `/api/file?name=${encodeURIComponent(fileName)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content }),
+          },
+        );
         if (res?.ok) {
-          setEditingFile((prev) => (prev ? { ...prev, isNew: false, content } : null));
+          setEditingFile((prev) =>
+            prev ? { ...prev, isNew: false, content } : null,
+          );
           if (!isAuto) {
-            addToast('Arquivo salvo com sucesso!', 'success');
-            queryClient.invalidateQueries({ queryKey: ['search'] });
+            addToast("Arquivo salvo com sucesso!", "success");
+            queryClient.invalidateQueries({ queryKey: ["search"] });
           }
           return true;
         }
         return false;
       } catch (err) {
-        console.error('Erro ao salvar:', err);
+        console.error("Erro ao salvar:", err);
         return false;
       } finally {
         setIsSaving(false);

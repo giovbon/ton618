@@ -8,7 +8,8 @@ export const HashtagMark = Mark.create({
   addOptions() {
     return {
       HTMLAttributes: {
-        class: "",
+        class: "hashtag-pill",
+        "data-hashtag": "true",
       },
     };
   },

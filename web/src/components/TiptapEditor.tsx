@@ -19,6 +19,14 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 
+const cleanMarkdown = (content: string) => {
+  let c = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
+  c = c.replace(/<span data-wikilink="([^"]+)".*?<\/span>/g, "[[$1]]");
+  c = c.replace(/<span data-semantic-link="([^"]+)".*?<\/span>/g, "@[$1]");
+  c = c.replace(/<span[^>]*>(#[^<]+)<\/span>/g, "$1");
+  return c;
+};
+
 interface TiptapEditorProps {
   fileName: string;
   initialContent: string;
@@ -205,15 +213,7 @@ const TiptapEditor = ({
         let content = editor.storage.markdown.getMarkdown();
 
         // Unescape brackets if tiptap-markdown escaped them, or clean raw HTML if it fell back to HTML
-        content = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
-        content = content.replace(
-          /<span data-wikilink="([^"]+)".*?<\/span>/g,
-          "[[$1]]",
-        );
-        content = content.replace(
-          /<span data-semantic-link="([^"]+)".*?<\/span>/g,
-          "@[$1]",
-        );
+        content = cleanMarkdown(content);
 
         const fm = frontmatterRef.current;
         const finalContent = fm.trim()
@@ -279,7 +279,7 @@ const TiptapEditor = ({
     const newNameWithExt = `${finalNewName}.md`;
 
     try {
-      const content = editor.storage.markdown.getMarkdown();
+      const content = cleanMarkdown(editor.storage.markdown.getMarkdown());
       const fm = frontmatterRef.current;
       const finalContent = fm.trim() ? `---\n${fm}\n---\n${content}` : content;
 
@@ -304,16 +304,7 @@ const TiptapEditor = ({
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
       setEditorStatus("saving");
-      let content = editor.storage.markdown.getMarkdown();
-      content = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
-      content = content.replace(
-        /<span data-wikilink="([^"]+)".*?<\/span>/g,
-        "[[$1]]",
-      );
-      content = content.replace(
-        /<span data-semantic-link="([^"]+)".*?<\/span>/g,
-        "@[$1]",
-      );
+      let content = cleanMarkdown(editor.storage.markdown.getMarkdown());
       const finalContent = val.trim()
         ? `---\n${val}\n---\n${content}`
         : content;

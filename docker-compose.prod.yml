@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   ton618-pkm:
@@ -11,7 +11,7 @@ services:
       - PORT=6180
       - POLL_INTERVAL_SEC=30
       - AUTH_USER=admin
-      - AUTH_PASS=ton618_secret  # RECOMENDADO: Alterar para uma senha forte
+      - AUTH_PASS=ton618_secret # RECOMENDADO: Alterar para uma senha forte
       - BLEVE_INDEX_DIR=/app/data/ton618.bleve
       - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_MODEL=nomic-embed-text

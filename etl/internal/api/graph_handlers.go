@@ -49,12 +49,13 @@ type ManualTopic struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	Level int    `json:"level"`
+	Type  string `json:"type"` // "topic" or "tag"
 }
 
 type ManualLink struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
-	Type   string `json:"type"` // "hierarchy" or "note"
+	Type   string `json:"type"` // "hierarchy", "note" or "tag"
 }
 
 func (ctx *HandlerContext) HandleKnowledgeMapStatus(w http.ResponseWriter, r *http.Request) {
@@ -85,8 +86,9 @@ func (ctx *HandlerContext) HandleSemanticTopics(w http.ResponseWriter, r *http.R
 func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *http.Request) {
 	topics := ctx.State.GetAllSemanticTopics()
 	allNoteLinks := ctx.State.GetAllFileSemanticLinks()
+	allTags := ctx.State.GetAllFileTags()
 
-	log.Printf("[ManualMap] Topics do BBolt: %d | Files com links: %d\n", len(topics), len(allNoteLinks))
+	log.Printf("[ManualMap] Topics do BBolt: %d | Files com links: %d | Files com tags: %d\n", len(topics), len(allNoteLinks), len(allTags))
 
 	resp := ManualMapResponse{
 		Topics: []ManualTopic{},
@@ -115,6 +117,7 @@ func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *htt
 					ID:    currentPath,
 					Label: part,
 					Level: i,
+					Type:  "topic",
 				})
 				topicMap[currentPath] = true
 			}
@@ -127,6 +130,29 @@ func (ctx *HandlerContext) HandleManualSemanticMap(w http.ResponseWriter, r *htt
 				Source: note,
 				Target: topic,
 				Type:   "note",
+			})
+		}
+	}
+
+	for note, tags := range allTags {
+		for _, tag := range tags {
+			if tag == "" {
+				continue
+			}
+			tagID := "tag:" + tag
+			if !topicMap[tagID] {
+				resp.Topics = append(resp.Topics, ManualTopic{
+					ID:    tagID,
+					Label: "#" + tag,
+					Level: 1,
+					Type:  "tag",
+				})
+				topicMap[tagID] = true
+			}
+			resp.Links = append(resp.Links, ManualLink{
+				Source: note,
+				Target: tagID,
+				Type:   "tag",
 			})
 		}
 	}

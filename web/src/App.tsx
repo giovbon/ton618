@@ -254,15 +254,21 @@ function AppContent() {
     async (filename: string) => {
       console.log("Abrindo nota do mapa:", filename);
       if (isManualMapOpen) setIsManualMapOpen(false);
+
+      let queryName = filename;
+      if (!queryName.split('/').pop()?.includes('.')) {
+        queryName += '.md';
+      }
+
       try {
         const res = await fetchWithAuth(
-          `/api/file?name=${encodeURIComponent(filename)}`,
+          `/api/file?name=${encodeURIComponent(queryName)}`,
         );
         if (res?.ok) {
           const content = await res.text();
-          setEditingFile({ name: filename, content });
+          setEditingFile({ name: queryName, content });
         } else {
-          const newPath = `notes/${filename}`;
+          const newPath = queryName.startsWith('notes/') ? queryName : `notes/${queryName}`;
           setEditingFile({
             name: newPath,
             content: `# ${filename.replace(/\.md$/, "")}\n\n`,
@@ -273,7 +279,7 @@ function AppContent() {
         console.error("Erro ao abrir WikiLink:", err);
       }
     },
-    [fetchWithAuth],
+    [fetchWithAuth, isManualMapOpen],
   );
 
   useEffect(() => {

@@ -5,7 +5,7 @@ WORKDIR /app/web
 # Cache otimizado: Copia apenas os arquivos de dependência primeiro
 COPY web/package*.json ./
 # npm ci é mais rápido e seguro para builds do que npm install
-RUN npm ci 
+RUN npm ci
 
 COPY web/ .
 

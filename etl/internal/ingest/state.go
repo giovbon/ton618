@@ -144,3 +144,14 @@ func (s *AppState) RebuildKnownTagsCache() {
 	s.tags.setKnownTagsMap(newKnownTags)
 	log.Printf("[Sync] Cache de sugestoes de tags reconstruido: %d tags ativas.\n", len(newKnownTags))
 }
+
+func (s *AppState) GetAllFileTags() map[string][]string {
+	m := s.tags.getFileTagsMap()
+	res := make(map[string][]string, len(m))
+	for k, v := range m {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		res[k] = cp
+	}
+	return res
+}

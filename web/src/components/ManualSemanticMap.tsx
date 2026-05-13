@@ -17,12 +17,13 @@ interface ManualTopic {
   id: string;
   label: string;
   level: number;
+  type?: "topic" | "tag";
 }
 
 interface ManualLink {
   source: string;
   target: string;
-  type: "hierarchy" | "note";
+  type: "hierarchy" | "note" | "tag";
 }
 
 interface ManualMapData {
@@ -33,12 +34,12 @@ interface ManualMapData {
 interface Node extends SimulationNodeDatum {
   id: string;
   label: string;
-  type: "topic" | "note";
+  type: "topic" | "note" | "tag";
   level?: number;
 }
 
 interface Link extends SimulationLinkDatum<Node> {
-  type: "hierarchy" | "note";
+  type: "hierarchy" | "note" | "tag";
 }
 
 interface ManualSemanticMapProps {
@@ -107,14 +108,26 @@ export function ManualSemanticMap({
   const [visible, setVisible] = useState(false);
 
   // visual configurations
-  const [linkDistanceMult, setLinkDistanceMult] = useState(1);
-  const [lineWidthMult, setLineWidthMult] = useState(1);
-  const [nodeRadiusMult, setNodeRadiusMult] = useState(1);
+  const [linkDistanceMult, setLinkDistanceMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_linkDistanceMult');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [lineWidthMult, setLineWidthMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_lineWidthMult');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [nodeRadiusMult, setNodeRadiusMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_nodeRadiusMult');
+    return saved ? parseFloat(saved) : 1;
+  });
   const [showControls, setShowControls] = useState(false);
 
   const visualConfig = useRef({ linkDistanceMult, lineWidthMult, nodeRadiusMult });
   useEffect(() => {
     visualConfig.current = { linkDistanceMult, lineWidthMult, nodeRadiusMult };
+    localStorage.setItem('manualMap_linkDistanceMult', linkDistanceMult.toString());
+    localStorage.setItem('manualMap_lineWidthMult', lineWidthMult.toString());
+    localStorage.setItem('manualMap_nodeRadiusMult', nodeRadiusMult.toString());
   }, [linkDistanceMult, lineWidthMult, nodeRadiusMult]);
 
   // fade-in entry animation
@@ -145,14 +158,14 @@ export function ManualSemanticMap({
 
     const noteIds = new Set<string>();
     data.links.forEach((l) => {
-      if (l.type === "note") noteIds.add(l.source);
+      if (l.type === "note" || l.type === "tag") noteIds.add(l.source);
     });
 
     const nodes: Node[] = [
       ...data.topics.map((t) => ({
         id: t.id,
         label: t.label,
-        type: "topic" as const,
+        type: (t.type || "topic") as "topic" | "tag",
         level: t.level,
       })),
       ...Array.from(noteIds).map((id) => ({
@@ -298,11 +311,17 @@ export function ManualSemanticMap({
         ctx.beginPath();
         ctx.moveTo(link.source.x, link.source.y);
         ctx.lineTo(link.target.x, link.target.y);
-        ctx.strokeStyle =
-          link.type === "hierarchy"
-            ? "rgba(167,139,250,0.4)"
-            : "rgba(56,189,248,0.2)";
-        ctx.setLineDash(link.type === "note" ? [2, 2] : []);
+        
+        if (link.type === "hierarchy") {
+          ctx.strokeStyle = "rgba(167,139,250,0.4)";
+          ctx.setLineDash([]);
+        } else if (link.type === "tag") {
+          ctx.strokeStyle = "rgba(244,114,182,0.3)";
+          ctx.setLineDash([2, 2]);
+        } else {
+          ctx.strokeStyle = "rgba(56,189,248,0.2)";
+          ctx.setLineDash([2, 2]);
+        }
         ctx.lineWidth = 1 * visualConfig.current.lineWidthMult;
         ctx.stroke();
       });
@@ -311,21 +330,24 @@ export function ManualSemanticMap({
       // nodes
       nodes.forEach((node) => {
         const isTopic = node.type === "topic";
-        const radius = (isTopic ? 6 : 4) * visualConfig.current.nodeRadiusMult;
+        const isTag = node.type === "tag";
+        const isStructural = isTopic || isTag;
+        const radius = (isTopic ? 6 : isTag ? 5 : 4) * visualConfig.current.nodeRadiusMult;
+        
         ctx.beginPath();
         ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = isTopic ? "#a78bfa" : "#38bdf8";
+        ctx.fillStyle = isTopic ? "#a78bfa" : isTag ? "#f472b6" : "#38bdf8";
         ctx.fill();
 
-        if (t.k < 0.6 && !isTopic) return;
+        if (t.k < 0.6 && !isStructural) return;
 
-        const fontSize = (isTopic ? 12 : 10) * Math.min(1.5, Math.max(0.8, visualConfig.current.nodeRadiusMult));
-        ctx.font = `${isTopic ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
+        const fontSize = (isTopic ? 12 : isTag ? 11 : 10) * Math.min(1.5, Math.max(0.8, visualConfig.current.nodeRadiusMult));
+        ctx.font = `${isStructural ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
         ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        const maxWidth = isTopic ? 120 : 100;
+        const maxWidth = isTopic ? 120 : isTag ? 110 : 100;
         const lines = wrapText(ctx, node.label, maxWidth);
         const lh = fontSize * 1.2;
         lines.forEach((line, i) =>
