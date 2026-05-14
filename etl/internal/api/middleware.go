@@ -46,7 +46,6 @@ func BasicAuthMiddleware(next http.Handler, username, password string) http.Hand
 			}
 		}
 
-		w.Header().Set("WWW-Authenticate", `Basic realm="TON-618 Knowledge Singularity"`)
 		http.Error(w, "Acesso não autorizado. Por favor, faça login.", http.StatusUnauthorized)
 	})
 }

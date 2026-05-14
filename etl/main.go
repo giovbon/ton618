@@ -138,16 +138,6 @@ func main() {
 
 	// 4. Configuração do Servidor com Suporte a Shutdown
 	noCacheHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS e Segurança
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
 		// Desativar cache para arquivos estáticos sensíveis
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
 		w.Header().Set("Pragma", "no-cache")
