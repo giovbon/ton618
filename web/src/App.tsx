@@ -743,18 +743,9 @@ function AppContent() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 custom-scrollbar scroll-smooth">
+      <main className="flex-1 w-full mx-auto p-4 sm:p-6 custom-scrollbar scroll-smooth">
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between min-h-[1.5rem]">
-            {searchState.debouncedQuery.trim() !== "" && (
-              <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest animate-in fade-in duration-500">
-                {searchState.isLoading && searchState.results.length === 0
-                  ? "Carregando..."
-                  : searchState.isCompactMode
-                    ? `${searchState.results.length}${searchState.hasNextPage ? "+" : ""} Notas`
-                    : `${searchState.totalHits} Anexos`}
-              </h2>
-            )}
           </div>
           <div className="pb-20">
             {searchState.isDataviewQuery ? (
@@ -765,7 +756,17 @@ function AppContent() {
               />
             ) : (
               searchState.results.length > 0 && (
-                <Virtuoso
+                <div className={`mx-auto w-full transition-all duration-500 ${searchState.isCompactMode ? 'max-w-2xl' : 'max-w-4xl'}`}>
+                  {searchState.debouncedQuery.trim() !== "" && (
+                    <h2 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mb-6 px-1">
+                      {searchState.isLoading && searchState.results.length === 0
+                        ? "Carregando..."
+                        : searchState.isCompactMode
+                          ? `${searchState.results.length}${searchState.hasNextPage ? "+" : ""} Notas`
+                          : `${searchState.totalHits} Fragmentos`}
+                    </h2>
+                  )}
+                  <Virtuoso
                   ref={virtuosoRef}
                   useWindowScroll
                   data={searchState.results}
@@ -778,7 +779,7 @@ function AppContent() {
                   }}
                   itemContent={
                     ((index: number, doc: SearchResult) => (
-                      <div className="pb-4" key={doc.id || index}>
+                      <div className={searchState.isCompactMode ? "pb-1" : "pb-8"} key={doc.id || index}>
                         {searchState.isCompactMode ? (
                           <CompactResultCard
                             doc={doc}
@@ -835,6 +836,7 @@ function AppContent() {
                     )) as any,
                   }}
                 />
+                </div>
               )
             )}
           </div>

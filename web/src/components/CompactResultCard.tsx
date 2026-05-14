@@ -114,91 +114,63 @@ export const CompactResultCard = memo(
           liRef.current = el;
         }}
         onClick={isMedia ? (handleOpenAsset as any) : (handleOpen as any)}
-        className={`group relative flex flex-col gap-2 p-3 bg-zinc-900/40 hover:bg-zinc-800/60 border border-zinc-800/50 ${isArquivos ? "hover:border-indigo-500/30" : isImagem ? "hover:border-emerald-500/30" : isPDF ? "hover:border-red-500/30" : "hover:border-sky-500/30"} rounded-xl transition-all duration-300 cursor-pointer overflow-hidden shadow-sm`}
+        className="group relative flex items-center justify-between gap-2 px-3 py-3 sm:py-1.5 bg-zinc-950/20 hover:bg-zinc-900/60 border-b border-zinc-900/40 hover:border-zinc-800 transition-all duration-200 cursor-pointer overflow-hidden"
       >
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
-            <ResultIcon doc={doc} isIndexing={isIndexing} />
+        <div className="flex items-center flex-1 min-w-0 gap-2">
+          <ResultIcon doc={doc} isIndexing={isIndexing} />
 
-            <span
-              className={`text-[11px] font-bold truncate flex-1 min-w-0 ${doc.arquivo.startsWith("links/") ? "text-amber-500" : isArquivos ? "text-indigo-400" : isImagem ? "text-emerald-400" : isPDF ? "text-red-400" : "text-sky-400"}`}
-            >
-              <HighlightText
-                text={doc.arquivo
-                  .split("/")
-                  .pop()
-                  ?.replace(/\.(md|pdf)$/i, "")}
-                query={query}
-                searchTerms={searchTerms}
-              />
-            </span>
-          </div>
+          <span
+            className={`text-[11px] font-medium truncate flex-1 min-w-0 ${doc.arquivo.startsWith("links/") ? "text-amber-500/90" : isArquivos ? "text-indigo-400/90" : isImagem ? "text-emerald-400/90" : isPDF ? "text-red-400/90" : "text-sky-400/90"}`}
+          >
+            <HighlightText
+              text={doc.arquivo
+                .split("/")
+                .pop()
+                ?.replace(/\.(md|pdf)$/i, "")}
+              query={query}
+              searchTerms={searchTerms}
+            />
+          </span>
+        </div>
 
-          <div className="flex items-center gap-4 shrink-0">
-            {/* Desktop Tags */}
-            <div className="hidden md:flex flex-wrap justify-end gap-1.5 max-w-[280px]">
-              {(doc.tags || []).slice(0, 4).map((tag) => (
-                <span
-                  key={tag}
-                  className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-[9px] font-bold text-zinc-400 tracking-tight"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {(doc.tags || []).length > 4 && (
-                <span className="px-1 py-0.5 rounded bg-zinc-800/40 text-[8px] font-bold text-zinc-500">
-                  +{(doc.tags || []).length - 4}
-                </span>
-              )}
-            </div>
-
-            <span className="text-[10px] text-zinc-600 font-medium whitespace-nowrap">
-              {age}
-            </span>
-
-            {/* Mobile Tag Counter */}
-            {doc.tags && doc.tags.length > 0 && (
-              <div className="flex md:hidden items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/30 border border-zinc-800/50 text-[9px] font-bold text-zinc-500">
-                <svg
-                  className="w-2.5 h-2.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                  />
-                </svg>
-                <span>{doc.tags.length}</span>
-              </div>
-            )}
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteFile(doc.arquivo);
-              }}
-              title={"Excluir arquivo"}
-              className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-100"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden md:flex flex-wrap justify-end gap-1">
+            {(doc.tags || []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="px-1 py-0 rounded bg-zinc-800/30 text-[9px] font-bold text-zinc-600"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </button>
+                #{tag}
+              </span>
+            ))}
           </div>
+
+          <span className="text-[10px] text-zinc-600 font-medium tabular-nums w-10 text-right">
+            {age}
+          </span>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFile(doc.arquivo);
+            }}
+            title={"Excluir arquivo"}
+            className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
+          >
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </button>
         </div>
       </li>
     );
