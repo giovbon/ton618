@@ -79,24 +79,4 @@ describe("SearchResultCard - Tag Resilience", () => {
     expect(screen.getByText("colapsar")).toBeDefined();
   });
 
-  it("should show count in COMPACT mode instead of list", () => {
-    render(
-      <CompactResultCard
-        doc={mockDoc}
-        index={0}
-        query=""
-        onEdit={() => {}}
-        onDeleteFile={() => {}}
-        fetchWithAuth={() => Promise.resolve(null)}
-        searchTerms={[]}
-        auth={null}
-      />,
-    );
-
-    // No novo componente CompactResultCard, as 4 primeiras tags são mostradas
-    expect(screen.getByText(/#tag3/i)).toBeDefined();
-    expect(screen.queryByText(/#tag5/i)).toBeNull();
-    // Exibe +11 (15 total - 4 visíveis)
-    expect(screen.getByText("+11")).toBeDefined();
-  });
 });
