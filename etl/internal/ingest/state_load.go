@@ -128,11 +128,11 @@ func (s *AppState) Load(cfg *config.AppConfig) {
 			s.semantic.setFileSemanticLinksMap(links)
 		}
 
-		// Reconstroi topicos no startup para eliminar orfaos residuais
-		s.semantic.RebuildSemanticTopics()
-
-		return nil
 	})
+	
+	// Reconstroi topicos no startup para eliminar orfaos residuais
+	// Movido para fora do db.View para evitar deadlock (Update dentro de View)
+	s.semantic.RebuildSemanticTopics()
 
 	s.RebuildKnownTagsCache()
 

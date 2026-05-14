@@ -13,7 +13,7 @@ services:
       - AUTH_USER=admin
       - AUTH_PASS=ton618_secret
       - BLEVE_INDEX_DIR=/app/data/ton618.bleve
-      - OLLAMA_HOST=http://192.168.15.6:11434
+      - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=nomic-embed-text
       # Modelos alternativos (descomente um e ajuste EMBEDDING_DIMENSION nas Settings):
       # - OLLAMA_MODEL=multilingual-e5          # 1024d, melhor para PT-BR

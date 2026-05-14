@@ -1,6 +1,6 @@
 module etl
 
-go 1.25.0
+go 1.24.1
 
 require (
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
@@ -10,7 +10,6 @@ require (
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	go.etcd.io/bbolt v1.4.0
-	golang.org/x/time v0.15.0
 	gonum.org/v1/gonum v0.17.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -46,5 +45,6 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
