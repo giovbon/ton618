@@ -1,16 +1,6 @@
 import { select as d3Select } from "d3-selection";
 import { zoom as d3Zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
-import {
-  forceSimulation,
-  forceLink,
-  forceManyBody,
-  forceCenter,
-  forceCollide,
-  forceX,
-  forceY,
-  type SimulationNodeDatum,
-  type SimulationLinkDatum,
-} from "d3-force";
+import { tree as d3Tree, hierarchy as d3Hierarchy } from "d3-hierarchy";
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { wrapText } from "../utils/canvasWordWrap";
@@ -33,17 +23,22 @@ interface ManualMapData {
   links: ManualLink[];
 }
 
-interface Node extends SimulationNodeDatum {
+interface TreeNodeData {
   id: string;
   label: string;
-  type: "topic" | "note" | "tag";
+  type: "topic" | "note" | "tag" | "root";
   level?: number;
   degree?: number;
+  children?: TreeNodeData[];
 }
 
-interface Link extends SimulationLinkDatum<Node> {
-  type: "hierarchy" | "note" | "tag";
-}
+// Extended type for D3 nodes with collapse support
+type HierNode = d3.HierarchyNode<TreeNodeData> & { 
+    _children?: HierNode[] | null; 
+    children?: HierNode[] | null;
+    x: number;
+    y: number;
+};
 
 interface ManualSemanticMapProps {
   auth: string;
@@ -53,7 +48,6 @@ interface ManualSemanticMapProps {
 
 // ─── hooks ──────────────────────────────────────────────────────────
 
-/** Busca dados do mapa com AbortController, loading e error states. */
 function useSemanticMapData(auth: string) {
   const [data, setData] = useState<ManualMapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +94,6 @@ export function ManualSemanticMap({
   onClose,
 }: ManualSemanticMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const simulationRef = useRef<any>(null);
   const zoomTransformRef = useRef<ZoomTransform>(zoomIdentity);
   const { data, loading, error } = useSemanticMapData(auth);
   const [tooltip, setTooltip] = useState<{
@@ -109,351 +102,343 @@ export function ManualSemanticMap({
     text: string;
   } | null>(null);
   const [visible, setVisible] = useState(false);
+  const [hoveredNode, setHoveredNode] = useState<any | null>(null);
+  const [hierarchyRoot, setHierarchyRoot] = useState<HierNode | null>(null);
+  const [layoutVersion, setLayoutVersion] = useState(0);
 
   // visual configurations
-  const [linkDistanceMult, setLinkDistanceMult] = useState(() => {
-    const saved = localStorage.getItem('manualMap_linkDistanceMult');
-    return saved ? parseFloat(saved) : 1;
+  const [radialSpacing, setRadialSpacing] = useState(() => {
+    const saved = localStorage.getItem('manualMap_radialSpacing');
+    return saved ? parseFloat(saved) : 150;
   });
-  const [lineWidthMult, setLineWidthMult] = useState(() => {
-    const saved = localStorage.getItem('manualMap_lineWidthMult');
+  const [glowIntensity, setGlowIntensity] = useState(() => {
+    const saved = localStorage.getItem('manualMap_glowIntensity');
     return saved ? parseFloat(saved) : 1;
   });
   const [nodeRadiusMult, setNodeRadiusMult] = useState(() => {
     const saved = localStorage.getItem('manualMap_nodeRadiusMult');
     return saved ? parseFloat(saved) : 1;
   });
-  const [chargeStrengthMult, setChargeStrengthMult] = useState(() => {
-    const saved = localStorage.getItem('manualMap_chargeStrengthMult');
-    return saved ? parseFloat(saved) : 1;
-  });
-  const [gravityMult, setGravityMult] = useState(() => {
-    const saved = localStorage.getItem('manualMap_gravityMult');
+  const [angleSpread, setAngleSpread] = useState(() => {
+    const saved = localStorage.getItem('manualMap_angleSpread');
     return saved ? parseFloat(saved) : 1;
   });
   const [showControls, setShowControls] = useState(false);
 
-  const visualConfig = useRef({ linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult });
+  const visualConfig = useRef({ radialSpacing, glowIntensity, nodeRadiusMult, angleSpread });
+  
   useEffect(() => {
-    visualConfig.current = { linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult };
-    localStorage.setItem('manualMap_linkDistanceMult', linkDistanceMult.toString());
-    localStorage.setItem('manualMap_lineWidthMult', lineWidthMult.toString());
+    visualConfig.current = { radialSpacing, glowIntensity, nodeRadiusMult, angleSpread };
+    localStorage.setItem('manualMap_radialSpacing', radialSpacing.toString());
+    localStorage.setItem('manualMap_glowIntensity', glowIntensity.toString());
     localStorage.setItem('manualMap_nodeRadiusMult', nodeRadiusMult.toString());
-    localStorage.setItem('manualMap_chargeStrengthMult', chargeStrengthMult.toString());
-    localStorage.setItem('manualMap_gravityMult', gravityMult.toString());
-  }, [linkDistanceMult, lineWidthMult, nodeRadiusMult, chargeStrengthMult, gravityMult]);
+    localStorage.setItem('manualMap_angleSpread', angleSpread.toString());
+    setLayoutVersion(v => v + 1);
+  }, [radialSpacing, glowIntensity, nodeRadiusMult, angleSpread]);
 
-  // fade-in entry animation
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
-  // update force distance when linkDistanceMult changes
+  // 1. Build initial hierarchy when data arrives
   useEffect(() => {
-    if (simulationRef.current) {
-      const linkForce = simulationRef.current.force("link");
-      if (linkForce) {
-        linkForce.distance((d: any) =>
-          d.type === "hierarchy" ? 60 * linkDistanceMult : 100 * linkDistanceMult
-        );
-        simulationRef.current.alpha(0.3).restart();
+    if (!data) return;
+    const rootData: TreeNodeData = { id: "root", label: "Knowledge", type: "root", children: [] };
+    const topicMap = new Map<string, TreeNodeData>();
+    topicMap.set("", rootData);
+
+    data.topics.sort((a, b) => a.level - b.level).forEach(t => {
+      const parts = t.id.split("/");
+      const label = parts.pop()!;
+      const parentId = parts.join("/");
+      const node: TreeNodeData = { id: t.id, label, type: (t.type || "topic") as any, level: t.level, children: [] };
+      topicMap.set(t.id, node);
+      const parent = topicMap.get(parentId) || rootData;
+      if (!parent.children) parent.children = [];
+      parent.children.push(node);
+    });
+
+    data.links.filter(l => l.type === "note").forEach(l => {
+      const parent = topicMap.get(l.target);
+      if (parent) {
+        if (!parent.children) parent.children = [];
+        parent.children.push({
+          id: l.source,
+          label: l.source.split("/").pop()?.replace(/\.(md|pdf)$/i, "") || l.source,
+          type: "note"
+        });
       }
-    }
-  }, [linkDistanceMult]);
+    });
 
-  // update charge/repulsion strength when chargeStrengthMult changes
-  useEffect(() => {
-    if (simulationRef.current) {
-      const chargeForce = simulationRef.current.force("charge");
-      const collideForce = simulationRef.current.force("collide");
-      if (chargeForce) chargeForce.strength(-300 * chargeStrengthMult);
-      if (collideForce) collideForce.radius(50 * chargeStrengthMult);
-      simulationRef.current.alpha(0.3).restart();
-    }
-  }, [chargeStrengthMult]);
+    const root = d3Hierarchy(rootData) as HierNode;
+    setHierarchyRoot(root);
+    setLayoutVersion(v => v + 1);
+  }, [data]);
 
-  // update gravity/centering force when gravityMult changes
+  // 2. Tree Layout and Rendering
   useEffect(() => {
-    if (simulationRef.current && canvasRef.current) {
-      const dpr = window.devicePixelRatio || 1;
-      const xForce = simulationRef.current.force("x");
-      const yForce = simulationRef.current.force("y");
-      if (xForce) xForce.strength(0.01 * gravityMult);
-      if (yForce) yForce.strength(0.01 * gravityMult);
-      simulationRef.current.alpha(0.3).restart();
-    }
-  }, [gravityMult]);
-
-  // ── initialize / update force graph ──────────────────────────
-  useEffect(() => {
-    if (!data || !canvasRef.current) return;
+    if (!hierarchyRoot || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
 
-    const noteIds = new Set<string>();
-    const nodeDegrees = new Map<string, number>();
-    data.links.forEach((l) => {
-      if (l.type === "note" || l.type === "tag") noteIds.add(l.source);
-      nodeDegrees.set(l.target, (nodeDegrees.get(l.target) || 0) + 1);
-    });
+    // Apply tree layout
+    const treeLayout = d3Tree<TreeNodeData>()
+      .size([2 * Math.PI * visualConfig.current.angleSpread, 100])
+      .separation((a, b) => (a.parent === b.parent ? 1 : 2) / (a.depth || 1));
 
-    const nodes: Node[] = [
-      ...data.topics.map((t) => ({
-        id: t.id,
-        label: t.label,
-        type: (t.type || "topic") as "topic" | "tag",
-        level: t.level,
-        degree: nodeDegrees.get(t.id) || 0,
-      })),
-      ...Array.from(noteIds).map((id) => ({
-        id,
-        label:
-          id
-            .split("/")
-            .pop()
-            ?.replace(/\.(md|pdf)$/i, "") || id,
-        type: "note" as const,
-        degree: nodeDegrees.get(id) || 0,
-      })),
-    ];
+    const root = treeLayout(hierarchyRoot) as HierNode;
+    const nodes = root.descendants();
+    const links = root.links();
 
-    const links: Link[] = data.links.map((l) => ({
-      source: l.source,
-      target: l.target,
-      type: l.type,
-    }));
-
-    const simulation = forceSimulation<Node>(nodes)
-      .force(
-        "link",
-        forceLink<Node, Link>(links)
-          .id((d) => d.id)
-          .distance((d) =>
-            d.type === "hierarchy"
-              ? 60 * visualConfig.current.linkDistanceMult
-              : 100 * visualConfig.current.linkDistanceMult
-          ),
-      )
-      .force("charge", forceManyBody().strength(-300 * visualConfig.current.chargeStrengthMult))
-      .force(
-        "center",
-        forceCenter(canvas.width / dpr / 2, canvas.height / dpr / 2),
-      )
-      .force("x", forceX(canvas.width / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
-      .force("y", forceY(canvas.height / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
-      .force("collide", forceCollide().radius((d: any) => {
-        const weight = 1 + (d.degree || 0);
-        const scale = Math.sqrt(weight);
-        const baseRadius = (d.type === "topic" ? 6 : d.type === "tag" ? 5 : 4);
-        return (baseRadius * scale * visualConfig.current.nodeRadiusMult) + (15 * visualConfig.current.chargeStrengthMult);
-      }));
-
-    simulationRef.current = simulation;
-
-    // zoom (estilo Obsidian: scroll/pinch para zoom, arrasto no fundo para pan)
-    // Na mousedown, verifica se tem um no sob o cursor — se tiver, pula o zoom
-    // para nao competir com o drag manual.
+    // Zoom Behavior
     const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>()
-      .scaleExtent([0.1, 10])
-      .filter((event: any) => {
-        if (event.type === "wheel" || event.type === "touchstart") return true;
-        if (event.type === "mousedown" && event.button === 0) {
-          const t = zoomTransformRef.current;
-          const r = canvas.getBoundingClientRect();
-          const px = t.invertX(event.clientX - r.left);
-          const py = t.invertY(event.clientY - r.top);
-          if (simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult)) return false; // no sob cursor → drag manual
-        }
-        return true;
-      })
+      .scaleExtent([0.05, 20])
       .on("zoom", (event) => {
         zoomTransformRef.current = event.transform;
       });
     d3Select(canvas).call(zoomBehavior as any);
 
-    // drag manual (estilo Obsidian): clica e arrasta, no fica onde soltou
-    let dragNode: Node | null = null;
-    let mouseDownPos = { x: 0, y: 0 };
-    let mouseDownTime = 0;
-    const rect = canvas.getBoundingClientRect();
-    const onMouseDown = (e: MouseEvent) => {
-      mouseDownPos = { x: e.clientX, y: e.clientY };
-      mouseDownTime = Date.now();
-      const t = zoomTransformRef.current;
-      const px = t.invertX(e.clientX - rect.left);
-      const py = t.invertY(e.clientY - rect.top);
-      const node = simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult);
-      if (node) {
-        dragNode = node as Node;
-        dragNode.fx = dragNode.x;
-        dragNode.fy = dragNode.y;
-        simulation.alphaTarget(0.3).restart();
-        e.preventDefault();
-      }
-    };
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragNode) return;
-      const t = zoomTransformRef.current;
-      dragNode.fx = t.invertX(e.clientX - rect.left);
-      dragNode.fy = t.invertY(e.clientY - rect.top);
-    };
-    const onMouseUp = () => {
-      if (dragNode) {
-        simulation.alphaTarget(0);
-        dragNode = null;
-      }
-    };
-    canvas.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    if (zoomTransformRef.current.k === 1 && zoomTransformRef.current.x === 0) {
+      const initialTransform = zoomIdentity.translate(window.innerWidth / 2, window.innerHeight / 2).scale(0.6);
+      d3Select(canvas).call(zoomBehavior.transform as any, initialTransform);
+      zoomTransformRef.current = initialTransform;
+    }
 
-    // click → open note
-    const handleClick = (event: MouseEvent) => {
-      const dist = Math.hypot(event.clientX - mouseDownPos.x, event.clientY - mouseDownPos.y);
-      const timeElapsed = Date.now() - mouseDownTime;
-      if (dist > 5 || timeElapsed > 300) return;
-
+    // Interaction Helpers
+    const findNodeAt = (mx: number, my: number) => {
       const t = zoomTransformRef.current;
       const rect = canvas.getBoundingClientRect();
-      const px = t.invertX(event.clientX - rect.left);
-      const py = t.invertY(event.clientY - rect.top);
-      const node = simulation.find(px, py, 20 * visualConfig.current.nodeRadiusMult);
-      if (node && node.type === "note") onOpenNote(node.id);
+      const px = (mx - rect.left - t.x) / t.k;
+      const py = (my - rect.top - t.y) / t.k;
+
+      for (const node of nodes) {
+        const radius = node.depth * visualConfig.current.radialSpacing;
+        const angle = node.x - Math.PI / 2;
+        const nx = radius * Math.cos(angle);
+        const ny = radius * Math.sin(angle);
+        const dist = Math.hypot(px - nx, py - ny);
+        if (dist < 25 * visualConfig.current.nodeRadiusMult) return node;
+      }
+      return null;
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const node = findNodeAt(event.clientX, event.clientY) as HierNode | null;
+      if (!node) return;
+
+      if (node.data.type === "note") {
+        onOpenNote(node.data.id);
+      } else if (node.depth > 0) {
+        // Toggle Collapse
+        if (node.children) {
+          node._children = node.children;
+          node.children = null;
+        } else if (node._children) {
+          node.children = node._children;
+          node._children = null;
+        }
+        setLayoutVersion(v => v + 1);
+      }
     };
     canvas.addEventListener("click", handleClick);
 
-    // mousemove → tooltip
     const handleMouseMove = (event: MouseEvent) => {
-      const t = zoomTransformRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const px = t.invertX(event.clientX - rect.left);
-      const py = t.invertY(event.clientY - rect.top);
-      const node = simulation.find(px, py, 15 * visualConfig.current.nodeRadiusMult);
+      const node = findNodeAt(event.clientX, event.clientY);
       if (node) {
-        setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.id });
+        setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.data.id });
         canvas.style.cursor = "pointer";
+        setHoveredNode(node);
       } else {
         setTooltip(null);
         canvas.style.cursor = "";
+        setHoveredNode(null);
       }
     };
     canvas.addEventListener("mousemove", handleMouseMove);
 
-    // render loop — para automaticamente quando a simulação esfria
+    // Render Loop
     let renderId = 0;
     const render = () => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       const t = zoomTransformRef.current;
+      const time = performance.now() / 1000;
 
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Subtle Grid
+      ctx.strokeStyle = "rgba(255,255,255,0.02)";
+      ctx.lineWidth = 1;
+      const step = 60 * t.k;
+      const offsetX = t.x % step;
+      const offsetY = t.y % step;
+      for (let x = offsetX; x < canvas.width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+      for (let y = offsetY; y < canvas.height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
       ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
 
-      // links
-      links.forEach((link: any) => {
-        if (!link.source.x || !link.target.x) return;
-        ctx.beginPath();
-        ctx.moveTo(link.source.x, link.source.y);
-        ctx.lineTo(link.target.x, link.target.y);
+      const spacing = visualConfig.current.radialSpacing;
+      const glow = visualConfig.current.glowIntensity;
+
+      const branchIds = new Set<string>();
+      if (hoveredNode) {
+        let curr = hoveredNode;
+        while (curr) { branchIds.add(curr.data.id); curr = curr.parent; }
+      }
+
+      // Links
+      ctx.globalCompositeOperation = "screen";
+      links.forEach((link) => {
+        if (isNaN(link.source.x) || isNaN(link.target.x)) return;
         
-        if (link.type === "hierarchy") {
-          ctx.strokeStyle = "rgba(167,139,250,0.4)";
-          ctx.setLineDash([]);
-        } else if (link.type === "tag") {
-          ctx.strokeStyle = "rgba(244,114,182,0.3)";
-          ctx.setLineDash([2, 2]);
+        const sourceAngle = link.source.x - Math.PI / 2;
+        const sourceRadius = link.source.depth * spacing;
+        const targetAngle = link.target.x - Math.PI / 2;
+        const targetRadius = link.target.depth * spacing;
+
+        const sx = sourceRadius * Math.cos(sourceAngle);
+        const sy = sourceRadius * Math.sin(sourceAngle);
+        const tx = targetRadius * Math.cos(targetAngle);
+        const ty = targetRadius * Math.sin(targetAngle);
+
+        const isHighlighted = branchIds.has(link.target.data.id);
+        
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        const midRadius = (sourceRadius + targetRadius) / 2;
+        const cp1x = midRadius * Math.cos(sourceAngle);
+        const cp1y = midRadius * Math.sin(sourceAngle);
+        const cp2x = midRadius * Math.cos(targetAngle);
+        const cp2y = midRadius * Math.sin(targetAngle);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tx, ty);
+
+        if (isHighlighted) {
+          ctx.strokeStyle = "rgba(167,139,250,0.8)";
+          ctx.lineWidth = 2.5 / t.k;
+          ctx.shadowBlur = 15 / t.k;
+          ctx.shadowColor = "#a78bfa";
         } else {
-          ctx.strokeStyle = "rgba(56,189,248,0.2)";
-          ctx.setLineDash([2, 2]);
+          ctx.strokeStyle = "rgba(167,139,250,0.12)";
+          ctx.lineWidth = 1 / t.k;
+          ctx.shadowBlur = 0;
         }
-        ctx.lineWidth = 1 * visualConfig.current.lineWidthMult;
         ctx.stroke();
       });
-      ctx.setLineDash([]);
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
 
-      // nodes
+      // Nodes
       nodes.forEach((node) => {
-        const isTopic = node.type === "topic";
-        const isTag = node.type === "tag";
+        if (isNaN(node.x)) return;
+        if (node.data.id === "root" && node.depth === 0) {
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = "#fff";
+            ctx.shadowBlur = 20 / t.k;
+            ctx.shadowColor = "#a78bfa";
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            return;
+        }
+        
+        const angle = node.x - Math.PI / 2;
+        const radius = node.depth * spacing;
+        const nx = radius * Math.cos(angle);
+        const ny = radius * Math.sin(angle);
+
+        const isTopic = node.data.type === "topic";
+        const isTag = node.data.type === "tag";
         const isStructural = isTopic || isTag;
+        const isCollapsed = (node as any)._children?.length > 0;
+        const isHovered = hoveredNode?.data.id === node.data.id;
+        const isInBranch = branchIds.has(node.data.id);
         
-        const weight = 1 + (node.degree || 0);
+        const weight = 1 + (node.children?.length || (node as any)._children?.length || 0);
         const scale = Math.sqrt(weight);
-        const baseRadius = isTopic ? 6 : isTag ? 5 : 4;
-        const radius = baseRadius * scale * visualConfig.current.nodeRadiusMult;
+        const baseRadius = isTopic ? 7 : isTag ? 6 : 5;
+        const r = (baseRadius * scale * visualConfig.current.nodeRadiusMult) * (isHovered ? 1.3 : 1);
         
+        const color = isTopic ? "#a78bfa" : isTag ? "#f472b6" : "#38bdf8";
+
+        // Aura
+        if (glow > 0) {
+          const auraRadius = r * (isCollapsed ? 3.5 : 2.5);
+          ctx.beginPath();
+          ctx.arc(nx, ny, auraRadius, 0, 2 * Math.PI);
+          const grad = ctx.createRadialGradient(nx, ny, r, nx, ny, auraRadius);
+          grad.addColorStop(0, color + (isCollapsed ? "66" : "33"));
+          grad.addColorStop(1, color + "00");
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
+        // Core Node
         ctx.beginPath();
-        ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = isTopic ? "#a78bfa" : isTag ? "#f472b6" : "#38bdf8";
+        ctx.arc(nx, ny, r, 0, 2 * Math.PI);
+        ctx.fillStyle = isHovered ? "#fff" : color;
+        
+        if (isCollapsed) {
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "#fff";
+          ctx.stroke();
+        }
+
+        if (isInBranch) {
+          ctx.shadowBlur = 15 / t.k;
+          ctx.shadowColor = color;
+        }
         ctx.fill();
+        ctx.shadowBlur = 0;
 
-        if (t.k < 0.6 && !isStructural) return;
+        // Labels
+        if (t.k < 0.4 && !isStructural && !isHovered) return;
 
-        const fontSize = (isTopic ? 12 : isTag ? 11 : 10) * Math.min(1.5, Math.max(0.8, visualConfig.current.nodeRadiusMult));
-        ctx.font = `${isStructural ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        const fontSize = (isTopic ? 13 : isTag ? 12 : 11) * Math.min(1.4, Math.max(0.8, visualConfig.current.nodeRadiusMult));
+        ctx.font = `${isStructural || isHovered ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
+        
+        ctx.shadowBlur = 4 / t.k;
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.fillStyle = isHovered || isInBranch ? "#fff" : "rgba(255,255,255,0.6)";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        const maxWidth = isTopic ? 120 : isTag ? 110 : 100;
-        const lines = wrapText(ctx, node.label, maxWidth);
-        const lh = fontSize * 1.2;
+        const label = isCollapsed ? `[+] ${node.data.label}` : node.data.label;
+        const maxWidth = isTopic ? 140 : isTag ? 120 : 110;
+        const lines = wrapText(ctx, label, maxWidth);
+        const lh = fontSize * 1.3;
         lines.forEach((line, i) =>
-          ctx.fillText(line.trim(), node.x!, node.y! + radius + 4 + i * lh),
+          ctx.fillText(line.trim(), nx, ny + r + 6 + i * lh),
         );
+        ctx.shadowBlur = 0;
       });
 
       ctx.restore();
-
       renderId = requestAnimationFrame(render);
     };
 
     render();
     return () => {
       cancelAnimationFrame(renderId);
-      simulation.stop();
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [data]);
+  }, [hierarchyRoot, layoutVersion, radialSpacing, glowIntensity, nodeRadiusMult, angleSpread, hoveredNode]);
 
-  // ── resize com throttle ──────────────────────────────────────
+  // ── resize handler ──────────────────────────────────────────
   useEffect(() => {
-    let timer = 0;
     const handleResize = () => {
-      clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (!canvasRef.current) return;
-        const dpr = window.devicePixelRatio || 1;
-        canvasRef.current.width = window.innerWidth * dpr;
-        canvasRef.current.height = window.innerHeight * dpr;
-        if (simulationRef.current) {
-          const centerX = window.innerWidth / 2;
-          const centerY = window.innerHeight / 2;
-          simulationRef.current
-            .force("center", forceCenter(centerX, centerY))
-            .force("x", simulationRef.current.force("x")?.x(centerX))
-            .force("y", simulationRef.current.force("y")?.y(centerY))
-            .alpha(0.3)
-            .restart();
-        }
-      }, 150);
+      if (!canvasRef.current) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvasRef.current.width = window.innerWidth * dpr;
+      canvasRef.current.height = window.innerHeight * dpr;
     };
     window.addEventListener("resize", handleResize);
-    handleResize();
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", handleResize);
-    };
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ── render ───────────────────────────────────────────────────
   return (
     <div
       className={`fixed inset-0 z-[50] bg-[#0a0a0c] overflow-hidden transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
@@ -463,13 +448,7 @@ export function ManualSemanticMap({
           onClick={onClose}
           className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all flex items-center gap-2 text-sm font-medium backdrop-blur-md"
         >
-          <svg
-            className="w-4 h-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
           VOLTAR
@@ -488,81 +467,62 @@ export function ManualSemanticMap({
       {showControls && (
         <div className="absolute top-20 left-6 z-20 bg-zinc-900/90 backdrop-blur-xl border border-zinc-700/50 p-5 rounded-2xl flex flex-col gap-5 min-w-[240px] shadow-2xl animate-in slide-in-from-top-2">
           <h3 className="text-[11px] font-bold text-zinc-300 uppercase tracking-widest border-b border-zinc-700/50 pb-2 flex items-center justify-between">
-            Visualização
+            Knowledge Galaxy
             <button onClick={() => { 
-              setLinkDistanceMult(1); 
-              setLineWidthMult(1); 
+              setRadialSpacing(150); 
+              setGlowIntensity(1); 
               setNodeRadiusMult(1); 
-              setChargeStrengthMult(1); 
-              setGravityMult(1);
+              setAngleSpread(1);
             }} className="text-[9px] text-sky-400 hover:text-sky-300 px-2 py-0.5 bg-sky-500/10 rounded">RESET</button>
           </h3>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-              <span>Espaçamento (Proximidade)</span>
-              <span className="text-sky-400">{linkDistanceMult.toFixed(1)}x</span>
+              <span>Expansão Radial</span>
+              <span className="text-sky-400">{radialSpacing.toFixed(0)}px</span>
             </div>
-            <input type="range" min="0.2" max="3" step="0.1" value={linkDistanceMult} onChange={e => setLinkDistanceMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="80" max="400" step="10" value={radialSpacing} onChange={e => setRadialSpacing(parseFloat(e.target.value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-              <span>Espessura das Linhas</span>
-              <span className="text-sky-400">{lineWidthMult.toFixed(1)}x</span>
+              <span>Intensidade do Brilho</span>
+              <span className="text-sky-400">{glowIntensity.toFixed(1)}x</span>
             </div>
-            <input type="range" min="0.1" max="5" step="0.1" value={lineWidthMult} onChange={e => setLineWidthMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0" max="2" step="0.1" value={glowIntensity} onChange={e => setGlowIntensity(parseFloat(e.target.value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
               <span>Tamanho dos Nós</span>
               <span className="text-sky-400">{nodeRadiusMult.toFixed(1)}x</span>
             </div>
-            <input type="range" min="0.2" max="4" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0.5" max="3" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-              <span>Expansão (Repulsão)</span>
-              <span className="text-sky-400">{chargeStrengthMult.toFixed(1)}x</span>
+              <span>Ângulo de Abertura</span>
+              <span className="text-sky-400">{(angleSpread * 360).toFixed(0)}°</span>
             </div>
-            <input type="range" min="0.1" max="5" step="0.1" value={chargeStrengthMult} onChange={e => setChargeStrengthMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-              <span>Agrupamento (Gravidade)</span>
-              <span className="text-sky-400">{gravityMult.toFixed(1)}x</span>
-            </div>
-            <input type="range" min="0" max="5" step="0.1" value={gravityMult} onChange={e => setGravityMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0.1" max="1" step="0.05" value={angleSpread} onChange={e => setAngleSpread(parseFloat(e.target.value))} className="w-full accent-sky-500" />
           </div>
         </div>
       )}
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center text-white/20 uppercase tracking-[0.2em] text-[10px] animate-pulse">
-          Sincronizando Grafo Estruturado...
+          Sincronizando Galáxia de Conhecimento...
         </div>
       )}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
           <p className="text-red-400 text-sm">Erro ao carregar: {error}</p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white text-sm"
-          >
-            Fechar
-          </button>
+          <button onClick={onClose} className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white text-sm">Fechar</button>
         </div>
       )}
       {tooltip && (
-        <div
-          className="fixed z-[60] pointer-events-none px-2 py-1 bg-zinc-900/90 border border-zinc-700/50 rounded text-[11px] text-zinc-300 whitespace-nowrap"
-          style={{ left: tooltip.x + 12, top: tooltip.y - 24 }}
-        >
+        <div className="fixed z-[60] pointer-events-none px-2 py-1 bg-zinc-900/90 border border-zinc-700/50 rounded text-[11px] text-zinc-300 whitespace-nowrap" style={{ left: tooltip.x + 12, top: tooltip.y - 24 }}>
           {tooltip.text}
         </div>
       )}
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
-      />
+      <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
     </div>
   );
 }
