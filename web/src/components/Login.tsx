@@ -1,40 +1,61 @@
-import { useState } from 'preact/hooks';
+import { useState } from "preact/hooks";
 
-import { Logo } from './Logo';
+import { Logo } from "./Logo";
 
 interface LoginProps {
   onLogin: (authHeader: string) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const handleSubmit = async (e?: Event) => {
     if (e) e.preventDefault();
-    setError('');
+    setError("");
     setIsSubmitting(true);
 
-    // Encode credentials for Basic Auth
     const authHeader = `Basic ${btoa(`${username}:${password}`)}`;
 
-    try {
-      const resp = await fetch('/api/status', {
-        headers: { Authorization: authHeader },
-      });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const resp = await fetch("/api/status", {
+          headers: { Authorization: authHeader },
+        });
 
-      if (resp.ok) {
-        onLogin(authHeader);
-      } else {
-        setError('Usuário ou senha incorretos.');
+        if (resp.ok) {
+          setIsSubmitting(false);
+          setRetryCount(0);
+          onLogin(authHeader);
+          return;
+        }
+
+        // 401 = credenciais invalidas, nao adianta tentar de novo
+        if (resp.status === 401) {
+          setError("Usuário ou senha incorretos.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Outro erro (503, 500, etc) — tenta de novo
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+        } else {
+          setError(`Servidor respondeu com erro ${resp.status}.`);
+        }
+      } catch (_err) {
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+        } else {
+          setError("Erro ao conectar ao servidor.");
+        }
       }
-    } catch (_err) {
-      setError('Erro ao conectar ao servidor.');
-    } finally {
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
+    setRetryCount((c) => c + 1);
   };
 
   return (
@@ -45,47 +66,58 @@ export default function Login({ onLogin }: LoginProps) {
             <Logo className="login-logo" />
           </div>
           <h1>TON-618</h1>
-          <p>{'Jogue tudo no escuro. Atraia tudo. Nossa busca rompe o horizonte de eventos.'}</p>
+          <p>
+            {
+              "Jogue tudo no escuro. Atraia tudo. Nossa busca rompe o horizonte de eventos."
+            }
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="input-group">
-            <label htmlFor="user">{'Usuário'}</label>
+            <label htmlFor="user">{"Usuário"}</label>
             <input
               id="user"
               type="text"
               value={username}
               onInput={(e: any) => setUsername(e.target.value)}
-              placeholder={'Usuário'}
+              placeholder={"Usuário"}
               required
+              autoComplete="username"
             />
           </div>
 
           <div className="input-group">
-            <label htmlFor="pass">{'Senha'}</label>
+            <label htmlFor="pass">{"Senha"}</label>
             <input
               id="pass"
               type="password"
               value={password}
               onInput={(e: any) => setPassword(e.target.value)}
-              placeholder={'Senha'}
+              placeholder={"Senha"}
               required
+              autoComplete="current-password"
             />
           </div>
 
           {error && <div className="login-error">{error}</div>}
+          {retryCount > 0 && !error && (
+            <div className="login-retry">
+              {`Tentativa ${Math.min(retryCount * 3, 9)}...`}
+            </div>
+          )}
 
           <button
             type="submit"
-            className={`login-button ${isSubmitting ? 'loading' : ''}`}
+            className={`login-button ${isSubmitting ? "loading" : ""}`}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Verificando...' : 'Entrar'}
+            {isSubmitting ? "Verificando..." : "Entrar"}
           </button>
         </form>
 
         <div className="login-footer">
-          <p>{'Auto-hospedado & Privado'}</p>
+          <p>{"Auto-hospedado & Privado"}</p>
         </div>
       </div>
 
@@ -98,7 +130,7 @@ export default function Login({ onLogin }: LoginProps) {
           justify-content: center;
           background: #09090b;
           color: #f8fafc;
-          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          font-family: "Inter", system-ui, -apple-system, sans-serif;
         }
 
         .login-card {
@@ -114,8 +146,14 @@ export default function Login({ onLogin }: LoginProps) {
         }
 
         @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         .login-header {
@@ -137,8 +175,12 @@ export default function Login({ onLogin }: LoginProps) {
         }
 
         @keyframes pulseGlow {
-          from { filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.3)); }
-          to { filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.8)); }
+          from {
+            filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.3));
+          }
+          to {
+            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.8));
+          }
         }
 
         h1 {
@@ -200,6 +242,12 @@ export default function Login({ onLogin }: LoginProps) {
           background: rgba(248, 113, 113, 0.1);
           padding: 0.5rem;
           border-radius: 8px;
+        }
+
+        .login-retry {
+          color: #fbbf24;
+          font-size: 0.75rem;
+          text-align: center;
         }
 
         .login-button {

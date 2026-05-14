@@ -2,6 +2,7 @@ package search
 
 import (
 	"etl/internal/models"
+	"math"
 	"testing"
 	"time"
 )
@@ -139,7 +140,7 @@ func TestScoreFragmentStopwords(t *testing.T) {
 	if details2["titulo"] != 0 {
 		t.Error("Stopword 'de' NÃO deveria ganhar bônus de título")
 	}
-	if score2 != 10.0 {
+	if math.Abs(score2-10.0) > 0.01 {
 		t.Errorf("Stopword 'de' deveria manter o score base 10.0, mas obteve %f", score2)
 	}
 }

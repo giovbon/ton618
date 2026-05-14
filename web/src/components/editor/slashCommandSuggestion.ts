@@ -105,19 +105,19 @@ export function getSlashCommandConfig() {
           },
         },
         {
+          title: "Tabela",
+          description: "Inserir tabela 3x3.",
+          icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
+          command: ({ editor, range }) => {
+            editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          },
+        },
+        {
           title: "Divisor",
           description: "Linha horizontal.",
           icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 12h16" /></svg>',
           command: ({ editor, range }) => {
             editor.chain().focus().deleteRange(range).setHorizontalRule().run();
-          },
-        },
-        {
-          title: "Tabela 3x3",
-          description: "Inserir tabela tabela (2x2 a 5x5).",
-          icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
-          command: ({ editor, range }) => {
-            editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
           },
         }
       ];
@@ -126,7 +126,7 @@ export function getSlashCommandConfig() {
         .filter((item) =>
           item.title.toLowerCase().includes(query.toLowerCase()),
         )
-        .slice(0, 10);
+        .slice(0, 15);
     },
 
     command: ({ editor, range, props }: any) => {

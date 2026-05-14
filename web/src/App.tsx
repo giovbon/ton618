@@ -455,8 +455,11 @@ function AppContent() {
                 </button>
 
                 <button
-                  onClick={() => setIsManualMapOpen(true)}
+                  onClick={() => {
+                    setIsManualMapOpen(true);
+                  }}
                   title="Mapa Estruturado"
+                  style={{ zIndex: 999, pointerEvents: 'auto' }}
                   className="flex items-center justify-center w-12 h-12 sm:w-10 sm:h-10 rounded-xl transition-all duration-300 text-zinc-600 hover:text-violet-400 hover:bg-violet-500/10 group"
                 >
                   <svg

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strings"
+	"log/slog"
 )
 
 // BasicAuthMiddleware protege rotas de API e Documentos com autenticação básica.
@@ -26,6 +27,7 @@ func BasicAuthMiddleware(next http.Handler, username, password string) http.Hand
 
 		// 1. Tentar via Header padrão
 		user, pass, ok := r.BasicAuth()
+		slog.Debug("auth check", "path", r.URL.Path, "user", user, "ok", ok, "expected_user", username)
 		if ok && user == username && pass == password {
 			next.ServeHTTP(w, r)
 			return

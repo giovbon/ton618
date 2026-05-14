@@ -1,76 +1,102 @@
-import { ReactRenderer } from '@tiptap/react';
-import tippy from 'tippy.js';
-import { WikiLinkSuggestionList } from './WikiLinkSuggestionUI';
+import { ReactRenderer } from "@tiptap/react";
+import tippy, { Instance as TippyInstance } from "tippy.js";
+import { SemanticLinkSuggestionList } from "./SemanticLinkSuggestionUI";
+import type { MutableRefObject } from "preact/compat";
 
-export const getSemanticSuggestionConfig = (topicsRef: { current: string[] }) => ({
-  char: '@',
-  allowSpaces: true,
-  startOfLine: false,
+export interface SemanticSuggestionItem {
+  label: string;
+  type: "topic" | "note";
+}
 
-  items: ({ query }: { query: string }) => {
-    return topicsRef.current
-      .filter(item => item.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 10);
-  },
+export function getSemanticLinkSuggestionConfig(
+  topicsRef: MutableRefObject<string[]>,
+  notesRef: MutableRefObject<string[]>
+) {
+  return {
+    char: "@[",
+    allowSpaces: true,
+    startOfLine: false,
 
-  command: ({ editor, range, props }: any) => {
-    editor
-      .chain()
-      .focus()
-      .insertContentAt(range, `@[${props.id}] `)
-      .run();
-  },
+    items: ({ query }: { query: string }): SemanticSuggestionItem[] => {
+      const q = query.toLowerCase();
 
-  render: () => {
-    let component: any;
-    let popup: any;
+      const topicMatches: SemanticSuggestionItem[] = (topicsRef.current || [])
+        .filter((t) => t.toLowerCase().includes(q))
+        .slice(0, 6)
+        .map((t) => ({ label: t, type: "topic" }));
 
-    return {
-      onStart: (props: any) => {
-        component = new ReactRenderer(WikiLinkSuggestionList, {
-          props,
-          editor: props.editor,
-        });
+      const topicLabels = new Set(topicMatches.map((i) => i.label));
 
-        if (!props.clientRect) {
-          return;
-        }
+      const noteMatches: SemanticSuggestionItem[] = (notesRef.current || [])
+        .filter((n) => n.toLowerCase().includes(q) && !topicLabels.has(n))
+        .slice(0, 4)
+        .map((n) => ({ label: n, type: "note" }));
 
-        popup = tippy('body', {
-          getReferenceClientRect: props.clientRect,
-          appendTo: () => document.body,
-          content: component.element,
-          showOnCreate: true,
-          interactive: true,
-          trigger: 'manual',
-          placement: 'bottom-start',
-        });
-      },
+      return [...topicMatches, ...noteMatches];
+    },
 
-      onUpdate(props: any) {
-        component.updateProps(props);
+    command: ({ editor, range, props }: any) => {
+      const item: SemanticSuggestionItem = props;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(range, {
+          type: "semanticlink",
+          attrs: { topic: item.label },
+        })
+        // Espaço após o atom → cursor fora do node, Enter funciona normalmente
+        .insertContent(" ")
+        .run();
+    },
 
-        if (!props.clientRect) {
-          return;
-        }
+    render: () => {
+      let component: ReactRenderer;
+      let popup: TippyInstance[];
 
-        popup[0].setProps({
-          getReferenceClientRect: props.clientRect,
-        });
-      },
+      return {
+        onStart: (props: any) => {
+          component = new ReactRenderer(SemanticLinkSuggestionList, {
+            props,
+            editor: props.editor,
+          });
 
-      onKeyDown(props: any) {
-        if (props.event.key === 'Escape') {
-          popup[0].hide();
-          return true;
-        }
-        return component.ref?.onKeyDown(props);
-      },
+          popup = tippy(props.editor.view.dom, {
+            getReferenceClientRect: props.clientRect,
+            appendTo: () =>
+              props.editor.view.dom.closest(".editor-main") || document.body,
+            content: component.element,
+            showOnCreate: true,
+            interactive: true,
+            trigger: "manual",
+            placement: "bottom-start",
+            zIndex: 10,
+          });
+        },
 
-      onExit() {
-        popup[0].destroy();
-        component.destroy();
-      },
-    };
-  },
-});
+        onUpdate(props: any) {
+          component.updateProps(props);
+          if (!props.clientRect) {
+            popup?.[0]?.hide();
+            return;
+          }
+          popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect });
+          popup?.[0]?.show();
+        },
+
+        onKeyDown(props: any) {
+          if (props.event.key === "Escape") {
+            popup?.[0]?.hide();
+            return true;
+          }
+          return (component.ref as any)?.onKeyDown(props) ?? false;
+        },
+
+        onExit() {
+          popup?.[0]?.hide();
+          popup?.[0]?.destroy();
+          component?.destroy();
+        },
+      };
+    },
+  };
+}

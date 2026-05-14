@@ -34,7 +34,7 @@ describe('Time Utilities', () => {
 
   it('should format months', () => {
     const timestamp = new Date('2026-01-16T12:00:00Z').toISOString();
-    expect(formatAge(timestamp)).toBe('3m');
+    expect(formatAge(timestamp)).toBe('3mês');
   });
 
   it('should format years', () => {

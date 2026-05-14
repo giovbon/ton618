@@ -85,14 +85,38 @@ Use `[[Nome da Nota]]` para criar links entre notas. O autocomplete sugere notas
 
 ---
 
-## 🗺️ Mapa Semântico
+## 🏷️ Links Semânticos
 
-Visualiza suas notas como **estrelas num céu 2D**. Notas similares aparecem próximas.
+Diferente dos links comuns, os **Links Semânticos** servem para marcar conceitos, tópicos ou entidades importantes que conectam suas ideias no **Mapa Estruturado**.
 
-- Ative pelo botão :icon-map: na barra de pesquisa
-- Passe o mouse sobre uma estrela para ver o nome da nota
-- Clique na estrela para abrir a nota
-- Scroll para zoom, arraste para navegar
+Use a sintaxe `@[Nome do Tópico]` para criar um link semântico.
+
+- **Conexão de Ideias:** Notas que compartilham o mesmo `@[Conceito]` aparecem conectadas no grafo.
+- **Diferenciação:** Use para tópicos que não são necessariamente arquivos físicos, mas temas que atravessam várias notas.
+- **Navegação:** Clicar em um link semântico no editor abre o **Mapa Estruturado** focado naquele tópico.
+
+---
+
+## 🌌 Mapa Semântico
+
+Visualiza suas notas como **estrelas num céu 2D**. Notas similares aparecem próximas automaticamente via IA.
+
+- Ative pelo botão :icon-map: na barra de pesquisa.
+- Notas com conteúdo parecido orbitam os mesmos clusters.
+- Scroll para zoom, arraste para navegar.
+- Clique na estrela para abrir a nota.
+
+---
+
+## 🕸️ Mapa Estruturado
+
+O **Mapa Estruturado** exibe as conexões explícitas que você criou através de **Links Semânticos** (`@[...]`).
+
+- Ative pelo botão de camadas no cabeçalho.
+- Exibe tópicos como nós e notas como conexões.
+- **Arraste e Solte:** Organize manualmente a posição dos nós (as posições são salvas automaticamente).
+- **Interação:** Clique nos tópicos para navegar entre as notas relacionadas.
+- Útil para criar mapas mentais ou ontologias personalizadas do seu conhecimento.
 
 ---
 
@@ -161,4 +185,5 @@ Use :icon-sync: para forçar uma sincronização manual imediata.
 2. Clique :icon-sync: antes de sair para garantir que tudo foi indexado
 3. Use `tags: [projeto, urgente]` no topo da nota
 4. [[WikiLinks]] conectam notas relacionadas para navegação rápida
-5. Use a aba Backup no :icon-settings: para baixar seus dados regularmente
+5. Use `@[Conceito]` para criar conexões explícitas no **Mapa Estruturado**
+6. Use a aba Backup no :icon-settings: para baixar seus dados regularmente

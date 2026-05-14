@@ -8,9 +8,10 @@ import { useEffect, useRef, useState, useCallback } from "preact/hooks";
 import { EditorHeader } from "./editor/EditorHeader";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
 import { WikiLinkNode } from "./editor/WikiLinkExtension";
-import { SemanticLinkMark } from "./editor/SemanticLinkExtension";
+import { SemanticLinkNode } from "./editor/SemanticLinkExtension";
 import Mention from "@tiptap/extension-mention";
 import { getSuggestionConfig } from "./editor/wikiLinkSuggestion";
+import { getSemanticLinkSuggestionConfig } from "./editor/semanticLinkSuggestion";
 import { HashtagMark } from "./editor/HashtagExtension";
 import { SlashCommandExtension } from "./editor/SlashCommandExtension";
 import { getSlashCommandConfig } from "./editor/slashCommandSuggestion";
@@ -18,6 +19,8 @@ import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 
 const cleanMarkdown = (content: string) => {
   let c = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
@@ -82,6 +85,15 @@ const TiptapEditor = ({
   const frontmatterRef = useRef(frontmatter);
   const [isMobile, setIsMobile] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
+
+  // ── floating editor for @[] links ────────────────────────────────
+  const [linkEdit, setLinkEdit] = useState<{
+    topic: string;
+    pos: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const linkEditInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -151,9 +163,24 @@ const TiptapEditor = ({
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    // ── listen for semantic-link-edit events from the nodeView ──
+    const handleLinkEdit = (e: Event) => {
+      const { topic, pos, rect } = (e as CustomEvent).detail;
+      setLinkEdit({
+        topic,
+        pos,
+        x: rect.left,
+        y: rect.bottom + 6,
+      });
+      // Focus the input after render
+      setTimeout(() => linkEditInputRef.current?.select(), 30);
+    };
+    window.addEventListener("semantic-link-edit", handleLinkEdit);
+
     return () => {
       document.body.style.overflow = originalOverflow;
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      window.removeEventListener("semantic-link-edit", handleLinkEdit);
     };
   }, []);
 
@@ -165,7 +192,7 @@ const TiptapEditor = ({
         },
       }),
       WikiLinkNode,
-      SemanticLinkMark,
+      SemanticLinkNode,
       HashtagMark,
       Markdown.configure({
         html: true,
@@ -191,6 +218,17 @@ const TiptapEditor = ({
           return `[[${node.attrs.id ?? node.attrs.label}]]`;
         },
       }),
+      Mention.extend({
+        name: "semanticLinkSuggestion",
+      }).configure({
+        HTMLAttributes: {
+          class: "semantic-mention",
+        },
+        suggestion: getSemanticLinkSuggestionConfig(semanticTopicsRef, notesRef),
+        renderLabel({ options, node }) {
+          return `@[${node.attrs.id ?? node.attrs.label}]`;
+        },
+      }),
 
       SlashCommandExtension.configure({
         suggestion: getSlashCommandConfig(),
@@ -199,6 +237,10 @@ const TiptapEditor = ({
       TableCell,
       TableRow,
       TableHeader,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
     ],
     content: cleanInitialContent,
     onSelectionUpdate: ({ editor }) => {
@@ -321,6 +363,50 @@ const TiptapEditor = ({
 
   return (
     <div className="editor-root bg-zinc-950 flex flex-col h-full fixed inset-0 z-[100] animate-in fade-in">
+
+      {/* ── Floating @[] link editor ────────────────── */}
+      {linkEdit && editor && (
+        <div
+          className="fixed z-[200] bg-zinc-900 border border-violet-500/40 rounded-xl shadow-2xl flex items-center gap-2 px-3 py-2 min-w-[200px]"
+          style={{ left: linkEdit.x, top: linkEdit.y }}
+        >
+          <span className="text-violet-400 font-bold text-sm select-none">@[</span>
+          <input
+            ref={linkEditInputRef}
+            type="text"
+            defaultValue={linkEdit.topic}
+            autoFocus
+            className="flex-1 bg-transparent border-none outline-none text-violet-200 font-bold text-sm min-w-[80px] max-w-[240px]"
+            onKeyDown={(e: any) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const newTopic = (e.target as HTMLInputElement).value.trim();
+                if (newTopic && newTopic !== linkEdit.topic) {
+                  editor.view.dispatch(
+                    editor.view.state.tr.setNodeMarkup(linkEdit.pos, undefined, { topic: newTopic })
+                  );
+                }
+                setLinkEdit(null);
+                editor.view.focus();
+              }
+              if (e.key === "Escape") {
+                setLinkEdit(null);
+                editor.view.focus();
+              }
+            }}
+            onBlur={(e: any) => {
+              const newTopic = (e.target as HTMLInputElement).value.trim();
+              if (newTopic && newTopic !== linkEdit.topic) {
+                editor.view.dispatch(
+                  editor.view.state.tr.setNodeMarkup(linkEdit.pos, undefined, { topic: newTopic })
+                );
+              }
+              setLinkEdit(null);
+            }}
+          />
+          <span className="text-violet-400 font-bold text-sm select-none">]</span>
+        </div>
+      )}
       <EditorHeader
         fileName={fileName}
         newFileName={newFileName}

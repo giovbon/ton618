@@ -70,7 +70,7 @@ export const SlashCommandList = forwardRef((props: SlashCommandListProps, ref) =
         {props.items.map((item, index) => (
           <button
             key={index}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${
+            className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-all ${
               index === selectedIndex
                 ? 'bg-sky-500/10 text-sky-400'
                 : 'text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100'
@@ -78,21 +78,16 @@ export const SlashCommandList = forwardRef((props: SlashCommandListProps, ref) =
             onClick={() => selectItem(index)}
           >
             <div
-              className={`w-8 h-8 rounded-md flex items-center justify-center border transition-all ${
+              className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
                 index === selectedIndex
                   ? 'bg-sky-500/20 border-sky-500/30 text-sky-400'
                   : 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400'
               }`}
               dangerouslySetInnerHTML={{ __html: item.icon }}
             />
-            <div className="flex flex-col">
-              <span className={`text-sm font-bold ${index === selectedIndex ? 'text-sky-400' : 'text-zinc-200'}`}>
-                {item.title}
-              </span>
-              <span className={`text-[10px] leading-tight mt-0.5 ${index === selectedIndex ? 'text-sky-500/70' : 'text-zinc-500'}`}>
-                {item.description}
-              </span>
-            </div>
+            <span className={`text-[13px] font-medium ${index === selectedIndex ? 'text-sky-400' : 'text-zinc-200'}`}>
+              {item.title}
+            </span>
           </button>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import { select as d3Select } from "d3-selection";
 import { zoom as d3Zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
-import { tree as d3Tree, hierarchy as d3Hierarchy } from "d3-hierarchy";
+import { tree as d3Tree, hierarchy as d3Hierarchy, type HierarchyNode } from "d3-hierarchy";
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { wrapText } from "../utils/canvasWordWrap";
@@ -10,6 +10,7 @@ interface ManualTopic {
   label: string;
   level: number;
   type?: "topic" | "tag";
+  has_file?: boolean; // true quando existe notes/Label.md
 }
 
 interface ManualLink {
@@ -29,15 +30,16 @@ interface TreeNodeData {
   type: "topic" | "note" | "tag" | "root";
   level?: number;
   degree?: number;
+  hasFile?: boolean;
   children?: TreeNodeData[];
 }
 
 // Extended type for D3 nodes with collapse support
-type HierNode = d3.HierarchyNode<TreeNodeData> & { 
-    _children?: HierNode[] | null; 
-    children?: HierNode[] | null;
-    x: number;
-    y: number;
+type HierNode = HierarchyNode<TreeNodeData> & {
+  _children?: HierNode[] | null;
+  children?: HierNode[] | null;
+  x: number;
+  y: number;
 };
 
 interface ManualSemanticMapProps {
@@ -48,7 +50,7 @@ interface ManualSemanticMapProps {
 
 // ─── hooks ──────────────────────────────────────────────────────────
 
-function useSemanticMapData(auth: string) {
+function useSemanticMapData(auth: string, refreshKeyParam: number) {
   const [data, setData] = useState<ManualMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +83,7 @@ function useSemanticMapData(auth: string) {
         }
       });
     return () => controller.abort();
-  }, [auth, refreshKey]);
+  }, [auth, refreshKeyParam]);
 
   return { data, loading, error };
 }
@@ -95,24 +97,36 @@ export function ManualSemanticMap({
 }: ManualSemanticMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomTransformRef = useRef<ZoomTransform>(zoomIdentity);
-  const { data, loading, error } = useSemanticMapData(auth);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [focusNode, setFocusNode] = useState<TreeNodeData | null>(null);
+  const { data, loading, error } = useSemanticMapData(auth, refreshKey);
+  
+  useEffect(() => {
+    if (data) console.log("DEBUG: Dados recebidos:", data);
+    if (error) console.error("DEBUG: Erro nos dados:", error);
+    if (loading) console.log("DEBUG: Carregando dados...");
+  }, [data, loading, error]);
   const [tooltip, setTooltip] = useState<{
     x: number;
     y: number;
     text: string;
+    node?: HierNode;
+    pinned?: boolean;
   } | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [hoveredNode, setHoveredNode] = useState<any | null>(null);
-  const [hierarchyRoot, setHierarchyRoot] = useState<HierNode | null>(null);
-  const [layoutVersion, setLayoutVersion] = useState(0);
+  const tooltipRef = useRef(tooltip);
+  useEffect(() => { tooltipRef.current = tooltip; }, [tooltip]);
 
   // visual configurations
   const [radialSpacing, setRadialSpacing] = useState(() => {
     const saved = localStorage.getItem('manualMap_radialSpacing');
     return saved ? parseFloat(saved) : 150;
   });
-  const [glowIntensity, setGlowIntensity] = useState(() => {
-    const saved = localStorage.getItem('manualMap_glowIntensity');
+  const [lineWidthMult, setLineWidthMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_lineWidthMult');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [labelScaleMult, setLabelScaleMult] = useState(() => {
+    const saved = localStorage.getItem('manualMap_labelScaleMult');
     return saved ? parseFloat(saved) : 1;
   });
   const [nodeRadiusMult, setNodeRadiusMult] = useState(() => {
@@ -125,19 +139,25 @@ export function ManualSemanticMap({
   });
   const [showControls, setShowControls] = useState(false);
 
-  const visualConfig = useRef({ radialSpacing, glowIntensity, nodeRadiusMult, angleSpread });
-  
+  const visualConfig = useRef({ radialSpacing, lineWidthMult, labelScaleMult, nodeRadiusMult, angleSpread });
+
   useEffect(() => {
-    visualConfig.current = { radialSpacing, glowIntensity, nodeRadiusMult, angleSpread };
+    visualConfig.current = { radialSpacing, lineWidthMult, labelScaleMult, nodeRadiusMult, angleSpread };
     localStorage.setItem('manualMap_radialSpacing', radialSpacing.toString());
-    localStorage.setItem('manualMap_glowIntensity', glowIntensity.toString());
+    localStorage.setItem('manualMap_lineWidthMult', lineWidthMult.toString());
+    localStorage.setItem('manualMap_labelScaleMult', labelScaleMult.toString());
     localStorage.setItem('manualMap_nodeRadiusMult', nodeRadiusMult.toString());
     localStorage.setItem('manualMap_angleSpread', angleSpread.toString());
     setLayoutVersion(v => v + 1);
-  }, [radialSpacing, glowIntensity, nodeRadiusMult, angleSpread]);
+  }, [radialSpacing, lineWidthMult, labelScaleMult, nodeRadiusMult, angleSpread]);
+
+  const [visible, setVisible] = useState(true);
+  const [hoveredNode, setHoveredNode] = useState<any | null>(null);
+  const [hierarchyRoot, setHierarchyRoot] = useState<HierNode | null>(null);
+  const [layoutVersion, setLayoutVersion] = useState(0);
 
   useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
+    console.log("DEBUG: ManualSemanticMap montado!");
   }, []);
 
   // 1. Build initial hierarchy when data arrives
@@ -151,7 +171,14 @@ export function ManualSemanticMap({
       const parts = t.id.split("/");
       const label = parts.pop()!;
       const parentId = parts.join("/");
-      const node: TreeNodeData = { id: t.id, label, type: (t.type || "topic") as any, level: t.level, children: [] };
+      const node: TreeNodeData = {
+        id: t.id,
+        label,
+        type: (t.type || "topic") as any,
+        level: t.level,
+        hasFile: t.has_file,
+        children: []
+      };
       topicMap.set(t.id, node);
       const parent = topicMap.get(parentId) || rootData;
       if (!parent.children) parent.children = [];
@@ -170,10 +197,17 @@ export function ManualSemanticMap({
       }
     });
 
-    const root = d3Hierarchy(rootData) as HierNode;
+    // Se houver um nó em foco, usamos ele como raiz real do D3
+    let effectiveRootData = rootData;
+    if (focusNode) {
+      const found = topicMap.get(focusNode.id);
+      if (found) effectiveRootData = found;
+    }
+
+    const root = d3Hierarchy(effectiveRootData) as HierNode;
     setHierarchyRoot(root);
     setLayoutVersion(v => v + 1);
-  }, [data]);
+  }, [data, focusNode]);
 
   // 2. Tree Layout and Rendering
   useEffect(() => {
@@ -225,29 +259,43 @@ export function ManualSemanticMap({
     };
 
     const handleClick = (event: MouseEvent) => {
-      const node = findNodeAt(event.clientX, event.clientY) as HierNode | null;
-      if (!node) return;
+      // Se clicou no tooltip, não faz nada (deixa o evento pro botão)
+      if ((event.target as HTMLElement).closest('.manual-map-tooltip')) {
+        return;
+      }
 
+      const node = findNodeAt(event.clientX, event.clientY) as HierNode | null;
+      
+      if (!node) {
+        if (tooltipRef.current?.pinned) setTooltip(null);
+        return;
+      }
+
+      // Nós de nota (ciano) → abre o arquivo imediatamente
       if (node.data.type === "note") {
         onOpenNote(node.data.id);
-      } else if (node.depth > 0) {
-        // Toggle Collapse
-        if (node.children) {
-          node._children = node.children;
-          node.children = null;
-        } else if (node._children) {
-          node.children = node._children;
-          node._children = null;
-        }
-        setLayoutVersion(v => v + 1);
+        return;
+      }
+
+      // Tópico abstrato (violeta) ou materializado → Mostra tooltip com opção de focar
+      if (node.data.type === "topic") {
+        setTooltip({
+          x: event.clientX,
+          y: event.clientY - 10,
+          text: node.data.id,
+          node,
+          pinned: true
+        });
       }
     };
     canvas.addEventListener("click", handleClick);
 
     const handleMouseMove = (event: MouseEvent) => {
+      if (tooltipRef.current?.pinned) return;
+
       const node = findNodeAt(event.clientX, event.clientY);
       if (node) {
-        setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.data.id });
+        setTooltip({ x: event.clientX, y: event.clientY - 10, text: node.data.id, node });
         canvas.style.cursor = "pointer";
         setHoveredNode(node);
       } else {
@@ -268,7 +316,7 @@ export function ManualSemanticMap({
 
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
+
       // Subtle Grid
       ctx.strokeStyle = "rgba(255,255,255,0.02)";
       ctx.lineWidth = 1;
@@ -281,7 +329,7 @@ export function ManualSemanticMap({
       ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
 
       const spacing = visualConfig.current.radialSpacing;
-      const glow = visualConfig.current.glowIntensity;
+      const lineMult = visualConfig.current.lineWidthMult;
 
       const branchIds = new Set<string>();
       if (hoveredNode) {
@@ -293,7 +341,18 @@ export function ManualSemanticMap({
       ctx.globalCompositeOperation = "screen";
       links.forEach((link) => {
         if (isNaN(link.source.x) || isNaN(link.target.x)) return;
+
+        const isHighlighted = branchIds.has(link.target.data.id);
+        const isStructural = link.target.depth <= 1;
         
+        // --- LOD (Level of Detail) Logic for Links ---
+        let linkOpacity = 0.12;
+        if (!isStructural && !isHighlighted) {
+          linkOpacity = Math.max(0, Math.min(0.12, (t.k - 0.3) * 0.24));
+        }
+        if (isHighlighted) linkOpacity = 0.8;
+        if (linkOpacity <= 0 && !isHighlighted) return;
+
         const sourceAngle = link.source.x - Math.PI / 2;
         const sourceRadius = link.source.depth * spacing;
         const targetAngle = link.target.x - Math.PI / 2;
@@ -304,8 +363,6 @@ export function ManualSemanticMap({
         const tx = targetRadius * Math.cos(targetAngle);
         const ty = targetRadius * Math.sin(targetAngle);
 
-        const isHighlighted = branchIds.has(link.target.data.id);
-        
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         const midRadius = (sourceRadius + targetRadius) / 2;
@@ -317,12 +374,12 @@ export function ManualSemanticMap({
 
         if (isHighlighted) {
           ctx.strokeStyle = "rgba(167,139,250,0.8)";
-          ctx.lineWidth = 2.5 / t.k;
+          ctx.lineWidth = (2.5 * lineMult) / t.k;
           ctx.shadowBlur = 15 / t.k;
           ctx.shadowColor = "#a78bfa";
         } else {
-          ctx.strokeStyle = "rgba(167,139,250,0.12)";
-          ctx.lineWidth = 1 / t.k;
+          ctx.strokeStyle = `rgba(167,139,250,${linkOpacity})`;
+          ctx.lineWidth = (1 * lineMult) / t.k;
           ctx.shadowBlur = 0;
         }
         ctx.stroke();
@@ -334,16 +391,27 @@ export function ManualSemanticMap({
       nodes.forEach((node) => {
         if (isNaN(node.x)) return;
         if (node.data.id === "root" && node.depth === 0) {
-            ctx.beginPath();
-            ctx.arc(0, 0, 10, 0, 2 * Math.PI);
-            ctx.fillStyle = "#fff";
-            ctx.shadowBlur = 20 / t.k;
-            ctx.shadowColor = "#a78bfa";
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            return;
+          ctx.beginPath();
+          ctx.arc(0, 0, 10, 0, 2 * Math.PI);
+          ctx.fillStyle = "#fff";
+          ctx.shadowBlur = 20 / t.k;
+          ctx.shadowColor = "#a78bfa";
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          return;
         }
-        
+
+        const isStructural = node.depth <= 1;
+        const isInBranch = branchIds.has(node.data.id);
+        const isHovered = hoveredNode?.data.id === node.data.id;
+        const isHighlighted = isHovered || isInBranch;
+
+        let nodeOpacity = 1;
+        if (!isStructural && !isHighlighted) {
+          nodeOpacity = Math.max(0, Math.min(1, (t.k - 0.2) * 2));
+        }
+        if (nodeOpacity <= 0) return;
+
         const angle = node.x - Math.PI / 2;
         const radius = node.depth * spacing;
         const nx = radius * Math.cos(angle);
@@ -351,35 +419,26 @@ export function ManualSemanticMap({
 
         const isTopic = node.data.type === "topic";
         const isTag = node.data.type === "tag";
-        const isStructural = isTopic || isTag;
+        const hasFile = !!node.data.hasFile;
         const isCollapsed = (node as any)._children?.length > 0;
-        const isHovered = hoveredNode?.data.id === node.data.id;
-        const isInBranch = branchIds.has(node.data.id);
-        
+
         const weight = 1 + (node.children?.length || (node as any)._children?.length || 0);
         const scale = Math.sqrt(weight);
         const baseRadius = isTopic ? 7 : isTag ? 6 : 5;
         const r = (baseRadius * scale * visualConfig.current.nodeRadiusMult) * (isHovered ? 1.3 : 1);
-        
-        const color = isTopic ? "#a78bfa" : isTag ? "#f472b6" : "#38bdf8";
 
-        // Aura
-        if (glow > 0) {
-          const auraRadius = r * (isCollapsed ? 3.5 : 2.5);
-          ctx.beginPath();
-          ctx.arc(nx, ny, auraRadius, 0, 2 * Math.PI);
-          const grad = ctx.createRadialGradient(nx, ny, r, nx, ny, auraRadius);
-          grad.addColorStop(0, color + (isCollapsed ? "66" : "33"));
-          grad.addColorStop(1, color + "00");
-          ctx.fillStyle = grad;
-          ctx.fill();
-        }
+        const color = isTopic
+          ? hasFile ? "#34d399" : "#a78bfa"
+          : isTag ? "#f472b6"
+          : "#38bdf8";
+
+        ctx.globalAlpha = nodeOpacity;
 
         // Core Node
         ctx.beginPath();
         ctx.arc(nx, ny, r, 0, 2 * Math.PI);
         ctx.fillStyle = isHovered ? "#fff" : color;
-        
+
         if (isCollapsed) {
           ctx.lineWidth = 3 / t.k;
           ctx.strokeStyle = "#fff";
@@ -393,18 +452,38 @@ export function ManualSemanticMap({
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Labels
-        if (t.k < 0.4 && !isStructural && !isHovered) return;
+        // Anel extra para tópicos com arquivo real (indica que são "materializados")
+        if (hasFile && isTopic) {
+          ctx.beginPath();
+          ctx.arc(nx, ny, r + 4 / t.k, 0, 2 * Math.PI);
+          ctx.strokeStyle = isHovered ? "#fff" : "#34d399";
+          ctx.lineWidth = 1.5 / t.k;
+          ctx.globalAlpha = 0.6;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
 
-        const fontSize = (isTopic ? 13 : isTag ? 12 : 11) * Math.min(1.4, Math.max(0.8, visualConfig.current.nodeRadiusMult));
+        // Labels
+        // No zoom out extremo, escondemos labels de notas para manter clareza
+        if (t.k < 0.4 && !isStructural && !isHovered) {
+          ctx.globalAlpha = 1;
+          return;
+        }
+
+        const labelScale = visualConfig.current.labelScaleMult;
+        const fontSize = (isTopic ? 13 : isTag ? 12 : 11) * labelScale * Math.min(1.4, Math.max(0.8, visualConfig.current.nodeRadiusMult));
         ctx.font = `${isStructural || isHovered ? "bold" : "normal"} ${fontSize}px "Inter", sans-serif`;
-        
+
         ctx.shadowBlur = 4 / t.k;
         ctx.shadowColor = "rgba(0,0,0,0.8)";
-        ctx.fillStyle = isHovered || isInBranch ? "#fff" : "rgba(255,255,255,0.6)";
+        
+        // Cor do texto com opacidade do LOD
+        ctx.fillStyle = isHovered || isInBranch ? "#fff" : `rgba(255,255,255,${0.6 * nodeOpacity})`;
+        
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
+        // Tópicos com arquivo mantêm o label original (diferenciação apenas pela cor/anel)
         const label = isCollapsed ? `[+] ${node.data.label}` : node.data.label;
         const maxWidth = isTopic ? 140 : isTag ? 120 : 110;
         const lines = wrapText(ctx, label, maxWidth);
@@ -413,6 +492,7 @@ export function ManualSemanticMap({
           ctx.fillText(line.trim(), nx, ny + r + 6 + i * lh),
         );
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1; // Reset alpha
       });
 
       ctx.restore();
@@ -425,7 +505,7 @@ export function ManualSemanticMap({
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [hierarchyRoot, layoutVersion, radialSpacing, glowIntensity, nodeRadiusMult, angleSpread, hoveredNode]);
+  }, [hierarchyRoot, layoutVersion, radialSpacing, lineWidthMult, labelScaleMult, nodeRadiusMult, angleSpread, hoveredNode]);
 
   // ── resize handler ──────────────────────────────────────────
   useEffect(() => {
@@ -441,8 +521,46 @@ export function ManualSemanticMap({
 
   return (
     <div
-      className={`fixed inset-0 z-[50] bg-[#0a0a0c] overflow-hidden transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[1000] bg-[#0a0a0c] overflow-hidden`}
     >
+      {/* Breadcrumbs / Focus Path */}
+      {focusNode && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-4 py-2 bg-zinc-900/80 backdrop-blur-md border border-sky-500/30 rounded-full shadow-2xl">
+          <button 
+            onClick={() => setFocusNode(null)}
+            className="text-[10px] font-black uppercase tracking-widest text-sky-400 hover:text-sky-300 transition-colors px-1"
+          >
+            Mundo
+          </button>
+          
+          {focusNode.id.split('/').map((part, i, arr) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span className="text-zinc-600 text-[10px]">/</span>
+              <button 
+                onClick={() => {
+                  const newPath = arr.slice(0, i + 1).join('/');
+                  if (newPath === focusNode.id) return;
+                  setFocusNode({ ...focusNode, id: newPath, label: part });
+                }}
+                className={`text-[11px] font-bold transition-colors px-1 ${i === arr.length - 1 ? 'text-zinc-100 cursor-default' : 'text-zinc-400 hover:text-sky-400'}`}
+              >
+                {part}
+              </button>
+            </div>
+          ))}
+
+          <button 
+            onClick={() => setFocusNode(null)}
+            className="ml-2 p-1 hover:bg-white/10 rounded-full transition-all"
+            title="Sair do Foco"
+          >
+            <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <div className="absolute top-6 left-6 z-10 flex gap-2">
         <button
           onClick={onClose}
@@ -468,10 +586,11 @@ export function ManualSemanticMap({
         <div className="absolute top-20 left-6 z-20 bg-zinc-900/90 backdrop-blur-xl border border-zinc-700/50 p-5 rounded-2xl flex flex-col gap-5 min-w-[240px] shadow-2xl animate-in slide-in-from-top-2">
           <h3 className="text-[11px] font-bold text-zinc-300 uppercase tracking-widest border-b border-zinc-700/50 pb-2 flex items-center justify-between">
             Knowledge Galaxy
-            <button onClick={() => { 
-              setRadialSpacing(150); 
-              setGlowIntensity(1); 
-              setNodeRadiusMult(1); 
+            <button onClick={() => {
+              setRadialSpacing(150);
+              setLineWidthMult(1);
+              setLabelScaleMult(1);
+              setNodeRadiusMult(1);
               setAngleSpread(1);
             }} className="text-[9px] text-sky-400 hover:text-sky-300 px-2 py-0.5 bg-sky-500/10 rounded">RESET</button>
           </h3>
@@ -480,28 +599,35 @@ export function ManualSemanticMap({
               <span>Expansão Radial</span>
               <span className="text-sky-400">{radialSpacing.toFixed(0)}px</span>
             </div>
-            <input type="range" min="80" max="400" step="10" value={radialSpacing} onChange={e => setRadialSpacing(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="80" max="400" step="10" value={radialSpacing} onChange={e => setRadialSpacing(parseFloat((e.target as HTMLInputElement).value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-              <span>Intensidade do Brilho</span>
-              <span className="text-sky-400">{glowIntensity.toFixed(1)}x</span>
+              <span>Espessura das Linhas</span>
+              <span className="text-sky-400">{lineWidthMult.toFixed(1)}x</span>
             </div>
-            <input type="range" min="0" max="2" step="0.1" value={glowIntensity} onChange={e => setGlowIntensity(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0.5" max="5" step="0.5" value={lineWidthMult} onChange={e => setLineWidthMult(parseFloat((e.target as HTMLInputElement).value))} className="w-full accent-sky-500" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
+              <span>Tamanho do Texto</span>
+              <span className="text-sky-400">{labelScaleMult.toFixed(1)}x</span>
+            </div>
+            <input type="range" min="0.5" max="2.5" step="0.1" value={labelScaleMult} onChange={e => setLabelScaleMult(parseFloat((e.target as HTMLInputElement).value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
               <span>Tamanho dos Nós</span>
               <span className="text-sky-400">{nodeRadiusMult.toFixed(1)}x</span>
             </div>
-            <input type="range" min="0.5" max="3" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0.5" max="3" step="0.1" value={nodeRadiusMult} onChange={e => setNodeRadiusMult(parseFloat((e.target as HTMLInputElement).value))} className="w-full accent-sky-500" />
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-medium">
               <span>Ângulo de Abertura</span>
               <span className="text-sky-400">{(angleSpread * 360).toFixed(0)}°</span>
             </div>
-            <input type="range" min="0.1" max="1" step="0.05" value={angleSpread} onChange={e => setAngleSpread(parseFloat(e.target.value))} className="w-full accent-sky-500" />
+            <input type="range" min="0.1" max="1" step="0.05" value={angleSpread} onChange={e => setAngleSpread(parseFloat((e.target as HTMLInputElement).value))} className="w-full accent-sky-500" />
           </div>
         </div>
       )}
@@ -518,8 +644,103 @@ export function ManualSemanticMap({
         </div>
       )}
       {tooltip && (
-        <div className="fixed z-[60] pointer-events-none px-2 py-1 bg-zinc-900/90 border border-zinc-700/50 rounded text-[11px] text-zinc-300 whitespace-nowrap" style={{ left: tooltip.x + 12, top: tooltip.y - 24 }}>
-          {tooltip.text}
+        <div 
+          className={`manual-map-tooltip fixed z-[60] p-3 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/50 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[160px] ${tooltip.pinned ? 'ring-2 ring-violet-500/30' : 'pointer-events-none'}`} 
+          style={{ left: tooltip.x + 12, top: tooltip.y - 24 }}
+        >
+          <div className="flex justify-between items-center border-b border-zinc-800 pb-1 mb-0.5">
+            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              {tooltip.node?.data.type === 'note' ? 'Arquivo' : 'Tópico'}
+            </div>
+            {tooltip.pinned && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setTooltip(null); }}
+                className="text-zinc-500 hover:text-white"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="text-[12px] text-zinc-100 font-bold whitespace-nowrap mb-1">
+            {tooltip.text}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Botão de Focar (Sempre disponível para tópicos) */}
+            {tooltip.node?.data.type === 'topic' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFocusNode(tooltip.node!.data);
+                  setTooltip(null);
+                }}
+                className="flex-1 px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/40 border border-sky-500/30 rounded-lg text-[10px] text-sky-300 font-bold uppercase tracking-tighter transition-all flex items-center justify-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Focar
+              </button>
+            )}
+
+            {/* Botão de Abrir Nota (Se já materializado) */}
+            {tooltip.node?.data.type === 'topic' && tooltip.node.data.hasFile && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenNote(`notes/${tooltip.node!.data.label}.md`);
+                  setTooltip(null);
+                }}
+                className="flex-1 px-2 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-lg text-[10px] text-emerald-300 font-bold uppercase tracking-tighter transition-all flex items-center justify-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                Abrir
+              </button>
+            )}
+          </div>
+
+          {/* Botão de Materializar (Se ainda não materializado) */}
+          {tooltip.pinned && tooltip.node?.data.type === 'topic' && !tooltip.node.data.hasFile && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                const label = tooltip.node!.data.label;
+                const filename = `notes/${label}.md`;
+                const content = "";
+                
+                try {
+                  const res = await fetch(`/api/file?name=${encodeURIComponent(filename)}`, {
+                    method: "POST",
+                    headers: {
+                      "Authorization": auth,
+                      "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ name: filename, content })
+                  });
+                  
+                    if (res.ok) {
+                      window.dispatchEvent(new CustomEvent("graph-updated"));
+                      setRefreshKey(prev => prev + 1);
+                      setTooltip(null);
+                      setTimeout(() => onOpenNote(filename), 100);
+                    }
+                } catch (err) {
+                  console.error("Erro ao materializar nota:", err);
+                }
+              }}
+              className="mt-1 px-2 py-1.5 bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/30 rounded-lg text-[10px] text-violet-300 font-bold uppercase tracking-tighter transition-all text-center flex items-center justify-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+              </svg>
+              Materializar Nota
+            </button>
+          )}
         </div>
       )}
       <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />

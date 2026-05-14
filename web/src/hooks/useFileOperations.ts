@@ -15,6 +15,8 @@ interface UseFileOperationsProps {
   handleDeleteFromList: (filename: string) => void;
 }
 
+import { useRef } from 'preact/compat';
+
 export const useFileOperations = ({
   fetchWithAuth,
   queryClient,
@@ -33,6 +35,7 @@ export const useFileOperations = ({
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const pendingContentRef = useRef<string | null>(null);
 
   const handleManualSync = useCallback(async () => {
     if (isSyncing) return;
@@ -100,6 +103,19 @@ export const useFileOperations = ({
         );
 
         if (res?.ok) {
+          // Refatoração Global de Links Semânticos
+          const getTopic = (name: string) => name.split('/').pop()?.replace(/\.md$/, "") || "";
+          const oldTopic = getTopic(oldName);
+          const newTopic = getTopic(newName);
+          
+          if (oldTopic && newTopic && oldTopic !== newTopic) {
+             fetchWithAuth("/api/graph/refactor-links", {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ oldTopic, newTopic })
+             }).catch(err => console.error("Erro ao refatorar links:", err));
+          }
+
           if (editingFile && editingFile.name === oldName) {
             setEditingFile((prev) =>
               prev
@@ -310,7 +326,11 @@ export const useFileOperations = ({
 
   const handleSaveFile = useCallback(
     async (fileName: string, content: string, isAuto: boolean = false) => {
-      if (isSaving) return false;
+      if (isSaving) {
+        // Guarda o conteudo mais recente e agenda save depois do atual terminar
+        pendingContentRef.current = content;
+        return false;
+      }
       setIsSaving(true);
       try {
         const res = await fetchWithAuth(
@@ -337,9 +357,15 @@ export const useFileOperations = ({
         return false;
       } finally {
         setIsSaving(false);
+        // Se tem conteudo pendente, salva agora (evita perder edicoes feitas durante save)
+        const pending = pendingContentRef.current;
+        pendingContentRef.current = null;
+        if (pending !== null && pending !== content) {
+          handleSaveFile(fileName, pending, isAuto);
+        }
       }
     },
-    [isSaving, fetchWithAuth, setEditingFile, addToast, queryClient],
+    [isSaving, fetchWithAuth, setEditingFile, addToast, queryClient, pendingContentRef],
   );
 
   return {

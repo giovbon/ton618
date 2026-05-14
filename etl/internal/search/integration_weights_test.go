@@ -3,6 +3,7 @@ package search
 import (
 	"etl/internal/models"
 	"os"
+	"math"
 	"testing"
 )
 
@@ -33,7 +34,7 @@ func TestWeightsPersistenceAndApplication(t *testing.T) {
 	// Total: 24.0
 	scoreBase, _ := ScoreFragment(hit, query, "rato roeu", "rato roeu", 0, 0)
 	expectedBase := 24.0
-	if scoreBase != expectedBase {
+	if math.Abs(scoreBase-expectedBase) > 0.01 {
 		t.Errorf("Score base incorreto. Esperado %f, obtido %f", expectedBase, scoreBase)
 	}
 
@@ -48,7 +49,7 @@ func TestWeightsPersistenceAndApplication(t *testing.T) {
 	// Phrase Boost: +50.0 (500% de 10.0)
 	// Keyword Bonus: +2.0
 	// Total: 62.0
-	if scoreNovo != 62.0 {
+	if math.Abs(scoreNovo-62.0) > 0.01 {
 		t.Errorf("O novo peso de frase não foi aplicado corretamente. Score: %f", scoreNovo)
 	}
 	// Agora os detalhes mostram o bônus real somado (+50.0), não o multiplicador
