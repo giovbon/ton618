@@ -128,6 +128,7 @@ func (s *AppState) Load(cfg *config.AppConfig) {
 			s.semantic.setFileSemanticLinksMap(links)
 		}
 
+		return nil
 	})
 	
 	// Reconstroi topicos no startup para eliminar orfaos residuais
