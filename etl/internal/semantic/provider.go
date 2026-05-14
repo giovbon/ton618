@@ -209,9 +209,10 @@ func NewOllamaEmbedding(model, host string, dimension int) func(ctx context.Cont
 			return nil, fmt.Errorf("ollama service unavailable (circuit open)")
 		}
 
-		// 1. Verificar cache primeiro (usando o texto original como chave para evitar colisoes de truncamento)
+		// 1. Verificar cache primeiro (chave composta: modelo|dimensao|texto)
+		cacheKey := fmt.Sprintf("%s|%d|%s", model, dimension, cleanText)
 		queryCacheMu.RLock()
-		if cached, exists := queryCache[cleanText]; exists {
+		if cached, exists := queryCache[cacheKey]; exists {
 			queryCacheMu.RUnlock()
 			return cached, nil
 		}
@@ -293,8 +294,8 @@ func NewOllamaEmbedding(model, host string, dimension int) func(ctx context.Cont
 				delete(queryCache, oldestKey)
 			}
 		}
-		queryCache[cleanText] = finalEmbedding
-		queryCacheKeys = append(queryCacheKeys, cleanText)
+		queryCache[cacheKey] = finalEmbedding
+		queryCacheKeys = append(queryCacheKeys, cacheKey)
 		queryCacheMu.Unlock()
 
 		return finalEmbedding, nil

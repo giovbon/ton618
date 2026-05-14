@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "preact/compat";
-import { useCallback, useMemo, useState } from "preact/compat";
+import { useCallback, useState } from "preact/compat";
 import type { FileObject } from "../types";
 
 interface UseFileOperationsProps {
@@ -342,8 +342,7 @@ export const useFileOperations = ({
     [isSaving, fetchWithAuth, setEditingFile, addToast, queryClient],
   );
 
-  return useMemo(
-    () => ({
+  return {
       state: {
         isSyncing,
         isUploading,
@@ -376,27 +375,5 @@ export const useFileOperations = ({
         confirmDeletion,
         handleSaveFile,
       },
-    }),
-    [
-      isSyncing,
-      isUploading,
-      syncSuccess,
-      fileToDelete,
-      isDeletingFile,
-      isCapturingLink,
-      isProcessingLink,
-      isCreatingNote,
-      isSaving,
-      isSettingsOpen,
-      handleManualSync,
-      handleCreateNote,
-      handleOpenDailyNote,
-      handleRenameNote,
-      handleCaptureLink,
-      handleFileUpload,
-      handleBundleUpload,
-      confirmDeletion,
-      handleSaveFile,
-    ],
-  );
 };
+}

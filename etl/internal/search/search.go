@@ -74,7 +74,7 @@ func buildStandardWordQuery(word string) query.Query {
 func buildCompactQuery(word string) query.Query {
 	q1 := bleve.NewWildcardQuery("*" + word + "*")
 	q1.SetField("arquivo")
-	q2 := bleve.NewWildcardQuery("*" + word + "*")
+	q2 := bleve.NewMatchQuery(word)
 	q2.SetField("secao")
 	q3 := bleve.NewTermQuery(word)
 	q3.SetField("tags")

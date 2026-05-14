@@ -1,5 +1,7 @@
-import { useCallback, useMemo, useState } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import type { Toast } from "../types";
+
+let _toastId = 0;
 
 export function useAppUI() {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -8,7 +10,7 @@ export function useAppUI() {
 
   const addToast = useCallback(
     (message: string, type: Toast["type"] = "info") => {
-      const id = Date.now();
+      const id = ++_toastId;
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -17,19 +19,8 @@ export function useAppUI() {
     [],
   );
 
-  return useMemo(
-    () => ({
-      state: {
-        toasts,
-        isMapOpen,
-        highlightedFile,
-      },
-      actions: {
-        setIsMapOpen,
-        setHighlightedFile,
-        addToast,
-      },
-    }),
-    [toasts, isMapOpen, highlightedFile, addToast],
-  );
+  return {
+    state: { toasts, isMapOpen, highlightedFile },
+    actions: { setIsMapOpen, setHighlightedFile, addToast },
+  };
 }

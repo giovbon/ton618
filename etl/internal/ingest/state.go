@@ -58,14 +58,16 @@ func NewAppState(cfg *config.AppConfig) *AppState {
 	if err != nil {
 		// Se for apenas timeout, falha sem apagar (provavelmente já aberto)
 		if strings.Contains(err.Error(), "timeout") {
-			log.Fatalf("[DB] Erro: Banco de dados já está em uso por outro processo: %v", err)
+			fmt.Fprintf(os.Stderr, "[DB] Erro: Banco de dados ja esta em uso por outro processo: %v\n", err)
+		os.Exit(1)
 		}
 
 		log.Printf("[DB] Erro ao abrir banco de dados: %v. Tentando recriar...", err)
 		os.Remove(dbPath)
 		db, err = openDB(dbPath)
 		if err != nil {
-			log.Fatalf("[DB] Erro fatal ao recriar banco de dados de estado: %v", err)
+			fmt.Fprintf(os.Stderr, "[DB] Erro fatal ao recriar banco de dados de estado: %v\n", err)
+		os.Exit(1)
 		}
 		log.Println("[DB] Banco de dados recriado do zero com sucesso.")
 	}

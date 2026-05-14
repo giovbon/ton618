@@ -38,6 +38,7 @@ interface Node extends SimulationNodeDatum {
   label: string;
   type: "topic" | "note" | "tag";
   level?: number;
+  degree?: number;
 }
 
 interface Link extends SimulationLinkDatum<Node> {
@@ -192,8 +193,10 @@ export function ManualSemanticMap({
     canvas.height = window.innerHeight * dpr;
 
     const noteIds = new Set<string>();
+    const nodeDegrees = new Map<string, number>();
     data.links.forEach((l) => {
       if (l.type === "note" || l.type === "tag") noteIds.add(l.source);
+      nodeDegrees.set(l.target, (nodeDegrees.get(l.target) || 0) + 1);
     });
 
     const nodes: Node[] = [
@@ -202,6 +205,7 @@ export function ManualSemanticMap({
         label: t.label,
         type: (t.type || "topic") as "topic" | "tag",
         level: t.level,
+        degree: nodeDegrees.get(t.id) || 0,
       })),
       ...Array.from(noteIds).map((id) => ({
         id,
@@ -211,6 +215,7 @@ export function ManualSemanticMap({
             .pop()
             ?.replace(/\.(md|pdf)$/i, "") || id,
         type: "note" as const,
+        degree: nodeDegrees.get(id) || 0,
       })),
     ];
 
@@ -238,7 +243,12 @@ export function ManualSemanticMap({
       )
       .force("x", forceX(canvas.width / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
       .force("y", forceY(canvas.height / dpr / 2).strength(0.01 * visualConfig.current.gravityMult))
-      .force("collide", forceCollide().radius(50 * visualConfig.current.chargeStrengthMult));
+      .force("collide", forceCollide().radius((d: any) => {
+        const weight = 1 + (d.degree || 0);
+        const scale = Math.sqrt(weight);
+        const baseRadius = (d.type === "topic" ? 6 : d.type === "tag" ? 5 : 4);
+        return (baseRadius * scale * visualConfig.current.nodeRadiusMult) + (15 * visualConfig.current.chargeStrengthMult);
+      }));
 
     simulationRef.current = simulation;
 
@@ -369,7 +379,11 @@ export function ManualSemanticMap({
         const isTopic = node.type === "topic";
         const isTag = node.type === "tag";
         const isStructural = isTopic || isTag;
-        const radius = (isTopic ? 6 : isTag ? 5 : 4) * visualConfig.current.nodeRadiusMult;
+        
+        const weight = 1 + (node.degree || 0);
+        const scale = Math.sqrt(weight);
+        const baseRadius = isTopic ? 6 : isTag ? 5 : 4;
+        const radius = baseRadius * scale * visualConfig.current.nodeRadiusMult;
         
         ctx.beginPath();
         ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI);
