@@ -1,10 +1,9 @@
 name: Deploy Docker
 
 on:
-  #  push:
-  #    branches:
-  #      - main
-  # Mantemos o dispatch caso você queira forçar um build manual
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag:
