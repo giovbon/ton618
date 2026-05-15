@@ -19,6 +19,7 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import { CustomImage } from "./editor/ImageExtension";
 
 import {
   LinksEditor,
@@ -70,6 +71,8 @@ const TiptapEditor = ({
   const [isEditingName, setIsEditingName] = useState(false);
   const [newFileName, setNewFileName] = useState(fileName);
   const [editorStatus, setEditorStatus] = useState<EditorStatus>("saved");
+  const [imageToDelete, setImageToDelete] = useState<{ filename: string; pos: number } | null>(null);
+  const [isDeletingImage, setIsDeletingImage] = useState(false);
   const autoSaveTimerRef = useRef<any>(null);
   const onSaveRef = useRef(onSave);
   const hasScrolledRef = useRef(false);
@@ -109,6 +112,8 @@ const TiptapEditor = ({
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const cleanInitialContent = useRef(() => {
     const match = initialContent.match(FRONTMATTER_REGEX);
@@ -212,6 +217,9 @@ const TiptapEditor = ({
       TaskItem.configure({
         nested: true,
       }),
+      CustomImage.configure({
+        allowBase64: true,
+      }),
     ],
     content: cleanInitialContent,
     onSelectionUpdate: ({ editor }) => {
@@ -247,6 +255,83 @@ const TiptapEditor = ({
       },
     },
   });
+
+  const handleImageUpload = useCallback(async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      setEditorStatus("saving");
+      const res = await fetchWithAuth("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res?.ok) {
+        const data = await res.json();
+        // data.filename vem do backend já slugificado e com timestamp prefix
+        const imageUrl = `/api/file?name=${encodeURIComponent(`attachments/${data.filename}`)}`;
+        
+        editor.chain().focus().setImage({ src: imageUrl, alt: data.filename }).run();
+        setEditorStatus("saved");
+      } else {
+        alert("Erro ao fazer upload da imagem.");
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Erro de conexão no upload.");
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }, [editor, fetchWithAuth]);
+
+  useEffect(() => {
+    const handleRequestImage = () => {
+      imageInputRef.current?.click();
+    };
+
+    const handleDeleteFileRequest = (e: any) => {
+      setImageToDelete(e.detail);
+    };
+
+    window.addEventListener("tiptap:request-image", handleRequestImage);
+    window.addEventListener("tiptap:delete-file", handleDeleteFileRequest);
+    return () => {
+      window.removeEventListener("tiptap:request-image", handleRequestImage);
+      window.removeEventListener("tiptap:delete-file", handleDeleteFileRequest);
+    };
+  }, [editor]);
+
+  const confirmImageDeletion = async () => {
+    if (!editor || !imageToDelete) return;
+    const { filename, pos } = imageToDelete;
+
+    setIsDeletingImage(true);
+    try {
+      const res = await fetchWithAuth(
+        `/api/file?name=${encodeURIComponent(filename)}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (res?.ok) {
+        if (pos !== null) {
+          editor.chain().focus().deleteRange({ from: pos, to: pos + 1 }).run();
+        }
+        setImageToDelete(null);
+      } else {
+        alert("Erro ao excluir arquivo do servidor.");
+      }
+    } catch (err) {
+      console.error("Delete file error:", err);
+    } finally {
+      setIsDeletingImage(false);
+    }
+  };
 
   useEffect(() => {
     if (editor && scrollToText && !hasScrolledRef.current) {
@@ -370,6 +455,7 @@ const TiptapEditor = ({
         onClose={onClose}
         setShowDeleteConfirm={setShowDeleteConfirm}
         editorStatus={editorStatus}
+        tags={links}
       />
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-10 md:px-20 lg:px-[15%] py-10 custom-scrollbar relative editor-main">
@@ -826,6 +912,15 @@ const TiptapEditor = ({
         )}
 
         <EditorContent editor={editor} className="w-full h-full min-h-full" />
+        
+        {/* Hidden Image Input */}
+        <input
+          type="file"
+          ref={imageInputRef}
+          onChange={handleImageUpload}
+          accept="image/*"
+          className="hidden"
+        />
       </main>
 
       <DeleteConfirmModal
@@ -833,6 +928,13 @@ const TiptapEditor = ({
         isDeleting={isDeleting}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
+      />
+
+      <DeleteConfirmModal
+        filename={imageToDelete?.filename || null}
+        isDeleting={isDeletingImage}
+        onClose={() => setImageToDelete(null)}
+        onConfirm={confirmImageDeletion}
       />
     </div>
   );

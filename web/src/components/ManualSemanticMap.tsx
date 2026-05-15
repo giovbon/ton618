@@ -100,7 +100,7 @@ export function ManualSemanticMap({
   const [refreshKey, setRefreshKey] = useState(0);
   const [focusNode, setFocusNode] = useState<TreeNodeData | null>(null);
   const { data, loading, error } = useSemanticMapData(auth, refreshKey);
-  
+
   useEffect(() => {
     if (data) console.log("DEBUG: Dados recebidos:", data);
     if (error) console.error("DEBUG: Erro nos dados:", error);
@@ -265,7 +265,7 @@ export function ManualSemanticMap({
       }
 
       const node = findNodeAt(event.clientX, event.clientY) as HierNode | null;
-      
+
       if (!node) {
         if (tooltipRef.current?.pinned) setTooltip(null);
         return;
@@ -317,14 +317,7 @@ export function ManualSemanticMap({
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Subtle Grid
-      ctx.strokeStyle = "rgba(255,255,255,0.02)";
-      ctx.lineWidth = 1;
-      const step = 60 * t.k;
-      const offsetX = t.x % step;
-      const offsetY = t.y % step;
-      for (let x = offsetX; x < canvas.width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-      for (let y = offsetY; y < canvas.height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+      // Grid removed — keeps background clean
 
       ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
 
@@ -344,11 +337,11 @@ export function ManualSemanticMap({
 
         const isHighlighted = branchIds.has(link.target.data.id);
         const isStructural = link.target.depth <= 1;
-        
+
         // --- LOD (Level of Detail) Logic for Links ---
-        let linkOpacity = 0.12;
+        let linkOpacity = 0.18;
         if (!isStructural && !isHighlighted) {
-          linkOpacity = Math.max(0, Math.min(0.12, (t.k - 0.3) * 0.24));
+          linkOpacity = Math.max(0, Math.min(0.18, (t.k - 0.25) * 0.36));
         }
         if (isHighlighted) linkOpacity = 0.8;
         if (linkOpacity <= 0 && !isHighlighted) return;
@@ -394,7 +387,7 @@ export function ManualSemanticMap({
           ctx.beginPath();
           ctx.arc(0, 0, 10, 0, 2 * Math.PI);
           ctx.fillStyle = "#fff";
-          ctx.shadowBlur = 20 / t.k;
+          ctx.shadowBlur = 12 / t.k;
           ctx.shadowColor = "#a78bfa";
           ctx.fill();
           ctx.shadowBlur = 0;
@@ -424,13 +417,13 @@ export function ManualSemanticMap({
 
         const weight = 1 + (node.children?.length || (node as any)._children?.length || 0);
         const scale = Math.sqrt(weight);
-        const baseRadius = isTopic ? 7 : isTag ? 6 : 5;
+        const baseRadius = isTopic ? 5 : isTag ? 4 : 3;
         const r = (baseRadius * scale * visualConfig.current.nodeRadiusMult) * (isHovered ? 1.3 : 1);
 
         const color = isTopic
           ? hasFile ? "#34d399" : "#a78bfa"
           : isTag ? "#f472b6"
-          : "#38bdf8";
+            : "#38bdf8";
 
         ctx.globalAlpha = nodeOpacity;
 
@@ -458,14 +451,20 @@ export function ManualSemanticMap({
           ctx.arc(nx, ny, r + 4 / t.k, 0, 2 * Math.PI);
           ctx.strokeStyle = isHovered ? "#fff" : "#34d399";
           ctx.lineWidth = 1.5 / t.k;
-          ctx.globalAlpha = 0.6;
+          ctx.globalAlpha = 0.45;
+          ctx.shadowBlur = 0;
           ctx.stroke();
           ctx.globalAlpha = 1;
         }
 
         // Labels
-        // No zoom out extremo, escondemos labels de notas para manter clareza
-        if (t.k < 0.4 && !isStructural && !isHovered) {
+        // Notas: label só aparece no hover — libera espaço visual
+        if (node.data.type === "note" && !isHovered) {
+          ctx.globalAlpha = 1;
+          return;
+        }
+        // LOD: esconde labels não-estruturais no zoom out
+        if (t.k < 0.55 && !isStructural && !isHovered) {
           ctx.globalAlpha = 1;
           return;
         }
@@ -476,10 +475,10 @@ export function ManualSemanticMap({
 
         ctx.shadowBlur = 4 / t.k;
         ctx.shadowColor = "rgba(0,0,0,0.8)";
-        
+
         // Cor do texto com opacidade do LOD
-        ctx.fillStyle = isHovered || isInBranch ? "#fff" : `rgba(255,255,255,${0.6 * nodeOpacity})`;
-        
+        ctx.fillStyle = isHovered || isInBranch ? "#fff" : `rgba(255,255,255,${0.75 * nodeOpacity})`;
+
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
@@ -526,17 +525,17 @@ export function ManualSemanticMap({
       {/* Breadcrumbs / Focus Path */}
       {focusNode && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-4 py-2 bg-zinc-900/80 backdrop-blur-md border border-sky-500/30 rounded-full shadow-2xl">
-          <button 
+          <button
             onClick={() => setFocusNode(null)}
             className="text-[10px] font-black uppercase tracking-widest text-sky-400 hover:text-sky-300 transition-colors px-1"
           >
             Mundo
           </button>
-          
+
           {focusNode.id.split('/').map((part, i, arr) => (
             <div key={i} className="flex items-center gap-1.5">
               <span className="text-zinc-600 text-[10px]">/</span>
-              <button 
+              <button
                 onClick={() => {
                   const newPath = arr.slice(0, i + 1).join('/');
                   if (newPath === focusNode.id) return;
@@ -549,7 +548,7 @@ export function ManualSemanticMap({
             </div>
           ))}
 
-          <button 
+          <button
             onClick={() => setFocusNode(null)}
             className="ml-2 p-1 hover:bg-white/10 rounded-full transition-all"
             title="Sair do Foco"
@@ -644,8 +643,8 @@ export function ManualSemanticMap({
         </div>
       )}
       {tooltip && (
-        <div 
-          className={`manual-map-tooltip fixed z-[60] p-3 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/50 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[160px] ${tooltip.pinned ? 'ring-2 ring-violet-500/30' : 'pointer-events-none'}`} 
+        <div
+          className={`manual-map-tooltip fixed z-[60] p-3 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/50 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[160px] ${tooltip.pinned ? 'ring-2 ring-violet-500/30' : 'pointer-events-none'}`}
           style={{ left: tooltip.x + 12, top: tooltip.y - 24 }}
         >
           <div className="flex justify-between items-center border-b border-zinc-800 pb-1 mb-0.5">
@@ -653,7 +652,7 @@ export function ManualSemanticMap({
               {tooltip.node?.data.type === 'note' ? 'Arquivo' : 'Tópico'}
             </div>
             {tooltip.pinned && (
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); setTooltip(null); }}
                 className="text-zinc-500 hover:text-white"
               >
@@ -666,7 +665,7 @@ export function ManualSemanticMap({
           <div className="text-[12px] text-zinc-100 font-bold whitespace-nowrap mb-1">
             {tooltip.text}
           </div>
-          
+
           <div className="flex items-center gap-2">
             {/* Botão de Focar (Sempre disponível para tópicos) */}
             {tooltip.node?.data.type === 'topic' && (
@@ -712,7 +711,7 @@ export function ManualSemanticMap({
                 const label = tooltip.node!.data.label;
                 const filename = `notes/${label}.md`;
                 const content = "";
-                
+
                 try {
                   const res = await fetch(`/api/file?name=${encodeURIComponent(filename)}`, {
                     method: "POST",
@@ -722,13 +721,13 @@ export function ManualSemanticMap({
                     },
                     body: JSON.stringify({ name: filename, content })
                   });
-                  
-                    if (res.ok) {
-                      window.dispatchEvent(new CustomEvent("graph-updated"));
-                      setRefreshKey(prev => prev + 1);
-                      setTooltip(null);
-                      setTimeout(() => onOpenNote(filename), 100);
-                    }
+
+                  if (res.ok) {
+                    window.dispatchEvent(new CustomEvent("graph-updated"));
+                    setRefreshKey(prev => prev + 1);
+                    setTooltip(null);
+                    setTimeout(() => onOpenNote(filename), 100);
+                  }
                 } catch (err) {
                   console.error("Erro ao materializar nota:", err);
                 }

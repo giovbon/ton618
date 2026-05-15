@@ -302,6 +302,11 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	cleanName := utils.SlugifyFilename(handler.Filename)
+	if isImage {
+		// Padrão consistente: img_YYYYMMDD_HHMMSS_nome.ext
+		timestamp := time.Now().Format("20060102_150405")
+		cleanName = fmt.Sprintf("img_%s_%s", timestamp, cleanName)
+	}
 	subDir := "pdfs"
 	if isImage {
 		subDir = "attachments"
@@ -345,13 +350,21 @@ func (ctx *HandlerContext) runOCRInBackground(imagePath, relFilename string) {
 
 	docs := ingest.ProcessImage(imagePath, relFilename, time.Now(), ctx.State)
 	if len(docs) > 0 {
-		// Não indexamos a imagem original, apenas a nota gerada
+		// Atualiza estado temporário antes de deletar
 		ingest.UpdateStateAfterOCR(imagePath, relFilename, docs, ctx.State)
 		slog.Info("Image processed, creating note", "file", relFilename)
 
-		// Criar nota Markdown automática vinculada à imagem
+		// Criar nota Markdown automática apenas com o texto extraído
 		ctx.createOCRNote(relFilename, docs[0].Texto)
 	}
+
+	// Remove a imagem original — ela é efêmera
+	if err := os.Remove(imagePath); err != nil {
+		slog.Error("Failed to delete ephemeral image", "path", imagePath, "error", err)
+	}
+	ctx.State.DeleteFileMod(imagePath)
+	ctx.State.DeleteFileTags(relFilename)
+
 	search.InvalidateFile(relFilename)
 }
 
@@ -361,16 +374,15 @@ func (ctx *HandlerContext) createOCRNote(imageRelPath, text string) {
 
 	basename := filepath.Base(imageRelPath)
 	cleanName := strings.TrimSuffix(basename, filepath.Ext(basename))
+	// Nota com timestamp para ser única, prefixo ocr_ para identificação
 	noteName := fmt.Sprintf("ocr_%s_%s.md", time.Now().Format("20060102_150405"), cleanName)
 	notePath := filepath.Join(notesDir, noteName)
 
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString("tags: [imagem]\n")
+	sb.WriteString("tags: [imagem]\n") // Icone verde no frontend
 	sb.WriteString("---\n\n")
-	sb.WriteString(fmt.Sprintf("# OCR: %s\n\n", cleanName))
-	sb.WriteString(fmt.Sprintf("![%s](/api/file?name=%s)\n\n", cleanName, imageRelPath))
-	sb.WriteString("## Texto Extraído\n\n")
+	// Apenas o texto, sem título ou link para imagem deletada
 	sb.WriteString(text)
 
 	if err := os.WriteFile(notePath, []byte(sb.String()), 0644); err != nil {
