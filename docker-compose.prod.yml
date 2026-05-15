@@ -13,12 +13,16 @@ services:
       - AUTH_USER=admin
       - AUTH_PASS=ton618_secret # RECOMENDADO: Alterar para uma senha forte
       - BLEVE_INDEX_DIR=/app/data/ton618.bleve
-      - OLLAMA_HOST=http://host.docker.internal:11434
-      - OLLAMA_MODEL=nomic-embed-text
-      - SEMANTIC_ENABLE=true
+      # Embedding: configure API Key em Settings > APIs > Embedding API
+      # Exemplo para Gemini (grátis):
+      # - EMBEDDING_PROVIDER=gemini
+      # - EMBEDDING_API_KEY=AIza...
+      # - EMBEDDING_MODEL=text-embedding-004
+      #
+      # Fallback: Ollama local (descomente se tiver servidor Ollama)
+      # - OLLAMA_HOST=http://host.docker.internal:11434
+      # - OLLAMA_MODEL=nomic-embed-text
     volumes:
       - ./docs:/docs
       - ./state:/app/state
       - ./data:/app/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

@@ -13,26 +13,12 @@ services:
       - AUTH_USER=admin
       - AUTH_PASS=ton618_secret
       - BLEVE_INDEX_DIR=/app/data/ton618.bleve
-     # - OLLAMA_HOST=http://ollama:11434
-     # - OLLAMA_MODEL=nomic-embed-text
-      # Modelos alternativos (descomente um e ajuste EMBEDDING_DIMENSION nas Settings):
-      # - OLLAMA_MODEL=multilingual-e5          # 1024d, melhor para PT-BR
-      # - OLLAMA_MODEL=bge-m3                   # 1024d, multilíngue pesado
-      # - OLLAMA_MODEL=mxbai-embed-large        # 1024d, foco inglês
+      # Embedding: configure em Settings > APIs > Embedding API
+      # Padrão: Ollama (http://localhost:11434, modelo nomic-embed-text)
+      # Alternativas: set EMBEDDING_PROVIDER=gemini + EMBEDDING_API_KEY no ambiente
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=nomic-embed-text
     volumes:
       - ./docs:/docs
       - ./state:/app/state
       - ./data:/app/data
-#    depends_on:
- #     - ollama
-
-  # Modelos persistem em ./ollama_data mesmo apos docker compose down.
-  # Para limpar tudo: docker compose down -v
-#  ollama:
- #   image: ollama/ollama:latest
-  #  container_name: ollama
-   # restart: unless-stopped
-#    ports:
- #     - "11434:11434"
-  #  volumes:
-   #   - ./ollama_data:/root/.ollama

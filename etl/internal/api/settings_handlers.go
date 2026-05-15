@@ -56,6 +56,9 @@ func (ctx *HandlerContext) HandleGetSettings(w http.ResponseWriter, r *http.Requ
 	if settings.GoogleVisionKey != "" {
 		settings.GoogleVisionKey = KeyMask
 	}
+	if settings.EmbeddingAPIKey != "" {
+		settings.EmbeddingAPIKey = KeyMask
+	}
 
 	json.NewEncoder(w).Encode(settings)
 }
@@ -78,6 +81,9 @@ func (ctx *HandlerContext) HandleSaveSettings(w http.ResponseWriter, r *http.Req
 	oldSettings := ctx.State.GetSettings()
 	if newSettings.GoogleVisionKey == KeyMask {
 		newSettings.GoogleVisionKey = oldSettings.GoogleVisionKey
+	}
+	if newSettings.EmbeddingAPIKey == KeyMask {
+		newSettings.EmbeddingAPIKey = oldSettings.EmbeddingAPIKey
 	}
 	ctx.State.SetSettings(newSettings)
 	ctx.State.Save(ctx.Cfg)

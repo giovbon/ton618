@@ -127,6 +127,10 @@ export const WeightsSettings = ({
     semantic_enable: true,
     semantic_strategy: "whitelist",
     embedding_dimension: 512,
+    embedding_provider: "ollama",
+    embedding_api_key: "",
+    embedding_model: "",
+    embedding_base_url: "",
     language: "pt-BR",
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -867,6 +871,135 @@ export const WeightsSettings = ({
                       {
                         "Dica: Ative a 'Cloud Vision API' no console do Google Cloud."
                       }
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── Embedding API ──────────────────────────────── */}
+                <div className="p-6 bg-zinc-900/60 border border-zinc-800 rounded-3xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <svg
+                      className="w-12 h-12 text-violet-500"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                        stroke="currentColor"
+                        fill="none"
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-zinc-100 font-black text-xs uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                    {"Embedding API"}
+                    <span className="text-[10px] bg-violet-500/20 text-violet-400 px-2 py-0.5 rounded-full border border-violet-500/20 font-black tracking-normal">
+                      SEMÂNTICO
+                    </span>
+                  </h3>
+                  <p className="text-zinc-500 text-sm leading-relaxed mb-4">
+                    API externa para gerar embeddings (vetores) usados na busca
+                    semântica e mapa de conhecimento.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">
+                        Provedor
+                      </label>
+                      <select
+                        value={settings.embedding_provider}
+                        onChange={(e: any) =>
+                          setSettings({
+                            ...settings,
+                            embedding_provider: e.target.value,
+                          })
+                        }
+                        className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 px-3 py-2.5 rounded-xl focus:ring-1 focus:ring-violet-500 outline-none text-sm transition-all"
+                      >
+                        <option value="ollama">🐙 Ollama (local)</option>
+                        <option value="gemini">
+                          🔮 Google Gemini (grátis)
+                        </option>
+                        <option value="openai">🤖 OpenAI</option>
+                        <option value="custom">
+                          🔧 Custom (OpenAI-compat)
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">
+                        Modelo
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.embedding_model}
+                        onInput={(e: any) =>
+                          setSettings({
+                            ...settings,
+                            embedding_model: e.target.value,
+                          })
+                        }
+                        placeholder={
+                          settings.embedding_provider === "gemini"
+                            ? "text-embedding-004"
+                            : settings.embedding_provider === "ollama"
+                              ? "nomic-embed-text"
+                              : "text-embedding-3-small"
+                        }
+                        className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 px-4 py-2.5 rounded-xl focus:ring-1 focus:ring-violet-500 outline-none font-mono text-sm transition-all"
+                      />
+                    </div>
+                    {settings.embedding_provider !== "ollama" && (
+                      <div>
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">
+                          API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={settings.embedding_api_key}
+                          onInput={(e: any) =>
+                            setSettings({
+                              ...settings,
+                              embedding_api_key: e.target.value,
+                            })
+                          }
+                          placeholder={
+                            settings.embedding_provider === "gemini"
+                              ? "AIza..."
+                              : "sk-..."
+                          }
+                          className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 px-4 py-2.5 rounded-xl focus:ring-1 focus:ring-violet-500 outline-none font-mono text-sm transition-all"
+                        />
+                      </div>
+                    )}
+                    {(settings.embedding_provider === "openai" ||
+                      settings.embedding_provider === "custom") && (
+                      <div>
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">
+                          Base URL
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.embedding_base_url}
+                          onInput={(e: any) =>
+                            setSettings({
+                              ...settings,
+                              embedding_base_url: e.target.value,
+                            })
+                          }
+                          placeholder="https://api.openai.com/v1"
+                          className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 px-4 py-2.5 rounded-xl focus:ring-1 focus:ring-violet-500 outline-none font-mono text-sm transition-all"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[9px] text-zinc-600 mt-1 italic">
+                      {settings.embedding_provider === "gemini"
+                        ? "Obtenha chave grátis em aistudio.google.com (sem cartão)"
+                        : settings.embedding_provider === "openai"
+                          ? "Chave em platform.openai.com/api-keys"
+                          : settings.embedding_provider === "custom"
+                            ? "Endpoint OpenAI-compat (vLLM, LiteLLM, etc.)"
+                            : "Ollama roda localmente, sem chave necessária"}
                     </p>
                   </div>
                 </div>

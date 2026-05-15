@@ -44,6 +44,10 @@ type AppSettings struct {
 	SemanticStrategy   string `json:"semantic_strategy"`   // "whitelist" ou "blacklist"
 	Language           string `json:"language"`            // "pt-BR", "en-US"
 	EmbeddingDimension int    `json:"embedding_dimension"` // Dimensao do vetor (Matryoshka), default 512
+	EmbeddingProvider  string `json:"embedding_provider"`  // "ollama", "openai", "gemini", "custom"
+	EmbeddingAPIKey    string `json:"embedding_api_key"`   // Chave da API (Gemini, OpenAI, etc.)
+	EmbeddingModel     string `json:"embedding_model"`     // Modelo (ex: "text-embedding-004")
+	EmbeddingBaseURL   string `json:"embedding_base_url"`  // URL customizada do endpoint
 }
 
 type SystemState struct {
