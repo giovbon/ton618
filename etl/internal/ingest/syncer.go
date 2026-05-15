@@ -564,10 +564,11 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 					return
 				}
 
-				effectiveHost := cfg.OllamaHost
-				log.Printf("[Sync] Usando Ollama em %s para vetorizar: %s\n", effectiveHost, fname)
-				embFunc := appState.GetEmbeddingFunc(cfg)
-				vec, err := embFunc(func() context.Context { ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute); defer cancel(); return ctx }(), string(content))
+				log.Printf("[Sync] Vetorizando: %s\n", fname)
+				provider := appState.GetEmbeddingProvider(cfg)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				vec, err := provider.Embed(ctx, string(content))
+				cancel()
 				if err != nil {
 					log.Printf("[Sync] Erro ao gerar embedding para %s: %v\n", fname, err)
 				} else {

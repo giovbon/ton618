@@ -80,7 +80,7 @@ func NewAppState(cfg *config.AppConfig) *AppState {
 		hashCache:    make(map[string]string),
 		popularity:   make(map[string]int),
 		fileMetadata: make(map[string]map[string]interface{}),
-		settings:     models.AppSettings{SemanticStrategy: "whitelist", Language: "pt-BR", EmbeddingDimension: 512},
+		settings: models.AppSettings{SemanticEnable: true, SemanticStrategy: "whitelist", Language: "pt-BR", EmbeddingDimension: 512},
 		tags:         newTagManager(db),
 		links:        newLinkManager(db),
 		vectors:      newVectorManager(db),
