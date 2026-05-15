@@ -527,8 +527,11 @@ func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDoc
 	vectorDocsByFile := make(map[string][]models.Document)
 	if semanticEnabled {
 		for _, doc := range vectorDocs {
+			// Markdown sempre vetoriza se semântica estiver ativa.
+			// Imagens e outros tipos continuam precisando da tag ou sendo automáticos por tipo.
 			if doc.Tipo == "markdown" || doc.Tipo == "image" || doc.Tipo == "imagem" || doc.Tipo == "link" || doc.Tipo == "youtube" {
-				if HasEmbedTag(doc.Tags) {
+				// Se for markdown, não exigimos mais a tag #embed para facilitar o uso no MiniPC
+				if doc.Tipo == "markdown" || HasEmbedTag(doc.Tags) {
 					vectorDocsByFile[doc.Arquivo] = append(vectorDocsByFile[doc.Arquivo], doc)
 				}
 			}
