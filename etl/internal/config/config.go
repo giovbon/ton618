@@ -38,7 +38,7 @@ func LoadConfig() *AppConfig {
 		StateFile:       filepath.Join(stateDir, "state.json"),
 		AuthUser:        getEnv("AUTH_USER", "admin"),
 		AuthPass:        getEnv("AUTH_PASS", "ton618_secret"),
-		OllamaHost:      getEnv("OLLAMA_HOST", "http://192.168.15.6:11434"),
+		OllamaHost:      getEnv("OLLAMA_HOST", "http://localhost:11434"),
 		OllamaModel:     getEnv("OLLAMA_MODEL", "nomic-embed-text"),
 		SemanticEnable:  getEnv("SEMANTIC_ENABLE", "true") == "true",
 	}
