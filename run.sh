@@ -8,8 +8,8 @@ DOCS_DIR="$BASE_DIR/docs"
 WEB_DIR="$BASE_DIR/web/dist"
 
 # Usar um caminho NEUTRO para o índice (evita problemas com espaços/acentos na Área de Trabalho)
-BLEVE_INDEX_DIR="/home/giobon/ton618_data/ton618.bleve"
-STATE_DIR="/home/giobon/ton618_data"
+BLEVE_INDEX_DIR="$BASE_DIR/data/ton618.bleve"
+STATE_DIR="$BASE_DIR/data"
 PORT="6180"
 
 export DOCS_DIR
