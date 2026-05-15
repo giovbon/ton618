@@ -12,6 +12,7 @@ import (
 
 	"etl/internal/config"
 	"etl/internal/models"
+	"etl/internal/semantic"
 
 	bolt "go.etcd.io/bbolt"
 )
