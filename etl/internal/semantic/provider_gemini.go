@@ -85,22 +85,18 @@ func (p *GeminiProvider) EmbedBatch(ctx context.Context, texts []string) (map[st
 
 func (p *GeminiProvider) callGemini(ctx context.Context, text string) ([]float32, error) {
 	url := fmt.Sprintf(
-		"https://generativelanguage.googleapis.com/v1/models/%s:embedContent?key=%s",
+		"https://generativelanguage.googleapis.com/v1beta/models/%s:embedContent?key=%s",
 		p.model, p.apiKey,
 	)
 
-	type embedRequest struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
+	reqBody := map[string]interface{}{
+		"model": fmt.Sprintf("models/%s", p.model),
+		"content": map[string]interface{}{
+			"parts": []map[string]string{
+				{"text": text},
+			},
+		},
 	}
-
-	reqBody := embedRequest{}
-	reqBody.Content.Parts = []struct {
-		Text string `json:"text"`
-	}{{Text: text}}
 
 	body, _ := json.Marshal(reqBody)
 

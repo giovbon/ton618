@@ -47,7 +47,10 @@ func NewEmbeddingProvider(cfg *models.AppSettings, ollamaHost, ollamaModel strin
 			return NewOllamaProvider(ollamaHost, ollamaModel, dim)
 		}
 		if model == "" {
-			model = "text-embedding-004"
+			model = "gemini-embedding-2"
+		}
+		if dim == 0 || dim == 512 {
+			dim = 768 // Dimensao recomendada pelo Google
 		}
 		slog.Info("[Embedding] Usando Gemini", "model", model)
 		return NewGeminiProvider(key, model, dim)
