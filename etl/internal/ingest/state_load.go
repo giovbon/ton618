@@ -189,4 +189,3 @@ func (s *AppState) performMigration(legacy models.SystemState) {
 		return nil
 	})
 }
-}
