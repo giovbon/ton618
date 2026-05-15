@@ -129,10 +129,14 @@ func (s *AppState) Load(cfg *config.AppConfig) {
 		}
 
 		// Reconstroi topicos no startup para eliminar orfaos residuais
-		s.semantic.RebuildSemanticTopics()
+		// NOTA: Nao chamar dentro de db.View() — RebuildSemanticTopics faz db.Update(),
+		// o que causaria deadlock. A reconstrucao e feita logo apos a View.
 
 		return nil
 	})
+
+	// RebuildSemanticTopics precisa ser fora do db.View() porque ele faz db.Update()
+	s.semantic.RebuildSemanticTopics()
 
 	s.RebuildKnownTagsCache()
 
