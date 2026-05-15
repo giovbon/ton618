@@ -54,10 +54,14 @@ func (p *OpenAIProvider) Embed(ctx context.Context, text string) ([]float32, err
 		clean = clean[:maxLen]
 	}
 
-	vec, err := p.callOpenAI(ctx, []string{clean})
+	vecs, err := p.callOpenAI(ctx, []string{clean})
 	if err != nil {
 		return nil, err
 	}
+	if len(vecs) == 0 {
+		return nil, fmt.Errorf("nenhum embedding retornado")
+	}
+	vec := vecs[0]
 
 	if len(vec) > p.dimension {
 		vec = vec[:p.dimension]
