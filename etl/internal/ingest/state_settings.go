@@ -42,6 +42,7 @@ func (s *AppState) IsSemanticEnabled() bool {
 // GetEmbeddingFunc retorna a funcao de embedding Ollama memoizada.
 // A closure e recriada apenas quando modelo, host ou dimensao mudam,
 // preservando o HTTP client e connection pooling entre chamadas.
+// Deprecated: use GetEmbeddingProvider.
 func (s *AppState) GetEmbeddingFunc(cfg *config.AppConfig) func(context.Context, string) ([]float32, error) {
 	s.settingsMu.RLock()
 	settings := s.settings
@@ -66,4 +67,34 @@ func (s *AppState) GetEmbeddingFunc(cfg *config.AppConfig) func(context.Context,
 	slog.Info("[Embedding] Funcao de embedding criada/cache atualizado",
 		"model", cfg.OllamaModel, "host", cfg.OllamaHost, "dimension", dimension)
 	return s.embCacheFunc
+}
+
+// GetEmbeddingProvider retorna o provider de embeddings configurado.
+// Respeita as settings salvas (provider, api key, modelo) com fallback para Ollama.
+// O resultado e memoizado para preservar HTTP client e connection pooling.
+func (s *AppState) GetEmbeddingProvider(cfg *config.AppConfig) semantic.EmbeddingProvider {
+	s.settingsMu.RLock()
+	settings := s.settings
+	s.settingsMu.RUnlock()
+
+	// Cache key leva em conta settings + config
+	cacheKey := fmt.Sprintf("provider|%s|%s|%s|%s|%d",
+		settings.EmbeddingProvider,
+		settings.EmbeddingModel,
+		settings.EmbeddingBaseURL,
+		cfg.OllamaHost,
+		settings.EmbeddingDimension,
+	)
+
+	s.embCacheMu.Lock()
+	defer s.embCacheMu.Unlock()
+
+	// Se o cache for valido, reusa
+	if s.embCacheKey == cacheKey && s.embCacheProvider != nil {
+		return s.embCacheProvider
+	}
+
+	s.embCacheProvider = semantic.NewEmbeddingProvider(&settings, cfg.OllamaHost, cfg.OllamaModel)
+	s.embCacheKey = cacheKey
+	return s.embCacheProvider
 }

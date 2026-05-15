@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"etl/internal/semantic"
 )
 
 type QueryPointRequest struct {
@@ -71,9 +69,8 @@ func (ctx *HandlerContext) HandleGraphQueryPoint(w http.ResponseWriter, r *http.
 	embedCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	effectiveHost := cfg.OllamaHost
-	embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
-	queryVec, err := embFunc(embedCtx, req.Query)
+	provider := ctx.State.GetEmbeddingProvider(ctx.Cfg)
+	queryVec, err := provider.Embed(embedCtx, req.Query)
 	if err != nil {
 		slog.Error("Erro ao gerar embedding no query point", "error", err)
 		http.Error(w, "Erro ao gerar embedding da pergunta", http.StatusInternalServerError)

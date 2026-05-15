@@ -35,9 +35,10 @@ type AppState struct {
 	semantic *SemanticManager
 
 	// Cache da funcao de embedding para preservar HTTP client e connection pooling
-	embCacheFunc func(context.Context, string) ([]float32, error)
-	embCacheMu   sync.Mutex
-	embCacheKey  string
+	embCacheFunc     func(context.Context, string) ([]float32, error)
+	embCacheMu       sync.Mutex
+	embCacheKey      string
+	embCacheProvider semantic.EmbeddingProvider
 }
 
 func openDB(dbPath string) (db *bolt.DB, err error) {

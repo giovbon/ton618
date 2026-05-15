@@ -19,7 +19,6 @@ import (
 	"etl/internal/clustering"
 	"etl/internal/events"
 	"etl/internal/ingest"
-	"etl/internal/semantic"
 
 	"github.com/blevesearch/bleve/v2"
 )
@@ -455,6 +454,9 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 		newVectors := make(map[string]ingest.NoteVector)
 		var mu sync.Mutex
 
+		// Usa o provider configurado (Gemini, OpenAI, Ollama, etc.)
+		provider := ctx.State.GetEmbeddingProvider(ctx.Cfg)
+
 		for i := 0; i < len(filenames); i += batchSize {
 			end := i + batchSize
 			if end > len(filenames) {
@@ -465,15 +467,15 @@ func (ctx *HandlerContext) HandleReindexVectors(w http.ResponseWriter, r *http.R
 			slog.Info("Processing batch", "batch", i/batchSize+1, "totalBatches", (len(filenames)+batchSize-1)/batchSize, "notes", len(batchFiles))
 
 			ctxEmbed, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			effectiveHost := cfg.OllamaHost
-			vecs, err := semantic.EmbedBatch(ctxEmbed, effectiveHost, cfg.OllamaModel, batchTexts, ctx.State.GetSettings().EmbeddingDimension)
+			vecs, err := provider.EmbedBatch(ctxEmbed, batchTexts)
 			cancel()
 
 			if err != nil {
 				slog.Error("Erro no lote, fallback individual", "error", err)
 				for j, fname := range batchFiles {
-					embFunc := semantic.NewOllamaEmbedding(cfg.OllamaModel, effectiveHost, ctx.State.GetSettings().EmbeddingDimension)
-					vec, err := embFunc(context.Background(), batchTexts[j])
+					ctxSingle, cancelSingle := context.WithTimeout(context.Background(), 5*time.Minute)
+					vec, err := provider.Embed(ctxSingle, batchTexts[j])
+					cancelSingle()
 					if err != nil {
 						slog.Error("ERRO em embedding", "file", fname, "error", err)
 					} else {
@@ -571,7 +573,7 @@ func (ctx *HandlerContext) HandleRefactorSemanticLinks(w http.ResponseWriter, r 
 		// Exemplos: @[Topic], @[Parent/Topic], @[Topic/Child], @[Parent/Topic/Child]
 		// O segmento deve estar entre [ ou / e / ou ]
 		re := regexp.MustCompile(`(@\[|/)(` + regexp.QuoteMeta(req.OldTopic) + `)(/|\])`)
-		
+
 		if re.MatchString(newContent) {
 			newContent = re.ReplaceAllStringFunc(newContent, func(match string) string {
 				// Precisamos preservar o prefixo e o sufixo
