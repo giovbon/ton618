@@ -8,10 +8,8 @@ import { useEffect, useRef, useState, useCallback } from "preact/hooks";
 import { EditorHeader } from "./editor/EditorHeader";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
 import { WikiLinkNode } from "./editor/WikiLinkExtension";
-import { SemanticLinkNode } from "./editor/SemanticLinkExtension";
 import Mention from "@tiptap/extension-mention";
 import { getSuggestionConfig } from "./editor/wikiLinkSuggestion";
-import { getSemanticLinkSuggestionConfig } from "./editor/semanticLinkSuggestion";
 import { HashtagMark } from "./editor/HashtagExtension";
 import { SlashCommandExtension } from "./editor/SlashCommandExtension";
 import { getSlashCommandConfig } from "./editor/slashCommandSuggestion";
@@ -22,10 +20,15 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 
+import {
+  LinksEditor,
+  parseLinksFromFrontmatter,
+  setLinksInFrontmatter,
+} from "./LinksEditor";
+
 const cleanMarkdown = (content: string) => {
   let c = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
   c = c.replace(/<span data-wikilink="([^"]+)".*?<\/span>/g, "[[$1]]");
-  c = c.replace(/<span data-semantic-link="([^"]+)".*?<\/span>/g, "@[$1]");
   c = c.replace(/<span[^>]*>(#[^<]+)<\/span>/g, "$1");
   return c;
 };
@@ -83,17 +86,15 @@ const TiptapEditor = ({
   });
   const [showFrontmatter, setShowFrontmatter] = useState(false);
   const frontmatterRef = useRef(frontmatter);
+
+  // Links extraídos do frontmatter (fonte primária de @[])
+  const [links, setLinks] = useState<string[]>(() =>
+    parseLinksFromFrontmatter(frontmatter),
+  );
+  const linksRef = useRef(links);
+
   const [isMobile, setIsMobile] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-
-  // ── floating editor for @[] links ────────────────────────────────
-  const [linkEdit, setLinkEdit] = useState<{
-    topic: string;
-    pos: number;
-    x: number;
-    y: number;
-  } | null>(null);
-  const linkEditInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -112,19 +113,16 @@ const TiptapEditor = ({
   const cleanInitialContent = useRef(() => {
     const match = initialContent.match(FRONTMATTER_REGEX);
     let base = match ? match[2] : initialContent;
-    base = base.replace(
+    return base.replace(
       /\[\[([^\]]+)\]\]/g,
       '<span data-wikilink="$1"></span>',
-    );
-    return base.replace(
-      /@\[([^\]]+)\]/g,
-      '<span data-semantic-link="$1"></span>',
     );
   }).current();
 
   // WikiLink Notes list for suggestions
   const notesRef = useRef<string[]>([]);
-  const semanticTopicsRef = useRef<string[]>([]);
+  // State para as sugestões do LinksEditor (populado via API)
+  const [semanticSuggestions, setSemanticSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     fetchWithAuth("/api/notes")
@@ -143,7 +141,7 @@ const TiptapEditor = ({
       .then((res) => (res?.ok ? res.json() : null))
       .then((data) => {
         if (data && data.topics) {
-          semanticTopicsRef.current = data.topics;
+          setSemanticSuggestions(data.topics);
         }
       })
       .catch(console.error);
@@ -163,24 +161,9 @@ const TiptapEditor = ({
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // ── listen for semantic-link-edit events from the nodeView ──
-    const handleLinkEdit = (e: Event) => {
-      const { topic, pos, rect } = (e as CustomEvent).detail;
-      setLinkEdit({
-        topic,
-        pos,
-        x: rect.left,
-        y: rect.bottom + 6,
-      });
-      // Focus the input after render
-      setTimeout(() => linkEditInputRef.current?.select(), 30);
-    };
-    window.addEventListener("semantic-link-edit", handleLinkEdit);
-
     return () => {
       document.body.style.overflow = originalOverflow;
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-      window.removeEventListener("semantic-link-edit", handleLinkEdit);
     };
   }, []);
 
@@ -192,7 +175,6 @@ const TiptapEditor = ({
         },
       }),
       WikiLinkNode,
-      SemanticLinkNode,
       HashtagMark,
       Markdown.configure({
         html: true,
@@ -216,17 +198,6 @@ const TiptapEditor = ({
         suggestion: getSuggestionConfig(notesRef),
         renderLabel({ options, node }) {
           return `[[${node.attrs.id ?? node.attrs.label}]]`;
-        },
-      }),
-      Mention.extend({
-        name: "semanticLinkSuggestion",
-      }).configure({
-        HTMLAttributes: {
-          class: "semantic-mention",
-        },
-        suggestion: getSemanticLinkSuggestionConfig(semanticTopicsRef, notesRef),
-        renderLabel({ options, node }) {
-          return `@[${node.attrs.id ?? node.attrs.label}]`;
         },
       }),
 
@@ -342,6 +313,10 @@ const TiptapEditor = ({
     const val = e.target.value;
     setFrontmatter(val);
     frontmatterRef.current = val;
+    // Re-sincroniza links quando o frontmatter é editado manualmente
+    const parsed = parseLinksFromFrontmatter(val);
+    setLinks(parsed);
+    linksRef.current = parsed;
     setEditorStatus("dirty");
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
@@ -357,56 +332,34 @@ const TiptapEditor = ({
     }, 1000);
   };
 
+  // Sincroniza links do componente visual de volta para o frontmatter
+  const handleLinksChange = (newLinks: string[]) => {
+    setLinks(newLinks);
+    linksRef.current = newLinks;
+    const newFm = setLinksInFrontmatter(frontmatterRef.current, newLinks);
+    setFrontmatter(newFm);
+    frontmatterRef.current = newFm;
+    setEditorStatus("dirty");
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      setEditorStatus("saving");
+      let content = cleanMarkdown(editor.storage.markdown.getMarkdown());
+      const finalContent = newFm.trim()
+        ? `---\n${newFm}\n---\n${content}`
+        : content;
+      onSaveRef
+        .current(finalContent, true)
+        .then(() => setEditorStatus("saved"))
+        .catch(() => setEditorStatus("dirty"));
+    }, 1000);
+  };
+
   if (!editor) {
     return null;
   }
 
   return (
     <div className="editor-root bg-zinc-950 flex flex-col h-full fixed inset-0 z-[100] animate-in fade-in">
-
-      {/* ── Floating @[] link editor ────────────────── */}
-      {linkEdit && editor && (
-        <div
-          className="fixed z-[200] bg-zinc-900 border border-violet-500/40 rounded-xl shadow-2xl flex items-center gap-2 px-3 py-2 min-w-[200px]"
-          style={{ left: linkEdit.x, top: linkEdit.y }}
-        >
-          <span className="text-violet-400 font-bold text-sm select-none">@[</span>
-          <input
-            ref={linkEditInputRef}
-            type="text"
-            defaultValue={linkEdit.topic}
-            autoFocus
-            className="flex-1 bg-transparent border-none outline-none text-violet-200 font-bold text-sm min-w-[80px] max-w-[240px]"
-            onKeyDown={(e: any) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                const newTopic = (e.target as HTMLInputElement).value.trim();
-                if (newTopic && newTopic !== linkEdit.topic) {
-                  editor.view.dispatch(
-                    editor.view.state.tr.setNodeMarkup(linkEdit.pos, undefined, { topic: newTopic })
-                  );
-                }
-                setLinkEdit(null);
-                editor.view.focus();
-              }
-              if (e.key === "Escape") {
-                setLinkEdit(null);
-                editor.view.focus();
-              }
-            }}
-            onBlur={(e: any) => {
-              const newTopic = (e.target as HTMLInputElement).value.trim();
-              if (newTopic && newTopic !== linkEdit.topic) {
-                editor.view.dispatch(
-                  editor.view.state.tr.setNodeMarkup(linkEdit.pos, undefined, { topic: newTopic })
-                );
-              }
-              setLinkEdit(null);
-            }}
-          />
-          <span className="text-violet-400 font-bold text-sm select-none">]</span>
-        </div>
-      )}
       <EditorHeader
         fileName={fileName}
         newFileName={newFileName}
@@ -443,13 +396,22 @@ const TiptapEditor = ({
           </button>
 
           {showFrontmatter && (
-            <div className="mt-3 animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="mt-3 animate-in slide-in-from-top-2 fade-in duration-200 space-y-4">
               <textarea
                 value={frontmatter}
                 onChange={handleFrontmatterChange}
-                placeholder={"title: Minha Nota\ntags:\n  - tag1\n  - tag2"}
+                placeholder={
+                  "title: Minha Nota\ntags:\n  - tag1\n  - tag2\nlinks:\n  - TopicoRelacionado"
+                }
                 className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 font-mono text-xs text-zinc-300 focus:outline-none focus:border-sky-500/50 focus:bg-zinc-900 transition-all resize-y min-h-[120px] custom-scrollbar"
                 spellCheck={false}
+              />
+
+              {/* Links Editor — gerencia o campo "links" do frontmatter */}
+              <LinksEditor
+                links={links}
+                onLinksChange={handleLinksChange}
+                suggestions={semanticSuggestions}
               />
             </div>
           )}

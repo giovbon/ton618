@@ -93,6 +93,11 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 		panic("Simulated processing panic")
 	}
 
+	// Extrai links da chave "links" no frontmatter (fonte primária)
+	// Declarada antes do bloco de parse do YAML para que a declaração abaixo
+	// (variavel de retorno) reutilize as fatias, em vez de criar um novo escopo.
+	var semanticLinks []string
+
 	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
 		endIdx := strings.Index(text[4:], "\n---")
 		if endIdx != -1 {
@@ -111,6 +116,25 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 									appState.AddKnownTag(cleanTag)
 								}
 							}
+						}
+					}
+				}
+				// Extrai links da chave "links" no frontmatter (fonte primária)
+				if lRaw, ok := fm["links"]; ok {
+					switch v := lRaw.(type) {
+					case []interface{}:
+						for _, l := range v {
+							if ls, ok := l.(string); ok {
+								link := strings.TrimSpace(ls)
+								if link != "" {
+									semanticLinks = append(semanticLinks, link)
+								}
+							}
+						}
+					case string:
+						link := strings.TrimSpace(v)
+						if link != "" {
+							semanticLinks = append(semanticLinks, link)
 						}
 					}
 				}
@@ -170,9 +194,12 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 		}
 	}
 
-	semanticLinks := ExtractSemanticLinks(text)
+	// Fallback: se não havia "links" no frontmatter, extrai do corpo (@[] inline)
+	if len(semanticLinks) == 0 {
+		semanticLinks = ExtractSemanticLinks(text)
+	}
 	if len(semanticLinks) > 0 {
-		log.Printf("[Sync] LINKS SEMANTICOS EXTRAIDOS em %s: %v\n", filename, semanticLinks)
+		log.Printf("[Sync] LINKS SEMANTICOS em %s: %v\n", filename, semanticLinks)
 	}
 
 	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)

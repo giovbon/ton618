@@ -1,5 +1,6 @@
 # ======== STAGE 1: FRONTEND (Vite + Preact) ========
-FROM node:20-alpine AS builder-web
+# --platform=$BUILDPLATFORM força o build a rodar nativo (evita QEMU lento/quebrado)
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder-web
 WORKDIR /app/web
 
 # Cache otimizado: Copia apenas os arquivos de dependência primeiro
@@ -15,7 +16,8 @@ RUN if [ "$SKIP_TESTS" = "false" ]; then echo "SKIP"; else echo "⏩ Pulando tes
 RUN npm run build
 
 # ======== STAGE 2: BACKEND (Golang) ========
-FROM golang:1.24-alpine AS builder-go
+# --platform=$BUILDPLATFORM + cross-compilação com GOARCH=$TARGETARCH
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder-go
 WORKDIR /app/etl
 
 # Cache otimizado: Copia mod/sum antes de baixar
@@ -29,8 +31,10 @@ COPY etl/ .
 ARG SKIP_TESTS=false
 RUN if [ "$SKIP_TESTS" = "false" ]; then go test -v ./...; else echo "⏩ Pulando testes do Backend..."; fi
 
-# Compilação limpa
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o ton-server main.go
+# TARGETARCH injetado automaticamente pelo buildx (amd64, arm64, etc.)
+ARG TARGETARCH
+# Cross-compilação: compila nativo no host, gera binário para a arquitetura alvo
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-w -s" -o ton-server main.go
 
 # ======== STAGE 3: RUNNER (Alpine Minimalista) ========
 FROM alpine:3.19
