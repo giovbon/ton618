@@ -27,13 +27,6 @@ func TestRebuildSemanticTopics(t *testing.T) {
 
 	sm := newSemanticManager(db)
 
-	// Injetar lixo no banco de dados para simular corrupção ou órfãos
-	db.Update(func(tx *bolt.Tx) error {
-		bt := tx.Bucket(bucketSemanticTopics)
-		bt.Put([]byte("fantasma1"), []byte("true"))
-		bt.Put([]byte("fantasma2"), []byte("true"))
-		return nil
-	})
 
 	// Injetar links válidos
 	validLinks1 := []string{"topico_valido", "outro_topico"}
@@ -42,6 +35,14 @@ func TestRebuildSemanticTopics(t *testing.T) {
 	// Gravar links no manager (que também grava no banco)
 	sm.SetFileSemanticLinks("nota1.md", validLinks1)
 	sm.SetFileSemanticLinks("nota2.md", validLinks2)
+
+	// Injetar lixo no banco de dados para simular corrupção ou órfãos
+	db.Update(func(tx *bolt.Tx) error {
+		bt := tx.Bucket(bucketSemanticTopics)
+		bt.Put([]byte("fantasma1"), []byte("true"))
+		bt.Put([]byte("fantasma2"), []byte("true"))
+		return nil
+	})
 
 	// No momento o manager tem os validos E os fantasmas no bucket de topicos
 	var countBefore int

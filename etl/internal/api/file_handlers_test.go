@@ -303,8 +303,13 @@ func TestHandleUpload(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("Upload Image: esperado 200, obteve %d", w.Code)
 		}
-		if _, err := os.Stat(filepath.Join(tmpDir, "attachments", "test.jpg")); err != nil {
-			t.Error("Arquivo de imagem não foi salvo em attachments")
+
+		var resp map[string]string
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		uploadedName := resp["filename"]
+
+		if _, err := os.Stat(filepath.Join(tmpDir, "attachments", uploadedName)); err != nil {
+			t.Errorf("Arquivo de imagem %s não foi salvo em attachments", uploadedName)
 		}
 	})
 

@@ -381,7 +381,13 @@ const TiptapEditor = ({
       const fm = frontmatterRef.current;
       const finalContent = fm.trim() ? `---\n${fm}\n---\n${content}` : content;
 
-      await onSave(finalContent, true);
+      const saveSuccess = await onSave(finalContent, true);
+      if (saveSuccess === false) {
+        // Se falhou ao salvar (ex: já estava salvando), não prossegue com renomeio agora
+        // para evitar inconsistência entre o que está no editor e o que será renomeado
+        console.warn("Save pending or failed, delaying rename...");
+        return;
+      }
 
       if (onRename) {
         const success = await onRename(fileName, newNameWithExt, finalContent);
@@ -444,7 +450,7 @@ const TiptapEditor = ({
   }
 
   return (
-    <div className="editor-root bg-zinc-950 flex flex-col h-full fixed inset-0 z-[100] animate-in fade-in">
+    <div className="editor-root bg-zinc-950 flex flex-col h-full fixed inset-0 z-[2000] animate-in fade-in">
       <EditorHeader
         fileName={fileName}
         newFileName={newFileName}
@@ -460,7 +466,7 @@ const TiptapEditor = ({
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-10 md:px-20 lg:px-[15%] py-10 custom-scrollbar relative editor-main">
         {/* Frontmatter Editor */}
-        <div className="max-w-2xl mx-auto mb-8">
+        <div className="max-w-2xl mx-auto mb-8 relative z-50">
           <button
             onClick={() => setShowFrontmatter(!showFrontmatter)}
             className="flex items-center gap-2 text-xs font-mono text-zinc-500 hover:text-sky-400 transition-colors"

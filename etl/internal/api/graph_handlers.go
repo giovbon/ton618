@@ -19,6 +19,7 @@ import (
 	"etl/internal/clustering"
 	"etl/internal/events"
 	"etl/internal/ingest"
+	"etl/internal/search"
 
 	"github.com/blevesearch/bleve/v2"
 )
@@ -589,17 +590,19 @@ func (ctx *HandlerContext) HandleRefactorSemanticLinks(w http.ResponseWriter, r 
 			modified = true
 		}
 
-		if modified {
+	if modified {
 			if err := os.WriteFile(path, []byte(newContent), info.Mode()); err == nil {
 				count++
 				relPath, _ := filepath.Rel(ctx.Cfg.DocsDir, path)
-				if ctx.Coordinator != nil {
-					ctx.Coordinator.Push(relPath, ingest.JobFileUpdate, false)
-				}
+				search.InvalidateFile(relPath)
 			}
 		}
 		return nil
 	})
+
+	if count > 0 && ctx.Coordinator != nil {
+		ctx.Coordinator.Push("global", ingest.JobFullSync, false)
+	}
 
 	if err != nil {
 		http.Error(w, "Erro ao processar arquivos: "+err.Error(), http.StatusInternalServerError)

@@ -113,7 +113,13 @@ func StartWatcher(ctx context.Context, cfg *config.AppConfig, appState *AppState
 			}
 			// Qualquer evento de arquivo dispara sync (Create, Write, Remove, Rename)
 			if coordinator != nil {
-				coordinator.Push("global", JobFullSync, false)
+				// Se for um arquivo específico, tenta passar o caminho
+				relPath, err := filepath.Rel(cfg.DocsDir, event.Name)
+				if err == nil && !strings.Contains(relPath, "..") {
+					coordinator.Push(relPath, JobFileUpdate, false)
+				} else {
+					coordinator.Push("global", JobFullSync, false)
+				}
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
@@ -196,17 +202,19 @@ func getLatestWriteTime(baseDir string) time.Time {
 	return latest
 }
 
-func RunSync(cfg *config.AppConfig, forceScanIndex bool, mode string, appState *AppState) {
+func RunSync(cfg *config.AppConfig, forceScanIndex bool, mode string, appState *AppState, targetFile ...string) {
 	syncMu.Lock()
 	// Liberamos o lock logo após a varredura para permitir que a API de exclusão/renomeação
 	// funcione enquanto o motor semântico (lento) está rodando.
 
 	// Realiza limpeza de registros órfãos (arquivos deletados manualmente)
-	GlobalVacuum(cfg, appState)
+	if len(targetFile) == 0 {
+		GlobalVacuum(cfg, appState)
+	}
 	// Limpeza de pacotes agora é manual via exclusão da nota (cascata)
 	events.GetHub().Broadcast("sync:started", map[string]string{"mode": mode})
 
-	docs, deletedFiles, validIdsMap := ProcessDocs(cfg, forceScanIndex, appState)
+	docs, deletedFiles, validIdsMap := ProcessDocs(cfg, forceScanIndex, appState, targetFile...)
 	syncMu.Unlock() // LIBERADO: Agora a API pode excluir arquivos enquanto o RunSync termina.
 
 	if len(deletedFiles) > 0 {
@@ -318,7 +326,7 @@ func UpdateStateAfterOCR(absPath, relPath string, docs []models.Document, appSta
 	appState.SetFileTags(relPath, docs[0].Tags)
 }
 
-func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]models.Document, []string, map[string][]string) {
+func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState, targetFile ...string) ([]models.Document, []string, map[string][]string) {
 	var deltaDocs []models.Document
 	var mu sync.Mutex
 	seenFiles := make(map[string]bool)
@@ -341,6 +349,22 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 	}
 
 	sem := make(chan struct{}, numWorkers)
+
+	// Se temos um arquivo alvo, processamos apenas ele
+	if len(targetFile) > 0 && targetFile[0] != "global" && targetFile[0] != "" {
+		var deletedFiles []string
+		for _, f := range targetFile {
+			absPath := filepath.Join(cfg.DocsDir, f)
+			if info, err := os.Stat(absPath); err == nil {
+				wg.Add(1)
+				go processFile(absPath, f, info, cfg, force, appState, &wg, sem, &mu, &deltaDocs, &validIdsMu, validIdsMap, &seenFilesMu, seenFiles)
+			} else if os.IsNotExist(err) {
+				deletedFiles = append(deletedFiles, absPath)
+			}
+		}
+		wg.Wait()
+		return deltaDocs, deletedFiles, validIdsMap
+	}
 
 	log.Printf("[Sync] Sincronização paralela iniciada com %d workers.\n", numWorkers)
 
@@ -398,89 +422,8 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 			return nil
 		}
 
-		seenFilesMu.Lock()
-		seenFiles[path] = true
-		seenFilesMu.Unlock()
-
-		modTime := info.ModTime()
-		lastMod, exists := appState.GetFileMod(path)
-		relPath, _ := filepath.Rel(cfg.DocsDir, path)
-
-		if isImage && exists && !modTime.After(lastMod) && appState.HasTags(relPath) {
-			id := semantic.HashFunc("img-" + relPath)
-			if _, hashExists := appState.GetHash(id); hashExists {
-				validIdsMu.Lock()
-				validIdsMap[relPath] = append(validIdsMap[relPath], id)
-				validIdsMu.Unlock()
-				return nil
-			}
-		}
-
-		if force || !exists || modTime.After(lastMod) || !appState.HasTags(relPath) || appState.GetFileMetadata(relPath) == nil {
-			wg.Add(1)
-			go func(p, f string, mt time.Time) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("[ERRO CRÍTICO] Panic detectado ao processar %s: %v\nStack:\n%s\n", f, r, debug.Stack())
-					}
-					<-sem
-				}()
-
-				var docs []models.Document
-				var links []string
-				var semanticLinks []string
-				var metadata map[string]interface{}
-				var tags []string
-				if isMD {
-					docs, links, semanticLinks, metadata, tags = ProcessMarkdown(p, f, mt, appState)
-				} else if isPDF {
-					docs = ProcessPDF(p, f, mt, appState)
-					tags = appState.GetFileTags(f)
-				} else if isImage {
-					docs = ProcessImage(p, f, mt, appState)
-					tags = appState.GetFileTags(f)
-				}
-
-				if tags == nil {
-					tags = []string{}
-				}
-				appState.SetFileTags(f, tags)
-
-				if len(links) > 0 {
-					appState.SetFileLinks(f, links)
-				} else if isMD {
-					appState.DeleteFileLinks(f)
-				}
-
-				if len(semanticLinks) > 0 {
-					appState.SetFileSemanticLinks(f, semanticLinks)
-				} else if isMD {
-					appState.DeleteFileSemanticLinks(f)
-				}
-
-				if metadata == nil {
-					metadata = make(map[string]interface{})
-				}
-				appState.SetFileMetadata(f, metadata)
-
-				if len(docs) > 0 {
-					mu.Lock()
-					deltaDocs = append(deltaDocs, docs...)
-					mu.Unlock()
-
-					validIdsMu.Lock()
-					ids := make([]string, 0, len(docs))
-					for _, d := range docs {
-						ids = append(ids, d.ID)
-					}
-					validIdsMap[f] = ids
-					validIdsMu.Unlock()
-				}
-				appState.SetFileMod(p, mt)
-			}(path, relPath, modTime)
-		}
+		wg.Add(1)
+		go processFile(path, rel, info, cfg, force, appState, &wg, sem, &mu, &deltaDocs, &validIdsMu, validIdsMap, &seenFilesMu, seenFiles)
 		return nil
 	})
 
@@ -502,6 +445,112 @@ func ProcessDocs(cfg *config.AppConfig, force bool, appState *AppState) ([]model
 	}
 
 	return deltaDocs, deletedFiles, validIdsMap
+}
+
+func processFile(path, relPath string, info fs.FileInfo, cfg *config.AppConfig, force bool, appState *AppState, wg *sync.WaitGroup, sem chan struct{}, mu *sync.Mutex, deltaDocs *[]models.Document, validIdsMu *sync.Mutex, validIdsMap map[string][]string, seenFilesMu *sync.Mutex, seenFiles map[string]bool) {
+	defer wg.Done()
+
+	seenFilesMu.Lock()
+	seenFiles[path] = true
+	seenFilesMu.Unlock()
+
+	modTime := info.ModTime()
+	lastMod, exists := appState.GetFileMod(path)
+
+	ext := strings.ToLower(filepath.Ext(path))
+	isMD := false
+	for _, e := range models.ExtMarkdown {
+		if e == ext {
+			isMD = true
+			break
+		}
+	}
+	isPDF := false
+	for _, e := range models.ExtPDF {
+		if e == ext {
+			isPDF = true
+			break
+		}
+	}
+	isImage := false
+	for _, e := range models.ExtImage {
+		if e == ext {
+			isImage = true
+			break
+		}
+	}
+
+	if isImage && exists && !modTime.After(lastMod) && appState.HasTags(relPath) {
+		id := semantic.HashFunc("img-" + relPath)
+		if _, hashExists := appState.GetHash(id); hashExists {
+			validIdsMu.Lock()
+			validIdsMap[relPath] = append(validIdsMap[relPath], id)
+			validIdsMu.Unlock()
+			return
+		}
+	}
+
+	if force || !exists || modTime.After(lastMod) || !appState.HasTags(relPath) || appState.GetFileMetadata(relPath) == nil {
+		sem <- struct{}{}
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[ERRO CRÍTICO] Panic detectado ao processar %s: %v\nStack:\n%s\n", relPath, r, debug.Stack())
+			}
+			<-sem
+		}()
+
+		var docs []models.Document
+		var links []string
+		var semanticLinks []string
+		var metadata map[string]interface{}
+		var tags []string
+		if isMD {
+			docs, links, semanticLinks, metadata, tags = ProcessMarkdown(path, relPath, modTime, appState)
+		} else if isPDF {
+			docs = ProcessPDF(path, relPath, modTime, appState)
+			tags = appState.GetFileTags(relPath)
+		} else if isImage {
+			docs = ProcessImage(path, relPath, modTime, appState)
+			tags = appState.GetFileTags(relPath)
+		}
+
+		if tags == nil {
+			tags = []string{}
+		}
+		appState.SetFileTags(relPath, tags)
+
+		if len(links) > 0 {
+			appState.SetFileLinks(relPath, links)
+		} else if isMD {
+			appState.DeleteFileLinks(relPath)
+		}
+
+		if len(semanticLinks) > 0 {
+			appState.SetFileSemanticLinks(relPath, semanticLinks)
+		} else if isMD {
+			appState.DeleteFileSemanticLinks(relPath)
+		}
+
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		appState.SetFileMetadata(relPath, metadata)
+
+		if len(docs) > 0 {
+			mu.Lock()
+			*deltaDocs = append(*deltaDocs, docs...)
+			mu.Unlock()
+
+			validIdsMu.Lock()
+			ids := make([]string, 0, len(docs))
+			for _, d := range docs {
+				ids = append(ids, d.ID)
+			}
+			validIdsMap[relPath] = ids
+			validIdsMu.Unlock()
+		}
+		appState.SetFileMod(path, modTime)
+	}
 }
 
 func SendToEngines(cfg *config.AppConfig, bleveDocs []models.Document, vectorDocs []models.Document, appState *AppState) {

@@ -46,12 +46,6 @@ func (ctx *HandlerContext) HandleRename(w http.ResponseWriter, r *http.Request) 
 	fromPath := filepath.Join(ctx.Cfg.DocsDir, fromRel)
 	toPath := filepath.Join(ctx.Cfg.DocsDir, toRel)
 
-	content, err := os.ReadFile(fromPath)
-	if err != nil {
-		http.Error(w, "Arquivo original não encontrado", http.StatusNotFound)
-		return
-	}
-
 	if fromRel != toRel {
 		if _, err := os.Stat(toPath); err == nil {
 			http.Error(w, "Já existe um arquivo com este nome", http.StatusConflict)
@@ -63,21 +57,33 @@ func (ctx *HandlerContext) HandleRename(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Erro ao criar diretório destino", http.StatusInternalServerError)
 		return
 	}
-	if err := os.WriteFile(toPath, content, 0644); err != nil {
-		http.Error(w, "Erro ao criar arquivo destino", http.StatusInternalServerError)
-		return
+
+	// Renomeio Atômico (se possível)
+	renameErr := os.Rename(fromPath, toPath)
+	if renameErr != nil {
+		// Fallback para Copiar + Deletar (cross-device ou outros erros)
+		content, err := os.ReadFile(fromPath)
+		if err != nil {
+			http.Error(w, "Arquivo original não encontrado", http.StatusNotFound)
+			return
+		}
+		if err := os.WriteFile(toPath, content, 0644); err != nil {
+			http.Error(w, "Erro ao criar arquivo destino", http.StatusInternalServerError)
+			return
+		}
+		os.Remove(fromPath)
 	}
 
-	// Sincronização Síncrona do Índice (Deleção do antigo)
-	ctx.Coordinator.Lock() // <--- TRAVA O VIGILANTE
-	defer ctx.Coordinator.Unlock()
+	// Sincronização do Índice e Estado
+	if ctx.Coordinator != nil {
+		ctx.Coordinator.Lock()
+		defer ctx.Coordinator.Unlock()
+	}
 
-	os.Remove(fromPath)
 	search.InvalidateFile(fromRel)
 	search.InvalidateFile(toRel)
 	slog.Info("Note renamed", "from", fromRel, "to", toRel)
 
-	// Bug 2 Fix: coletar e limpar estado do arquivo ANTIGO antes de deletar do Bleve
 	deletedIDs := ingest.CollectBleveIDsForFile(ctx.Cfg, fromRel)
 	ingest.DeleteFileFromBleve(ctx.Cfg, fromRel)
 	ctx.State.DeleteVectorHash(fromRel)
@@ -223,8 +229,10 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		// Sincronizar exclusão nos motores de busca antes de responder 200 OK
 		slog.Info("Iniciando exclusão síncrona", "tag", "API", "file", relPath)
 
-		ctx.Coordinator.Lock() // <--- TRAVA O VIGILANTE
-		defer ctx.Coordinator.Unlock()
+		if ctx.Coordinator != nil {
+			ctx.Coordinator.Lock() // <--- TRAVA O VIGILANTE
+			defer ctx.Coordinator.Unlock()
+		}
 
 		deletedIDs := ingest.CollectBleveIDsForFile(ctx.Cfg, relPath)
 		slog.Info("Identified Bleve fragments", "count", len(deletedIDs), "file", relPath)

@@ -78,6 +78,9 @@ function AppContent() {
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [isManualMapOpen, setIsManualMapOpen] = useState(false);
+  const [mapToReopen, setMapToReopen] = useState<"knowledge" | "manual" | null>(
+    null,
+  );
 
   // 2. UI Hook
   const { state: uiState, actions: uiActions } = useAppUI();
@@ -253,7 +256,15 @@ function AppContent() {
   const handleOpenWikiLink = useCallback(
     async (filename: string) => {
       console.log("Abrindo nota do mapa:", filename);
-      if (isManualMapOpen) setIsManualMapOpen(false);
+      
+      // Armazenamos qual mapa estava aberto para restaurar depois
+      if (uiState.isMapOpen) {
+        setMapToReopen("knowledge");
+        uiActions.setIsMapOpen(false);
+      } else if (isManualMapOpen) {
+        setMapToReopen("manual");
+        setIsManualMapOpen(false);
+      }
 
       let queryName = filename;
       if (!queryName.split('/').pop()?.includes('.')) {
@@ -279,7 +290,7 @@ function AppContent() {
         console.error("Erro ao abrir WikiLink:", err);
       }
     },
-    [fetchWithAuth, isManualMapOpen],
+    [fetchWithAuth, isManualMapOpen, uiState.isMapOpen, uiActions, setIsManualMapOpen],
   );
 
   useEffect(() => {
@@ -318,7 +329,7 @@ function AppContent() {
       <div className="min-h-screen w-full bg-zinc-950 text-zinc-300 font-sans flex flex-col">
         <Suspense
           fallback={
-            <div className="fixed inset-0 z-[110] bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="fixed inset-0 z-[2100] bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center">
               <div className="w-12 h-12 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
             </div>
           }
@@ -862,7 +873,7 @@ function AppContent() {
       {editingFile && (
         <Suspense
           fallback={
-            <div className="fixed inset-0 z-[110] bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="fixed inset-0 z-[2100] bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center">
               <div className="w-12 h-12 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
             </div>
           }
@@ -877,6 +888,12 @@ function AppContent() {
             onClose={() => {
               uiActions.setHighlightedFile(editingFile.name);
               setEditingFile(null);
+              
+              // Restaura o mapa que estava aberto
+              if (mapToReopen === "knowledge") uiActions.setIsMapOpen(true);
+              if (mapToReopen === "manual") setIsManualMapOpen(true);
+              setMapToReopen(null);
+
               setTimeout(() => uiActions.setHighlightedFile(null), 3000);
             }}
             onSave={(content, isAuto) =>

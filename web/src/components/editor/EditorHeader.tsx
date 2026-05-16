@@ -110,7 +110,7 @@ export const EditorHeader = ({
   };
 
   return (
-    <header className="flex items-center justify-between gap-2 px-3 py-2 sm:p-2.5 border-b border-zinc-700/60 bg-zinc-900 relative z-20">
+    <header className="flex items-center justify-between gap-2 px-3 py-2 sm:p-2.5 border-b border-zinc-700/60 bg-zinc-900 relative z-[60]">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {renderIcon()}
 

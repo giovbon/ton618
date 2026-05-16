@@ -49,12 +49,12 @@ func NewSyncCoordinator(cfg *config.AppConfig, state *AppState) *SyncCoordinator
 }
 
 func (sc *SyncCoordinator) defaultProcessJob(job IndexJob) {
-	if job.Type == JobFullSync {
+	if job.Type == JobFullSync || job.Path == "global" {
 		log.Printf("[Coordinator] Executando Sincronização Global (Force: %v)\n", job.Force)
 		RunSync(sc.cfg, job.Force, "auto", sc.state)
 	} else {
 		log.Printf("[Coordinator] Processando atualização de arquivo: %s\n", job.Path)
-		RunSync(sc.cfg, job.Force, "event", sc.state)
+		RunSync(sc.cfg, job.Force, "event", sc.state, job.Path)
 	}
 }
 
@@ -88,16 +88,32 @@ func (sc *SyncCoordinator) Push(path string, jobType JobType, force bool) {
 		timer.Stop()
 	}
 
+	// Se for uma sincronização global, cancela todos os timers específicos pendentes
+	// para evitar redundância (o global vai processar tudo de qualquer forma)
+	if path == "global" || jobType == JobFullSync {
+		for p, t := range sc.pending {
+			if p != "global" {
+				t.Stop()
+				delete(sc.pending, p)
+			}
+		}
+	}
+
 	// Agenda a execução para daqui a 2 segundos
 	sc.pending[path] = time.AfterFunc(2*time.Second, func() {
 		sc.pmu.Lock()
 		delete(sc.pending, path)
 		sc.pmu.Unlock()
 
-		sc.queue <- IndexJob{
+		// Se a fila estiver cheia, não bloqueia
+		select {
+		case sc.queue <- IndexJob{
 			Type:  jobType,
 			Path:  path,
 			Force: force,
+		}:
+		default:
+			log.Printf("[Coordinator] Fila de sincronização cheia, descartando job: %s\n", path)
 		}
 	})
 }
