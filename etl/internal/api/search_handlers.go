@@ -11,7 +11,6 @@ import (
 	"etl/internal/ingest"
 	"etl/internal/models"
 	"etl/internal/search"
-	"etl/internal/utils"
 )
 
 // HandleSearch recebe a query do Frontend, autentica e manda pro backend motor de busca local.
@@ -96,22 +95,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(searchResult)
 }
 
-func (ctx *HandlerContext) HandleTrack(w http.ResponseWriter, r *http.Request) {
-	filename := r.URL.Query().Get("name")
-	if filename == "" {
-		http.Error(w, "Nome do arquivo é obrigatório", http.StatusBadRequest)
-		return
-	}
 
-	utils.SafeGo(func() {
-		ctx.State.IncrementPopularity(filename)
-		if ctx.State.GetPopularity(filename)%10 == 1 {
-			ctx.State.Save(ctx.Cfg)
-		}
-	})
-
-	w.WriteHeader(http.StatusNoContent)
-}
 
 func PostProcessSearchHits(hits []models.SearchHit, queryTerms []string, rawQuery string, isCompact bool, state *ingest.AppState) []models.SearchHit {
 	filteredHits := []models.SearchHit{}

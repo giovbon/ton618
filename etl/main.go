@@ -74,7 +74,6 @@ func main() {
 	mux.HandleFunc("/api/search", apiCtx.HandleSearch)
 	mux.HandleFunc("/api/sync", apiCtx.HandleManualSync)
 	mux.HandleFunc("/api/file", apiCtx.HandleFile)
-	mux.HandleFunc("/api/track", apiCtx.HandleTrack)
 	mux.HandleFunc("/api/upload", apiCtx.HandleUpload)
 	mux.HandleFunc("/api/weights", apiCtx.HandleWeights)
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +99,7 @@ func main() {
 	mux.HandleFunc("/api/graph/reindex", apiCtx.HandleReindexVectors)
 	mux.HandleFunc("/api/graph/status", apiCtx.HandleKnowledgeMapStatus)
 	mux.HandleFunc("/api/graph/query-point", apiCtx.HandleGraphQueryPoint)
-	mux.HandleFunc("/api/graph/semantic-topics", apiCtx.HandleSemanticTopics)
-	mux.HandleFunc("/api/graph/manual-map", apiCtx.HandleManualSemanticMap)
-	mux.HandleFunc("/api/graph/refactor-links", apiCtx.HandleRefactorSemanticLinks)
+
 	mux.HandleFunc("/api/bundle", apiCtx.HandleBundleUpload)
 	mux.HandleFunc("/api/backup/download", apiCtx.HandleDownloadBackup)
 	mux.HandleFunc("/api/backup/size", apiCtx.HandleGetBackupSize)

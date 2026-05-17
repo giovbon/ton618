@@ -26,15 +26,6 @@ func (s *AppState) GetPopularity(filename string) int {
 	return s.popularity[filename]
 }
 
-func (s *AppState) GetAllPopularity() map[string]int {
-	s.popularityMu.RLock()
-	defer s.popularityMu.RUnlock()
-	cp := make(map[string]int, len(s.popularity))
-	for k, v := range s.popularity {
-		cp[k] = v
-	}
-	return cp
-}
 
 // DeletePopularity remove a entrada de popularidade de um arquivo.
 func (s *AppState) DeletePopularity(filename string) {

@@ -21,11 +21,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { CustomImage } from "./editor/ImageExtension";
 
-import {
-  LinksEditor,
-  parseLinksFromFrontmatter,
-  setLinksInFrontmatter,
-} from "./LinksEditor";
+
 
 const cleanMarkdown = (content: string) => {
   let c = content.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
@@ -90,12 +86,6 @@ const TiptapEditor = ({
   const [showFrontmatter, setShowFrontmatter] = useState(false);
   const frontmatterRef = useRef(frontmatter);
 
-  // Links extraídos do frontmatter (fonte primária de @[])
-  const [links, setLinks] = useState<string[]>(() =>
-    parseLinksFromFrontmatter(frontmatter),
-  );
-  const linksRef = useRef(links);
-
   const [isMobile, setIsMobile] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
 
@@ -114,6 +104,7 @@ const TiptapEditor = ({
   }, []);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const cleanInitialContent = useRef(() => {
     const match = initialContent.match(FRONTMATTER_REGEX);
@@ -126,8 +117,6 @@ const TiptapEditor = ({
 
   // WikiLink Notes list for suggestions
   const notesRef = useRef<string[]>([]);
-  // State para as sugestões do LinksEditor (populado via API)
-  const [semanticSuggestions, setSemanticSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     fetchWithAuth("/api/notes")
@@ -138,15 +127,6 @@ const TiptapEditor = ({
             const clean = n.split("/").pop() || n;
             return clean.replace(/\.md$/, "");
           });
-        }
-      })
-      .catch(console.error);
-
-    fetchWithAuth("/api/graph/semantic-topics")
-      .then((res) => (res?.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.topics) {
-          setSemanticSuggestions(data.topics);
         }
       })
       .catch(console.error);
@@ -265,17 +245,24 @@ const TiptapEditor = ({
 
     try {
       setEditorStatus("saving");
-      const res = await fetchWithAuth("/api/upload", {
+      const res = await fetchWithAuth("/api/upload?editor=true", {
         method: "POST",
         body: formData,
       });
 
       if (res?.ok) {
         const data = await res.json();
-        // data.filename vem do backend já slugificado e com timestamp prefix
         const imageUrl = `/api/file?name=${encodeURIComponent(`attachments/${data.filename}`)}`;
         
-        editor.chain().focus().setImage({ src: imageUrl, alt: data.filename }).run();
+        let contentToInsert = `<img src="${imageUrl}" alt="${data.filename}" />`;
+        if (data.ocr_text) {
+          contentToInsert += `<p><em>${data.ocr_text.trim().replace(/\n/g, '<br>')}</em></p>`;
+        } else {
+          contentToInsert += `<p></p>`;
+        }
+        
+        editor.chain().focus().insertContent(contentToInsert).run();
+        
         setEditorStatus("saved");
       } else {
         alert("Erro ao fazer upload da imagem.");
@@ -288,9 +275,44 @@ const TiptapEditor = ({
     }
   }, [editor, fetchWithAuth]);
 
+  const handlePdfUpload = useCallback(async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      setEditorStatus("saving");
+      const res = await fetchWithAuth("/api/upload?editor=true", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res?.ok) {
+        const data = await res.json();
+        const pdfUrl = `/api/file?name=${encodeURIComponent(`pdfs/${data.filename}`)}`;
+        
+        editor.chain().focus().insertContent(`\n\n[📄 PDF: ${file.name}](${pdfUrl})\n\n`).run();
+        setEditorStatus("saved");
+      } else {
+        alert("Erro ao fazer upload do PDF.");
+      }
+    } catch (err) {
+      console.error("PDF upload error:", err);
+      alert("Erro de conexão no upload do PDF.");
+    } finally {
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  }, [editor, fetchWithAuth]);
+
   useEffect(() => {
     const handleRequestImage = () => {
       imageInputRef.current?.click();
+    };
+
+    const handleRequestPdf = () => {
+      pdfInputRef.current?.click();
     };
 
     const handleDeleteFileRequest = (e: any) => {
@@ -298,9 +320,11 @@ const TiptapEditor = ({
     };
 
     window.addEventListener("tiptap:request-image", handleRequestImage);
+    window.addEventListener("tiptap:request-pdf", handleRequestPdf);
     window.addEventListener("tiptap:delete-file", handleDeleteFileRequest);
     return () => {
       window.removeEventListener("tiptap:request-image", handleRequestImage);
+      window.removeEventListener("tiptap:request-pdf", handleRequestPdf);
       window.removeEventListener("tiptap:delete-file", handleDeleteFileRequest);
     };
   }, [editor]);
@@ -404,10 +428,6 @@ const TiptapEditor = ({
     const val = e.target.value;
     setFrontmatter(val);
     frontmatterRef.current = val;
-    // Re-sincroniza links quando o frontmatter é editado manualmente
-    const parsed = parseLinksFromFrontmatter(val);
-    setLinks(parsed);
-    linksRef.current = parsed;
     setEditorStatus("dirty");
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
@@ -415,28 +435,6 @@ const TiptapEditor = ({
       let content = cleanMarkdown(editor.storage.markdown.getMarkdown());
       const finalContent = val.trim()
         ? `---\n${val}\n---\n${content}`
-        : content;
-      onSaveRef
-        .current(finalContent, true)
-        .then(() => setEditorStatus("saved"))
-        .catch(() => setEditorStatus("dirty"));
-    }, 1000);
-  };
-
-  // Sincroniza links do componente visual de volta para o frontmatter
-  const handleLinksChange = (newLinks: string[]) => {
-    setLinks(newLinks);
-    linksRef.current = newLinks;
-    const newFm = setLinksInFrontmatter(frontmatterRef.current, newLinks);
-    setFrontmatter(newFm);
-    frontmatterRef.current = newFm;
-    setEditorStatus("dirty");
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      setEditorStatus("saving");
-      let content = cleanMarkdown(editor.storage.markdown.getMarkdown());
-      const finalContent = newFm.trim()
-        ? `---\n${newFm}\n---\n${content}`
         : content;
       onSaveRef
         .current(finalContent, true)
@@ -461,7 +459,7 @@ const TiptapEditor = ({
         onClose={onClose}
         setShowDeleteConfirm={setShowDeleteConfirm}
         editorStatus={editorStatus}
-        tags={links}
+        tags={[]}
       />
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-10 md:px-20 lg:px-[15%] py-10 custom-scrollbar relative editor-main">
@@ -493,17 +491,10 @@ const TiptapEditor = ({
                 value={frontmatter}
                 onChange={handleFrontmatterChange}
                 placeholder={
-                  "title: Minha Nota\ntags:\n  - tag1\n  - tag2\nlinks:\n  - TopicoRelacionado"
+                  "title: Minha Nota\ntags:\n  - tag1\n  - tag2"
                 }
                 className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 font-mono text-xs text-zinc-300 focus:outline-none focus:border-sky-500/50 focus:bg-zinc-900 transition-all resize-y min-h-[120px] custom-scrollbar"
                 spellCheck={false}
-              />
-
-              {/* Links Editor — gerencia o campo "links" do frontmatter */}
-              <LinksEditor
-                links={links}
-                onLinksChange={handleLinksChange}
-                suggestions={semanticSuggestions}
               />
             </div>
           )}
@@ -925,6 +916,15 @@ const TiptapEditor = ({
           ref={imageInputRef}
           onChange={handleImageUpload}
           accept="image/*"
+          className="hidden"
+        />
+        
+        {/* Hidden PDF Input */}
+        <input
+          type="file"
+          ref={pdfInputRef}
+          onChange={handlePdfUpload}
+          accept=".pdf"
           className="hidden"
         />
       </main>

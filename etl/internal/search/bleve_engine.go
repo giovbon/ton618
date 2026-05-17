@@ -95,9 +95,9 @@ func buildMapping() (mapping.IndexMapping, error) {
 	secaoMapping.IncludeTermVectors = true
 	docMapping.AddFieldMappingsAt("secao", secaoMapping)
 
-	// Caminhos de arquivo (Keyword Analyzer para deleção exata e vacuum seguro)
+	// Caminhos de arquivo (Custom Lowercase Keyword Analyzer para busca case-insensitive, deleção exata e vacuum seguro)
 	pathMapping := bleve.NewTextFieldMapping()
-	pathMapping.Analyzer = "keyword"
+	pathMapping.Analyzer = "lowercase_keyword"
 	pathMapping.Store = true
 	docMapping.AddFieldMappingsAt("arquivo", pathMapping)
 
@@ -126,6 +126,16 @@ func buildMapping() (mapping.IndexMapping, error) {
 	indexMapping := bleve.NewIndexMapping()
 	indexMapping.DefaultMapping = docMapping
 	indexMapping.DefaultAnalyzer = pt.AnalyzerName
+
+	// Registrar o analyzer customizado para caminhos case-insensíveis
+	err := indexMapping.AddCustomAnalyzer("lowercase_keyword", map[string]interface{}{
+		"type":          "custom",
+		"tokenizer":     "single",
+		"token_filters": []interface{}{"to_lower"},
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return indexMapping, nil
 }

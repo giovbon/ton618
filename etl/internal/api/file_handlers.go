@@ -336,16 +336,46 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	isEditor := r.URL.Query().Get("editor") == "true"
+
 	if isImage {
 		relFilename := subDir + "/" + cleanName
-		utils.SafeGo(func() {
-			ctx.runOCRInBackground(destPath, relFilename)
-		})
+		if isEditor {
+			docs := ingest.ProcessImage(destPath, relFilename, time.Now(), ctx.State)
+			ocrText := ""
+			if len(docs) > 0 {
+				ocrText = docs[0].Texto
+				ingest.UpdateStateAfterOCR(destPath, relFilename, docs, ctx.State)
+			}
+			search.InvalidateFile(relFilename)
+			if ctx.Coordinator != nil {
+				ctx.Coordinator.Push(relFilename, ingest.JobFileUpdate, false)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":   "success",
+				"filename": cleanName,
+				"ocr_text": ocrText,
+			})
+			return
+		} else {
+			utils.SafeGo(func() {
+				ctx.runOCRInBackground(destPath, relFilename)
+			})
+		}
 	} else if strings.HasSuffix(strings.ToLower(cleanName), ".pdf") {
 		relFilename := subDir + "/" + cleanName
-		utils.SafeGo(func() {
-			ctx.runPDFProcessingInBackground(destPath, relFilename)
-		})
+		if isEditor {
+			search.InvalidateFile(relFilename)
+			if ctx.Coordinator != nil {
+				ctx.Coordinator.Push(relFilename, ingest.JobFileUpdate, false)
+			}
+		} else {
+			utils.SafeGo(func() {
+				ctx.runPDFProcessingInBackground(destPath, relFilename)
+			})
+		}
 	}
 
 	search.InvalidateFile(subDir + "/" + cleanName)

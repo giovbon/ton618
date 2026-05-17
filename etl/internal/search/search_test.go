@@ -246,3 +246,48 @@ func TestExecuteSearch_PhraseExact(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteSearch_CaseInsensitiveCompact(t *testing.T) {
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "search_case_insensitive.bleve")
+
+	InitIndex(indexPath)
+	defer CloseIndex()
+
+	docData := map[string]interface{}{
+		"texto":   "budegueira",
+		"arquivo": "notes/Esperança.md",
+		"tipo":    "markdown",
+	}
+	IndexDocument("doc-esperanca", docData)
+
+	t.Run("Busca compacta com minúsculas e acentos deve encontrar", func(t *testing.T) {
+		res, err := ExecuteSearch(context.Background(), "esperança", true, 0, 10)
+		if err != nil {
+			t.Fatalf("Erro ao buscar: %v", err)
+		}
+		if res.Hits.Total.Value == 0 {
+			t.Fatal("Esperava encontrar 'notes/Esperança.md' ao buscar por 'esperança'")
+		}
+	})
+
+	t.Run("Busca compacta com maiúsculas e acentos deve encontrar", func(t *testing.T) {
+		res, err := ExecuteSearch(context.Background(), "Esperança", true, 0, 10)
+		if err != nil {
+			t.Fatalf("Erro ao buscar: %v", err)
+		}
+		if res.Hits.Total.Value == 0 {
+			t.Fatal("Esperava encontrar 'notes/Esperança.md' ao buscar por 'Esperança'")
+		}
+	})
+
+	t.Run("Busca compacta com prefixo minúsculo deve encontrar", func(t *testing.T) {
+		res, err := ExecuteSearch(context.Background(), "espera", true, 0, 10)
+		if err != nil {
+			t.Fatalf("Erro ao buscar: %v", err)
+		}
+		if res.Hits.Total.Value == 0 {
+			t.Fatal("Esperava encontrar 'notes/Esperança.md' ao buscar por 'espera'")
+		}
+	})
+}

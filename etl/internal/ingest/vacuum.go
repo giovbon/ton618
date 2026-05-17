@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/blevesearch/bleve/v2"
 
@@ -21,7 +22,7 @@ func VacuumOrphans(cfg *config.AppConfig, filename string, expectedIds []string)
 	for _, id := range expectedIds {
 		expected[id] = true
 	}
-	query := bleve.NewTermQuery(filename)
+	query := bleve.NewTermQuery(strings.ToLower(filename))
 	query.SetField("arquivo")
 	req := bleve.NewSearchRequest(query)
 	req.Size = 1000
@@ -110,7 +111,7 @@ func DeleteFileFromBleve(cfg *config.AppConfig, filename string) {
 	}
 
 	// Busca por termo exato no campo 'arquivo' (mapeado como keyword)
-	query := bleve.NewTermQuery(filename)
+	query := bleve.NewTermQuery(strings.ToLower(filename))
 	query.SetField("arquivo")
 	req := bleve.NewSearchRequest(query)
 	req.Size = 1000 // Aumentar se um único arquivo puder ter mais de 1000 fragmentos
@@ -144,7 +145,7 @@ func CollectBleveIDsForFile(cfg *config.AppConfig, filename string) []string {
 		return nil
 	}
 
-	query := bleve.NewTermQuery(filename)
+	query := bleve.NewTermQuery(strings.ToLower(filename))
 	query.SetField("arquivo")
 	req := bleve.NewSearchRequest(query)
 	req.Size = 1000

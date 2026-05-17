@@ -190,59 +190,7 @@ export const useFileOperations = ({
     [fetchWithAuth, addToast, setEditingFile],
   );
 
-  const handleFileUpload = useCallback(
-    async (e: any) => {
-      const mode = e.target.getAttribute("data-mode");
-      const file = e.target.files[0];
-      if (!file) return;
 
-      const name = file.name.toLowerCase();
-      const isPdf = name.endsWith(".pdf");
-      const isImage =
-        name.endsWith(".png") ||
-        name.endsWith(".jpg") ||
-        name.endsWith(".jpeg");
-
-      if (mode === "pdf" && !isPdf) {
-        window.alert(
-          "Este botão é exclusivo para PDFs. Para fotos ou imagens, use o botão ao lado (Imagem / Câmera).",
-        );
-        e.target.value = null;
-        return;
-      }
-      if (mode === "image" && !isImage) {
-        window.alert(
-          "Este botão é exclusivo para Imagens / Câmera. Para documentos PDF, use o botão de Upload PDF.",
-        );
-        e.target.value = null;
-        return;
-      }
-
-      setIsUploading(true);
-      const formData = new FormData();
-      formData.append("file", file);
-
-      try {
-        const res = await fetchWithAuth("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (res?.ok) {
-          handleManualSync();
-          e.target.value = null;
-        } else {
-          alert("Erro no upload.");
-        }
-      } catch (err) {
-        console.error("Erro no upload:", err);
-        alert("Erro de conexão ao enviar arquivo.");
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [fetchWithAuth, handleManualSync],
-  );
 
   const handleBundleUpload = useCallback(
     async (e: any) => {
@@ -396,7 +344,6 @@ export const useFileOperations = ({
         handleOpenDailyNote,
         handleRenameNote,
         handleCaptureLink,
-        handleFileUpload,
         handleBundleUpload,
         confirmDeletion,
         handleSaveFile,

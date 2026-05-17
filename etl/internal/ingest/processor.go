@@ -8,6 +8,7 @@ import (
 	"etl/internal/semantic"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -23,7 +24,6 @@ var (
 	headerRegex    = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
 	hashtagRegex   = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
 	wikilinkRegex  = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
-	semanticRegex  = regexp.MustCompile(`@\\?\[([^\]]+?)\\?\]`) // Aceita @[texto] e @\[texto\] com backslash opcional antes dos colchetes
 	mediaLinkRegex = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
 )
 
@@ -38,20 +38,7 @@ func stripHTML(s string) string {
 // Primeiro remove HTML (o serializador markdown envolve @[texto] em <span>),
 // depois aplica regex que aceita @[texto] e @\[texto\] com backslash opcional.
 func ExtractSemanticLinks(text string) []string {
-	cleanText := stripHTML(text)
-	cleanText = strings.ReplaceAll(cleanText, "\n", " ")
-	matches := semanticRegex.FindAllStringSubmatch(cleanText, -1)
-	var links []string
-	for _, m := range matches {
-		if len(m) > 1 {
-			target := strings.TrimSpace(m[1])
-			if target != "" {
-				target = strings.ReplaceAll(target, "\\", "")
-				links = append(links, strings.TrimSpace(target))
-			}
-		}
-	}
-	return links
+	return nil
 }
 
 func ReadFileWithRetry(path string, retries int) ([]byte, error) {
@@ -119,25 +106,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 						}
 					}
 				}
-				// Extrai links da chave "links" no frontmatter (fonte primária)
-				if lRaw, ok := fm["links"]; ok {
-					switch v := lRaw.(type) {
-					case []interface{}:
-						for _, l := range v {
-							if ls, ok := l.(string); ok {
-								link := strings.TrimSpace(ls)
-								if link != "" {
-									semanticLinks = append(semanticLinks, link)
-								}
-							}
-						}
-					case string:
-						link := strings.TrimSpace(v)
-						if link != "" {
-							semanticLinks = append(semanticLinks, link)
-						}
-					}
-				}
 			}
 
 			afterFrontmatter := endIdx + 4
@@ -192,14 +160,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 				links = append(links, target)
 			}
 		}
-	}
-
-	// Fallback: se não havia "links" no frontmatter, extrai do corpo (@[] inline)
-	if len(semanticLinks) == 0 {
-		semanticLinks = ExtractSemanticLinks(text)
-	}
-	if len(semanticLinks) > 0 {
-		log.Printf("[Sync] LINKS SEMANTICOS em %s: %v\n", filename, semanticLinks)
 	}
 
 	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)
@@ -352,8 +312,10 @@ func ProcessPDF(path, filename string, modTime time.Time, appState *AppState) []
 }
 
 func OCRImage(ctx_unused interface{}, path, key string) (string, error) {
+	slog.Info("[OCRImage] Lendo arquivo para processamento", "path", path)
 	fileData, err := os.ReadFile(path)
 	if err != nil {
+		slog.Error("[OCRImage] Erro ao ler arquivo no disco", "path", path, "error", err)
 		return "", err
 	}
 	base64Image := base64.StdEncoding.EncodeToString(fileData)
@@ -370,34 +332,54 @@ func OCRImage(ctx_unused interface{}, path, key string) (string, error) {
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
+	slog.Info("[OCRImage] Enviando requisição para Google Vision API...")
 	req, _ := http.NewRequest("POST", "https://vision.googleapis.com/v1/images:annotate?key="+key, bytes.NewBuffer(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		slog.Error("[OCRImage] Falha na conexão HTTP com Google Vision API", "error", err)
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	slog.Info("[OCRImage] Resposta recebida", "status", resp.Status)
 
 	var visionResp struct {
 		Responses []struct {
 			FullTextAnnotation struct {
 				Text string `json:"text"`
 			} `json:"fullTextAnnotation"`
+			Error struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+				Status  string `json:"status"`
+			} `json:"error"`
 		} `json:"responses"`
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&visionResp); err != nil {
+		slog.Error("[OCRImage] Erro ao decodificar JSON da resposta da API", "error", err)
 		return "", err
 	}
 
 	if len(visionResp.Responses) > 0 {
-		return visionResp.Responses[0].FullTextAnnotation.Text, nil
+		resp0 := visionResp.Responses[0]
+		if resp0.Error.Message != "" {
+			slog.Error("[OCRImage] Erro retornado pela API do Google Vision", "code", resp0.Error.Code, "message", resp0.Error.Message)
+			return "", fmt.Errorf("google vision api error: %s", resp0.Error.Message)
+		}
+		slog.Info("[OCRImage] Texto extraído com sucesso", "length", len(resp0.FullTextAnnotation.Text))
+		return resp0.FullTextAnnotation.Text, nil
 	}
+
+	slog.Warn("[OCRImage] Nenhuma resposta retornada do Google Vision API")
 	return "", nil
 }
 
 func ProcessImage(path, filename string, modTime time.Time, appState *AppState) []models.Document {
+	slog.Info("[ProcessImage] Iniciando processamento de imagem", "file", filename)
 	// Recuperar data de criação original (se existir)
 	creationTime, exists := appState.GetFileCreation(filename)
 	if !exists {
@@ -412,7 +394,11 @@ func ProcessImage(path, filename string, modTime time.Time, appState *AppState) 
 		res, err := OCRImage(nil, path, settings.GoogleVisionKey)
 		if err == nil {
 			text = res
+		} else {
+			slog.Error("[ProcessImage] Erro ao executar OCR", "file", filename, "error", err)
 		}
+	} else {
+		slog.Warn("[ProcessImage] GoogleVisionKey não está configurada nas configurações. Ignorando OCR.", "file", filename)
 	}
 
 	tags := appState.GetFileTags(filename)

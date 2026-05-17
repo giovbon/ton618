@@ -17,7 +17,6 @@ const Virtuoso = VirtuosoOriginal as any;
 import { CompactResultCard } from "./components/CompactResultCard";
 import { DataviewSearchView } from "./components/DataviewSearchView";
 import { KnowledgeMap } from "./components/KnowledgeMap";
-import { ManualSemanticMap } from "./components/ManualSemanticMap";
 import Login from "./components/Login";
 import { Logo } from "./components/Logo";
 import { CaptureLinkModal } from "./components/modals/CaptureLinkModal";
@@ -52,8 +51,6 @@ function AppContent() {
   const queryClient = useQueryClient();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const bundleInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Auth & Core State
@@ -77,10 +74,7 @@ function AppContent() {
   const [editingFile, setEditingFile] = useState<FileObject | null>(null);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-  const [isManualMapOpen, setIsManualMapOpen] = useState(false);
-  const [mapToReopen, setMapToReopen] = useState<"knowledge" | "manual" | null>(
-    null,
-  );
+  const [mapToReopen, setMapToReopen] = useState<"knowledge" | null>(null);
 
   // 2. UI Hook
   const { state: uiState, actions: uiActions } = useAppUI();
@@ -261,9 +255,6 @@ function AppContent() {
       if (uiState.isMapOpen) {
         setMapToReopen("knowledge");
         uiActions.setIsMapOpen(false);
-      } else if (isManualMapOpen) {
-        setMapToReopen("manual");
-        setIsManualMapOpen(false);
       }
 
       let queryName = filename;
@@ -290,7 +281,7 @@ function AppContent() {
         console.error("Erro ao abrir WikiLink:", err);
       }
     },
-    [fetchWithAuth, isManualMapOpen, uiState.isMapOpen, uiActions, setIsManualMapOpen],
+    [fetchWithAuth, uiState.isMapOpen, uiActions],
   );
 
   useEffect(() => {
@@ -301,15 +292,6 @@ function AppContent() {
     window.addEventListener("open-note", handleOpenNote);
     return () => window.removeEventListener("open-note", handleOpenNote);
   }, [handleOpenWikiLink]);
-
-  useEffect(() => {
-    const handleOpenTopic = (_e: Event) => {
-      setIsManualMapOpen(true);
-    };
-    window.addEventListener("open-semantic-topic", handleOpenTopic);
-    return () =>
-      window.removeEventListener("open-semantic-topic", handleOpenTopic);
-  }, []);
 
   useWikiNavigation(handleOpenWikiLink, !!auth);
 
@@ -464,44 +446,6 @@ function AppContent() {
                     />
                   </svg>
                 </button>
-
-                <button
-                  onClick={() => {
-                    setIsManualMapOpen(true);
-                  }}
-                  title="Mapa Estruturado"
-                  style={{ zIndex: 999, pointerEvents: 'auto' }}
-                  className="flex items-center justify-center w-12 h-12 sm:w-10 sm:h-10 rounded-xl transition-all duration-300 text-zinc-600 hover:text-violet-400 hover:bg-violet-500/10 group"
-                >
-                  <svg
-                    className="w-5 h-5 sm:w-5 sm:h-5 transform group-hover:scale-110 transition-transform duration-300"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      d="M12 2L2 7L12 12L22 7L12 2Z"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-violet-400"
-                    />
-                    <path
-                      d="M2 17L12 22L22 17"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-violet-500"
-                    />
-                    <path
-                      d="M2 12L12 17L22 12"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-violet-600"
-                    />
-                  </svg>
-                </button>
               </div>
 
               <TagAutocomplete
@@ -580,72 +524,7 @@ function AppContent() {
               )}
             </button>
 
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={fileOpsState.isUploading}
-              title="OCR de Imagem"
-              className={`flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl transition-all duration-300 border shadow-lg ${fileOpsState.isUploading ? "bg-zinc-800 border-zinc-700 text-zinc-500 cursor-wait" : "bg-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40 active:scale-95 shadow-emerald-500/5"}`}
-            >
-              <input
-                type="file"
-                ref={cameraInputRef}
-                onChange={fileOpsActions.handleFileUpload}
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                data-mode="image"
-                data-testid="camera-input"
-              />
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </button>
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={fileOpsState.isUploading}
-              title="Upload PDF"
-              className={`flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl transition-all duration-300 border shadow-lg ${fileOpsState.isUploading ? "bg-zinc-800 border-zinc-700 text-zinc-500 cursor-wait" : "bg-red-500/5 border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/40 active:scale-95 shadow-red-500/5"}`}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={fileOpsActions.handleFileUpload}
-                accept=".pdf"
-                className="hidden"
-                data-mode="pdf"
-                data-testid="pdf-input"
-              />
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                />
-              </svg>
-            </button>
 
             <button
               onClick={() => bundleInputRef.current?.click()}
@@ -862,14 +741,6 @@ function AppContent() {
         />
       )}
 
-      {isManualMapOpen && (
-        <ManualSemanticMap
-          auth={auth}
-          onOpenNote={handleOpenWikiLink}
-          onClose={() => setIsManualMapOpen(false)}
-        />
-      )}
-
       {editingFile && (
         <Suspense
           fallback={
@@ -891,7 +762,6 @@ function AppContent() {
               
               // Restaura o mapa que estava aberto
               if (mapToReopen === "knowledge") uiActions.setIsMapOpen(true);
-              if (mapToReopen === "manual") setIsManualMapOpen(true);
               setMapToReopen(null);
 
               setTimeout(() => uiActions.setHighlightedFile(null), 3000);
