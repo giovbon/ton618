@@ -28,24 +28,35 @@ func checkCredentials(r *http.Request, user, pass string) bool {
 	}
 
 	// 3. Tenta cookie (para navegações nativas após login via JS)
+	// O cookie contém apenas o base64 bruto de "user:pass" (sem prefixo "Basic ")
 	cookie, err := r.Cookie("ton_auth")
 	if err == nil {
-		raw := strings.TrimPrefix(cookie.Value, "Basic ")
+		val := cookie.Value
 		// Tenta decodificar direto
-		if decoded, decErr := base64.StdEncoding.DecodeString(raw); decErr == nil {
+		if decoded, decErr := base64.StdEncoding.DecodeString(val); decErr == nil {
 			parts := strings.SplitN(string(decoded), ":", 2)
 			if len(parts) == 2 && parts[0] == user && parts[1] == pass {
 				return true
 			}
 		}
-		// Se tiver % pode estar URL-encoded (encodeURIComponent no JS)
-		if strings.Contains(raw, "%") {
-			if unescaped, unErr := url.QueryUnescape(raw); unErr == nil {
+		// Se tiver % pode estar URL-encoded
+		if strings.Contains(val, "%") {
+			if unescaped, unErr := url.QueryUnescape(val); unErr == nil {
 				if decoded, decErr := base64.StdEncoding.DecodeString(unescaped); decErr == nil {
 					parts := strings.SplitN(string(decoded), ":", 2)
 					if len(parts) == 2 && parts[0] == user && parts[1] == pass {
 						return true
 					}
+				}
+			}
+		}
+		// Fallback: talvez tenha prefixo "Basic " legado
+		if strings.HasPrefix(val, "Basic ") {
+			stripped := strings.TrimPrefix(val, "Basic ")
+			if decoded, decErr := base64.StdEncoding.DecodeString(stripped); decErr == nil {
+				parts := strings.SplitN(string(decoded), ":", 2)
+				if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+					return true
 				}
 			}
 		}
