@@ -366,15 +366,9 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 		}
 	} else if strings.HasSuffix(strings.ToLower(cleanName), ".pdf") {
 		relFilename := subDir + "/" + cleanName
-		if isEditor {
-			search.InvalidateFile(relFilename)
-			if ctx.Coordinator != nil {
-				ctx.Coordinator.Push(relFilename, ingest.JobFileUpdate, false)
-			}
-		} else {
-			utils.SafeGo(func() {
-				ctx.runPDFProcessingInBackground(destPath, relFilename)
-			})
+		search.InvalidateFile(relFilename)
+		if ctx.Coordinator != nil {
+			ctx.Coordinator.Push(relFilename, ingest.JobFileUpdate, false)
 		}
 	}
 
@@ -421,53 +415,6 @@ func (ctx *HandlerContext) createOCRNote(imageRelPath, text string) {
 	sb.WriteString("tags: [imagem]\n") // Icone verde no frontend
 	sb.WriteString("---\n\n")
 	// Apenas o texto, sem título ou link para imagem deletada
-	sb.WriteString(text)
-
-	if err := os.WriteFile(notePath, []byte(sb.String()), 0644); err != nil {
-		slog.Error("Erro ao criar nota MD", "error", err)
-	} else if ctx.Coordinator != nil {
-		ctx.Coordinator.Push(noteName, ingest.JobFileUpdate, false)
-	}
-}
-
-func (ctx *HandlerContext) runPDFProcessingInBackground(pdfPath, relFilename string) {
-	slog.Info("Starting PDF background processing", "file", relFilename)
-
-	docs := ingest.ProcessPDF(pdfPath, relFilename, time.Now(), ctx.State)
-	if len(docs) > 0 {
-		// Não indexamos o PDF original, apenas a nota gerada
-		slog.Info("PDF processed, creating note", "file", relFilename)
-
-		// Unir o texto de todas as páginas para a nota principal
-		var fullText strings.Builder
-		for i, doc := range docs {
-			if i > 0 {
-				fullText.WriteString("\n\n---\n\n")
-			}
-			fullText.WriteString(doc.Texto)
-		}
-
-		ctx.createPDFNote(relFilename, fullText.String())
-	}
-	search.InvalidateFile(relFilename)
-}
-
-func (ctx *HandlerContext) createPDFNote(pdfRelPath, text string) {
-	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
-	os.MkdirAll(notesDir, 0755)
-
-	basename := filepath.Base(pdfRelPath)
-	cleanName := strings.TrimSuffix(basename, filepath.Ext(basename))
-	noteName := fmt.Sprintf("doc_%s_%s.md", time.Now().Format("20060102_150405"), cleanName)
-	notePath := filepath.Join(notesDir, noteName)
-
-	var sb strings.Builder
-	sb.WriteString("---\n")
-	sb.WriteString("tags: [pdf]\n")
-	sb.WriteString("---\n\n")
-	sb.WriteString(fmt.Sprintf("# PDF: %s\n\n", cleanName))
-	sb.WriteString(fmt.Sprintf("[📖 Abrir Documento PDF](/docs/%s)\n\n", pdfRelPath))
-	sb.WriteString("## Conteúdo Extraído\n\n")
 	sb.WriteString(text)
 
 	if err := os.WriteFile(notePath, []byte(sb.String()), 0644); err != nil {

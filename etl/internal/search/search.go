@@ -71,15 +71,106 @@ func buildStandardWordQuery(word string) query.Query {
 	return bleve.NewDisjunctionQuery(q1, q2, q3)
 }
 
-func buildCompactQuery(word string) query.Query {
-	q1 := bleve.NewWildcardQuery("*" + word + "*")
-	q1.SetField("arquivo")
-	q2 := bleve.NewWildcardQuery("*" + word + "*")
-	q2.SetField("secao")
-	q3 := bleve.NewTermQuery(word)
-	q3.SetField("tags")
-	return bleve.NewDisjunctionQuery(q1, q2, q3)
+func removeDiacritics(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		switch r {
+		case 'á', 'à', 'â', 'ã', 'ä':
+			sb.WriteRune('a')
+		case 'é', 'è', 'ê', 'ë':
+			sb.WriteRune('e')
+		case 'í', 'ì', 'î', 'ï':
+			sb.WriteRune('i')
+		case 'ó', 'ò', 'ô', 'õ', 'ö':
+			sb.WriteRune('o')
+		case 'ú', 'ù', 'û', 'ü':
+			sb.WriteRune('u')
+		case 'ç':
+			sb.WriteRune('c')
+		case 'ñ':
+			sb.WriteRune('n')
+		case 'Á', 'À', 'Â', 'Ã', 'Ä':
+			sb.WriteRune('a')
+		case 'É', 'È', 'Ê', 'Ë':
+			sb.WriteRune('e')
+		case 'Í', 'Ì', 'Î', 'Ï':
+			sb.WriteRune('i')
+		case 'Ó', 'Ò', 'Ô', 'Õ', 'Ö':
+			sb.WriteRune('o')
+		case 'Ú', 'Ù', 'Û', 'Ü':
+			sb.WriteRune('u')
+		case 'Ç':
+			sb.WriteRune('c')
+		case 'Ñ':
+			sb.WriteRune('n')
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
 }
+
+func buildCompactQuery(word string) query.Query {
+	cleanWord := strings.ToLower(word)
+	foldedWord := removeDiacritics(cleanWord)
+
+	var queries []query.Query
+
+	// Wildcard em arquivo
+	w1 := bleve.NewWildcardQuery("*" + cleanWord + "*")
+	w1.SetField("arquivo")
+	queries = append(queries, w1)
+
+	if foldedWord != cleanWord {
+		w2 := bleve.NewWildcardQuery("*" + foldedWord + "*")
+		w2.SetField("arquivo")
+		queries = append(queries, w2)
+	}
+
+	// Wildcard em secao
+	w3 := bleve.NewWildcardQuery("*" + cleanWord + "*")
+	w3.SetField("secao")
+	queries = append(queries, w3)
+
+	if foldedWord != cleanWord {
+		w4 := bleve.NewWildcardQuery("*" + foldedWord + "*")
+		w4.SetField("secao")
+		queries = append(queries, w4)
+	}
+
+	// Match queries para análise inteligente com analisador do campo
+	mq1 := bleve.NewMatchQuery(cleanWord)
+	mq1.SetField("arquivo")
+	queries = append(queries, mq1)
+
+	mq2 := bleve.NewMatchQuery(cleanWord)
+	mq2.SetField("secao")
+	queries = append(queries, mq2)
+
+	if foldedWord != cleanWord {
+		mq3 := bleve.NewMatchQuery(foldedWord)
+		mq3.SetField("arquivo")
+		queries = append(queries, mq3)
+
+		mq4 := bleve.NewMatchQuery(foldedWord)
+		mq4.SetField("secao")
+		queries = append(queries, mq4)
+	}
+
+	// Term em tags
+	t1 := bleve.NewTermQuery(cleanWord)
+	t1.SetField("tags")
+	queries = append(queries, t1)
+
+	if foldedWord != cleanWord {
+		t2 := bleve.NewTermQuery(foldedWord)
+		t2.SetField("tags")
+		queries = append(queries, t2)
+	}
+
+	return bleve.NewDisjunctionQuery(queries...)
+}
+
 
 func BuildBleveQuery(raw string, isCompact bool) query.Query {
 	if raw == "" || raw == "*" {

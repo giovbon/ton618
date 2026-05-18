@@ -10,6 +10,7 @@ import (
 	_ "github.com/blevesearch/bleve/v2/analysis/analyzer/keyword"
 	_ "github.com/blevesearch/bleve/v2/analysis/analyzer/simple"
 	_ "github.com/blevesearch/bleve/v2/analysis/analyzer/standard"
+	_ "github.com/blevesearch/bleve/v2/analysis/char/asciifolding"
 	"github.com/blevesearch/bleve/v2/analysis/lang/pt"
 	_ "github.com/blevesearch/bleve/v2/analysis/token/lowercase"
 	_ "github.com/blevesearch/bleve/v2/analysis/tokenizer/single"
@@ -127,9 +128,10 @@ func buildMapping() (mapping.IndexMapping, error) {
 	indexMapping.DefaultMapping = docMapping
 	indexMapping.DefaultAnalyzer = pt.AnalyzerName
 
-	// Registrar o analyzer customizado para caminhos case-insensíveis
+	// Registrar o analyzer customizado para caminhos case-insensíveis com folding de acentos
 	err := indexMapping.AddCustomAnalyzer("lowercase_keyword", map[string]interface{}{
 		"type":          "custom",
+		"char_filters":  []interface{}{"asciifolding"},
 		"tokenizer":     "single",
 		"token_filters": []interface{}{"to_lower"},
 	})

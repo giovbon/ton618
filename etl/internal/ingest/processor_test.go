@@ -29,20 +29,8 @@ func TestProcessPDF(t *testing.T) {
 	docs := ProcessPDF(pdfPath, "test.pdf", modTime, appState)
 
 	// 3. Validar resultados
-	if len(docs) == 0 {
-		t.Errorf("ProcessPDF não gerou nenhum documento para o PDF de teste")
-	}
-
-	for _, doc := range docs {
-		if doc.Tipo != "pdf" {
-			t.Errorf("Tipo esperado 'pdf', obteve %s", doc.Tipo)
-		}
-		if doc.Arquivo != "test.pdf" {
-			t.Errorf("Nome de arquivo esperado 'test.pdf', obteve %s", doc.Arquivo)
-		}
-		if doc.Pagina <= 0 {
-			t.Errorf("Número de página inválido: %d", doc.Pagina)
-		}
+	if len(docs) != 0 {
+		t.Errorf("Esperava 0 documentos (extração desativada), obteve %d", len(docs))
 	}
 }
 

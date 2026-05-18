@@ -290,4 +290,14 @@ func TestExecuteSearch_CaseInsensitiveCompact(t *testing.T) {
 			t.Fatal("Esperava encontrar 'notes/Esperança.md' ao buscar por 'espera'")
 		}
 	})
+
+	t.Run("Busca compacta com termo sem acento deve encontrar", func(t *testing.T) {
+		res, err := ExecuteSearch(context.Background(), "esperanca", true, 0, 10)
+		if err != nil {
+			t.Fatalf("Erro ao buscar: %v", err)
+		}
+		if res.Hits.Total.Value == 0 {
+			t.Fatal("Esperava encontrar 'notes/Esperança.md' ao buscar por 'esperanca'")
+		}
+	})
 }

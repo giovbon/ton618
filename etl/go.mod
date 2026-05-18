@@ -8,7 +8,6 @@ require (
 	github.com/blevesearch/bleve/v2 v2.5.7
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
-	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	go.etcd.io/bbolt v1.4.0
 	golang.org/x/time v0.12.0
 	gonum.org/v1/gonum v0.17.0

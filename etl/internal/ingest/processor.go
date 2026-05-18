@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledongthuc/pdf"
 	"gopkg.in/yaml.v3"
 )
 
@@ -252,63 +251,9 @@ func ProcessMarkdown(path, filename string, modTime time.Time, appState *AppStat
 	return docs, links, semanticLinks, metadata, fileTags
 }
 
-func ExtractPDFText(path string) ([]string, error) {
-	f, r, err := pdf.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var pages []string
-	totalPage := r.NumPage()
-	for i := 1; i <= totalPage; i++ {
-		p := r.Page(i)
-		if p.V.IsNull() {
-			continue
-		}
-		s, _ := p.GetPlainText(nil)
-		pages = append(pages, s)
-	}
-	return pages, nil
-}
-
+// ProcessPDF handles PDF indexing by returning nil as text extraction is disabled.
 func ProcessPDF(path, filename string, modTime time.Time, appState *AppState) []models.Document {
-	// Recuperar data de criação original (se existir)
-	creationTime, exists := appState.GetFileCreation(filename)
-	if !exists {
-		creationTime = modTime
-	}
-	creationStr := creationTime.UTC().Format(time.RFC3339)
-	timestampStr := modTime.UTC().Format(time.RFC3339)
-
-	pages, err := ExtractPDFText(path)
-	if err != nil {
-		log.Printf("Erro ao ler PDF %s: %v\n", path, err)
-		return nil
-	}
-
-	var docs []models.Document
-	for i, text := range pages {
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-
-		tags := appState.GetFileTags(filename)
-		docs = append(docs, models.Document{
-			ID:         semantic.HashFunc(fmt.Sprintf("%s-p%d", filename, i+1)),
-			Tipo:       "pdf",
-			Arquivo:    filename,
-			Secao:      fmt.Sprintf("Página %d", i+1),
-			Pagina:     i + 1,
-			Texto:      text,
-			Timestamp:  timestampStr,
-			Created:    creationStr,
-			Hash:       semantic.CalculateHash(fmt.Sprintf("page-%d", i+1), text, tags),
-			VectorHash: semantic.CalculateVectorHash(fmt.Sprintf("page-%d", i+1), text),
-			Tags:       tags,
-		})
-	}
-	return docs
+	return nil
 }
 
 func OCRImage(ctx_unused interface{}, path, key string) (string, error) {
