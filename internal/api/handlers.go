@@ -62,6 +62,18 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		filename = "notes/novo.md"
 	}
 
+	// Normaliza o filename: garante prefixo notes/ e extensao .md
+	sanitized := sanitizeFilename(filename)
+
+	// Se a URL nao estava normalizada, redireciona para a URL canonica
+	// Isso evita que o browser fique com uma URL sem o prefixo notes/
+	// e o conteudo se perca ao dar refresh.
+	if sanitized != filename {
+		canonical := "/editor?file=" + url.QueryEscape(sanitized)
+		http.Redirect(w, r, canonical, http.StatusFound)
+		return
+	}
+
 	var content string
 	var tags []string
 

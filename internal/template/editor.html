@@ -1075,11 +1075,11 @@
                     });
                 }
 
-                // 3. Atualiza e redireciona
+                // 3. Atualiza e redireciona para a URL canonica (com notes/)
                 originalFilename = "notes/" + newName;
                 originalDisplayName = newName;
                 window.location.href =
-                    "/editor?file=" + encodeURIComponent(newName);
+                    "/editor?file=" + encodeURIComponent("notes/" + newName);
             } catch (e) {
                 setStatus("dirty");
             }

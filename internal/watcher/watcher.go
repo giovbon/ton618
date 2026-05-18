@@ -17,6 +17,10 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
+// entre o processamento direto (HandleFileSave) e o watcher fsnotify.
+var processMu sync.Mutex
+
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
 var MonitoredSubDirs = []string{"notes", "links", "voice"}
 
@@ -99,7 +103,12 @@ func (w *Watcher) Events() <-chan FileEvent {
 // ── ProcessFile ──
 
 // ProcessFile processes a single file event: reads, parses, indexes, and optionally embeds the content.
+// O mutex processMu serializa chamadas concorrentes para evitar duplicacao
+// quando o HandleFileSave e o fsnotify disparam simultaneamente.
 func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
+	processMu.Lock()
+	defer processMu.Unlock()
+
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))
 	tipo, ok := supportedExts[ext]

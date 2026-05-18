@@ -231,12 +231,12 @@
     </body>
 
     <script>
-        // ── New Note com nome único (sem "notes/" — o servidor adiciona) ──
+        // ── New Note com nome único ──
         function createNewNote() {
             var ts = Date.now();
             var random = Math.random().toString(36).substring(2, 6);
             window.location.href =
-                "/editor?file=novo-" + ts + "-" + random + ".md";
+                "/editor?file=notes/novo-" + ts + "-" + random + ".md";
             return false;
         }
 
