@@ -1,0 +1,44 @@
+# === Go ===
+ton618                # Binário compilado (go build)
+*.exe
+*.test
+*.out
+*.test-output
+/tmp/
+
+# === Runtime Data (gerado pelo servidor) ===
+data/                 # SQLite database + estado
+docs/                 # Suas notas (NÃO versionar se quiser privacidade)
+*.db                  # Qualquer database local
+state/
+*.bleve/
+
+# === Ambiente ===
+.env                  # Contém API keys! NUNCA versionar
+.env.local
+.env.prod
+
+# === Docker ===
+ollama_data/
+
+# === IDE / Editores ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+.vim/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+._*
+.Spotlight-V100
+.Trashes
+
+# === Go cache ===
+go.work
+go.work.sum
+vendor/

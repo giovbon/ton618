@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  ton618-pkm:
+    image: giovbon/ton618:latest
+    container_name: ton618-pkm
+    restart: unless-stopped
+    ports:
+      - "6180:6180"
+    environment:
+      - PORT=6180
+      - POLL_INTERVAL_SEC=30
+      - AUTH_USER=admin
+      - AUTH_PASS=ton618_secret # RECOMENDADO: Alterar para uma senha forte
+      - BLEVE_INDEX_DIR=/app/data/ton618.bleve
+      # Embedding: configure API Key em Settings > APIs > Embedding API
+      # Exemplo para Gemini (grátis):
+      # - EMBEDDING_PROVIDER=gemini
+      # - EMBEDDING_API_KEY=AIza...
+      # - EMBEDDING_MODEL=text-embedding-004
+      #
+      # Fallback: Ollama local (descomente se tiver servidor Ollama)
+      # - OLLAMA_HOST=http://host.docker.internal:11434
+      # - OLLAMA_MODEL=nomic-embed-text
+    volumes:
+      - ./docs:/docs
+      - ./state:/app/state
+      - ./data:/app/data

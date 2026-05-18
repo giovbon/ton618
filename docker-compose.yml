@@ -1,0 +1,23 @@
+services:
+  ton618:
+    build: .
+    container_name: ton618
+    restart: unless-stopped
+    ports:
+      - "6180:6180"
+    volumes:
+      - ./docs:/app/docs
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DOCS_DIR=/app/docs
+      - DB_PATH=/app/data/ton618.db
+      - STATE_DIR=/app/data
+      - PORT=6180
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6180/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

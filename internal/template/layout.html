@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{{.Title}} — TON-618</title>
+        <!-- Inter font -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap"
+            rel="stylesheet"
+        />
+        <!-- HTMX -->
+        <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+        <!-- Tailwind CSS -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ["Inter", "system-ui", "sans-serif"],
+                        },
+                        animation: {
+                            "fast-spin": "fast-spin 0.4s linear infinite",
+                        },
+                        keyframes: {
+                            "fast-spin": {
+                                from: { transform: "rotate(0deg)" },
+                                to: { transform: "rotate(360deg)" },
+                            },
+                        },
+                    },
+                },
+            };
+        </script>
+        <!-- TipTap (loaded only on editor page) -->
+        {{if .LoadTipTap}}
+        <script
+            src="https://unpkg.com/@tiptap/starter-kit@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-placeholder@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-table@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-table-row@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-table-cell@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-table-header@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-image@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-task-list@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        <script
+            src="https://unpkg.com/@tiptap/extension-task-item@2.11.5/dist/bundle.min.js"
+            defer
+        ></script>
+        {{end}}
+        <style>
+            * {
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                scrollbar-width: thin;
+                scrollbar-color: #27272a transparent;
+            }
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #27272a;
+                border-radius: 4px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #3f3f46;
+            }
+            body {
+                margin: 0;
+                min-width: 320px;
+                min-height: 100vh;
+                background-color: #09090b;
+                color: #a1a1aa;
+            }
+            .search-highlight {
+                background-color: rgba(14, 165, 233, 0.25);
+                color: #38bdf8;
+                font-weight: 700;
+                padding: 0 4px;
+                border-radius: 4px;
+            }
+            .htmx-indicator {
+                opacity: 0;
+                transition: opacity 200ms ease-in;
+            }
+            .htmx-request .htmx-indicator {
+                opacity: 1;
+            }
+            .htmx-request.htmx-indicator {
+                opacity: 1;
+            }
+            .premium-card {
+                box-shadow:
+                    inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+            }
+        </style>
+    </head>
+    <body class="font-sans antialiased">
+        <!-- Navbar -->
+        <nav
+            class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50"
+        >
+            <div
+                class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between"
+            >
+                <a
+                    href="/"
+                    class="flex items-center gap-2.5 group"
+                    title="TON-618 — Sistema de Gestão de Conhecimento"
+                >
+                    <!-- Logo SVG: buraco negro (simplificado do LEGADO) -->
+                    <div
+                        class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300"
+                    >
+                        <svg
+                            viewBox="0 0 100 100"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]"
+                        >
+                            <defs>
+                                <filter
+                                    id="logoGlow"
+                                    x="-50%"
+                                    y="-50%"
+                                    width="200%"
+                                    height="200%"
+                                >
+                                    <feGaussianBlur
+                                        stdDeviation="3"
+                                        result="blur"
+                                    />
+                                    <feColorMatrix
+                                        in="blur"
+                                        type="matrix"
+                                        values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7"
+                                        result="glow"
+                                    />
+                                    <feComposite
+                                        in="SourceGraphic"
+                                        in2="glow"
+                                        operator="over"
+                                    />
+                                </filter>
+                                <radialGradient
+                                    id="singularityGrad"
+                                    cx="50%"
+                                    cy="50%"
+                                    r="50%"
+                                >
+                                    <stop offset="65%" stop-color="#000000" />
+                                    <stop offset="100%" stop-color="#0f172a" />
+                                </radialGradient>
+                            </defs>
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r="45"
+                                fill="white"
+                                filter="url(#logoGlow)"
+                                opacity="0.25"
+                            />
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r="28"
+                                stroke="white"
+                                stroke-width="1.2"
+                                stroke-opacity="0.85"
+                                fill="none"
+                                filter="url(#logoGlow)"
+                            />
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r="26"
+                                fill="url(#singularityGrad)"
+                            />
+                            <circle cx="50" cy="50" r="22" fill="#000000" />
+                            <!-- Accretion disk -->
+                            <path
+                                d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
+                                fill="white"
+                                opacity="0.7"
+                                transform="rotate(0 50 50)"
+                            />
+                            <path
+                                d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
+                                fill="#e2e8f0"
+                                opacity="0.3"
+                                transform="rotate(120 50 50)"
+                            />
+                            <path
+                                d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
+                                fill="white"
+                                opacity="0.5"
+                                transform="rotate(240 50 50)"
+                            />
+                        </svg>
+                    </div>
+                    <span
+                        class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors"
+                        >TON-618</span
+                    >
+                </a>
+                <div
+                    class="flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase"
+                >
+                    <a
+                        href="/"
+                        class="text-zinc-400 hover:text-white transition-colors"
+                        >Busca</a
+                    >
+                    <a
+                        href="/editor?file=notes/novo.md"
+                        class="text-zinc-400 hover:text-white transition-colors"
+                        >+ Nova</a
+                    >
+                    <a
+                        href="/graph"
+                        class="text-zinc-400 hover:text-white transition-colors"
+                        >Mapa</a
+                    >
+                </div>
+            </div>
+        </nav>
+
+        <!-- Conteúdo principal -->
+        <main class="max-w-4xl mx-auto px-4 py-6">
+            {{template "content" .}}
+        </main>
+    </body>
+</html>

@@ -1,0 +1,298 @@
+2026/05/15 21:14:48 [Coordinator] Iniciando motor de sincronização...
+2026/05/15 21:14:51 [Coordinator] Iniciando motor de sincronização...
+2026/05/15 21:14:54 [DB] Erro ao abrir banco de dados: invalid database. Tentando recriar...
+2026/05/15 21:14:54 [DB] Banco de dados recriado do zero com sucesso.
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:54 [Init] Estado carregado do BBolt: 0 arquivos, 1 hashes.
+2026/05/15 21:14:54 [DB] Erro ao abrir banco de dados: panic ao abrir banco: invalid freelist page: 18446744073709551615, page type is unknown<ffff>. Tentando recriar...
+2026/05/15 21:14:54 [DB] Banco de dados recriado do zero com sucesso.
+2026/05/15 21:14:54 [DB] Erro ao abrir banco de dados: invalid database. Tentando recriar...
+2026/05/15 21:14:54 [DB] Banco de dados recriado do zero com sucesso.
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 2 tags ativas.
+2026/05/15 21:14:54 [Init] Estado carregado do BBolt: 0 arquivos, 2 hashes.
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:54 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/embed-note.md
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 Indexando 1 fragmentos (Bleve: 1, Vetores: 1)...
+2026/05/15 21:14:54 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:54 [Sync] Vetorizando nota em background: notes/embed-note.md (1 fragmentos)
+2026/05/15 21:14:54 [Sync] Vetorizando: notes/embed-note.md
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 1 tags ativas.
+2026/05/15 21:14:54 INFO [Embedding] Usando Ollama model=nomic-embed-text host=http://localhost:11434
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:54 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/test-hash.md
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 Indexando 1 fragmentos (Bleve: 1, Vetores: 1)...
+2026/05/15 21:14:54 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:54 [Sync] Vetorizando nota em background: notes/test-hash.md (1 fragmentos)
+2026/05/15 21:14:54 [Sync] Vetorizando: notes/test-hash.md
+2026/05/15 21:14:54 INFO [Embedding] Usando Ollama model=nomic-embed-text host=http://localhost:11434
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 1 tags ativas.
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 1 tags ativas.
+2026/05/15 21:14:54 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/test-hash.md
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 Indexando 1 fragmentos (Bleve: 1, Vetores: 1)...
+2026/05/15 21:14:54 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:54 [Sync] Vetorizando nota em background: notes/test-hash.md (1 fragmentos)
+2026/05/15 21:14:54 [Sync] Vetorizando: notes/test-hash.md
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 1 tags ativas.
+2026/05/15 21:14:54 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/another.md
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/panic.md
+2026/05/15 21:14:54 [ERRO CRÍTICO] Panic detectado ao processar notes/panic.md: Simulated processing panic
+Stack:
+goroutine 86 [running]:
+runtime/debug.Stack()
+	/usr/lib/go/src/runtime/debug/stack.go:26 +0x5e
+etl/internal/ingest.processFile.func1()
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:494 +0x58
+panic({0xc04d80?, 0xd900e0?})
+	/usr/lib/go/src/runtime/panic.go:860 +0x13a
+etl/internal/ingest.ProcessMarkdown({0x232d26e48940, 0x3b}, {0x232d26e4896d, 0xe}, {0x0?, 0x0?, 0x14b8480?}, 0x232d26e88180)
+	/home/giobon/CODE/ton618/etl/internal/ingest/processor.go:93 +0x2307
+etl/internal/ingest.processFile({0x232d26e48940, 0x3b}, {0x232d26e4896d, 0xe}, {0xda1e68, 0x232d2714e340}, 0x828e3d012936762b?, 0x0, 0x232d26e88180, 0x232d26e3c660, ...)
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:505 +0x996
+created by etl/internal/ingest.ProcessDocs.func1 in goroutine 83
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:423 +0x5fc
+
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/good.md
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:54 INFO fsnotify watcher iniciado dir=/tmp/TestParallelPanicRecovery2422061786/001
+2026/05/15 21:14:54 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:54 [Sync] ProcessMarkdown: processando notes/panic.md
+2026/05/15 21:14:54 [ERRO CRÍTICO] Panic detectado ao processar notes/panic.md: Simulated processing panic
+Stack:
+goroutine 70 [running]:
+runtime/debug.Stack()
+	/usr/lib/go/src/runtime/debug/stack.go:26 +0x5e
+etl/internal/ingest.processFile.func1()
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:494 +0x58
+panic({0xc04d80?, 0xd900e0?})
+	/usr/lib/go/src/runtime/panic.go:860 +0x13a
+etl/internal/ingest.ProcessMarkdown({0x232d26d6ecc0, 0x3b}, {0x232d26d6eced, 0xe}, {0x0?, 0x0?, 0x14b8480?}, 0x232d26e88180)
+	/home/giobon/CODE/ton618/etl/internal/ingest/processor.go:93 +0x2307
+etl/internal/ingest.processFile({0x232d26d6ecc0, 0x3b}, {0x232d26d6eced, 0xe}, {0xda1e68, 0x232d2701f520}, 0x0?, 0x0, 0x232d26e88180, 0x232d271e05b0, ...)
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:505 +0x996
+created by etl/internal/ingest.ProcessDocs.func1 in goroutine 83
+	/home/giobon/CODE/ton618/etl/internal/ingest/syncer.go:423 +0x5fc
+
+2026/05/15 21:14:54 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 INFO Watcher encerrando por sinal do sistema
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando test.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando dirty.md
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Vetorizando nota em background: note1.md (1 fragmentos)
+2026/05/15 21:14:55 [Sync] Erro ao ler arquivo para vetorização: open /tmp/TestSendToEngines_ClearProjections1378062853/002/note1.md: no such file or directory
+2026/05/15 21:14:55 [Sync] 4 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Vetorizando nota em background:  (3 fragmentos)
+2026/05/15 21:14:55 [Sync] Erro ao ler arquivo para vetorização: open : no such file or directory
+2026/05/15 21:14:55 [Sync] Vetorizando nota em background:  (3 fragmentos)
+2026/05/15 21:14:55 [Sync] Erro ao ler arquivo para vetorização: open : no such file or directory
+2026/05/15 21:14:55 [Sync] 4 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] 4 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Vetorizacao concluida para: notes/embed-note.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 2 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 3 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 3 ativos
+--- FAIL: TestRebuildSemanticTopics (0.08s)
+    state_semantic_test.go:56: Esperava 5 tópicos antes do rebuild, obteve 3
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 1 tags ativas.
+2026/05/15 21:14:55 [Init] Estado carregado do BBolt: 0 arquivos, 1 hashes.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Init] Estado carregado do BBolt: 0 arquivos, 0 hashes.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Init] Estado carregado do BBolt: 0 arquivos, 0 hashes.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Init] Estado carregado do BBolt: 0 arquivos, 0 hashes.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Init] Estado carregado do BBolt: 0 arquivos, 0 hashes.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_9.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_0.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_1.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_31.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_10.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_11.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_12.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_13.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_14.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_15.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_17.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_16.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_18.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_19.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_2.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_20.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_21.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_22.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_23.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_24.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_25.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_26.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_27.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_28.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_29.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_3.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_30.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_42.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_32.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_33.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_34.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_35.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_36.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_37.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_38.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_39.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_4.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_40.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_41.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_48.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_43.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_44.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_45.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_46.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_47.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_6.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_49.md
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_5.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_7.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/note_8.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 Indexando 50 fragmentos (Bleve: 50, Vetores: 50)...
+2026/05/15 21:14:55 [Sync] 50 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 5 tags ativas.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 5 tags ativas.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/vader.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 Indexando 1 fragmentos (Bleve: 1, Vetores: 1)...
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 2 tags ativas.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 2 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização concluída: 1 fragmentos de notes/vader.md removidos do índice.
+2026/05/15 21:14:55 [Vacuum] Removendo metadados órfãos do Estado: notes/vader.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Search] Query: 'matchme' (Compact: false)
+2026/05/15 21:14:55 [Sync] Sincronização concluída: 1 fragmentos de Notes (v1) - Test.pdf removidos do índice.
+2026/05/15 21:14:55 [Search] Query: 'teste' (Compact: false)
+2026/05/15 21:14:55 [Sync] Sincronização concluída: 1 fragmentos de links/ghost.md removidos do índice.
+2026/05/15 21:14:55 [Search] Query: 'real' (Compact: false)
+2026/05/15 21:14:55 [Search] Query: 'fantasma' (Compact: false)
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 3 tags ativas.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 2 tags ativas.
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Vetorizando nota em background: no-embed.md (1 fragmentos)
+2026/05/15 21:14:55 [Sync] Vetorizando: no-embed.md
+2026/05/15 21:14:55 INFO [Embedding] Usando Ollama model=nomic-embed-text host=http://localhost:11434
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Vetorizando nota em background: embed.md (1 fragmentos)
+2026/05/15 21:14:55 [Sync] Vetorizando: embed.md
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/lifecycle.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 Indexando 2 fragmentos (Bleve: 2, Vetores: 2)...
+2026/05/15 21:14:55 [Sync] 2 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/lifecycle.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 Indexando 3 fragmentos (Bleve: 2, Vetores: 3)...
+2026/05/15 21:14:55 [Sync] 2 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] ProcessMarkdown: processando notes/lifecycle.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 Indexando 1 fragmentos (Bleve: 1, Vetores: 1)...
+2026/05/15 21:14:55 [Sync] 1 fragmentos sincronizados (Vetores processados arquivo por arquivo).
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização concluída: 1 fragmentos de notes/lifecycle.md removidos do índice.
+2026/05/15 21:14:55 [Vacuum] Removendo metadados órfãos do Estado: notes/lifecycle.md
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [SemanticManager] Topicos reconstruidos: 0 ativos
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+2026/05/15 21:14:55 [Sync] Sincronização paralela iniciada com 4 workers.
+2026/05/15 21:14:55 [Sync] Cache de sugestoes de tags reconstruido: 0 tags ativas.
+FAIL
+FAIL	etl/internal/ingest	6.460s
+FAIL

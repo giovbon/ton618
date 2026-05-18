@@ -1,0 +1,28 @@
+run:
+  go: "1.24"
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - goconst
+    - gocritic
+    - prealloc
+
+linters-settings:
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - goconst
+    - path: internal/ingest/syncer\.go
+      text: "SA1019" # ignore deprecated warnings in syncer if any

@@ -1,0 +1,163 @@
+{{define "content"}}
+<div>
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-sm font-black tracking-tight text-zinc-200">
+            Mapa Semântico
+        </h1>
+        <span
+            class="text-[10px] text-zinc-600 font-medium"
+            id="graph-status"
+        ></span>
+    </div>
+
+    <!-- Graph container -->
+    <div
+        class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card"
+    >
+        <div id="graph-container" style="width: 100%; height: 560px"></div>
+    </div>
+
+    <p
+        class="text-[10px] text-zinc-600 mt-3 text-center tracking-wide uppercase"
+    >
+        Arraste para mover &middot; Scroll para zoom &middot; Duplo-clique para
+        abrir a nota
+    </p>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", async function () {
+        const statusEl = document.getElementById("graph-status");
+        statusEl.textContent = "Carregando...";
+
+        let data;
+        try {
+            const resp = await fetch("/api/graph/data");
+            data = await resp.json();
+            statusEl.textContent = data.nodes.length + " notas";
+        } catch (e) {
+            statusEl.textContent = "Erro ao carregar";
+            return;
+        }
+
+        if (!data.nodes || data.nodes.length === 0) {
+            statusEl.textContent = "Sem dados";
+            return;
+        }
+
+        const container = document.getElementById("graph-container");
+        const width = container.clientWidth;
+        const height = 560;
+
+        const svg = d3
+            .select("#graph-container")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .style("background", "#09090b");
+
+        const g = svg.append("g");
+
+        // Zoom
+        const zoom = d3
+            .zoom()
+            .scaleExtent([0.15, 4])
+            .on("zoom", (event) => g.attr("transform", event.transform));
+
+        svg.call(zoom);
+
+        // Force simulation
+        const simulation = d3
+            .forceSimulation(data.nodes)
+            .force(
+                "link",
+                d3
+                    .forceLink(data.links || [])
+                    .id((d) => d.id)
+                    .distance(120),
+            )
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide(35));
+
+        // Links
+        const link = g
+            .append("g")
+            .selectAll("line")
+            .data(data.links || [])
+            .join("line")
+            .attr("stroke", "#27272a")
+            .attr("stroke-width", 0.8);
+
+        // Nodes
+        const node = g
+            .append("g")
+            .selectAll("g")
+            .data(data.nodes)
+            .join("g")
+            .call(
+                d3
+                    .drag()
+                    .on("start", (event, d) => {
+                        if (!event.active)
+                            simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    })
+                    .on("drag", (event, d) => {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    })
+                    .on("end", (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    }),
+            )
+            .on("dblclick", (event, d) => {
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(d.id);
+            });
+
+        // Node circle
+        node.append("circle")
+            .attr("r", 7)
+            .attr("fill", "#0ea5e9")
+            .attr("opacity", 0.85)
+            .attr("stroke", "#38bdf8")
+            .attr("stroke-width", 1)
+            .attr("filter", "drop-shadow(0 0 6px rgba(14,165,233,0.4))");
+
+        // Node label
+        node.append("text")
+            .text((d) => {
+                const parts = d.id.split("/");
+                let name = parts[parts.length - 1];
+                name = name.replace(/\.(md|pdf)$/i, "");
+                if (d.title && d.title !== name) {
+                    return d.title.length > 30
+                        ? d.title.slice(0, 30) + "..."
+                        : d.title;
+                }
+                return name;
+            })
+            .attr("x", 12)
+            .attr("y", 4)
+            .attr("font-size", "10px")
+            .attr("font-weight", "600")
+            .attr("fill", "#a1a1aa")
+            .attr("font-family", "Inter, system-ui, sans-serif");
+
+        // Tick update
+        simulation.on("tick", () => {
+            link.attr("x1", (d) => d.source.x)
+                .attr("y1", (d) => d.source.y)
+                .attr("x2", (d) => d.target.x)
+                .attr("y2", (d) => d.target.y);
+            node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+        });
+    });
+</script>
+{{end}}

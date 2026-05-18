@@ -1,0 +1,50 @@
+{{define "content"}}
+<div>
+    <!-- Search bar -->
+    <form
+        hx-post="/search"
+        hx-target="#results"
+        hx-trigger="keyup delay:200ms from:input, submit"
+        hx-indicator="#spinner"
+        class="mb-6"
+    >
+        <div class="relative">
+            <input
+                type="text"
+                name="q"
+                value="{{.Query}}"
+                placeholder='Buscar notas... (use +tags:tag para filtrar, -termo para excluir, "frase exata")'
+                class="w-full px-5 py-4 text-[15px] bg-zinc-900/60 border border-zinc-800 rounded-xl text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all"
+                autofocus
+            />
+            <div class="absolute right-4 top-1/2 -translate-y-1/2">
+                <div id="spinner" class="htmx-indicator">
+                    <svg
+                        class="animate-spin h-4 w-4 text-zinc-500"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                        ></circle>
+                        <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        ></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- Results -->
+    <div id="results">{{template "search_results.html" .}}</div>
+</div>
+{{end}}

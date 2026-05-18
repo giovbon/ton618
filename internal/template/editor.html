@@ -1,0 +1,142 @@
+{{define "content"}}
+<div>
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3 min-w-0">
+            <h1
+                class="text-sm font-black tracking-tight text-zinc-200 truncate"
+            >
+                {{.Filename}}
+            </h1>
+            {{if .Tags}}
+            <div class="flex gap-1">
+                {{range .Tags}}
+                <span
+                    class="text-[9px] font-bold text-zinc-500 bg-zinc-800/40 px-1.5 py-0.5 rounded"
+                    >#{{.}}</span
+                >
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        <div class="flex gap-2 shrink-0">
+            <button
+                form="editor-form"
+                onclick="document.getElementById('editor-form').submit()"
+                class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-bold tracking-wide uppercase rounded-lg transition-colors border border-zinc-700"
+            >
+                💾 Salvar
+            </button>
+        </div>
+    </div>
+
+    <form id="editor-form" method="POST" action="/file/save">
+        <input type="hidden" name="filename" value="{{.Filename}}" />
+
+        <!-- Editor -->
+        <div
+            class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden mb-4 premium-card"
+        >
+            <div
+                id="editor"
+                class="prose prose-invert prose-sm max-w-none p-5 min-h-[450px] focus:outline-none text-zinc-300"
+            ></div>
+        </div>
+
+        <textarea id="content-input" name="content" class="hidden">
+{{.Content}}</textarea
+        >
+
+        <!-- Tags -->
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <label
+                class="text-[10px] font-black tracking-widest text-zinc-500 uppercase block mb-2"
+                >Tags</label
+            >
+            <input
+                type="text"
+                name="tags"
+                form="editor-form"
+                value="{{range $i, $t := .Tags}}{{if $i}},{{end}}{{$t}}{{end}}"
+                placeholder="#projeto, #referencia"
+                class="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-[13px] text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+            />
+            <div class="text-[10px] text-zinc-600 mt-1.5">
+                Separe tags por vírgula
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    // TipTap Editor initialization
+    document.addEventListener("DOMContentLoaded", function () {
+        const content = document.getElementById("content-input").value;
+        const editor = new tiptap.Editor({
+            element: document.getElementById("editor"),
+            extensions: [
+                tiptap.StarterKit.configure({
+                    heading: { levels: [1, 2, 3, 4, 5, 6] },
+                }),
+                tiptap.Placeholder.configure({
+                    placeholder: "Comece a escrever... — Ctrl+S para salvar",
+                }),
+                tiptap.Table.configure({ resizable: true }),
+                tiptap.TableRow,
+                tiptap.TableCell,
+                tiptap.TableHeader,
+                tiptap.Image,
+                tiptap.TaskList,
+                tiptap.TaskItem.configure({ nested: true }),
+            ],
+            content: content,
+            onUpdate: ({ editor }) => {
+                document.getElementById("content-input").value =
+                    editor.getHTML();
+            },
+        });
+
+        // Ctrl+S to save
+        document.addEventListener("keydown", function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                document.getElementById("editor-form").submit();
+            }
+        });
+    });
+
+    // ProseMirror overrides for dark theme
+    const style = document.createElement("style");
+    style.textContent = `
+    .ProseMirror { outline: none; min-height: 400px; color: #d4d4d8; }
+    .ProseMirror h1 { color: #f4f4f5; font-size: 1.5rem; margin-top: 1.2em; }
+    .ProseMirror h2 { color: #e4e4e7; font-size: 1.25rem; margin-top: 1em; }
+    .ProseMirror h3 { color: #d4d4d8; font-size: 1.1rem; }
+    .ProseMirror p { color: #a1a1aa; line-height: 1.7; }
+    .ProseMirror code { background: #27272a; color: #f472b6; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+    .ProseMirror pre { background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 1em; }
+    .ProseMirror pre code { background: none; padding: 0; }
+    .ProseMirror blockquote { border-left: 3px solid #3f3f46; padding-left: 1em; color: #71717a; }
+    .ProseMirror a { color: #38bdf8; text-decoration: none; }
+    .ProseMirror a:hover { text-decoration: underline; }
+    .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; }
+    .ProseMirror li p { margin: 0.2em 0; }
+    .ProseMirror hr { border: none; border-top: 1px solid #27272a; margin: 2em 0; }
+    .ProseMirror img { max-width: 100%; border-radius: 8px; }
+    .ProseMirror strong { color: #e4e4e7; }
+    .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.875rem; }
+    .ProseMirror th { background: rgba(255,255,255,0.05); color: #e4e4e7; font-weight: 700; padding: 8px 12px; border: 1px solid #27272a; }
+    .ProseMirror td { padding: 6px 12px; border: 1px solid #27272a; color: #a1a1aa; }
+    .ProseMirror tr:hover td { background: rgba(255,255,255,0.02); }
+    .ProseMirror .tableWrapper { overflow-x: auto; margin: 1em 0; }
+    .ProseMirror p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        color: #52525b;
+        pointer-events: none;
+        height: 0;
+    }
+`;
+    document.head.appendChild(style);
+</script>
+{{end}}
