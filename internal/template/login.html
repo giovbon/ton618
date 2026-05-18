@@ -228,6 +228,15 @@
             <div class="footer"><p>Auto-hospedado &amp; Privado</p></div>
         </div>
         <script>
+            // Se já tem auth em sessionStorage, redireciona direto
+            (function () {
+                var existing = sessionStorage.getItem("ton_auth");
+                if (existing) {
+                    window.location.href = "/";
+                    return;
+                }
+            })();
+
             document
                 .getElementById("login-form")
                 .addEventListener("submit", async function (e) {
@@ -240,12 +249,19 @@
                     btn.textContent = "Verificando...";
                     errEl.style.display = "none";
                     var auth = btoa(user + ":" + pass);
+                    var basicHeader = "Basic " + auth;
                     try {
-                        var resp = await fetch("/api/health", {
-                            headers: { Authorization: "Basic " + auth },
+                        // Usa /api/status (que requer auth) em vez de /api/health (público)
+                        var resp = await fetch("/api/status", {
+                            headers: { Authorization: basicHeader },
                         });
                         if (resp.ok) {
-                            sessionStorage.setItem("ton_auth", "Basic " + auth);
+                            sessionStorage.setItem("ton_auth", basicHeader);
+                            // Define cookie para navegações nativas do browser
+                            document.cookie =
+                                "ton_auth=" +
+                                encodeURIComponent(basicHeader) +
+                                ";path=/;SameSite=Lax;max-age=86400";
                             window.location.href = "/";
                         } else if (resp.status === 401) {
                             errEl.textContent = "Usuário ou senha incorretos.";

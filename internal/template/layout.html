@@ -211,6 +211,13 @@
                         class="text-zinc-400 hover:text-white transition-colors"
                         >Mapa</a
                     >
+                    <button
+                        onclick="logout()"
+                        class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                        title="Sair"
+                    >
+                        Sair
+                    </button>
                 </div>
             </div>
         </nav>
@@ -224,6 +231,12 @@
 
     <script>
         // ── Auth Integration ──
+        function logout() {
+            sessionStorage.removeItem("ton_auth");
+            document.cookie = "ton_auth=;path=/;max-age=0";
+            window.location.href = "/login";
+        }
+
         (function () {
             var auth = sessionStorage.getItem("ton_auth");
 

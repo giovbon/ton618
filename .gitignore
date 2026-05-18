@@ -1,5 +1,6 @@
 # === Go ===
-ton618                # Binário compilado (go build)
+ton618
+server
 *.exe
 *.test
 *.out
@@ -7,14 +8,14 @@ ton618                # Binário compilado (go build)
 /tmp/
 
 # === Runtime Data (gerado pelo servidor) ===
-data/                 # SQLite database + estado
-docs/                 # Suas notas (NÃO versionar se quiser privacidade)
-*.db                  # Qualquer database local
+data/
+docs/
+*.db
 state/
 *.bleve/
 
 # === Ambiente ===
-.env                  # Contém API keys! NUNCA versionar
+.env
 .env.local
 .env.prod
 
@@ -34,6 +35,9 @@ ollama_data/
 .DS_Store
 Thumbs.db
 Desktop.ini
+nul
+NUL
+Nul
 ._*
 .Spotlight-V100
 .Trashes

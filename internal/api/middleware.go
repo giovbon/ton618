@@ -3,8 +3,56 @@ package api
 import (
 	"encoding/base64"
 	"net/http"
+	"net/url"
 	"strings"
 )
+
+// checkCredentials valida user:pass contra as credenciais configuradas.
+func checkCredentials(r *http.Request, user, pass string) bool {
+	// 1. Tenta Basic Auth header nativo (browser, fetch)
+	u, p, ok := r.BasicAuth()
+	if ok && u == user && p == pass {
+		return true
+	}
+
+	// 2. Tenta Authorization header manual (sessionStorage JS)
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Basic ") {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
+		if err == nil {
+			parts := strings.SplitN(string(decoded), ":", 2)
+			if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+				return true
+			}
+		}
+	}
+
+	// 3. Tenta cookie (para navegações nativas após login via JS)
+	cookie, err := r.Cookie("ton_auth")
+	if err == nil {
+		raw := strings.TrimPrefix(cookie.Value, "Basic ")
+		// Tenta decodificar direto
+		if decoded, decErr := base64.StdEncoding.DecodeString(raw); decErr == nil {
+			parts := strings.SplitN(string(decoded), ":", 2)
+			if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+				return true
+			}
+		}
+		// Se tiver % pode estar URL-encoded (encodeURIComponent no JS)
+		if strings.Contains(raw, "%") {
+			if unescaped, unErr := url.QueryUnescape(raw); unErr == nil {
+				if decoded, decErr := base64.StdEncoding.DecodeString(unescaped); decErr == nil {
+					parts := strings.SplitN(string(decoded), ":", 2)
+					if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
 
 // BasicAuthMiddleware retorna um middleware HTTP Basic Auth.
 // Se user e pass forem vazios, permite acesso sem autenticação.
@@ -20,24 +68,9 @@ func BasicAuthMiddleware(next http.Handler, user, pass string) http.Handler {
 			return
 		}
 
-		// Check Basic Auth
-		u, p, ok := r.BasicAuth()
-		if ok && u == user && p == pass {
+		if checkCredentials(r, user, pass) {
 			next.ServeHTTP(w, r)
 			return
-		}
-
-		// Check for auth header from JS (sessionStorage)
-		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Basic ") {
-			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
-			if err == nil {
-				parts := strings.SplitN(string(decoded), ":", 2)
-				if len(parts) == 2 && parts[0] == user && parts[1] == pass {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
 		}
 
 		// Not authenticated for HTML page → redirect to login
