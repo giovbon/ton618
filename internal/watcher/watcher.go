@@ -111,6 +111,10 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 		store.DeleteDocumentsByFile(filename)
 		store.DeleteFTSByFile(filename)
 		store.DeleteEmbedding(filename)
+		store.DeleteFileMod(filename)
+		store.ResetPopularity(filename)
+		store.SetFileTags(filename, nil) // limpa tags
+		slog.Info("Arquivo removido do índice", "file", filename)
 		return nil
 	}
 
@@ -230,8 +234,11 @@ func (w *Watcher) fsnotifyLoop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
-				w.handleEvent(event.Name)
+			switch {
+			case event.Op&(fsnotify.Create|fsnotify.Write) != 0:
+				w.handleCreateOrMod(event.Name)
+			case event.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
+				w.handleDelete(event.Name)
 			}
 		case err, ok := <-w.watcher.Errors:
 			if !ok {
@@ -242,7 +249,7 @@ func (w *Watcher) fsnotifyLoop(ctx context.Context) {
 	}
 }
 
-func (w *Watcher) handleEvent(absPath string) {
+func (w *Watcher) handleCreateOrMod(absPath string) {
 	relPath := strings.TrimPrefix(absPath, w.cfg.DocsDir)
 	relPath = strings.TrimPrefix(relPath, "/")
 
@@ -268,6 +275,27 @@ func (w *Watcher) handleEvent(absPath string) {
 	}
 }
 
+func (w *Watcher) handleDelete(absPath string) {
+	relPath := strings.TrimPrefix(absPath, w.cfg.DocsDir)
+	relPath = strings.TrimPrefix(relPath, "/")
+
+	if relPath == "" || relPath == absPath {
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(relPath))
+	if _, ok := supportedExts[ext]; !ok {
+		return
+	}
+
+	slog.Info("Arquivo deletado", "file", relPath)
+	w.events <- FileEvent{
+		Path:     absPath,
+		Filename: relPath,
+		Type:     "delete",
+	}
+}
+
 func (w *Watcher) pollLoop(ctx context.Context) {
 	defer w.wg.Done()
 	ticker := time.NewTicker(w.cfg.PollIntervalSec)
@@ -289,6 +317,8 @@ func (w *Watcher) PollAll() {
 }
 
 func (w *Watcher) pollAll() {
+	// 1. Escaneia arquivos no disco
+	diskFiles := make(map[string]bool)
 	for _, sub := range MonitoredSubDirs {
 		dir := filepath.Join(w.cfg.DocsDir, sub)
 		filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -305,6 +335,7 @@ func (w *Watcher) pollAll() {
 			}
 			relPath := strings.TrimPrefix(path, w.cfg.DocsDir)
 			relPath = strings.TrimPrefix(relPath, "/")
+			diskFiles[relPath] = true
 			w.events <- FileEvent{
 				Path:     path,
 				Filename: relPath,
@@ -313,5 +344,19 @@ func (w *Watcher) pollAll() {
 			}
 			return nil
 		})
+	}
+
+	// 2. Remove do banco arquivos que existem no DB mas não estão no disco
+	dbFiles, _ := w.store.GetAllFileMods()
+	for filename := range dbFiles {
+		if !diskFiles[filename] {
+			fullPath := filepath.Join(w.cfg.DocsDir, filename)
+			slog.Info("Arquivo deletado (detectado no poll)", "file", filename)
+			w.events <- FileEvent{
+				Path:     fullPath,
+				Filename: filename,
+				Type:     "delete",
+			}
+		}
 	}
 }
