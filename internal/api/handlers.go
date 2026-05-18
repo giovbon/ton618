@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +18,32 @@ import (
 	"ton618/internal/search"
 	"ton618/internal/watcher"
 )
+
+// ── Helpers de normalizacao ──
+
+// sanitizeFilename garante que o nome do arquivo:
+// 1. Nao tenha subdiretorios (strips tudo antes de /)
+// 2. Tenha extensao .md
+// 3. Esteja no diretorio notes/
+func sanitizeFilename(name string) string {
+	// Remove qualquer prefixo de diretorio
+	base := filepath.Base(name)
+	// Garante extensao .md
+	if !strings.HasSuffix(base, ".md") {
+		base += ".md"
+	}
+	// Forca prefixo notes/
+	if !strings.HasPrefix(base, "notes/") {
+		base = "notes/" + base
+	}
+	return base
+}
+
+// displayName retorna apenas o nome do arquivo (sem diretorio) para exibicao.
+func displayName(name string) string {
+	base := filepath.Base(name)
+	return base
+}
 
 // ── Pages ──
 
@@ -38,9 +65,13 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	var content string
 	var tags []string
 
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	if data, err := os.ReadFile(fullPath); err == nil {
-		content = string(data)
+	// Se for o template "novo.md" ou "novo-*", ignora conteudo existente no disco
+	// para evitar que o auto-save polua o template de nova nota.
+	if !strings.HasPrefix(filename, "notes/novo") {
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+		if data, err := os.ReadFile(fullPath); err == nil {
+			content = string(data)
+		}
 	}
 	fileTags, err := ctx.Store.GetFileTags(filename)
 	if err == nil {
@@ -55,6 +86,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	data := map[string]interface{}{
 		"Title":        "Editor - " + filename,
 		"Filename":     filename,
+		"DisplayName":  displayName(filename),
 		"Content":      content,
 		"Tags":         tags,
 		"AllTags":      allTags,
@@ -199,11 +231,12 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 // ── File handlers ──
 
 func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
-	filename := r.URL.Query().Get("name")
-	if filename == "" {
+	raw := r.URL.Query().Get("name")
+	if raw == "" {
 		http.Error(w, "name required", http.StatusBadRequest)
 		return
 	}
+	filename := sanitizeFilename(raw)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	http.ServeFile(w, r, fullPath)
 }
@@ -214,24 +247,21 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	filename := r.FormValue("filename")
+	raw := r.FormValue("filename")
 	content := r.FormValue("content")
 	tags := r.FormValue("tags")
 
-	if filename == "" {
+	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
-	// Ensure filename has .md extension
-	if !strings.HasSuffix(filename, ".md") {
-		filename += ".md"
-	}
+	// Normaliza: remove subdiretorios, garante .md e prefixo notes/
+	filename := sanitizeFilename(raw)
 
-	// Ensure directory exists
+	// Garante que o diretorio notes/ existe
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -267,7 +297,7 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 	}
 
 	// Redirect back to editor
-	http.Redirect(w, r, "/editor?file="+filename, http.StatusSeeOther)
+	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
 }
 
 func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
@@ -276,12 +306,13 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	filename := r.FormValue("filename")
-	if filename == "" {
+	raw := r.FormValue("filename")
+	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
+	filename := sanitizeFilename(raw)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -302,11 +333,19 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	oldName := r.FormValue("old")
-	newName := r.FormValue("new")
+	rawOld := r.FormValue("old")
+	rawNew := r.FormValue("new")
 
-	if oldName == "" || newName == "" {
+	if rawOld == "" || rawNew == "" {
 		http.Error(w, "old and new required", http.StatusBadRequest)
+		return
+	}
+
+	oldName := sanitizeFilename(rawOld)
+	newName := sanitizeFilename(rawNew)
+
+	if oldName == newName {
+		http.Redirect(w, r, "/editor?file="+newName, http.StatusSeeOther)
 		return
 	}
 
@@ -329,7 +368,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}, ctx.Embed, ctx.Cfg.EmbeddingAll)
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/editor?file="+url.QueryEscape(newName), http.StatusSeeOther)
 }
 
 func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) {
@@ -347,16 +386,15 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	subdir := r.FormValue("subdir")
-	if subdir == "" {
-		subdir = "notes"
+	// Forca diretorio notes independente do subdir enviado
+	filename := "notes/" + filepath.Base(header.Filename)
+	// Garante .md
+	if !strings.HasSuffix(filename, ".md") {
+		filename += ".md"
 	}
-
-	filename := filepath.Join(subdir, header.Filename)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 
-	dir := filepath.Dir(fullPath)
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
 
 	dst, err := os.Create(fullPath)
 	if err != nil {

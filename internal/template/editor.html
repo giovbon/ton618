@@ -4,7 +4,7 @@
         <input
             id="file-name"
             type="text"
-            value="{{.Filename}}"
+            value="{{.DisplayName}}"
             class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
             spellcheck="false"
         />
@@ -310,7 +310,8 @@
         var saveTimer = null;
         var currentStatus = "saved";
         var editor = null;
-        var originalFilename = filenameInput.value;
+        var originalFilename = "{{.Filename}}";
+        var originalDisplayName = filenameInput.value;
         var slashPos = null;
         var frontmatterText = "";
         var frontmatterVisible = false;
@@ -1034,7 +1035,7 @@
 
         async function doRename() {
             var newName = filenameInput.value.trim();
-            if (!newName || newName === originalFilename) return;
+            if (!newName || newName === originalDisplayName) return;
             if (!newName.endsWith(".md")) newName += ".md";
             if (saveTimer) clearTimeout(saveTimer);
             setStatus("saving");
@@ -1053,16 +1054,19 @@
                 "[[$1]]",
             );
 
-            // 1. Salva no novo nome
+            // 1. Salva no novo nome (servidor sanitiza: remove subdiretorio, adiciona notes/)
             var fd = new FormData();
             fd.append("filename", newName);
             fd.append("content", finalContent);
             fd.append("tags", "");
             try {
-                await fetch("/file/save", { method: "POST", body: fd });
+                var saveResp = await fetch("/file/save", {
+                    method: "POST",
+                    body: fd,
+                });
 
-                // 2. Deleta o arquivo antigo
-                if (originalFilename !== newName) {
+                // 2. Deleta o arquivo antigo (se o nome realmente mudou)
+                if (originalFilename !== "notes/" + newName) {
                     var deleteFd = new FormData();
                     deleteFd.append("filename", originalFilename);
                     await fetch("/file/delete", {
@@ -1072,7 +1076,8 @@
                 }
 
                 // 3. Atualiza e redireciona
-                originalFilename = newName;
+                originalFilename = "notes/" + newName;
+                originalDisplayName = newName;
                 window.location.href =
                     "/editor?file=" + encodeURIComponent(newName);
             } catch (e) {

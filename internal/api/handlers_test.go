@@ -40,7 +40,10 @@ func newTestContext(t *testing.T) *HandlerContext {
 
 	tpl := template.New("layout.html").Funcs(template.FuncMap{
 		"hasPrefix": strings.HasPrefix,
-		"lastPath": func(s string) string {
+		"baseName": func(s string) string {
+			if s == "" {
+				return ""
+			}
 			parts := strings.Split(s, "/")
 			return parts[len(parts)-1]
 		},
@@ -75,7 +78,7 @@ func TestHandleFileSave_CriaNotaNova(t *testing.T) {
 	}
 
 	loc := rec.Header().Get("Location")
-	if loc != "/editor?file=notes/teste.md" {
+	if loc != "/editor?file=notes%2Fteste.md" {
 		t.Fatalf("Location inesperado: %s", loc)
 	}
 
@@ -181,8 +184,96 @@ func TestHandleFileSave_RedirecionaParaEditor(t *testing.T) {
 	}
 
 	loc := rec.Header().Get("Location")
-	if !strings.HasPrefix(loc, "/editor?file=notes/redir.md") {
+	if !strings.HasPrefix(loc, "/editor?file=notes%2Fredir.md") {
 		t.Fatalf("redirect nao aponta para editor: %s", loc)
+	}
+}
+
+// ── HandleEditor ────────────────────────────────────────────────
+
+func TestHandleEditor_NovoMd_IgnoraConteudoNoDisco(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria um arquivo notes/novo.md no disco (simula auto-save anterior)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/novo.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("<p>conteudo fantasma</p>"), 0644)
+
+	// Handler deve ignorar o conteudo existente
+	req := httptest.NewRequest("GET", "/editor?file=notes/novo.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleEditor(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	// O textarea escondido deve estar vazio (ou conter apenas whitespace)
+	if strings.Contains(body, "conteudo fantasma") {
+		t.Error("HandleEditor carregou conteudo existente de notes/novo.md")
+	}
+}
+
+func TestHandleEditor_NovoComTimestamp_IgnoraConteudoNoDisco(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria arquivo notes/novo-1234-abcd.md no disco
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/novo-1234-abcd.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("<p>conteudo fantasma</p>"), 0644)
+
+	req := httptest.NewRequest("GET", "/editor?file=notes/novo-1234-abcd.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleEditor(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if strings.Contains(body, "conteudo fantasma") {
+		t.Error("HandleEditor carregou conteudo existente de notes/novo-*")
+	}
+}
+
+func TestHandleEditor_NotaExistente_CarregaConteudo(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria nota real
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/minha-nota.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("<p>conteudo real</p>"), 0644)
+
+	req := httptest.NewRequest("GET", "/editor?file=notes/minha-nota.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleEditor(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "conteudo real") {
+		t.Error("HandleEditor deveria carregar conteudo de notas existentes")
+	}
+}
+
+func TestHandleEditor_SemFilename_UsaNovoMd(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("GET", "/editor", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleEditor(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	// Deve conter o display name padrao (sem diretorio) e content vazio
+	if !strings.Contains(body, `value="novo.md"`) {
+		t.Error("sem filename, editor deveria usar novo.md como display name")
 	}
 }
 

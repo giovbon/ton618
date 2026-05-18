@@ -202,7 +202,8 @@
                         >Busca</a
                     >
                     <a
-                        href="/editor?file=notes/novo.md"
+                        href="#"
+                        onclick="return createNewNote();"
                         class="text-zinc-400 hover:text-white transition-colors"
                         >+ Nova</a
                     >
@@ -230,6 +231,15 @@
     </body>
 
     <script>
+        // ── New Note com nome único (sem "notes/" — o servidor adiciona) ──
+        function createNewNote() {
+            var ts = Date.now();
+            var random = Math.random().toString(36).substring(2, 6);
+            window.location.href =
+                "/editor?file=novo-" + ts + "-" + random + ".md";
+            return false;
+        }
+
         // ── Auth Integration ──
         function logout() {
             sessionStorage.removeItem("ton_auth");

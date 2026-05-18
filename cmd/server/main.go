@@ -61,13 +61,13 @@ func main() {
 	// 4. Templates
 	tpl := template.New("layout.html").Funcs(template.FuncMap{
 		"hasPrefix": strings.HasPrefix,
-		"lastPath": func(s string) string {
-			parts := strings.Split(s, "/")
-			if len(parts) > 0 {
-				return strings.TrimSuffix(parts[len(parts)-1], ".md")
-			}
-			return s
-		},
+		"baseName": func(s string) string {
+					if s == "" {
+						return ""
+					}
+					parts := strings.Split(s, "/")
+					return parts[len(parts)-1]
+				},
 	})
 	var parseErr error
 	tpl, parseErr = tpl.ParseFS(internalTpl.TemplatesFS, "*.html")
