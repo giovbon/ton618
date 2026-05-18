@@ -12,6 +12,7 @@ import (
 	"ton618/internal/config"
 	"ton618/internal/db"
 	"ton618/internal/processor"
+	"ton618/internal/semantic"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -19,16 +20,21 @@ import (
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
 var MonitoredSubDirs = []string{"notes", "links", "voice"}
 
-// supportedExts maps file extensions to their internal type identifier.
+// supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{
 	".md":   "markdown",
-	".pdf":  "pdf",
 	".png":  "imagem",
 	".jpg":  "imagem",
 	".jpeg": "imagem",
+	".gif":  "imagem",
+	".webp": "imagem",
+	".bmp":  "imagem",
+	".svg":  "imagem",
 }
 
-// FileEvent representa um arquivo que precisa ser processado.
+// ── FileEvent ──
+
+// FileEvent is emitted by the watcher when a file is created, modified, or deleted.
 type FileEvent struct {
 	Path     string
 	Filename string
@@ -36,58 +42,53 @@ type FileEvent struct {
 	Type     string // "create", "modify", "delete"
 }
 
-// Watcher é o monitor de sistema de arquivos.
+// ── Watcher ──
+
 type Watcher struct {
-	cfg     *config.AppConfig
-	store   *db.Store
-	events  chan FileEvent
-	watcher *fsnotify.Watcher
-	wg      sync.WaitGroup
+	cfg      *config.AppConfig
+	store    *db.Store
+	embed    semantic.EmbeddingProvider
+	embedAll bool
+	watcher  *fsnotify.Watcher
+	events   chan FileEvent
+	wg       sync.WaitGroup
 }
 
-// NewWatcher cria um novo monitor.
+// NewWatcher creates a new watcher instance.
 func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
 	return &Watcher{
-		cfg:    cfg,
-		store:  store,
-		events: make(chan FileEvent, 100),
+		cfg:      cfg,
+		store:    store,
+		embedAll: cfg.EmbeddingAll,
+		events:   make(chan FileEvent, 100),
 	}
 }
 
-// Start inicia o watcher (fsnotify + polling).
+// SetEmbedProvider sets the embedding provider for generating vectors.
+func (w *Watcher) SetEmbedProvider(embed semantic.EmbeddingProvider) {
+	w.embed = embed
+}
+
+// Start launches the fsnotify watcher and polling loop.
 func (w *Watcher) Start(ctx context.Context) {
-	// Try fsnotify
-	fsWatcher, err := fsnotify.NewWatcher()
-	if err == nil {
-		w.watcher = fsWatcher
-
-		// Add directories to watch
-		for _, sub := range MonitoredSubDirs {
-			dir := filepath.Join(w.cfg.DocsDir, sub)
-			os.MkdirAll(dir, 0755)
-			w.watcher.Add(dir)
-		}
-
-		w.wg.Add(1)
-		go w.fsnotifyLoop(ctx)
-
-		slog.Info("Watcher fsnotify iniciado")
-	} else {
-		slog.Warn("fsnotify indisponível, usando apenas polling", "error", err)
+	var err error
+	w.watcher, err = fsnotify.NewWatcher()
+	if err != nil {
+		slog.Error("criar watcher", "error", err)
+		return
 	}
 
-	// Polling fallback
-	w.wg.Add(1)
-	go w.pollingLoop(ctx)
-}
-
-// Stop encerra o watcher.
-func (w *Watcher) Stop() {
-	if w.watcher != nil {
-		w.watcher.Close()
+	// Watch monitored subdirectories
+	for _, sub := range MonitoredSubDirs {
+		dir := filepath.Join(w.cfg.DocsDir, sub)
+		os.MkdirAll(dir, 0755)
+		w.watcher.Add(dir)
 	}
-	close(w.events)
-	w.wg.Wait()
+
+	w.wg.Add(2)
+	go w.fsnotifyLoop(ctx)
+	go w.pollLoop(ctx)
+	slog.Info("Watcher fsnotify iniciado")
 }
 
 // Events retorna o canal de eventos.
@@ -95,8 +96,10 @@ func (w *Watcher) Events() <-chan FileEvent {
 	return w.events
 }
 
-// ProcessFile processa um evento de arquivo (indexa no banco).
-func ProcessFile(store *db.Store, ev FileEvent) error {
+// ── ProcessFile ──
+
+// ProcessFile processes a single file event: reads, parses, indexes, and optionally embeds the content.
+func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))
 	tipo, ok := supportedExts[ext]
@@ -107,15 +110,8 @@ func ProcessFile(store *db.Store, ev FileEvent) error {
 	if ev.Type == "delete" {
 		store.DeleteDocumentsByFile(filename)
 		store.DeleteFTSByFile(filename)
-		// NOTE: DeleteEmbedding takes a doc_id, not a filename. Orphaned embeddings
-		// for this file will remain in the table until a future cleanup pass.
 		store.DeleteEmbedding(filename)
 		return nil
-	}
-
-	content, err := os.ReadFile(ev.Path)
-	if err != nil {
-		return err
 	}
 
 	// Remove old docs for this file
@@ -126,13 +122,12 @@ func ProcessFile(store *db.Store, ev FileEvent) error {
 	var links []string
 	var fileTags []string
 
-	creationTime := ev.ModTime // Simplified: use modtime as creation time
+	creationTime := ev.ModTime
 
 	switch tipo {
 	case "markdown":
 		docs, links, fileTags = processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
 	case "imagem":
-		// Images are indexed with minimal text (OCR not in this version)
 		docs = []processor.Document{{
 			ID:         processor.HashFunc("img-" + filename),
 			Tipo:       "imagem",
@@ -170,6 +165,28 @@ func ProcessFile(store *db.Store, ev FileEvent) error {
 		if err := store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, db.SliceToTags(doc.Tags)); err != nil {
 			slog.Error("index fts", "id", doc.ID, "error", err)
 		}
+
+		// Generate embedding if provider is set and note should be embedded
+		if embed != nil && doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll) {
+			textToEmbed := doc.Secao + " " + doc.Texto
+			textToEmbed = strings.TrimSpace(textToEmbed)
+			if textToEmbed != "" && len(textToEmbed) > 10 {
+				vec, err := embed.Embed(context.Background(), textToEmbed)
+				if err != nil {
+					slog.Warn("embedding failed", "id", doc.ID, "arquivo", doc.Arquivo, "error", err)
+				} else {
+					title := doc.Secao
+					if title == "" {
+						title = doc.Arquivo
+					}
+					if err := store.SetEmbedding(doc.ID, vec, title); err != nil {
+						slog.Error("store embedding", "id", doc.ID, "error", err)
+					} else {
+						slog.Info("embedding stored", "id", doc.ID, "arquivo", doc.Arquivo)
+					}
+				}
+			}
+		}
 	}
 
 	// Store links
@@ -186,6 +203,19 @@ func ProcessFile(store *db.Store, ev FileEvent) error {
 	store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
 
 	return nil
+}
+
+// shouldEmbed verifies if this document should have an embedding generated.
+func shouldEmbed(tags []string, embedAll bool) bool {
+	if embedAll {
+		return true
+	}
+	for _, t := range tags {
+		if t == "embed" {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Internal loops ──
@@ -207,15 +237,41 @@ func (w *Watcher) fsnotifyLoop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			slog.Error("fsnotify error", "error", err)
+			slog.Error("watcher error", "error", err)
 		}
 	}
 }
 
-func (w *Watcher) pollingLoop(ctx context.Context) {
+func (w *Watcher) handleEvent(absPath string) {
+	relPath := strings.TrimPrefix(absPath, w.cfg.DocsDir)
+	relPath = strings.TrimPrefix(relPath, "/")
+
+	if relPath == "" || relPath == absPath {
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(relPath))
+	if _, ok := supportedExts[ext]; !ok {
+		return
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return
+	}
+
+	w.events <- FileEvent{
+		Path:     absPath,
+		Filename: relPath,
+		ModTime:  info.ModTime(),
+		Type:     "modify",
+	}
+}
+
+func (w *Watcher) pollLoop(ctx context.Context) {
+	defer w.wg.Done()
 	ticker := time.NewTicker(w.cfg.PollIntervalSec)
 	defer ticker.Stop()
-	defer w.wg.Done()
 
 	for {
 		select {
@@ -224,47 +280,6 @@ func (w *Watcher) pollingLoop(ctx context.Context) {
 		case <-ticker.C:
 			w.pollAll()
 		}
-	}
-}
-
-func (w *Watcher) handleEvent(absPath string) {
-	rel, err := filepath.Rel(w.cfg.DocsDir, absPath)
-	if err != nil {
-		return
-	}
-	// Check if it's in a monitored subdir
-	parts := strings.Split(rel, string(filepath.Separator))
-	if len(parts) < 2 {
-		return
-	}
-	isMonitored := false
-	for _, m := range MonitoredSubDirs {
-		if parts[0] == m {
-			isMonitored = true
-			break
-		}
-	}
-	if !isMonitored {
-		return
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return
-	}
-	if info.IsDir() {
-		return
-	}
-
-	select {
-	case w.events <- FileEvent{
-		Path:     absPath,
-		Filename: rel,
-		ModTime:  info.ModTime(),
-		Type:     "modify",
-	}:
-	default:
-		slog.Warn("event channel full, dropping", "file", rel)
 	}
 }
 
@@ -288,24 +303,13 @@ func (w *Watcher) pollAll() {
 			if err != nil {
 				return nil
 			}
-
-			rel, _ := filepath.Rel(w.cfg.DocsDir, path)
-			cachedMod, err := w.store.GetFileMod(rel)
-			if err != nil {
-				cachedMod = ""
-			}
-			currentMod := info.ModTime().Format(time.RFC3339)
-
-			if cachedMod != currentMod {
-				select {
-				case w.events <- FileEvent{
-					Path:     path,
-					Filename: rel,
-					ModTime:  info.ModTime(),
-					Type:     "modify",
-				}:
-				default:
-				}
+			relPath := strings.TrimPrefix(path, w.cfg.DocsDir)
+			relPath = strings.TrimPrefix(relPath, "/")
+			w.events <- FileEvent{
+				Path:     path,
+				Filename: relPath,
+				ModTime:  info.ModTime(),
+				Type:     "modify",
 			}
 			return nil
 		})

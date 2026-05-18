@@ -36,6 +36,8 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
 	mux.HandleFunc("GET /graph", ctx.HandleGraph)
 
+	mux.HandleFunc("GET /login", ctx.HandleLogin)
+
 	// Busca (HTMX partial)
 	mux.HandleFunc("POST /search", ctx.HandleSearch)
 	mux.HandleFunc("GET /search", ctx.HandleSearch)
@@ -52,6 +54,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 	mux.HandleFunc("GET /api/graph/data", ctx.HandleGraphData)
+	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
 
 	// Static files

@@ -11,7 +11,7 @@ RUN go mod download
 
 # Build
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /ton618 ./cmd/server/
+RUN CGO_ENABLED=1 GOOS=linux go build -tags sqlite_fts5 -ldflags="-s -w" -o /ton618 ./cmd/server/
 
 # ─── Estágio 2: Runtime ──────────────────────────────────
 FROM alpine:3.21

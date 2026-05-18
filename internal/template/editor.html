@@ -1,142 +1,1166 @@
-{{define "content"}}
-<div>
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3 min-w-0">
-            <h1
-                class="text-sm font-black tracking-tight text-zinc-200 truncate"
+{{template "layout" .}} {{define "editorContent"}}
+<div class="editor-root">
+    <div class="flex items-center gap-3 mb-4">
+        <input
+            id="file-name"
+            type="text"
+            value="{{.Filename}}"
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span
+            id="editor-status"
+            class="text-[10px] font-mono text-zinc-600 shrink-0"
+            >—</span
+        >
+        <span
+            id="embed-status"
+            class="text-[10px] font-mono shrink-0"
+            title="Status do embedding"
+            >—</span
+        >
+        <button
+            id="save-btn"
+            class="text-[10px] font-bold tracking-wide uppercase text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+        >
+            Salvar
+        </button>
+    </div>
+
+    <!-- Frontmatter toggle -->
+    <div class="mb-3">
+        <button
+            id="toggle-fm-btn"
+            class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors"
+        >
+            <svg
+                id="fm-arrow"
+                class="w-3 h-3 transition-transform"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
             >
-                {{.Filename}}
-            </h1>
-            {{if .Tags}}
-            <div class="flex gap-1">
-                {{range .Tags}}
-                <span
-                    class="text-[9px] font-bold text-zinc-500 bg-zinc-800/40 px-1.5 py-0.5 rounded"
-                    >#{{.}}</span
-                >
-                {{end}}
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.5"
+                    d="M9 5l7 7-7 7"
+                />
+            </svg>
+            FRONTMATTER
+        </button>
+        <textarea
+            id="frontmatter-area"
+            class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]"
+            placeholder="title: Titulo da Nota&#10;tags: [tag1, tag2]"
+            spellcheck="false"
+        ></textarea>
+        <!-- Tag suggestions (visible when frontmatter is open) -->
+        <div id="tag-suggestions" class="hidden mt-2">
+            <div class="text-[10px] font-mono text-zinc-600 mb-1.5">
+                TAGS DISPONÍVEIS
             </div>
-            {{end}}
-        </div>
-        <div class="flex gap-2 shrink-0">
-            <button
-                form="editor-form"
-                onclick="document.getElementById('editor-form').submit()"
-                class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-bold tracking-wide uppercase rounded-lg transition-colors border border-zinc-700"
-            >
-                💾 Salvar
-            </button>
+            <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
         </div>
     </div>
 
-    <form id="editor-form" method="POST" action="/file/save">
-        <input type="hidden" name="filename" value="{{.Filename}}" />
+    <!-- Wikilink autocomplete -->
+    <div
+        id="wikilink-menu"
+        class="fixed hidden z-50 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
+        style="max-height: 240px"
+    >
+        <div class="py-1 overflow-y-auto" id="wikilink-items"></div>
+    </div>
 
-        <!-- Editor -->
-        <div
-            class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden mb-4 premium-card"
-        >
-            <div
-                id="editor"
-                class="prose prose-invert prose-sm max-w-none p-5 min-h-[450px] focus:outline-none text-zinc-300"
-            ></div>
-        </div>
+    <div
+        id="editor-wrapper"
+        class="bg-zinc-900/60 border border-zinc-800 rounded-xl premium-card"
+    >
+        <div id="editor-content" class="px-4 py-5 min-h-[500px]"></div>
+    </div>
 
-        <textarea id="content-input" name="content" class="hidden">
-{{.Content}}</textarea
-        >
+    <div
+        id="bubble-menu"
+        class="fixed hidden z-50 flex items-center gap-0.5 px-1.5 py-1 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl"
+    >
+        <button data-cmd="bold" class="bubble-btn"><b>B</b></button>
+        <button data-cmd="italic" class="bubble-btn"><i>I</i></button>
+        <button data-cmd="underline" class="bubble-btn"><u>U</u></button>
+        <button data-cmd="highlight" class="bubble-btn">⋮</button>
+        <button data-cmd="strike" class="bubble-btn"><s>S</s></button>
+        <div class="w-px h-4 bg-zinc-800 mx-1"></div>
+        <button data-cmd="code" class="bubble-btn">&lt;/&gt;</button>
+        <button id="bubble-link" class="bubble-btn">🔗</button>
+    </div>
 
-        <!-- Tags -->
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <label
-                class="text-[10px] font-black tracking-widest text-zinc-500 uppercase block mb-2"
-                >Tags</label
-            >
-            <input
-                type="text"
-                name="tags"
-                form="editor-form"
-                value="{{range $i, $t := .Tags}}{{if $i}},{{end}}{{$t}}{{end}}"
-                placeholder="#projeto, #referencia"
-                class="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-[13px] text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
-            />
-            <div class="text-[10px] text-zinc-600 mt-1.5">
-                Separe tags por vírgula
-            </div>
-        </div>
-    </form>
+    <div
+        id="slash-menu"
+        class="fixed hidden z-50 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
+    >
+        <div class="py-1 max-h-64 overflow-y-auto" id="slash-items"></div>
+    </div>
+
+    <textarea id="content-output" class="hidden">{{.Content}}</textarea>
 </div>
 
+<style>
+    .editor-root {
+        position: relative;
+    }
+    .bubble-btn {
+        padding: 3px 7px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.12s;
+    }
+    .bubble-btn:hover {
+        color: #e4e4e7;
+        background: rgba(255, 255, 255, 0.06);
+    }
+    .bubble-btn.is-active {
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+    }
+    .slash-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.1s;
+    }
+    .slash-item:hover,
+    .slash-item.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e4e4e7;
+    }
+    .slash-item .icon {
+        font-size: 16px;
+        width: 24px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .slash-item .label {
+        font-weight: 600;
+    }
+    .slash-item .desc {
+        font-size: 10px;
+        color: #52525b;
+        margin-top: 1px;
+    }
+    .ProseMirror {
+        outline: none;
+        min-height: 480px;
+        color: #d4d4d8;
+    }
+    .ProseMirror p {
+        margin: 0.3em 0;
+        line-height: 1.7;
+        color: #a1a1aa;
+    }
+    .ProseMirror h1 {
+        color: #f4f4f5;
+        font-size: 1.6rem;
+        font-weight: 900;
+        margin: 1.2em 0 0.2em;
+        letter-spacing: -0.02em;
+    }
+    .ProseMirror h2 {
+        color: #e4e4e7;
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 1em 0 0.2em;
+    }
+    .ProseMirror h3 {
+        color: #d4d4d8;
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0.8em 0 0.2em;
+    }
+    .ProseMirror ul,
+    .ProseMirror ol {
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror li p {
+        margin: 0.2em 0;
+    }
+    .ProseMirror strong {
+        color: #e4e4e7;
+    }
+    .ProseMirror s {
+        color: #52525b;
+    }
+    .ProseMirror mark {
+        background: rgba(250, 204, 21, 0.25);
+        color: #fef08a;
+        border-radius: 2px;
+        padding: 0 2px;
+    }
+    .ProseMirror u {
+        text-decoration: underline;
+        text-decoration-color: #3f3f46;
+    }
+    .ProseMirror code {
+        background: #27272a;
+        color: #f472b6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+    .ProseMirror pre {
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 8px;
+        padding: 1em;
+        margin: 0.8em 0;
+    }
+    .ProseMirror pre code {
+        background: none;
+        padding: 0;
+        color: #a1a1aa;
+    }
+    .ProseMirror blockquote {
+        border-left: 3px solid #3f3f46;
+        padding-left: 1em;
+        color: #71717a;
+        margin: 0.6em 0;
+    }
+    .ProseMirror hr {
+        border: none;
+        border-top: 1px solid #27272a;
+        margin: 2em 0;
+    }
+    .ProseMirror ul {
+        list-style-type: disc;
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror ol {
+        list-style-type: decimal;
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror li {
+        margin: 0.1em 0;
+    }
+    .wikilink-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 7px 12px;
+        font-size: 12px;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.1s;
+    }
+    .wikilink-item:hover,
+    .wikilink-item.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e4e4e7;
+    }
+    .wikilink-item .wiki-icon {
+        color: #38bdf8;
+        font-weight: 700;
+        font-size: 10px;
+        opacity: 0.7;
+    }
+    .wikish-link {
+        color: #38bdf8 !important;
+        text-decoration: underline !important;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(56, 189, 248, 0.3) !important;
+        cursor: pointer !important;
+        font-weight: 500;
+    }
+    .wikish-link:hover {
+        text-decoration-color: #38bdf8 !important;
+    }
+</style>
+
 <script>
-    // TipTap Editor initialization
-    document.addEventListener("DOMContentLoaded", function () {
-        const content = document.getElementById("content-input").value;
-        const editor = new tiptap.Editor({
-            element: document.getElementById("editor"),
+    (function () {
+        "use strict";
+        var T = window.TipTapEditor;
+        var el = document.getElementById("editor-content");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+        var bubbleEl = document.getElementById("bubble-menu");
+        var slashEl = document.getElementById("slash-menu");
+        var slashItems = document.getElementById("slash-items");
+
+        var raw = document.getElementById("content-output").value;
+        var saveTimer = null;
+        var currentStatus = "saved";
+        var editor = null;
+        var originalFilename = filenameInput.value;
+        var slashPos = null;
+        var frontmatterText = "";
+        var frontmatterVisible = false;
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+
+        // ── Parse frontmatter do raw content ──
+        var bodyContent = raw;
+        var fmMatch = raw.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            frontmatterText = fmMatch[1];
+            bodyContent = fmMatch[2];
+        }
+
+        // ── Slash commands ──
+        function makeSlashAction(cmd, attrs) {
+            return function () {
+                hideSlashMenu();
+                if (slashPos !== null && editor) {
+                    editor
+                        .chain()
+                        .focus()
+                        .deleteRange({ from: slashPos, to: slashPos + 1 })
+                        .run();
+                    slashPos = null;
+                }
+                exec(cmd, attrs);
+            };
+        }
+
+        var SLASH_COMMANDS = [
+            {
+                id: "h1",
+                icon: "H1",
+                label: "Heading 1",
+                desc: "Titulo grande",
+                action: makeSlashAction("heading", { level: 1 }),
+            },
+            {
+                id: "h2",
+                icon: "H2",
+                label: "Heading 2",
+                desc: "Titulo medio",
+                action: makeSlashAction("heading", { level: 2 }),
+            },
+            {
+                id: "h3",
+                icon: "H3",
+                label: "Heading 3",
+                desc: "Titulo pequeno",
+                action: makeSlashAction("heading", { level: 3 }),
+            },
+            {
+                id: "bullet",
+                icon: "\u2022",
+                label: "Lista",
+                desc: "Lista nao ordenada",
+                action: makeSlashAction("bulletList"),
+            },
+            {
+                id: "ordered",
+                icon: "1.",
+                label: "Lista numerada",
+                desc: "Lista ordenada",
+                action: makeSlashAction("orderedList"),
+            },
+            {
+                id: "task",
+                icon: "\u2611",
+                label: "Checklist",
+                desc: "Lista de tarefas",
+                action: makeSlashAction("taskList"),
+            },
+            {
+                id: "quote",
+                icon: "\u275D",
+                label: "Citacao",
+                desc: "Bloco de citacao",
+                action: makeSlashAction("blockquote"),
+            },
+            {
+                id: "code",
+                icon: "\u2394",
+                label: "Bloco de codigo",
+                desc: "Codigo",
+                action: makeSlashAction("codeBlock"),
+            },
+            {
+                id: "table",
+                icon: "\u229E",
+                label: "Tabela",
+                desc: "Inserir tabela 3x3",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({ from: slashPos, to: slashPos + 1 })
+                            .run();
+                        slashPos = null;
+                    }
+                    if (editor)
+                        editor
+                            .chain()
+                            .focus()
+                            .insertTable({
+                                rows: 3,
+                                cols: 3,
+                                withHeaderRow: true,
+                            })
+                            .run();
+                },
+            },
+            {
+                id: "hr",
+                icon: "\u2014",
+                label: "Linha horizontal",
+                desc: "Separador",
+                action: makeSlashAction("horizontalRule"),
+            },
+        ];
+
+        // ── Wikilink Autocomplete ──
+        var wikiNotes = [];
+        var wikiVisible = false;
+        var wikiSelected = 0;
+
+        function loadWikiNotes() {
+            fetch("/api/notes")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    wikiNotes = (data.notes || []).map(function (n) {
+                        var name = n.arquivo.split("/").pop() || n.arquivo;
+                        return name.replace(/\.md$/i, "");
+                    });
+                })
+                .catch(function () {});
+        }
+
+        function showWikiMenu(filter) {
+            var f = filter.toLowerCase();
+            var items = wikiNotes.filter(function (n) {
+                return n.toLowerCase().indexOf(f) !== -1;
+            });
+            var el = document.getElementById("wikilink-menu");
+            var list = document.getElementById("wikilink-items");
+            if (items.length === 0) {
+                el.classList.add("hidden");
+                wikiVisible = false;
+                return;
+            }
+            wikiSelected = 0;
+            var html = "";
+            items.forEach(function (name, i) {
+                var idx = name.toLowerCase().indexOf(f);
+                var before = htmlEscape(name.substring(0, idx));
+                var match = htmlEscape(name.substring(idx, idx + f.length));
+                var after = htmlEscape(name.substring(idx + f.length));
+                html +=
+                    '<button class="wikilink-item' +
+                    (i === 0 ? " active" : "") +
+                    '" data-index="' +
+                    i +
+                    '" data-wiki-name="' +
+                    htmlEscape(name) +
+                    '">';
+                html += '<span class="wiki-icon">[[]]</span>';
+                html +=
+                    "<span>" +
+                    before +
+                    "<strong>" +
+                    match +
+                    "</strong>" +
+                    after +
+                    "</span>";
+                html += "</button>";
+            });
+            list.innerHTML = html;
+            el.classList.remove("hidden");
+            wikiVisible = true;
+            var sel = window.getSelection();
+            if (sel.rangeCount) {
+                var range = sel.getRangeAt(0);
+                var rect = range.getBoundingClientRect();
+                el.style.left = rect.left - 10 + "px";
+                el.style.top = rect.bottom + 4 + "px";
+            }
+        }
+
+        function hideWikiMenu() {
+            document.getElementById("wikilink-menu").classList.add("hidden");
+            wikiVisible = false;
+        }
+
+        // Click delegation for wikilink items (evita escopo global do onclick)
+        document
+            .getElementById("wikilink-items")
+            .addEventListener("click", function (e) {
+                var btn = e.target.closest(".wikilink-item");
+                if (btn) {
+                    var name = btn.getAttribute("data-wiki-name");
+                    if (name) selectWiki(name);
+                }
+            });
+
+        function selectWiki(name) {
+            hideWikiMenu();
+            if (!editor) return;
+            var $from = editor.state.selection.$from;
+            var textBefore = $from.parent.textBetween(0, $from.parentOffset);
+            var bracketPos = textBefore.lastIndexOf("[[");
+            if (bracketPos !== -1) {
+                var deleteFrom = $from.pos - (textBefore.length - bracketPos);
+                var deleteTo = $from.pos;
+                editor
+                    .chain()
+                    .focus()
+                    .deleteRange({ from: deleteFrom, to: deleteTo })
+                    .setLink({ href: "/editor?file=notes/" + name + ".md" })
+                    .insertContent(name)
+                    .run();
+            } else {
+                editor
+                    .chain()
+                    .focus()
+                    .setLink({ href: "/editor?file=notes/" + name + ".md" })
+                    .insertContent(name)
+                    .run();
+            }
+        }
+
+        // ── Editor ──
+        editor = new T.Editor({
+            element: el,
             extensions: [
-                tiptap.StarterKit.configure({
+                T.StarterKit.configure({
                     heading: { levels: [1, 2, 3, 4, 5, 6] },
                 }),
-                tiptap.Placeholder.configure({
-                    placeholder: "Comece a escrever... — Ctrl+S para salvar",
+                T.Placeholder.configure({
+                    placeholder: "Pressione / para comandos...",
                 }),
-                tiptap.Table.configure({ resizable: true }),
-                tiptap.TableRow,
-                tiptap.TableCell,
-                tiptap.TableHeader,
-                tiptap.Image,
-                tiptap.TaskList,
-                tiptap.TaskItem.configure({ nested: true }),
+                T.Table.configure({ resizable: true }),
+                T.TableRow,
+                T.TableCell,
+                T.TableHeader,
+                T.TaskList,
+                T.TaskItem.configure({ nested: true }),
+                T.Underline,
+                T.Highlight,
+                T.ImageExt,
+                T.Link,
             ],
-            content: content,
-            onUpdate: ({ editor }) => {
-                document.getElementById("content-input").value =
-                    editor.getHTML();
+            content: bodyContent || "<p></p>",
+            onSelectionUpdate: function () {
+                if (!slashEl.classList.contains("hidden")) return;
+                updateBubble();
+            },
+            onUpdate: function () {
+                setStatus("dirty");
+                if (saveTimer) clearTimeout(saveTimer);
+                saveTimer = setTimeout(doSave, 2000);
+                // Update wikilink filter if menu is visible
+                if (wikiVisible) {
+                    var $from = editor.state.selection.$from;
+                    var textBefore = $from.parent.textBetween(
+                        0,
+                        $from.parentOffset,
+                    );
+                    var bracketPos = textBefore.lastIndexOf("[[");
+                    if (bracketPos !== -1) {
+                        var filterText = textBefore.substring(bracketPos + 2);
+                        showWikiMenu(filterText);
+                    } else {
+                        hideWikiMenu();
+                    }
+                }
+            },
+            editorProps: {
+                attributes: { spellcheck: "false" },
+                handleKeyDown: function (view, event) {
+                    if (event.key === "/" && !event.ctrlKey && !event.metaKey) {
+                        var $from = view.state.selection.$from;
+                        var textBefore = $from.parent.textBetween(
+                            0,
+                            $from.parentOffset,
+                        );
+                        if (textBefore === "") {
+                            slashPos = view.state.selection.from;
+                            setTimeout(function () {
+                                showSlashMenu(view);
+                            }, 10);
+                            return false;
+                        }
+                    }
+                    // Wikilink detection: [[ typing
+                    if (event.key === "[" && !event.ctrlKey && !event.metaKey) {
+                        var $from = view.state.selection.$from;
+                        var textBefore = $from.parent.textBetween(
+                            0,
+                            $from.parentOffset,
+                        );
+                        if (
+                            textBefore.length >= 1 &&
+                            textBefore.slice(-1) === "["
+                        ) {
+                            wikiVisible = true;
+                            setTimeout(function () {
+                                showWikiMenu("");
+                            }, 10);
+                            return false;
+                        }
+                    }
+                    if (wikiVisible) {
+                        if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items.length) {
+                                wikiSelected = Math.min(
+                                    wikiSelected + 1,
+                                    items.length - 1,
+                                );
+                                items.forEach(function (el, i) {
+                                    el.classList.toggle(
+                                        "active",
+                                        i === wikiSelected,
+                                    );
+                                });
+                            }
+                            return true;
+                        }
+                        if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items.length) {
+                                wikiSelected = Math.max(wikiSelected - 1, 0);
+                                items.forEach(function (el, i) {
+                                    el.classList.toggle(
+                                        "active",
+                                        i === wikiSelected,
+                                    );
+                                });
+                            }
+                            return true;
+                        }
+                        if (event.key === "Enter" || event.key === "Tab") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items[wikiSelected])
+                                items[wikiSelected].click();
+                            return true;
+                        }
+                        if (event.key === "Escape") {
+                            hideWikiMenu();
+                            return true;
+                        }
+                    }
+                    if (event.key === "Escape") {
+                        hideSlashMenu();
+                        hideBubble();
+                    }
+                    return false;
+                },
+            },
+            onCreate: function () {
+                // Set frontmatter textarea after editor is created
+                var fmArea = document.getElementById("frontmatter-area");
+                if (fmArea && frontmatterText) {
+                    fmArea.value = frontmatterText;
+                }
+                // Convert existing [[wikilinks]] to clickable links in the content
+                setTimeout(function () {
+                    if (!editor) return;
+                    var html = editor.getHTML();
+                    // Match [[nota]] pattern and convert to links
+                    html = html.replace(
+                        /\[\[([^\]]+)\]\]/g,
+                        function (match, name) {
+                            var noteName = name.trim();
+                            if (!noteName.endsWith(".md")) noteName += ".md";
+                            return (
+                                '<a href="/editor?file=notes/' +
+                                encodeURIComponent(noteName) +
+                                '" class="wikish-link">' +
+                                name.trim() +
+                                "</a>"
+                            );
+                        },
+                    );
+                    if (html !== editor.getHTML()) {
+                        editor.commands.setContent(html);
+                    }
+                }, 100);
             },
         });
 
-        // Ctrl+S to save
+        // ── Bubble Menu ──
+        function updateBubble() {
+            if (!editor || editor.isDestroyed) {
+                hideBubble();
+                return;
+            }
+            var sel = window.getSelection();
+            if (!sel || sel.isCollapsed || !sel.rangeCount) {
+                hideBubble();
+                return;
+            }
+            var range = sel.getRangeAt(0);
+            var rect = range.getBoundingClientRect();
+            if (!rect || rect.width === 0) {
+                hideBubble();
+                return;
+            }
+            bubbleEl.classList.remove("hidden");
+            var bw = bubbleEl.offsetWidth;
+            var left = rect.left + rect.width / 2 - bw / 2;
+            var top = rect.top - 48;
+            if (top < 8) top = rect.bottom + 8;
+            if (left < 8) left = 8;
+            if (left + bw > window.innerWidth - 8)
+                left = window.innerWidth - bw - 8;
+            bubbleEl.style.left = left + "px";
+            bubbleEl.style.top = top + "px";
+            bubbleEl.querySelectorAll(".bubble-btn").forEach(function (btn) {
+                var cmd = btn.dataset.cmd;
+                if (cmd)
+                    btn.classList.toggle("is-active", editor.isActive(cmd));
+            });
+        }
+
+        function hideBubble() {
+            bubbleEl.classList.add("hidden");
+        }
+
+        bubbleEl.addEventListener("mousedown", function (e) {
+            var btn = e.target.closest(".bubble-btn");
+            if (!btn) return;
+            e.preventDefault();
+            var cmd = btn.dataset.cmd;
+            if (cmd) exec(cmd);
+            if (btn.id === "bubble-link") promptLink();
+        });
+
+        // ── Slash Menu ──
+        function showSlashMenu(view) {
+            var coords = view.coordsAtPos(view.state.selection.from);
+            if (!coords) return;
+            renderSlashItems("");
+            slashEl.classList.remove("hidden");
+            var mw = 224;
+            var left = coords.left - 10;
+            var top = coords.bottom + 4;
+            if (left + mw > window.innerWidth - 8)
+                left = window.innerWidth - mw - 8;
+            if (left < 8) left = 8;
+            slashEl.style.left = left + "px";
+            slashEl.style.top = top + "px";
+            selectSlashItem(0);
+        }
+
+        function hideSlashMenu() {
+            slashEl.classList.add("hidden");
+        }
+
+        function renderSlashItems(filter) {
+            var f = filter.toLowerCase();
+            var items = SLASH_COMMANDS.filter(function (c) {
+                return (
+                    c.label.toLowerCase().indexOf(f) !== -1 ||
+                    c.desc.toLowerCase().indexOf(f) !== -1
+                );
+            });
+            slashItems.innerHTML = "";
+            items.forEach(function (cmd, i) {
+                var btn = document.createElement("button");
+                btn.className = "slash-item";
+                btn.innerHTML =
+                    '<span class="icon">' +
+                    cmd.icon +
+                    '</span><div><div class="label">' +
+                    cmd.label +
+                    '</div><div class="desc">' +
+                    cmd.desc +
+                    "</div></div>";
+                btn.onclick = cmd.action;
+                btn.dataset.index = i;
+                slashItems.appendChild(btn);
+            });
+            selectSlashItem(0);
+        }
+
+        var slashSelected = 0;
+
+        function htmlEscape(s) {
+            return s
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
+        function selectSlashItem(idx) {
+            slashSelected = idx;
+            slashItems
+                .querySelectorAll(".slash-item")
+                .forEach(function (el, i) {
+                    el.classList.toggle("active", i === idx);
+                    if (i === idx) el.scrollIntoView({ block: "nearest" });
+                });
+        }
+
+        document.addEventListener("keydown", function (e) {
+            if (!slashEl.classList.contains("hidden")) {
+                var items = slashItems.querySelectorAll(".slash-item");
+                if (items.length === 0) return;
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    selectSlashItem(
+                        Math.min(slashSelected + 1, items.length - 1),
+                    );
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    selectSlashItem(Math.max(slashSelected - 1, 0));
+                } else if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    items[slashSelected] && items[slashSelected].click();
+                }
+            }
+        });
+
+        // ── Executar ──
+        function exec(cmd, attrs) {
+            if (!editor) return;
+            var chain = editor.chain().focus();
+            switch (cmd) {
+                case "bold":
+                    chain.toggleBold();
+                    break;
+                case "italic":
+                    chain.toggleItalic();
+                    break;
+                case "underline":
+                    chain.toggleUnderline();
+                    break;
+                case "strike":
+                    chain.toggleStrike();
+                    break;
+                case "highlight":
+                    chain.toggleHighlight();
+                    break;
+                case "code":
+                    chain.toggleCode();
+                    break;
+                case "heading":
+                    chain.toggleHeading(attrs);
+                    break;
+                case "bulletList":
+                    chain.toggleBulletList();
+                    break;
+                case "orderedList":
+                    chain.toggleOrderedList();
+                    break;
+                case "taskList":
+                    chain.toggleTaskList();
+                    break;
+                case "blockquote":
+                    chain.toggleBlockquote();
+                    break;
+                case "codeBlock":
+                    chain.toggleCodeBlock();
+                    break;
+                case "horizontalRule":
+                    chain.setHorizontalRule();
+                    break;
+                default:
+                    return;
+            }
+            chain.run();
+        }
+
+        function promptLink() {
+            var url = prompt("URL do link:");
+            if (url && editor) {
+                editor.chain().focus().setLink({ href: url }).run();
+            }
+        }
+
+        // ── Frontmatter ──
+        function toggleFrontmatter() {
+            frontmatterVisible = !frontmatterVisible;
+            var el = document.getElementById("frontmatter-area");
+            var arrow = document.getElementById("fm-arrow");
+            var tagSuggest = document.getElementById("tag-suggestions");
+            if (el) el.classList.toggle("hidden", !frontmatterVisible);
+            if (arrow) arrow.classList.toggle("rotate-90", frontmatterVisible);
+            if (tagSuggest)
+                tagSuggest.classList.toggle("hidden", !frontmatterVisible);
+            if (frontmatterVisible) loadTagSuggestions();
+        }
+
+        function loadTagSuggestions() {
+            fetch("/api/tags")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    var list = document.getElementById("tag-suggestion-list");
+                    var tags = data.tags || [];
+                    if (tags.length === 0) {
+                        list.innerHTML =
+                            '<span class="text-[10px] text-zinc-700">Nenhuma tag indexada.</span>';
+                        return;
+                    }
+                    list.innerHTML = "";
+                    tags.forEach(function (t) {
+                        var btn = document.createElement("button");
+                        btn.className =
+                            "text-[10px] font-bold text-zinc-500 bg-zinc-800/40 hover:bg-zinc-700/60 hover:text-zinc-300 px-2 py-0.5 rounded transition-colors";
+                        btn.textContent = "#" + t;
+                        btn.onclick = function () {
+                            addTagToFrontmatter(t);
+                        };
+                        list.appendChild(btn);
+                    });
+                })
+                .catch(function () {});
+        }
+
+        function addTagToFrontmatter(tag) {
+            var fm = document.getElementById("frontmatter-area");
+            var val = fm.value;
+            // Check if tags: already exists
+            var tagsMatch = val.match(/^(tags:\s*\[)([^\]]*)(\])$/m);
+            if (tagsMatch) {
+                // tags: [existing1, existing2]
+                var existing = tagsMatch[2].trim();
+                var newTags = existing ? existing + ", " + tag : tag;
+                var newVal = val.replace(
+                    /^tags:\s*\[[^\]]*\]$/m,
+                    "tags: [" + newTags + "]",
+                );
+                fm.value = newVal;
+            } else if (val.trim() && !val.includes("tags:")) {
+                // Add tags: [tag] at the end
+                fm.value = val + "\ntags: [" + tag + "]";
+            } else if (!val.trim()) {
+                fm.value = "tags: [" + tag + "]";
+            } else {
+                fm.value = val + ", " + tag;
+            }
+            // Trigger input event
+            var evt = new Event("input", { bubbles: true });
+            fm.dispatchEvent(evt);
+        }
+
+        document.addEventListener("input", function (e) {
+            if (e.target && e.target.id === "frontmatter-area") {
+                frontmatterText = e.target.value;
+            }
+        });
+
+        // ── Status ──
+        function setStatus(s) {
+            currentStatus = s;
+            statusEl.textContent =
+                s === "saved" ? "\u2713" : s === "saving" ? "\u27F3" : "\u25CF";
+        }
+
+        // ── Save ──
+        async function saveNow() {
+            if (saveTimer) clearTimeout(saveTimer);
+            await doSave();
+        }
+
+        async function doSave() {
+            if (!editor || currentStatus === "saving") return;
+            setStatus("saving");
+            var md = "";
+            try {
+                md = editor.storage.markdown.getMarkdown();
+            } catch (e) {
+                md = editor.getHTML();
+            }
+            var fm = document.getElementById("frontmatter-area").value.trim();
+            var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+            // Convert editor links to [[wikilink]] for storage
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                "[[$1]]",
+            );
+            var fd = new FormData();
+            fd.append("filename", filenameInput.value);
+            fd.append("content", finalContent);
+            fd.append("tags", "");
+            try {
+                var resp = await fetch("/file/save", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (resp.ok || resp.status === 303) setStatus("saved");
+                else setStatus("dirty");
+            } catch (e) {
+                setStatus("dirty");
+            }
+        }
+
+        // ── Rename ──
+        filenameInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                doRename();
+            }
+        });
+        filenameInput.addEventListener("blur", function () {
+            doRename();
+        });
+
+        async function doRename() {
+            var newName = filenameInput.value.trim();
+            if (!newName || newName === originalFilename) return;
+            if (!newName.endsWith(".md")) newName += ".md";
+            if (saveTimer) clearTimeout(saveTimer);
+            setStatus("saving");
+
+            var md = "";
+            try {
+                md = editor.storage.markdown.getMarkdown();
+            } catch (e) {
+                md = editor.getHTML();
+            }
+            var fm = document.getElementById("frontmatter-area").value.trim();
+            var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+            // Convert editor links to [[wikilink]] for storage
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                "[[$1]]",
+            );
+
+            // 1. Salva no novo nome
+            var fd = new FormData();
+            fd.append("filename", newName);
+            fd.append("content", finalContent);
+            fd.append("tags", "");
+            try {
+                await fetch("/file/save", { method: "POST", body: fd });
+
+                // 2. Deleta o arquivo antigo
+                if (originalFilename !== newName) {
+                    var deleteFd = new FormData();
+                    deleteFd.append("filename", originalFilename);
+                    await fetch("/file/delete", {
+                        method: "POST",
+                        body: deleteFd,
+                    });
+                }
+
+                // 3. Atualiza e redireciona
+                originalFilename = newName;
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(newName);
+            } catch (e) {
+                setStatus("dirty");
+            }
+        }
+
+        // ── Ctrl+S ──
         document.addEventListener("keydown", function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
                 e.preventDefault();
-                document.getElementById("editor-form").submit();
+                saveNow();
             }
         });
-    });
 
-    // ProseMirror overrides for dark theme
-    const style = document.createElement("style");
-    style.textContent = `
-    .ProseMirror { outline: none; min-height: 400px; color: #d4d4d8; }
-    .ProseMirror h1 { color: #f4f4f5; font-size: 1.5rem; margin-top: 1.2em; }
-    .ProseMirror h2 { color: #e4e4e7; font-size: 1.25rem; margin-top: 1em; }
-    .ProseMirror h3 { color: #d4d4d8; font-size: 1.1rem; }
-    .ProseMirror p { color: #a1a1aa; line-height: 1.7; }
-    .ProseMirror code { background: #27272a; color: #f472b6; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
-    .ProseMirror pre { background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 1em; }
-    .ProseMirror pre code { background: none; padding: 0; }
-    .ProseMirror blockquote { border-left: 3px solid #3f3f46; padding-left: 1em; color: #71717a; }
-    .ProseMirror a { color: #38bdf8; text-decoration: none; }
-    .ProseMirror a:hover { text-decoration: underline; }
-    .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; }
-    .ProseMirror li p { margin: 0.2em 0; }
-    .ProseMirror hr { border: none; border-top: 1px solid #27272a; margin: 2em 0; }
-    .ProseMirror img { max-width: 100%; border-radius: 8px; }
-    .ProseMirror strong { color: #e4e4e7; }
-    .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.875rem; }
-    .ProseMirror th { background: rgba(255,255,255,0.05); color: #e4e4e7; font-weight: 700; padding: 8px 12px; border: 1px solid #27272a; }
-    .ProseMirror td { padding: 6px 12px; border: 1px solid #27272a; color: #a1a1aa; }
-    .ProseMirror tr:hover td { background: rgba(255,255,255,0.02); }
-    .ProseMirror .tableWrapper { overflow-x: auto; margin: 1em 0; }
-    .ProseMirror p.is-editor-empty:first-child::before {
-        content: attr(data-placeholder);
-        float: left;
-        color: #52525b;
-        pointer-events: none;
-        height: 0;
-    }
-`;
-    document.head.appendChild(style);
+        // ── Save button ──
+        document.getElementById("save-btn").addEventListener("click", saveNow);
+
+        // ── Frontmatter toggle ──
+        document
+            .getElementById("toggle-fm-btn")
+            .addEventListener("click", toggleFrontmatter);
+
+        // ── Clicar fora fecha menus ──
+        document.addEventListener("mousedown", function (e) {
+            if (
+                !bubbleEl.classList.contains("hidden") &&
+                !bubbleEl.contains(e.target)
+            )
+                hideBubble();
+            if (
+                !slashEl.classList.contains("hidden") &&
+                !slashEl.contains(e.target)
+            )
+                hideSlashMenu();
+            var wm = document.getElementById("wikilink-menu");
+            if (
+                !wm.classList.contains("hidden") &&
+                !wm.contains(e.target) &&
+                !e.target.closest(".ProseMirror")
+            ) {
+                hideWikiMenu();
+            }
+        });
+
+        // ── Check embedding status ──
+        function checkEmbedStatus() {
+            var filename = filenameInput.value;
+            fetch("/api/notes")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    var notes = data.notes || [];
+                    var found = false;
+                    for (var i = 0; i < notes.length; i++) {
+                        if (notes[i].arquivo === filename) {
+                            found = true;
+                            var el = document.getElementById("embed-status");
+                            if (notes[i].embedded) {
+                                el.textContent = "✦";
+                                el.className =
+                                    "text-[10px] font-mono shrink-0 text-emerald-600/70";
+                                el.title = "Embedado";
+                            } else {
+                                el.textContent = "○";
+                                el.className =
+                                    "text-[10px] font-mono shrink-0 text-zinc-700/50";
+                                el.title = "Sem embedding";
+                            }
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        var el = document.getElementById("embed-status");
+                        el.textContent = "○";
+                        el.className =
+                            "text-[10px] font-mono shrink-0 text-zinc-700/50";
+                        el.title = "Sem embedding";
+                    }
+                })
+                .catch(function () {});
+        }
+
+        setTimeout(checkEmbedStatus, 500);
+
+        loadWikiNotes();
+        setStatus("saved");
+    })();
 </script>
 {{end}}

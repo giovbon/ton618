@@ -1,28 +1,33 @@
-{{define "content"}}
+{{template "layout" .}} {{define "graphContent"}}
 <div>
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4">
         <h1 class="text-sm font-black tracking-tight text-zinc-200">
             Mapa Semântico
         </h1>
-        <span
-            class="text-[10px] text-zinc-600 font-medium"
-            id="graph-status"
-        ></span>
+        <div class="flex items-center gap-4">
+            <span
+                id="graph-status"
+                class="text-[10px] text-zinc-600 font-medium"
+                >—</span
+            >
+            <span class="text-[10px] text-zinc-700">✦ notas embedadas</span>
+        </div>
     </div>
 
-    <!-- Graph container -->
     <div
         class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card"
     >
-        <div id="graph-container" style="width: 100%; height: 560px"></div>
+        <div
+            id="graph-container"
+            style="width: 100%; height: 600px; position: relative"
+        ></div>
     </div>
 
     <p
-        class="text-[10px] text-zinc-600 mt-3 text-center tracking-wide uppercase"
+        class="text-[10px] text-zinc-600 mt-2 text-center tracking-wide uppercase"
     >
-        Arraste para mover &middot; Scroll para zoom &middot; Duplo-clique para
-        abrir a nota
+        Arraste para mover &middot; Scroll para zoom &middot; Clique na bolinha
+        para abrir
     </p>
 </div>
 
@@ -36,128 +41,295 @@
         try {
             const resp = await fetch("/api/graph/data");
             data = await resp.json();
-            statusEl.textContent = data.nodes.length + " notas";
         } catch (e) {
             statusEl.textContent = "Erro ao carregar";
             return;
         }
 
-        if (!data.nodes || data.nodes.length === 0) {
-            statusEl.textContent = "Sem dados";
+        const nodes = data.nodes || [];
+        if (nodes.length === 0) {
+            statusEl.textContent = "Nenhuma nota embedada";
             return;
         }
 
-        const container = document.getElementById("graph-container");
-        const width = container.clientWidth;
-        const height = 560;
+        // Link count for sizing
+        const linkCounts = {};
+        (data.links || []).forEach(function (l) {
+            var s = typeof l.source === "object" ? l.source.id : l.source;
+            var t = typeof l.target === "object" ? l.target.id : l.target;
+            linkCounts[s] = (linkCounts[s] || 0) + 1;
+            linkCounts[t] = (linkCounts[t] || 0) + 1;
+        });
 
-        const svg = d3
+        // Simple frontend clustering based on simulation positions
+        function assignClusters(pts, k) {
+            if (pts.length <= k) {
+                pts.forEach(function (p, i) {
+                    p.cluster = i;
+                });
+                return;
+            }
+            // Random initialization
+            var centroids = [];
+            var shuffled = pts.slice().sort(function () {
+                return Math.random() - 0.5;
+            });
+            for (var i = 0; i < k; i++)
+                centroids.push({ x: shuffled[i].x, y: shuffled[i].y });
+
+            for (var iter = 0; iter < 30; iter++) {
+                // Assign
+                pts.forEach(function (p) {
+                    var best = 0,
+                        bestDist = Infinity;
+                    centroids.forEach(function (c, j) {
+                        var d =
+                            (p.x - c.x) * (p.x - c.x) +
+                            (p.y - c.y) * (p.y - c.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = j;
+                        }
+                    });
+                    p.cluster = best;
+                });
+                // Update centroids
+                var sums = [],
+                    counts = [];
+                for (var j = 0; j < k; j++) {
+                    sums.push({ x: 0, y: 0 });
+                    counts.push(0);
+                }
+                pts.forEach(function (p) {
+                    sums[p.cluster].x += p.x;
+                    sums[p.cluster].y += p.y;
+                    counts[p.cluster]++;
+                });
+                for (var j = 0; j < k; j++) {
+                    if (counts[j] > 0) {
+                        centroids[j].x = sums[j].x / counts[j];
+                        centroids[j].y = sums[j].y / counts[j];
+                    }
+                }
+            }
+        }
+
+        var CLUSTER_COLORS = [
+            "#38bdf8",
+            "#10b981",
+            "#f59e0b",
+            "#ef4444",
+            "#8b5cf6",
+            "#ec4899",
+            "#14b8a6",
+            "#6366f1",
+        ];
+
+        var container = document.getElementById("graph-container");
+        var width = container.clientWidth,
+            height = 600;
+
+        var svg = d3
             .select("#graph-container")
             .append("svg")
             .attr("width", width)
             .attr("height", height)
             .style("background", "#09090b");
 
-        const g = svg.append("g");
+        var g = svg.append("g");
 
         // Zoom
-        const zoom = d3
+        var zoom = d3
             .zoom()
-            .scaleExtent([0.15, 4])
-            .on("zoom", (event) => g.attr("transform", event.transform));
-
+            .scaleExtent([0.1, 4])
+            .on("zoom", function (event) {
+                g.attr("transform", event.transform);
+            });
         svg.call(zoom);
 
         // Force simulation
-        const simulation = d3
-            .forceSimulation(data.nodes)
+        var simulation = d3
+            .forceSimulation(nodes)
             .force(
                 "link",
                 d3
                     .forceLink(data.links || [])
-                    .id((d) => d.id)
-                    .distance(120),
+                    .id(function (d) {
+                        return d.id;
+                    })
+                    .distance(100)
+                    .strength(0.6),
             )
-            .force("charge", d3.forceManyBody().strength(-400))
+            .force("charge", d3.forceManyBody().strength(-300))
             .force("center", d3.forceCenter(width / 2, height / 2))
-            .force("collision", d3.forceCollide(35));
+            .force("collision", d3.forceCollide(25));
+
+        // Voronoi layer (rendered before nodes)
+        var voronoiGroup = g.append("g").attr("class", "voronoi");
 
         // Links
-        const link = g
+        var link = g
             .append("g")
             .selectAll("line")
             .data(data.links || [])
             .join("line")
             .attr("stroke", "#27272a")
-            .attr("stroke-width", 0.8);
+            .attr("stroke-width", 0.5)
+            .attr("stroke-opacity", 0.4);
 
         // Nodes
-        const node = g
+        var node = g
             .append("g")
             .selectAll("g")
-            .data(data.nodes)
+            .data(nodes)
             .join("g")
             .call(
                 d3
                     .drag()
-                    .on("start", (event, d) => {
+                    .on("start", function (event, d) {
                         if (!event.active)
                             simulation.alphaTarget(0.3).restart();
                         d.fx = d.x;
                         d.fy = d.y;
                     })
-                    .on("drag", (event, d) => {
+                    .on("drag", function (event, d) {
                         d.fx = event.x;
                         d.fy = event.y;
                     })
-                    .on("end", (event, d) => {
+                    .on("end", function (event, d) {
                         if (!event.active) simulation.alphaTarget(0);
                         d.fx = null;
                         d.fy = null;
                     }),
             )
-            .on("dblclick", (event, d) => {
+            .on("click", function (event, d) {
+                event.stopPropagation();
                 window.location.href =
                     "/editor?file=" + encodeURIComponent(d.id);
+            })
+            .style("cursor", "pointer");
+
+        node.append("circle")
+            .attr("r", function (d) {
+                return 5 + Math.min((linkCounts[d.id] || 0) * 2, 15);
+            })
+            .attr("fill", function (d) {
+                return (
+                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
+                    "#0ea5e9"
+                );
+            })
+            .attr("opacity", 0.9)
+            .attr("stroke", "#18181b")
+            .attr("stroke-width", 2);
+
+        node.append("text")
+            .text(function (d) {
+                var name = (d.id.split("/").pop() || d.id).replace(
+                    /\.(md|pdf)$/i,
+                    "",
+                );
+                return name.length > 18 ? name.slice(0, 16) + "..." : name;
+            })
+            .attr("text-anchor", "middle")
+            .attr("dy", function (d) {
+                return 10 + Math.min((linkCounts[d.id] || 0) * 2, 15) + 8;
+            })
+            .attr("font-size", "9px")
+            .attr("font-weight", "500")
+            .attr("fill", "#71717a")
+            .attr("font-family", "Inter, system-ui, sans-serif")
+            .attr("pointer-events", "none");
+
+        // Render Voronoi after simulation ends
+        var voronoiRendered = false;
+        simulation.on("end", function () {
+            if (voronoiRendered) return;
+            voronoiRendered = true;
+
+            // Assign clusters
+            var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 2)));
+            assignClusters(nodes, k);
+
+            // Update node colors after clustering
+            node.selectAll("circle").attr("fill", function (d) {
+                return (
+                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
+                    "#0ea5e9"
+                );
             });
 
-        // Node circle
-        node.append("circle")
-            .attr("r", 7)
-            .attr("fill", "#0ea5e9")
-            .attr("opacity", 0.85)
-            .attr("stroke", "#38bdf8")
-            .attr("stroke-width", 1)
-            .attr("filter", "drop-shadow(0 0 6px rgba(14,165,233,0.4))");
+            // Build Delaunay triangulation
+            var delaunay = d3.Delaunay.from(
+                nodes.map(function (d) {
+                    return [d.x, d.y];
+                }),
+            );
+            var voronoi = delaunay.voronoi([
+                -100,
+                -100,
+                width + 100,
+                height + 100,
+            ]);
 
-        // Node label
-        node.append("text")
-            .text((d) => {
-                const parts = d.id.split("/");
-                let name = parts[parts.length - 1];
-                name = name.replace(/\.(md|pdf)$/i, "");
-                if (d.title && d.title !== name) {
-                    return d.title.length > 30
-                        ? d.title.slice(0, 30) + "..."
-                        : d.title;
-                }
-                return name;
-            })
-            .attr("x", 12)
-            .attr("y", 4)
-            .attr("font-size", "10px")
-            .attr("font-weight", "600")
-            .attr("fill", "#a1a1aa")
-            .attr("font-family", "Inter, system-ui, sans-serif");
+            // Render Voronoi cells
+            var cells = voronoiGroup
+                .selectAll("path")
+                .data(nodes)
+                .join("path")
+                .attr("d", function (d, i) {
+                    return voronoi.renderCell(i);
+                })
+                .attr("fill", function (d) {
+                    return (
+                        CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
+                        "#0ea5e9"
+                    );
+                })
+                .attr("fill-opacity", 0.06)
+                .attr("stroke", function (d) {
+                    return CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length];
+                })
+                .attr("stroke-opacity", 0.15)
+                .attr("stroke-width", 1);
 
-        // Tick update
-        simulation.on("tick", () => {
-            link.attr("x1", (d) => d.source.x)
-                .attr("y1", (d) => d.source.y)
-                .attr("x2", (d) => d.target.x)
-                .attr("y2", (d) => d.target.y);
-            node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+            statusEl.textContent = nodes.length + " notas · " + k + " grupos";
         });
+
+        // Tick
+        simulation.on("tick", function () {
+            link.attr("x1", function (d) {
+                return d.source.x;
+            })
+                .attr("y1", function (d) {
+                    return d.source.y;
+                })
+                .attr("x2", function (d) {
+                    return d.target.x;
+                })
+                .attr("y2", function (d) {
+                    return d.target.y;
+                });
+            node.attr("transform", function (d) {
+                return "translate(" + d.x + "," + d.y + ")";
+            });
+        });
+
+        // Auto-zoom after render
+        setTimeout(function () {
+            var bounds = g.node().getBBox();
+            var scale =
+                0.85 / Math.max(bounds.width / width, bounds.height / height);
+            svg.call(
+                zoom.transform,
+                d3.zoomIdentity
+                    .translate(
+                        width / 2 - scale * (bounds.x + bounds.width / 2),
+                        height / 2 - scale * (bounds.y + bounds.height / 2),
+                    )
+                    .scale(Math.max(0.3, scale)),
+            );
+        }, 2000);
     });
 </script>
 {{end}}

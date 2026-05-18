@@ -45,20 +45,22 @@ type RankWeights struct {
 	BaseMultiplier     float64
 	BoostTitleExact    float64
 	BoostTitlePartial  float64
+	BoostPathContext   float64
 	BoostPhrase        float64
 	BoostFreshness     float64
+	BoostTechnical     float64
 	BoostLinkAuthority float64
-	BoostTag           float64
 }
 
 var weights = RankWeights{
 	BaseMultiplier:     1.0,
-	BoostTitleExact:    2.0,
-	BoostTitlePartial:  0.8,
-	BoostPhrase:        1.5,
-	BoostFreshness:     0.5,
-	BoostLinkAuthority: 1.5,
-	BoostTag:           3.0,
+	BoostTitleExact:    1.0, // +10.0 per match exato
+	BoostTitlePartial:  0.4, // +4.0 per match parcial
+	BoostPathContext:   0.5, // +0.5 per term no path
+	BoostPhrase:        1.2, // +120% score quando frase exata
+	BoostFreshness:     0.5, // max bonus recencia
+	BoostTechnical:     0.5, // bonus tabela/código
+	BoostLinkAuthority: 1.5, // log2 multiplier
 }
 
 func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getLinkCount func(string) int, getPopularity func(string) int) (*SearchResults, error) {
@@ -138,28 +140,37 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 }
 
 func listAll(store *db.Store, from, size int) (*SearchResults, error) {
-	results, total, err := store.SearchFTS("", from, size)
+	docs, err := store.GetAllDocuments()
 	if err != nil {
 		return nil, err
 	}
 
+	total := len(docs)
+
+	// Apply pagination
+	if from >= total {
+		return &SearchResults{Hits: []SearchHit{}, Total: total}, nil
+	}
+	end := from + size
+	if end > total {
+		end = total
+	}
+	docs = docs[from:end]
+
 	var hits []SearchHit
-	for _, r := range results {
-		doc, _ := store.GetDocument(r.DocID)
-		if doc == nil {
-			continue
-		}
+	for _, doc := range docs {
 		hits = append(hits, SearchHit{
-			ID:         r.DocID,
+			ID:         doc.ID,
+			Doc:        doc,
 			Score:      1.0,
-			Doc:        *doc,
 			FinalScore: 1.0,
 		})
 	}
 	return &SearchResults{Hits: hits, Total: total}, nil
 }
 
-// buildFTSQuery converte query do usuário para sintaxe FTS5.
+// buildFTSQuery converte query do usuário para sintaxe FTS5 com pesos por coluna.
+// Pesos: tags 50x, arquivo 20x, secao 10x, texto 1x
 func buildFTSQuery(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -168,11 +179,12 @@ func buildFTSQuery(raw string) string {
 
 	var parts []string
 
-	// Extract quoted phrases
+	// Extract quoted phrases — aplica a todas as colunas
 	quotes := quoteRegex.FindAllStringSubmatch(raw, -1)
 	for _, q := range quotes {
 		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
-			parts = append(parts, `"`+strings.TrimSpace(q[1])+`"`)
+			ph := `"` + strings.TrimSpace(q[1]) + `"`
+			parts = append(parts, `(tags:`+ph+` OR arquivo:`+ph+` OR secao:`+ph+` OR texto:`+ph+`)`)
 		}
 		raw = strings.Replace(raw, q[0], " ", 1)
 	}
@@ -187,18 +199,18 @@ func buildFTSQuery(raw string) string {
 		if w == "" || stopwords[strings.ToLower(w)] {
 			continue
 		}
-		// Add prefix wildcard (FTS5 suporta prefixo com *)
-		if len(w) > 2 {
-			parts = append(parts, strings.ToLower(w)+"*")
-		} else {
-			parts = append(parts, strings.ToLower(w))
+		wLower := strings.ToLower(w)
+		if len(wLower) > 2 {
+			wLower += "*"
 		}
+		// Column weights: tags > arquivo > secao > texto
+		parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
 	}
 
 	if len(parts) == 0 {
 		return ""
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(parts, " AND ")
 }
 
 // extractTerms extrai termos relevantes da query (para re-ranking).

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,8 +22,9 @@ import (
 
 func (ctx *HandlerContext) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title": "TON-618",
-		"Query": r.URL.Query().Get("q"),
+		"Title":        "TON-618",
+		"Query":        r.URL.Query().Get("q"),
+		"ContentBlock": "indexContent",
 	}
 	ctx.render(w, "index.html", data)
 }
@@ -51,19 +53,21 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	}
 
 	data := map[string]interface{}{
-		"Title":      "Editor - " + filename,
-		"Filename":   filename,
-		"Content":    content,
-		"Tags":       tags,
-		"AllTags":    allTags,
-		"LoadTipTap": true,
+		"Title":        "Editor - " + filename,
+		"Filename":     filename,
+		"Content":      content,
+		"Tags":         tags,
+		"AllTags":      allTags,
+		"LoadTipTap":   true,
+		"ContentBlock": "editorContent",
 	}
 	ctx.render(w, "editor.html", data)
 }
 
 func (ctx *HandlerContext) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title": "Mapa Semântico - TON-618",
+		"Title":        "Mapa Semântico - TON-618",
+		"ContentBlock": "graphContent",
 	}
 	ctx.render(w, "graph.html", data)
 }
@@ -115,9 +119,57 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 	var items []resultItem
 	for _, hit := range results.Hits {
+		// Clean snippet: strip HTML, show context around query
 		snippet := hit.Doc.Texto
-		if len(snippet) > 300 {
-			snippet = snippet[:300] + "..."
+		// Strip basic HTML tags
+		snippet = strings.ReplaceAll(snippet, "<p>", "")
+		snippet = strings.ReplaceAll(snippet, "</p>", " ")
+		snippet = strings.ReplaceAll(snippet, "<br>", " ")
+		snippet = strings.ReplaceAll(snippet, "<br/>", " ")
+		snippet = strings.ReplaceAll(snippet, "<strong>", "")
+		snippet = strings.ReplaceAll(snippet, "</strong>", "")
+		snippet = strings.ReplaceAll(snippet, "<em>", "")
+		snippet = strings.ReplaceAll(snippet, "</em>", "")
+		snippet = strings.ReplaceAll(snippet, "<code>", "")
+		snippet = strings.ReplaceAll(snippet, "</code>", "")
+		snippet = strings.ReplaceAll(snippet, "<pre>", "")
+		snippet = strings.ReplaceAll(snippet, "</pre>", "")
+		snippet = strings.ReplaceAll(snippet, "<h1>", "")
+		snippet = strings.ReplaceAll(snippet, "</h1>", " - ")
+		snippet = strings.ReplaceAll(snippet, "<h2>", "")
+		snippet = strings.ReplaceAll(snippet, "</h2>", " - ")
+		snippet = strings.ReplaceAll(snippet, "<h3>", "")
+		snippet = strings.ReplaceAll(snippet, "</h3>", " - ")
+		snippet = strings.ReplaceAll(snippet, "<ul>", "")
+		snippet = strings.ReplaceAll(snippet, "</ul>", "")
+		snippet = strings.ReplaceAll(snippet, "<li>", "  ")
+		snippet = strings.ReplaceAll(snippet, "</li>", "")
+		snippet = strings.ReplaceAll(snippet, "<a[^>]*>", "")
+		snippet = strings.ReplaceAll(snippet, "</a>", "")
+		// Normalize whitespace
+		snippet = strings.Join(strings.Fields(snippet), " ")
+
+		// Extract context window around the query term (first occurrence)
+		queryLower := strings.ToLower(query)
+		snippetLower := strings.ToLower(snippet)
+		if pos := strings.Index(snippetLower, queryLower); pos >= 0 {
+			start := pos - 80
+			if start < 0 {
+				start = 0
+			}
+			end := pos + len(query) + 120
+			if end > len(snippet) {
+				end = len(snippet)
+			}
+			snippet = snippet[start:end]
+			if start > 0 {
+				snippet = "... " + snippet
+			}
+			if end < len(snippet) {
+				snippet = snippet + " ..."
+			}
+		} else if len(snippet) > 250 {
+			snippet = snippet[:250] + "..."
 		}
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		items = append(items, resultItem{
@@ -210,7 +262,7 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
+	if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, ctx.Cfg.EmbeddingAll); err != nil {
 		slog.Error("process file after save", "error", err)
 	}
 
@@ -274,7 +326,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	if err == nil {
 		watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 			Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-		})
+		}, ctx.Embed, ctx.Cfg.EmbeddingAll)
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -319,7 +371,7 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	info, _ := os.Stat(fullPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	})
+	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
 
 	http.Redirect(w, r, "/editor?file="+filename, http.StatusSeeOther)
 }
@@ -368,19 +420,35 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		Target string `json:"target"`
 	}
 
+	// Map doc IDs to filenames by consulting the documents table
 	var nodes []node
-	for id, nv := range embeddings {
-		// Use filename as display name
-		parts := strings.Split(id, "/")
-		display := id
-		if len(parts) > 0 {
-			display = parts[len(parts)-1]
+	for docID, nv := range embeddings {
+		// Busca o documento para obter o nome real do arquivo
+		doc, _ := ctx.Store.GetDocument(docID)
+		fileName := ""
+		if doc != nil && doc.Arquivo != "" {
+			fileName = doc.Arquivo
 		}
-		if nv.Title != "" {
-			display = nv.Title
+
+		// Se nao achou o documento, tenta usar o titulo salvo
+		display := nv.Title
+		if fileName != "" {
+			// Usa o nome do arquivo como ID (para abrir a nota) e como titulo
+			parts := strings.Split(fileName, "/")
+			shortName := strings.TrimSuffix(parts[len(parts)-1], ".md")
+			if len(parts) > 1 {
+				shortName = parts[len(parts)-1] + " (" + parts[len(parts)-1] + ")"
+			}
+			display = shortName
+		} else if display == "" {
+			display = docID
+			if len(display) > 12 {
+				display = display[:12] + "..."
+			}
 		}
+
 		nodes = append(nodes, node{
-			ID:    id,
+			ID:    fileName, // O ID real é o filename, nao o hash
 			Title: display,
 			X:     nv.X,
 			Y:     nv.Y,
@@ -402,9 +470,51 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(result)
 }
 
+func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
+	mods, err := ctx.Store.GetAllFileMods()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type noteItem struct {
+		Arquivo  string   `json:"arquivo"`
+		Tags     []string `json:"tags"`
+		Mtime    string   `json:"mtime"`
+		Embedded bool     `json:"embedded"`
+	}
+
+	var notes []noteItem
+	for arquivo, mtime := range mods {
+		tags, _ := ctx.Store.GetFileTags(arquivo)
+		embedded := ctx.Store.HasFileEmbedding(arquivo)
+		notes = append(notes, noteItem{
+			Arquivo:  arquivo,
+			Tags:     tags,
+			Mtime:    mtime,
+			Embedded: embedded,
+		})
+	}
+
+	sort.Slice(notes, func(i, j int) bool {
+		return notes[i].Mtime > notes[j].Mtime
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"notes": notes,
+	})
+}
+
 func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Request) {
 	// Trigger poll
 	ctx.Watcher.PollAll()
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(`<div class="text-green-500">✓ Sincronização iniciada</div>`))
+}
+
+func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	ctx.renderLogin(w, "login.html", map[string]interface{}{
+		"Title": "Login - TON-618",
+	})
 }

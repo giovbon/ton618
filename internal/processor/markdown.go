@@ -49,13 +49,15 @@ func HashFunc(s string) string {
 // CalculateHash gera hash para detecção de mudanças.
 func CalculateHash(secao, texto string, tags []string) string {
 	input := secao + texto + strings.Join(tags, ",")
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(input))[:8])
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h[:8])
 }
 
 // CalculateVectorHash gera hash do conteúdo textual (independente de tags/seção).
 func CalculateVectorHash(secao, texto string) string {
 	input := secao + texto
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(input))[:8])
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h[:8])
 }
 
 // ProcessMarkdown analisa um arquivo markdown e retorna fragmentos de documento.

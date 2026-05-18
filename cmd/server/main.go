@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -16,11 +15,9 @@ import (
 	"ton618/internal/config"
 	"ton618/internal/db"
 	"ton618/internal/semantic"
+	internalTpl "ton618/internal/template"
 	"ton618/internal/watcher"
 )
-
-//go:embed ../../internal/template/*.html
-var templatesFS embed.FS
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
@@ -54,6 +51,13 @@ func main() {
 	)
 	slog.Info("Provedor de embedding", "provider", cfg.EmbeddingProvider)
 
+	// Se nao tem API key configurada, desabilita embedding para evitar erros
+	if cfg.EmbeddingAPIKey == "" && cfg.EmbeddingProvider == "gemini" {
+		slog.Warn("EMBEDDING_API_KEY nao configurada — embeddings desabilitados")
+		cfg.EmbeddingAll = false
+		embedProvider = nil
+	}
+
 	// 4. Templates
 	tpl := template.New("layout.html").Funcs(template.FuncMap{
 		"hasPrefix": strings.HasPrefix,
@@ -66,7 +70,7 @@ func main() {
 		},
 	})
 	var parseErr error
-	tpl, parseErr = tpl.ParseFS(templatesFS, "*.html")
+	tpl, parseErr = tpl.ParseFS(internalTpl.TemplatesFS, "*.html")
 	if parseErr != nil {
 		slog.Error("carregar templates", "error", parseErr)
 		os.Exit(1)
@@ -75,6 +79,7 @@ func main() {
 
 	// 5. Watcher
 	w := watcher.NewWatcher(cfg, store)
+	w.SetEmbedProvider(embedProvider)
 	ctxWatcher, cancelWatcher := context.WithCancel(context.Background())
 	defer cancelWatcher()
 	w.Start(ctxWatcher)
@@ -83,7 +88,7 @@ func main() {
 	go func() {
 		for ev := range w.Events() {
 			slog.Info("Processando", "file", ev.Filename, "type", ev.Type)
-			if err := watcher.ProcessFile(store, ev); err != nil {
+			if err := watcher.ProcessFile(store, ev, embedProvider, cfg.EmbeddingAll); err != nil {
 				slog.Error("processar arquivo", "file", ev.Filename, "error", err)
 			}
 		}
@@ -102,14 +107,27 @@ func main() {
 	apiCtx.SetupRoutes(mux)
 
 	// 7. Server
+	// Static files: servidos SEM autenticação (fora do mux principal)
+	staticFS := http.FileServer(http.Dir(cfg.WebDir + "/static"))
+	staticHandler := http.StripPrefix("/static/", staticFS)
+
 	var handler http.Handler = mux
 	handler = loggingMiddleware(handler)
 	handler = api.Recovery(handler)
 	handler = api.BasicAuthMiddleware(handler, cfg.AuthUser, cfg.AuthPass)
 
+	// Wrap: primeiro tenta static, depois mux com auth
+	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) >= 8 && r.URL.Path[:8] == "/static/" {
+			staticHandler.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: handler,
+		Handler: mainHandler,
 	}
 
 	// Graceful shutdown

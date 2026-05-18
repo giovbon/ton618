@@ -1,50 +1,454 @@
-{{define "content"}}
+{{template "layout" .}} {{define "indexContent"}}
 <div>
-    <!-- Search bar -->
-    <form
-        hx-post="/search"
-        hx-target="#results"
-        hx-trigger="keyup delay:200ms from:input, submit"
-        hx-indicator="#spinner"
-        class="mb-6"
-    >
-        <div class="relative">
+    <!-- Search toggle + bar -->
+    <div class="flex items-center gap-3 mb-4">
+        <button
+            id="mode-toggle"
+            onclick="toggleMode()"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30"
+            title="Alternar modo de busca"
+        >
+            <span id="mode-icon">
+                <svg
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2.5"
+                        d="M4 6h16M4 12h16m-7 6h7"
+                    />
+                </svg>
+            </span>
+            <span id="mode-label">Notas</span>
+        </button>
+
+        <div class="relative flex-1">
             <input
+                id="search-input"
                 type="text"
-                name="q"
-                value="{{.Query}}"
-                placeholder='Buscar notas... (use +tags:tag para filtrar, -termo para excluir, "frase exata")'
-                class="w-full px-5 py-4 text-[15px] bg-zinc-900/60 border border-zinc-800 rounded-xl text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all"
-                autofocus
+                placeholder="Filtrar notas..."
+                oninput="onSearchInput(this.value)"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all"
             />
-            <div class="absolute right-4 top-1/2 -translate-y-1/2">
-                <div id="spinner" class="htmx-indicator">
-                    <svg
-                        class="animate-spin h-4 w-4 text-zinc-500"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                    >
-                        <circle
-                            class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"
-                        ></circle>
-                        <path
-                            class="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        ></path>
-                    </svg>
-                </div>
+            <div
+                id="spinner"
+                class="absolute right-3 top-1/2 -translate-y-1/2 htmx-indicator"
+            >
+                <svg
+                    class="animate-spin h-4 w-4 text-zinc-500"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                >
+                    <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                    ></circle>
+                    <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    ></path>
+                </svg>
+            </div>
+            <!-- Tag autocomplete -->
+            <div
+                id="tag-autocomplete"
+                class="absolute top-full left-0 right-0 mt-1 z-50 hidden"
+            >
+                <div
+                    id="tag-list"
+                    class="bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto"
+                ></div>
             </div>
         </div>
-    </form>
+    </div>
 
     <!-- Results -->
-    <div id="results">{{template "search_results.html" .}}</div>
+    <div id="results">
+        <div id="compact-container">
+            <div id="contentArea"></div>
+        </div>
+        <div id="global-container" class="hidden"></div>
+    </div>
 </div>
+
+<script>
+    var isCompact = true;
+    var allNotes = [];
+
+    function toggleMode() {
+        isCompact = !isCompact;
+        var btn = document.getElementById("mode-toggle");
+        var label = document.getElementById("mode-label");
+        var icon = document.getElementById("mode-icon");
+        var input = document.getElementById("search-input");
+
+        if (isCompact) {
+            btn.className =
+                "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
+            label.textContent = "Notas";
+            icon.innerHTML =
+                '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"/></svg>';
+            input.placeholder = "Filtrar notas...";
+            document
+                .getElementById("compact-container")
+                .classList.remove("hidden");
+            document.getElementById("global-container").classList.add("hidden");
+            if (allNotes.length) renderCompactNotes(allNotes);
+        } else {
+            btn.className =
+                "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
+            label.textContent = "Busca";
+            icon.innerHTML =
+                '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
+            input.placeholder = "Buscar no conteudo das notas...";
+            document
+                .getElementById("compact-container")
+                .classList.add("hidden");
+            document
+                .getElementById("global-container")
+                .classList.remove("hidden");
+            var q = input.value;
+            if (q) doGlobalSearch(q);
+        }
+    }
+
+    function onSearchInput(value) {
+        if (isCompact) {
+            // Check for #tag autocomplete
+            var lastHash = value.lastIndexOf("#");
+            if (lastHash !== -1) {
+                var afterHash = value.substring(lastHash + 1);
+                // Only trigger if # is not followed by space and is the last word
+                if (
+                    afterHash.indexOf(" ") === -1 &&
+                    (lastHash === 0 || value[lastHash - 1] === " ")
+                ) {
+                    showTagAutocomplete(afterHash);
+                    filterByTagAndName(value);
+                    return;
+                }
+            }
+            hideTagAutocomplete();
+            var valueLower = value.toLowerCase();
+            // Strip #tags from the name-matching part
+            var nameSearch = valueLower.replace(/#\w+/g, "").trim();
+            var filtered = allNotes.filter(function (n) {
+                // Check if name matches (only the non-tag part)
+                var nameMatch =
+                    !nameSearch ||
+                    n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
+                // Check tags
+                // Check if any tag matches explicit tag query
+                var tagMatch = true;
+                var tagQueries = value.match(/#(\w+)/g);
+                if (tagQueries) {
+                    tagQueries.forEach(function (tq) {
+                        var tag = tq.substring(1).toLowerCase();
+                        var hasTag = (n.tags || []).some(function (t) {
+                            return t.toLowerCase() === tag;
+                        });
+                        if (!hasTag) tagMatch = false;
+                    });
+                }
+                return nameMatch && tagMatch;
+            });
+            renderCompactNotes(filtered);
+        } else {
+            doGlobalSearch(value);
+        }
+    }
+
+    // ── Tag Autocomplete ──
+    var availableTags = [];
+    var tagSelectedIndex = 0;
+    var tagMatches = [];
+
+    function showTagAutocomplete(query) {
+        var q = query.toLowerCase();
+        tagMatches = availableTags.filter(function (t) {
+            return t.toLowerCase().indexOf(q) !== -1;
+        });
+        var el = document.getElementById("tag-autocomplete");
+        var list = document.getElementById("tag-list");
+        if (tagMatches.length === 0) {
+            el.classList.add("hidden");
+            return;
+        }
+        tagSelectedIndex = 0;
+        var html = "";
+        tagMatches.forEach(function (t, i) {
+            var idx = t.toLowerCase().indexOf(q);
+            var before = t.substring(0, idx);
+            var match = t.substring(idx, idx + q.length);
+            var after = t.substring(idx + q.length);
+            html +=
+                '<div class="px-4 py-2.5 cursor-pointer flex items-center gap-2 text-[13px] transition-colors ' +
+                (i === 0
+                    ? "bg-sky-500/15 text-sky-400"
+                    : "text-zinc-300 hover:bg-zinc-800/80") +
+                '" data-tag-index="' +
+                i +
+                '" onclick="applyTag(\'' +
+                t.replace(/'/g, "\\'") +
+                "')\">" +
+                '<span class="font-bold"><span class="text-sky-500/80">#</span>' +
+                before +
+                '<span class="text-sky-400">' +
+                match +
+                "</span>" +
+                after +
+                "</span>" +
+                "</div>";
+        });
+        list.innerHTML = html;
+        el.classList.remove("hidden");
+    }
+
+    function hideTagAutocomplete() {
+        document.getElementById("tag-autocomplete").classList.add("hidden");
+        tagMatches = [];
+    }
+
+    function applyTag(tag) {
+        var input = document.getElementById("search-input");
+        var val = input.value;
+        // Replace the last #xxx with #tag
+        var lastHash = val.lastIndexOf("#");
+        if (lastHash !== -1) {
+            var before = val.substring(0, lastHash);
+            input.value = before + "#" + tag + " ";
+        }
+        hideTagAutocomplete();
+        onSearchInput(input.value);
+        input.focus();
+    }
+
+    function filterByTagAndName(value) {
+        var valueLower = value.toLowerCase();
+        var nameSearch = valueLower.replace(/#\w+/g, "").trim();
+        var filtered = allNotes.filter(function (n) {
+            var nameMatch =
+                !nameSearch ||
+                n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
+            // Check explicit tag queries
+            var tagQueries = value.match(/#(\w+)/g);
+            if (tagQueries) {
+                tagQueries.forEach(function (tq) {
+                    var tag = tq.substring(1).toLowerCase();
+                    var hasTag = (n.tags || []).some(function (t) {
+                        return t.toLowerCase() === tag;
+                    });
+                    if (!hasTag) nameMatch = false;
+                });
+            }
+            return nameMatch;
+        });
+        renderCompactNotes(filtered);
+    }
+
+    var searchTimer = null;
+    function doGlobalSearch(query) {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+            var el = document.getElementById("global-container");
+            el.innerHTML =
+                '<div class="text-center py-10"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto"></div></div>';
+            var fd = new FormData();
+            fd.append("q", query);
+            fetch("/search", { method: "POST", body: fd })
+                .then(function (r) {
+                    return r.text();
+                })
+                .then(function (html) {
+                    el.innerHTML = html;
+                })
+                .catch(function () {
+                    el.innerHTML =
+                        '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Erro na busca.</p></div>';
+                });
+        }, 300);
+    }
+
+    function buildNoteRows(notes) {
+        var filter = document.getElementById("search-input").value;
+        var nameFilter = filter.replace(/#\w+/g, "").trim();
+        return notes.map(function (n) {
+            var name = n.arquivo.split("/").pop() || n.arquivo;
+            var folder = n.arquivo.split("/").slice(0, -1).join("/") || "";
+            var tags = n.tags || [];
+            var displayName = name;
+            if (nameFilter) {
+                var idx = name.toLowerCase().indexOf(nameFilter.toLowerCase());
+                if (idx !== -1) {
+                    var before = name.slice(0, idx);
+                    var match = name.slice(idx, idx + nameFilter.length);
+                    var after = name.slice(idx + nameFilter.length);
+                    displayName =
+                        before +
+                        '<span class="search-highlight">' +
+                        match +
+                        "</span>" +
+                        after;
+                }
+            }
+            var safeName = n.arquivo.replace(/'/g, "\\'");
+            var html =
+                '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
+            html +=
+                '<a href="/editor?file=' +
+                encodeURIComponent(n.arquivo) +
+                '" class="flex-1 min-w-0">';
+            html +=
+                '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
+                displayName +
+                "</span>";
+            if (folder)
+                html +=
+                    '<span class="text-[10px] text-zinc-700">' +
+                    folder +
+                    "</span>";
+            html += "</a>";
+            // Embedding indicator
+            if (n.embedded) {
+                html +=
+                    '<span class="shrink-0 text-[10px] text-emerald-600/70 font-bold" title="Nota embedada">✦</span>';
+            } else {
+                html +=
+                    '<span class="shrink-0 text-[10px] text-zinc-700/50" title="Sem embedding">○</span>';
+            }
+            if (tags.length) {
+                html += '<div class="flex gap-1 shrink-0">';
+                tags.forEach(function (t) {
+                    html +=
+                        '<span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#' +
+                        t +
+                        "</span>";
+                });
+                html += "</div>";
+            }
+            html +=
+                "<button onclick=\"deleteNote('" +
+                safeName +
+                '\')" class="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 text-[11px] transition-all shrink-0 px-1" title="Excluir">\u2715</button>';
+            html += "</div>";
+            return html;
+        });
+    }
+
+    function renderCompactNotes(notes) {
+        var el = document.getElementById("contentArea");
+        if (!notes || notes.length === 0) {
+            el.innerHTML =
+                '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p></div>';
+            return;
+        }
+        el.innerHTML = buildNoteRows(notes).join("");
+    }
+
+    // ── Keyboard navigation for tag autocomplete ──
+    document
+        .getElementById("search-input")
+        .addEventListener("keydown", function (e) {
+            var acEl = document.getElementById("tag-autocomplete");
+            if (acEl.classList.contains("hidden") || tagMatches.length === 0)
+                return;
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                tagSelectedIndex = Math.min(
+                    tagSelectedIndex + 1,
+                    tagMatches.length - 1,
+                );
+                highlightTagItem();
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                tagSelectedIndex = Math.max(tagSelectedIndex - 1, 0);
+                highlightTagItem();
+            } else if (e.key === "Enter" || e.key === "Tab") {
+                if (tagMatches[tagSelectedIndex]) {
+                    e.preventDefault();
+                    applyTag(tagMatches[tagSelectedIndex]);
+                }
+            } else if (e.key === "Escape") {
+                hideTagAutocomplete();
+            }
+        });
+
+    function highlightTagItem() {
+        var items = document.querySelectorAll("#tag-list > div");
+        items.forEach(function (el, i) {
+            el.className =
+                "px-4 py-2.5 cursor-pointer flex items-center gap-2 text-[13px] transition-colors " +
+                (i === tagSelectedIndex
+                    ? "bg-sky-500/15 text-sky-400"
+                    : "text-zinc-300 hover:bg-zinc-800/80");
+        });
+    }
+
+    // ── Close tag autocomplete on outside click ──
+    document.addEventListener("mousedown", function (e) {
+        var ac = document.getElementById("tag-autocomplete");
+        var input = document.getElementById("search-input");
+        if (
+            !ac.classList.contains("hidden") &&
+            !ac.contains(e.target) &&
+            e.target !== input
+        ) {
+            hideTagAutocomplete();
+        }
+    });
+
+    function deleteNote(filename) {
+        if (!confirm('Excluir "' + filename + '"?')) return;
+        var fd = new FormData();
+        fd.append("filename", filename);
+        fetch("/file/delete", { method: "POST", body: fd }).then(function (r) {
+            if (r.ok || r.status === 303) {
+                allNotes = allNotes.filter(function (n) {
+                    return n.arquivo !== filename;
+                });
+                renderCompactNotes(allNotes);
+            }
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Load tags
+        fetch("/api/tags")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                availableTags = data.tags || [];
+            })
+            .catch(function () {});
+        // Load notes
+        fetch("/api/notes")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                allNotes = data.notes || [];
+                if (allNotes.length) {
+                    renderCompactNotes(allNotes);
+                } else {
+                    document.getElementById("contentArea").innerHTML =
+                        '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p></div>';
+                }
+            })
+            .catch(function () {
+                document.getElementById("contentArea").innerHTML =
+                    '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Erro ao carregar notas.</p></div>';
+            });
+    });
+</script>
 {{end}}

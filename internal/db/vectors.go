@@ -95,6 +95,16 @@ func (s *Store) DeleteEmbedding(docID string) error {
 	return err
 }
 
+// HasFileEmbedding returns true if any document belonging to a file has an embedding stored.
+func (s *Store) HasFileEmbedding(arquivo string) bool {
+	var count int
+	s.DB.QueryRow(`
+		SELECT COUNT(*) FROM embeddings e
+		INNER JOIN documents d ON d.id = e.doc_id
+		WHERE d.arquivo = ?`, arquivo).Scan(&count)
+	return count > 0
+}
+
 // GetEmbeddingCount returns the total number of stored embeddings.
 func (s *Store) GetEmbeddingCount() int {
 	var count int

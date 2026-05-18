@@ -36,3 +36,14 @@ func (ctx *HandlerContext) renderPartial(w http.ResponseWriter, name string, dat
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func (ctx *HandlerContext) renderLogin(w http.ResponseWriter, name string, data map[string]interface{}) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if ctx.Templates == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	if err := ctx.Templates.ExecuteTemplate(w, name, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

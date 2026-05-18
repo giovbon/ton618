@@ -7,57 +7,55 @@
 {{if .Results}}
 <ul class="space-y-0">
     {{range .Results}}
-    <li
-        class="relative bg-transparent border-b border-zinc-900/50 hover:border-zinc-800 transition-all duration-300 group pb-6"
-    >
+    <li class="relative bg-transparent border-b border-zinc-900/50 hover:border-zinc-800 transition-all duration-300 group pb-6">
         <div class="relative z-10 px-1 pt-3">
-            <!-- Header: file + type badge -->
             <div class="flex items-center gap-2 min-w-0 mb-2">
                 <span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0">
                     {{.Tipo}}
                 </span>
-                <a
-                    href="/editor?file={{.Arquivo}}"
+                <a href="/editor?file={{.Arquivo}}"
                     class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer
                     {{if hasPrefix .Arquivo "links/"}}text-amber-400
                     {{else if hasPrefix .Arquivo "arquivos/"}}text-indigo-400
-                    {{else}}text-sky-400{{end}}"
-                >
+                    {{else}}text-sky-400{{end}}">
                     {{.Arquivo}}
                 </a>
             </div>
-
-            <!-- Section trail -->
             {{if .Secao}}
-            <div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase">
-                {{.Secao}}
-            </div>
+            <div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase">{{.Secao}}</div>
             {{end}}
-
-            <!-- Text snippet -->
-            <div class="text-[14px] leading-relaxed text-zinc-400 font-sans line-clamp-5">
-                {{.Snippet}}
-            </div>
-
-            <!-- Tags + timestamp footer -->
-            <div class="mt-4 flex items-center justify-between gap-3">
+            <div class="text-[14px] leading-relaxed text-zinc-400 font-sans line-clamp-4 snippet-text">{{.Snippet}}</div>
+            <div class="mt-3 flex items-center justify-between gap-3">
                 {{if .Tags}}
                 <div class="flex flex-wrap gap-1 flex-1 min-w-0">
                     {{range .Tags}}
-                    <span class="px-1.5 py-0 rounded bg-zinc-800/30 text-[9px] font-bold text-zinc-500">
-                        #{{.}}
-                    </span>
+                    <span class="px-1.5 py-0 rounded bg-zinc-800/30 text-[9px] font-bold text-zinc-500">#{{.}}</span>
                     {{end}}
                 </div>
                 {{end}}
-                <span class="text-[10px] text-zinc-600 font-medium tabular-nums shrink-0">
-                    {{.Timestamp}}
-                </span>
+                <span class="text-[10px] text-zinc-600 font-medium tabular-nums shrink-0">{{.Timestamp}}</span>
             </div>
         </div>
     </li>
     {{end}}
 </ul>
+
+<script>
+(function(){
+    var q = (document.querySelector('[name="q"]') || {}).value || "{{.Query}}";
+    if (!q) return;
+    var words = q.split(/\s+/).filter(function(w){ return w.length > 1; });
+    if (!words.length) return;
+    document.querySelectorAll('.snippet-text').forEach(function(el){
+        var html = el.textContent;
+        words.forEach(function(w){
+            var re = new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            html = html.replace(re, '<span class="search-highlight">$1</span>');
+        });
+        el.innerHTML = html;
+    });
+})();
+</script>
 {{else}}
     {{if .Query}}
     <div class="text-center py-20">

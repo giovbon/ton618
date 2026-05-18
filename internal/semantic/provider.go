@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync"
 )
@@ -21,7 +22,7 @@ func NewProvider(cfgProvider, apiKey, model, baseURL, ollamaHost, ollamaModel st
 			return NewOllamaProvider(ollamaHost, ollamaModel, dim)
 		}
 		if model == "" {
-			model = "text-embedding-004"
+			model = "gemini-embedding-2"
 		}
 		if dim <= 0 {
 			dim = 768
@@ -84,9 +85,8 @@ func NormalizeVector(vec []float32) {
 	for _, v := range vec {
 		sum += float64(v) * float64(v)
 	}
-	norm := float32(sum)
-	if norm > 0 && norm != 1.0 {
-		norm = float32(1.0 / float64(norm))
+	if sum > 0 && sum != 1.0 {
+		norm := float32(1.0 / math.Sqrt(sum))
 		for i := range vec {
 			vec[i] *= norm
 		}

@@ -31,6 +31,9 @@ func NewStore(path string) (*Store, error) {
 
 // initSchema cria as tabelas necessárias se ainda não existirem.
 func initSchema(database *sql.DB) error {
+	// Drop old contentless FTS5 to recreate with column-qualified query support
+	database.Exec("DROP TABLE IF EXISTS docs_fts")
+
 	schema := `
 	CREATE TABLE IF NOT EXISTS documents (
 		id          TEXT PRIMARY KEY,
@@ -46,7 +49,9 @@ func initSchema(database *sql.DB) error {
 		hash        TEXT DEFAULT '',
 		vector_hash TEXT DEFAULT ''
 	);
+	`
 
+	schema += `
 	CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
 		doc_id,
 		tipo,
@@ -54,7 +59,6 @@ func initSchema(database *sql.DB) error {
 		secao,
 		texto,
 		tags,
-		content='',
 		tokenize='unicode61'
 	);
 

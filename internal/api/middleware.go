@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
 	"strings"
@@ -14,30 +13,42 @@ func BasicAuthMiddleware(next http.Handler, user, pass string) http.Handler {
 		return next
 	}
 
-	expectedAuth := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for health check and static assets
-		if r.URL.Path == "/api/health" || strings.HasPrefix(r.URL.Path, "/static/") {
+		// Public paths: no auth required
+		if r.URL.Path == "/api/health" || r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
 
+		// Check Basic Auth
+		u, p, ok := r.BasicAuth()
+		if ok && u == user && p == pass {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Check for auth header from JS (sessionStorage)
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
-			w.Header().Set("WWW-Authenticate", `Basic realm="TON-618", charset="UTF-8"`)
+		if strings.HasPrefix(authHeader, "Basic ") {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
+			if err == nil {
+				parts := strings.SplitN(string(decoded), ":", 2)
+				if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+
+		// Not authenticated for HTML page → redirect to login
+		// Not authenticated for API → return 401
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.Method != "GET" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		providedAuth := strings.TrimPrefix(authHeader, "Basic ")
-		if subtle.ConstantTimeCompare([]byte(providedAuth), []byte(expectedAuth)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="TON-618", charset="UTF-8"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
+		// For page requests, redirect to login
+		http.Redirect(w, r, "/login", http.StatusFound)
 	})
 }
 
