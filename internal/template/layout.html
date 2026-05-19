@@ -219,6 +219,12 @@
                         accept=".pdf"
                         class="hidden"
                     />
+                    <button
+                        onclick="return promptCapture();"
+                        class="text-zinc-400 hover:text-emerald-400 transition-colors"
+                    >
+                        🌐 CAPTURA
+                    </button>
                     <a
                         href="/graph"
                         class="text-zinc-400 hover:text-white transition-colors"
@@ -279,7 +285,30 @@
         });
 
         // ── New Note com nome único ──
-        function createNewNote() {
+        
+        // ── Captura de artigo/YouTube ──
+        function promptCapture() {
+            var url = prompt("Insira a URL do artigo ou video do YouTube:");
+            if (!url) return false;
+            fetch("/api/capture", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url }),
+            })
+                .then(function (r) {
+                    if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+                    return r.json();
+                })
+                .then(function (data) {
+                    window.location.href = "/editor?file=" + encodeURIComponent(data.filename);
+                })
+                .catch(function (err) {
+                    alert("Erro ao capturar: " + err.message);
+                });
+            return false;
+        }
+
+function createNewNote() {
             var ts = Date.now();
             var random = Math.random().toString(36).substring(2, 6);
             window.location.href =

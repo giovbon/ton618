@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode"
 
+	"ton618/internal/capture"
 	"ton618/internal/db"
 	"ton618/internal/search"
 	"ton618/internal/semantic"
@@ -898,4 +899,14 @@ func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	ctx.renderLogin(w, "login.html", map[string]interface{}{
 		"Title": "Login - TON-618",
 	})
+}
+
+func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request) {
+	capCtx := &capture.HandlerContext{
+		Cfg:      ctx.Cfg,
+		Store:    ctx.Store,
+		Embed:    ctx.Embed,
+		EmbedAll: ctx.Cfg.EmbeddingAll,
+	}
+	capCtx.HandleCapture(w, r)
 }
