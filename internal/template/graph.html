@@ -12,6 +12,11 @@
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
+    .voronoi path {
+        transition:
+            fill-opacity 0.3s ease,
+            stroke-opacity 0.3s ease;
+    }
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
@@ -19,6 +24,10 @@
     .graph-note:hover text {
         fill: #e4e4e7 !important;
         font-weight: 700 !important;
+    }
+    .cluster-label {
+        pointer-events: none;
+        user-select: none;
     }
 </style>
 <div class="graph-page">
@@ -48,7 +57,7 @@
     <p
         class="text-[10px] text-zinc-600 mt-2 text-center tracking-wide uppercase"
     >
-        Scroll para zoom &middot; Clique na bolinha para abrir
+        Scroll para zoom &middot; Passe o mouse para destacar grupo
     </p>
 </div>
 
@@ -75,7 +84,7 @@
 
         var clusterCount = data.clusters || 0;
 
-        // Se todas as coordenadas forem (0,0), espalha os nos num grid
+        // Grid fallback se todas as coordenadas forem (0,0)
         var allZero = nodes.every(function (n) {
             return n.x === 0 && n.y === 0;
         });
@@ -86,6 +95,34 @@
                 n.y = Math.floor(i / cols) * 120 + 60;
             });
         }
+
+        // Contagem de links por nota para dimensionar circulos
+        var linkCounts = {};
+        (data.links || []).forEach(function (l) {
+            var s = typeof l.source === "object" ? l.source.id : l.source;
+            var t = typeof l.target === "object" ? l.target.id : l.target;
+            linkCounts[s] = (linkCounts[s] || 0) + 1;
+            linkCounts[t] = (linkCounts[t] || 0) + 1;
+        });
+        var maxLinks = 1;
+        Object.values(linkCounts).forEach(function (c) {
+            if (c > maxLinks) maxLinks = c;
+        });
+
+        // Centro de cada cluster (media das posicoes)
+        var clusterCenters = {};
+        var clusterCounts = {};
+        nodes.forEach(function (n) {
+            var cid = n.cluster_id || 0;
+            if (!clusterCenters[cid]) clusterCenters[cid] = { x: 0, y: 0 };
+            clusterCenters[cid].x += n.x;
+            clusterCenters[cid].y += n.y;
+            clusterCounts[cid] = (clusterCounts[cid] || 0) + 1;
+        });
+        Object.keys(clusterCenters).forEach(function (cid) {
+            clusterCenters[cid].x /= clusterCounts[cid];
+            clusterCenters[cid].y /= clusterCounts[cid];
+        });
 
         var CLUSTER_COLORS = [
             "#38bdf8",
@@ -102,7 +139,7 @@
         var width = container.clientWidth;
         var height = container.clientHeight;
 
-        // SVG + zoom
+        // --- SVG ---
         var svg = d3
             .select("#graph-container")
             .append("svg")
@@ -116,33 +153,32 @@
         statusEl.textContent =
             nodes.length + " notas · " + clusterCount + " grupos";
 
-        // ── Voronoi: recalcula no zoom para cobrir area visivel ──
+        // --- Voronoi ---
         var voronoiGroup = g.append("g").attr("class", "voronoi");
 
         function renderVoronoi(bounds) {
             if (!bounds) {
-                var minX = Infinity,
-                    maxX = -Infinity,
-                    minY = Infinity,
-                    maxY = -Infinity;
+                var mnX = Infinity,
+                    mxX = -Infinity,
+                    mnY = Infinity,
+                    mxY = -Infinity;
                 nodes.forEach(function (n) {
-                    if (n.x < minX) minX = n.x;
-                    if (n.x > maxX) maxX = n.x;
-                    if (n.y < minY) minY = n.y;
-                    if (n.y > maxY) maxY = n.y;
+                    if (n.x < mnX) mnX = n.x;
+                    if (n.x > mxX) mxX = n.x;
+                    if (n.y < mnY) mnY = n.y;
+                    if (n.y > mxY) mxY = n.y;
                 });
-                var dx = maxX - minX || 1,
-                    dy = maxY - minY || 1;
+                var dx = mxX - mnX || 1,
+                    dy = mxY - mnY || 1;
                 var pad = Math.max(dx, dy) * 0.5;
                 bounds = {
-                    x1: minX - pad,
-                    y1: minY - pad,
-                    x2: maxX + pad,
-                    y2: maxY + pad,
+                    x1: mnX - pad,
+                    y1: mnY - pad,
+                    x2: mxX + pad,
+                    y2: mxY + pad,
                 };
             }
 
-            // Deduplica pontos para Delaunay
             var pts = nodes.map(function (d) {
                 return [d.x, d.y];
             });
@@ -173,9 +209,13 @@
                 ]);
 
                 voronoiGroup
-                    .selectAll("path")
+                    .selectAll("path.voronoi-cell")
                     .data(nodes)
                     .join("path")
+                    .attr("class", "voronoi-cell")
+                    .attr("data-cluster", function (d) {
+                        return d.cluster_id || 0;
+                    })
                     .attr("d", function (d, i) {
                         try {
                             return voronoi.renderCell(indices[i]);
@@ -190,24 +230,25 @@
                             ] || "#0ea5e9"
                         );
                     })
-                    .attr("fill-opacity", 0.06)
+                    .attr("fill-opacity", 0.04)
                     .attr("stroke", function (d) {
                         return CLUSTER_COLORS[
                             (d.cluster_id || 0) % CLUSTER_COLORS.length
                         ];
                     })
-                    .attr("stroke-opacity", 0.15)
+                    .attr("stroke-opacity", 0.12)
                     .attr("stroke-width", 1);
             }
         }
 
         renderVoronoi(null);
 
-        // ── Links ──
+        // --- Links ---
         g.append("g")
             .selectAll("line")
             .data(data.links || [])
             .join("line")
+            .attr("class", "graph-link")
             .attr("x1", function (d) {
                 return (
                     d.source.x ||
@@ -236,13 +277,16 @@
             .attr("stroke-width", 0.5)
             .attr("stroke-opacity", 0.3);
 
-        // ── Nodes (usam cluster_id do servidor) ──
+        // --- Nós com tamanho variável por conectividade ---
         var node = g
             .append("g")
             .selectAll("g")
             .data(nodes)
             .join("g")
             .attr("class", "graph-note")
+            .attr("data-cluster", function (d) {
+                return d.cluster_id || 0;
+            })
             .attr("transform", function (d) {
                 return "translate(" + d.x + "," + d.y + ")";
             })
@@ -254,7 +298,10 @@
             .style("cursor", "pointer");
 
         node.append("circle")
-            .attr("r", 5)
+            .attr("r", function (d) {
+                var links = linkCounts[d.id] || 0;
+                return 4 + (links / maxLinks) * 8;
+            })
             .attr("fill", function (d) {
                 return (
                     CLUSTER_COLORS[
@@ -278,14 +325,99 @@
                 );
             })
             .attr("text-anchor", "middle")
-            .attr("dy", 15)
+            .attr("dy", function (d) {
+                var links = linkCounts[d.id] || 0;
+                return 12 + (links / maxLinks) * 8;
+            })
             .attr("font-size", "10px")
             .attr("font-weight", "500")
             .attr("fill", "#71717a")
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
-        // ── Zoom com Voronoi dinâmico ──
+        // --- Labels dos clusters (centroide + contagem) ---
+        var labelGroup = g.append("g").attr("class", "cluster-labels");
+        Object.keys(clusterCenters).forEach(function (cid) {
+            var c = clusterCenters[cid];
+            var color = CLUSTER_COLORS[parseInt(cid) % CLUSTER_COLORS.length];
+            var count = clusterCounts[cid];
+
+            labelGroup
+                .append("text")
+                .attr("class", "cluster-label")
+                .attr("x", c.x)
+                .attr("y", c.y - 18)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "9px")
+                .attr("font-weight", "700")
+                .attr("fill", color)
+                .attr("opacity", 0.6)
+                .attr("font-family", "Inter, system-ui, sans-serif")
+                .text("Grupo " + (parseInt(cid) + 1) + " (" + count + ")");
+        });
+
+        // --- Hover: destaca o cluster inteiro ---
+        function highlightCluster(cid) {
+            voronoiGroup
+                .selectAll("path.voronoi-cell")
+                .transition()
+                .duration(200)
+                .attr("fill-opacity", function (d) {
+                    return (d.cluster_id || 0) === cid ? 0.12 : 0.02;
+                })
+                .attr("stroke-opacity", function (d) {
+                    return (d.cluster_id || 0) === cid ? 0.4 : 0.06;
+                });
+
+            // Escurece nos de outros clusters
+            node.style("opacity", function (d) {
+                return (d.cluster_id || 0) === cid ? 1 : 0.3;
+            });
+
+            // Labels dos clusters: destaca o atual, atenua outros
+            labelGroup
+                .selectAll("text.cluster-label")
+                .transition()
+                .duration(200)
+                .attr("opacity", function () {
+                    var elCid = parseInt(d3.select(this).attr("data-cid"));
+                    return elCid === cid ? 0.9 : 0.15;
+                });
+        }
+
+        function resetHighlight() {
+            voronoiGroup
+                .selectAll("path.voronoi-cell")
+                .transition()
+                .duration(300)
+                .attr("fill-opacity", 0.04)
+                .attr("stroke-opacity", 0.12);
+
+            node.style("opacity", 1);
+
+            labelGroup
+                .selectAll("text.cluster-label")
+                .transition()
+                .duration(300)
+                .attr("opacity", 0.6);
+        }
+
+        // Hover via mouseover nos nos
+        node.on("mouseover", function (event, d) {
+            highlightCluster(d.cluster_id || 0);
+        });
+
+        // Hover via mouseover nas celulas Voronoi
+        voronoiGroup
+            .selectAll("path.voronoi-cell")
+            .on("mouseover", function (event, d) {
+                highlightCluster(d.cluster_id || 0);
+            });
+
+        // Restaura ao sair do grafo
+        svg.on("mouseleave", resetHighlight);
+
+        // --- Zoom com recolculodo Voronoi ---
         function getVisibleBounds(transform) {
             var inv = transform.invert;
             var p1 = inv.call(transform, [0, 0]);
@@ -307,38 +439,39 @@
                 g.attr("transform", event.transform);
                 var vb = getVisibleBounds(event.transform);
                 renderVoronoi(vb);
+                // Reaplica hover states apos recriar paths
+                voronoiGroup
+                    .selectAll("path.voronoi-cell")
+                    .on("mouseover", function (event, d) {
+                        highlightCluster(d.cluster_id || 0);
+                    });
             });
 
         svg.call(zoom);
 
-        // ── Zoom inicial ──
-        var minX = Infinity,
-            maxX = -Infinity,
-            minY = Infinity,
-            maxY = -Infinity;
+        // --- Zoom inicial ---
+        var mnX = Infinity,
+            mxX = -Infinity,
+            mnY = Infinity,
+            mxY = -Infinity;
         nodes.forEach(function (n) {
-            if (n.x < minX) minX = n.x;
-            if (n.x > maxX) maxX = n.x;
-            if (n.y < minY) minY = n.y;
-            if (n.y > maxY) maxY = n.y;
+            if (n.x < mnX) mnX = n.x;
+            if (n.x > mxX) mxX = n.x;
+            if (n.y < mnY) mnY = n.y;
+            if (n.y > mxY) mxY = n.y;
         });
 
-        var padding = 80;
-        var viewW = width - padding * 2;
-        var viewH = height - padding * 2;
-        var dx = maxX - minX || 1;
-        var dy = maxY - minY || 1;
-        var scale = Math.min(viewW / dx, viewH / dy);
+        var viewW = width - 160;
+        var viewH = height - 160;
+        var sc = Math.min(viewW / (mxX - mnX || 1), viewH / (mxY - mnY || 1));
 
         var initTransform = d3.zoomIdentity
             .translate(width / 2, height / 2)
-            .scale(scale)
-            .translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
+            .scale(sc)
+            .translate(-(mnX + mxX) / 2, -(mnY + mxY) / 2);
 
         svg.call(zoom.transform, initTransform);
-
-        var vb = getVisibleBounds(initTransform);
-        renderVoronoi(vb);
+        renderVoronoi(getVisibleBounds(initTransform));
     });
 </script>
 {{end}}
