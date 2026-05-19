@@ -14,9 +14,16 @@
     }
     .voronoi path {
         transition:
-            d 0.4s ease,
-            fill 0.4s ease,
-            fill-opacity 0.4s ease;
+            fill 1s ease,
+            fill-opacity 1s ease;
+    }
+    .graph-note:hover circle {
+        stroke: #fff !important;
+        stroke-width: 3px !important;
+    }
+    .graph-note:hover text {
+        fill: #e4e4e7 !important;
+        font-weight: 700 !important;
     }
 </style>
 <div class="graph-page">
@@ -46,8 +53,7 @@
     <p
         class="text-[10px] text-zinc-600 mt-2 text-center tracking-wide uppercase"
     >
-        Arraste para mover &middot; Scroll para zoom &middot; Clique na bolinha
-        para abrir
+        Scroll para zoom &middot; Clique na bolinha para abrir
     </p>
 </div>
 
@@ -84,13 +90,12 @@
             });
         }
 
-        // Link count for sizing
-        var linkCounts = {};
-        (data.links || []).forEach(function (l) {
-            var s = typeof l.source === "object" ? l.source.id : l.source;
-            var t = typeof l.target === "object" ? l.target.id : l.target;
-            linkCounts[s] = (linkCounts[s] || 0) + 1;
-            linkCounts[t] = (linkCounts[t] || 0) + 1;
+        // Centro dos pontos
+        var cx = d3.mean(nodes, function (d) {
+            return d.x;
+        });
+        var cy = d3.mean(nodes, function (d) {
+            return d.y;
         });
 
         var CLUSTER_COLORS = [
@@ -108,6 +113,7 @@
         var width = container.clientWidth;
         var height = container.clientHeight;
 
+        // SVG + zoom
         var svg = d3
             .select("#graph-container")
             .append("svg")
@@ -115,117 +121,15 @@
             .attr("height", height)
             .style("background", "#09090b");
 
-        // Clip path para evitar que nos e Voronoi vazem do container
-        svg.append("defs")
-            .append("clipPath")
-            .attr("id", "graph-clip")
-            .append("rect")
-            .attr("width", width)
-            .attr("height", height)
-            .attr("x", 0)
-            .attr("y", 0);
+        var g = svg.append("g");
 
-        var g = svg.append("g").attr("clip-path", "url(#graph-clip)");
-
-        // Zoom
         var zoom = d3
             .zoom()
-            .scaleExtent([0.1, 4])
+            .scaleExtent([0.1, 8])
             .on("zoom", function (event) {
                 g.attr("transform", event.transform);
             });
         svg.call(zoom);
-
-        // Force simulation
-        var simulation = d3
-            .forceSimulation(nodes)
-            .alphaDecay(0.04)
-            .force(
-                "link",
-                d3
-                    .forceLink(data.links || [])
-                    .id(function (d) {
-                        return d.id;
-                    })
-                    .distance(100)
-                    .strength(0.6),
-            )
-            .force("charge", d3.forceManyBody().strength(-300))
-            .force("center", d3.forceCenter(width / 2, height / 2))
-            .force("collision", d3.forceCollide(25));
-
-        // Layers
-        var voronoiGroup = g.append("g").attr("class", "voronoi");
-
-        var link = g
-            .append("g")
-            .selectAll("line")
-            .data(data.links || [])
-            .join("line")
-            .attr("stroke", "#27272a")
-            .attr("stroke-width", 0.5)
-            .attr("stroke-opacity", 0.4);
-
-        var node = g
-            .append("g")
-            .selectAll("g")
-            .data(nodes)
-            .join("g")
-            .call(
-                d3
-                    .drag()
-                    .on("start", function (event, d) {
-                        if (!event.active)
-                            simulation.alphaTarget(0.3).restart();
-                        d.fx = d.x;
-                        d.fy = d.y;
-                    })
-                    .on("drag", function (event, d) {
-                        d.fx = event.x;
-                        d.fy = event.y;
-                    })
-                    .on("end", function (event, d) {
-                        if (!event.active) simulation.alphaTarget(0);
-                        d.fx = null;
-                        d.fy = null;
-                    }),
-            )
-            .on("click", function (event, d) {
-                event.stopPropagation();
-                window.location.href =
-                    "/editor?file=" + encodeURIComponent(d.id);
-            })
-            .style("cursor", "pointer");
-
-        node.append("circle")
-            .attr("r", function (d) {
-                return 5 + Math.min((linkCounts[d.id] || 0) * 2, 15);
-            })
-            .attr("fill", "#0ea5e9")
-            .attr("opacity", 0.9)
-            .attr("stroke", "#18181b")
-            .attr("stroke-width", 2);
-
-        node.append("text")
-            .text(function (d) {
-                return (
-                    d.title ||
-                    d.id
-                        .split("/")
-                        .pop()
-                        .replace(/\.(md|pdf)$/i, "") ||
-                    "?"
-                );
-            })
-            .attr("text-anchor", "middle")
-            .attr("dy", function (d) {
-                return 10 + Math.min((linkCounts[d.id] || 0) * 2, 15) + 8;
-            })
-            .attr("font-size", "9px")
-            .attr("font-weight", "500")
-            .attr("fill", "#71717a")
-            .attr("font-family", "Inter, system-ui, sans-serif")
-            .attr("pointer-events", "none");
 
         // ── K-means clustering ──
         function assignClusters(pts, k) {
@@ -276,27 +180,12 @@
             }
         }
 
-        // ── Voronoi: renderiza UMA vez quando alpha cruza 0.08 ──
-        var voronoiTriggered = false;
-        var voronoiDone = false;
+        // Clustering
+        var clusterK = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
+        assignClusters(nodes, clusterK);
 
+        // ── Voronoi ──
         function renderVoronoi() {
-            if (voronoiDone) return;
-            voronoiDone = true;
-
-            // Remove classe de transicao para o primeiro frame (sem animacao)
-            voronoiGroup.selectAll("path").remove();
-
-            var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
-            assignClusters(nodes, k);
-
-            node.selectAll("circle").attr("fill", function (d) {
-                return (
-                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
-                    "#0ea5e9"
-                );
-            });
-
             var pts = nodes.map(function (d) {
                 return [d.x, d.y];
             });
@@ -320,14 +209,15 @@
             if (unique.length >= 3) {
                 var delaunay = d3.Delaunay.from(unique);
                 var voronoi = delaunay.voronoi([
-                    -100,
-                    -100,
-                    width + 100,
-                    height + 100,
+                    -200,
+                    -200,
+                    width + 200,
+                    height + 200,
                 ]);
 
-                voronoiGroup
-                    .selectAll("path")
+                g.selectAll(".voronoi").remove();
+                var vg = g.insert("g", ":first-child").attr("class", "voronoi");
+                vg.selectAll("path")
                     .data(nodes)
                     .join("path")
                     .attr("d", function (d, i) {
@@ -352,57 +242,120 @@
                     .attr("stroke-opacity", 0.15)
                     .attr("stroke-width", 1);
             }
-            statusEl.textContent = nodes.length + " notas · " + k + " grupos";
         }
 
-        // Tick — so atualiza nos, SEM Voronoi durante simulacao
-        simulation.on("tick", function () {
-            link.attr("x1", function (d) {
-                return d.source.x;
+        renderVoronoi();
+
+        // ── Links ──
+        g.append("g")
+            .selectAll("line")
+            .data(data.links || [])
+            .join("line")
+            .attr("x1", function (d) {
+                return (
+                    d.source.x ||
+                    (typeof d.source === "object" ? d.source.x : 0)
+                );
             })
-                .attr("y1", function (d) {
-                    return d.source.y;
-                })
-                .attr("x2", function (d) {
-                    return d.target.x;
-                })
-                .attr("y2", function (d) {
-                    return d.target.y;
-                });
-            node.attr("transform", function (d) {
+            .attr("y1", function (d) {
+                return (
+                    d.source.y ||
+                    (typeof d.source === "object" ? d.source.y : 0)
+                );
+            })
+            .attr("x2", function (d) {
+                return (
+                    d.target.x ||
+                    (typeof d.target === "object" ? d.target.x : 0)
+                );
+            })
+            .attr("y2", function (d) {
+                return (
+                    d.target.y ||
+                    (typeof d.target === "object" ? d.target.y : 0)
+                );
+            })
+            .attr("stroke", "#27272a")
+            .attr("stroke-width", 0.5)
+            .attr("stroke-opacity", 0.3);
+
+        // ── Nodes ──
+        var node = g
+            .append("g")
+            .selectAll("g")
+            .data(nodes)
+            .join("g")
+            .attr("class", "graph-note")
+            .attr("transform", function (d) {
                 return "translate(" + d.x + "," + d.y + ")";
-            });
+            })
+            .on("click", function (event, d) {
+                event.stopPropagation();
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(d.id);
+            })
+            .style("cursor", "pointer");
 
-            // Voronoi: unica vez quando alpha cruza 0.08
-            if (!voronoiTriggered && simulation.alpha() < 0.08) {
-                voronoiTriggered = true;
-                renderVoronoi();
-            }
+        node.append("circle")
+            .attr("r", 5)
+            .attr("fill", function (d) {
+                return (
+                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
+                    "#0ea5e9"
+                );
+            })
+            .attr("opacity", 0.9)
+            .attr("stroke", "#18181b")
+            .attr("stroke-width", 2);
+
+        node.append("text")
+            .text(function (d) {
+                return (
+                    d.title ||
+                    d.id
+                        .split("/")
+                        .pop()
+                        .replace(/\.(md|pdf)$/i, "") ||
+                    "?"
+                );
+            })
+            .attr("text-anchor", "middle")
+            .attr("dy", 15)
+            .attr("font-size", "10px")
+            .attr("font-weight", "500")
+            .attr("fill", "#71717a")
+            .attr("font-family", "Inter, system-ui, sans-serif")
+            .attr("pointer-events", "none");
+
+        // ── Zoom inicial: fit all notes ──
+        var minX = Infinity,
+            maxX = -Infinity,
+            minY = Infinity,
+            maxY = -Infinity;
+        nodes.forEach(function (n) {
+            if (n.x < minX) minX = n.x;
+            if (n.x > maxX) maxX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.y > maxY) maxY = n.y;
         });
 
-        // End — Voronoi (fallback se nunca cruzou) + auto-zoom
-        simulation.on("end", function () {
-            if (!voronoiDone) renderVoronoi();
-            setTimeout(function () {
-                var bounds = g.node().getBBox();
-                if (bounds.width > 0 && bounds.height > 0) {
-                    var scale =
-                        0.85 /
-                        Math.max(bounds.width / width, bounds.height / height);
-                    svg.call(
-                        zoom.transform,
-                        d3.zoomIdentity
-                            .translate(
-                                width / 2 -
-                                    scale * (bounds.x + bounds.width / 2),
-                                height / 2 -
-                                    scale * (bounds.y + bounds.height / 2),
-                            )
-                            .scale(Math.max(0.3, scale)),
-                    );
-                }
-            }, 100);
-        });
+        var padding = 80;
+        var viewW = width - padding * 2;
+        var viewH = height - padding * 2;
+        var dx = maxX - minX || 1;
+        var dy = maxY - minY || 1;
+        var scale = Math.min(viewW / dx, viewH / dy, 3);
+
+        svg.call(
+            zoom.transform,
+            d3.zoomIdentity
+                .translate(width / 2, height / 2)
+                .scale(scale)
+                .translate(-(minX + maxX) / 2, -(minY + maxY) / 2),
+        );
+
+        statusEl.textContent =
+            nodes.length + " notas · " + clusterK + " grupos";
     });
 </script>
 {{end}}
