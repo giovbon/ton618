@@ -208,6 +208,18 @@
                         >+ Nova</a
                     >
                     <a
+                        href="#"
+                        id="pdf-upload-link"
+                        class="text-zinc-400 hover:text-sky-400 transition-colors"
+                        >📕 PDF</a
+                    >
+                    <input
+                        id="pdf-file-input"
+                        type="file"
+                        accept=".pdf"
+                        class="hidden"
+                    />
+                    <a
                         href="/graph"
                         class="text-zinc-400 hover:text-white transition-colors"
                         >Mapa</a
@@ -231,6 +243,41 @@
     </body>
 
     <script>
+        // ── PDF Upload ──
+        document.addEventListener("click", function (e) {
+            if (e.target && e.target.id === "pdf-upload-link") {
+                e.preventDefault();
+                document.getElementById("pdf-file-input").click();
+            }
+        });
+
+        document.addEventListener("change", async function (e) {
+            if (e.target && e.target.id === "pdf-file-input") {
+                var file = e.target.files[0];
+                if (!file) return;
+                var link = document.getElementById("pdf-upload-link");
+                link.textContent = "...";
+                var fd = new FormData();
+                fd.append("file", file);
+                try {
+                    var resp = await fetch("/upload", {
+                        method: "POST",
+                        body: fd,
+                    });
+                    if (resp.ok) {
+                        window.location.href = "/";
+                    } else {
+                        link.textContent = "📕 PDF";
+                        alert("Erro ao fazer upload do PDF.");
+                    }
+                } catch (e) {
+                    link.textContent = "📕 PDF";
+                    alert("Erro ao fazer upload do PDF.");
+                }
+                e.target.value = "";
+            }
+        });
+
         // ── New Note com nome único ──
         function createNewNote() {
             var ts = Date.now();

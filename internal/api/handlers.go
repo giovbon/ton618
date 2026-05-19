@@ -588,40 +588,14 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 
 	io.Copy(dst, file)
 
-	// Check if user requested embedding
-	wantEmbed := r.FormValue("embed") == "true"
-
 	// Process the file (index, embed)
 	info, _ := os.Stat(fullPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	}, ctx.Embed, ctx.Cfg.EmbeddingAll || wantEmbed)
+	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
 
-	// If embedding was requested but embedAll is false, force-tag the document with "embed"
-	// so the embedding persists across reprocessings
-	if wantEmbed && !ctx.Cfg.EmbeddingAll && isPdf {
-		tags, _ := ctx.Store.GetFileTags(filename)
-		// Add "embed" to tags if not already present
-		hasEmbed := false
-		for _, t := range tags {
-			if t == "embed" {
-				hasEmbed = true
-				break
-			}
-		}
-		if !hasEmbed {
-			tags = append(tags, "embed")
-			ctx.Store.SetFileTags(filename, tags)
-		}
-	}
-
-	// Return JSON for editor integration
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"path":     filename,
-		"filename": filepath.Base(filename),
-		"url":      "/file?name=" + url.QueryEscape(filename),
-	})
+	// Redireciona para a pagina inicial (modo compacto)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // ── API ──

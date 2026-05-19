@@ -57,7 +57,8 @@ func ProcessPDF(path, filename string, modTime time.Time) ([]Document, []string,
 		Tags:       keywords,
 	}
 
-	return []Document{doc}, nil, keywords
+	// Retorna nil como tags para que keywords nao aparecam como # na interface
+	return []Document{doc}, nil, nil
 }
 
 // ExtractKeywords extrai os N termos mais frequentes do texto,
