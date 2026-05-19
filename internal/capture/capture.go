@@ -1,9 +1,9 @@
 package capture
 
 import (
-	"io"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -61,7 +61,7 @@ func getYouTubeTranscript(videoID string) (string, error) {
 	return transcript, nil
 }
 
-// getYouTubeTitle extrai o titulo do video da pagina.
+// getYouTubeTitle extrai o titulo do video via HTTP direto e regex no <title>.
 func getYouTubeTitle(videoURL string) string {
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(videoURL)
@@ -103,50 +103,36 @@ func slugifyFilename(title string) string {
 
 // cleanupMarkdown remove artefatos e texto duplicado gerado pelo html-to-markdown.
 func cleanupMarkdown(md string) string {
-	// Remove linhas que sao apenas texto duplicado de imagens: "texto" em linha propria
-	// quando a linha anterior ja continha esse texto como alt da imagem.
-	lines := strings.Split(md, "
-")
+	lines := strings.Split(md, "\n")
 	var cleaned []string
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// Pula linhas que sao texto solto repetido logo apos uma imagem
 		if i > 0 && trimmed != "" {
 			prev := strings.TrimSpace(lines[i-1])
-			// Se a linha anterior tem uma imagem com este texto como alt/title
 			if strings.Contains(prev, "![") && strings.Contains(prev, trimmed) {
 				continue
 			}
-			// Remove legendas de imagem em linha separada apos a imagem
 			if strings.HasPrefix(prev, "!") && len(trimmed) < 120 {
 				continue
 			}
 		}
-		// Remove linhas de video incorporado
 		if strings.Contains(trimmed, "youtube.com/embed") || strings.Contains(trimmed, "player.vimeo.com") {
 			continue
 		}
 		cleaned = append(cleaned, line)
 	}
-	md = strings.Join(cleaned, "
-")
-
-	// Remove linhas em branco consecutivas (max 1)
-	re := regexp.MustCompile(`
-{3,}`)
-	md = re.ReplaceAllString(md, "
-
-")
-
+	md = strings.Join(cleaned, "\n")
+	re := regexp.MustCompile(`\n{3,}`)
+	md = re.ReplaceAllString(md, "\n\n")
 	return strings.TrimSpace(md)
 }
 
 // HandlerContext contem as dependencias para o handler de captura.
 type HandlerContext struct {
-	Cfg       *config.AppConfig
-	Store     *db.Store
-	Embed     semantic.EmbeddingProvider
-	EmbedAll  bool
+	Cfg      *config.AppConfig
+	Store    *db.Store
+	Embed    semantic.EmbeddingProvider
+	EmbedAll bool
 }
 
 // HandleCapture processa uma URL (artigo web ou video YouTube) e salva como nota.
@@ -175,14 +161,12 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 	var title string
 
 	if isYouTubeURL(req.URL) {
-		// ── YouTube: transcricao ──
 		videoID := extractVideoID(req.URL)
 		if videoID == "" {
 			http.Error(w, "URL do YouTube invalida", http.StatusBadRequest)
 			return
 		}
 
-		// Tenta obter o titulo primeiro
 		title = getYouTubeTitle(req.URL)
 		if title == "" {
 			title = fmt.Sprintf("YouTube - %s", videoID)
@@ -212,7 +196,6 @@ source: %s
 
 *Capturado em %s*`, title, req.URL, title, req.URL, transcript, time.Now().Format("2006-01-02 15:04:05"))
 	} else {
-		// ── Artigo web ──
 		article, err := readability.FromURL(req.URL, 20*time.Second)
 		if err != nil {
 			slog.Error("erro ao capturar artigo", "error", err)
@@ -220,7 +203,6 @@ source: %s
 			return
 		}
 
-		// Validar conteudo
 		errorIndicators := []string{
 			"not found", "404", "403", "pagina nao encontrada",
 			"access denied", "forbidden",
@@ -245,7 +227,6 @@ source: %s
 			return
 		}
 
-		// Limpa artefatos do HTML-to-markdown
 		mdContent = cleanupMarkdown(mdContent)
 
 		finalMarkdown = fmt.Sprintf(`---
@@ -265,7 +246,6 @@ source: %s
 *Capturado em %s*`, title, req.URL, title, req.URL, req.URL, mdContent, time.Now().Format("2006-01-02 15:04:05"))
 	}
 
-	// Slug para nome do arquivo
 	slug := slugifyFilename(title)
 	if slug == "" || slug == "-" {
 		slug = fmt.Sprintf("captura-%d", time.Now().Unix())
@@ -273,7 +253,6 @@ source: %s
 
 	filename := fmt.Sprintf("notes/captura-%s.md", slug)
 
-	// Verificar se ja existe e adicionar sufixo
 	base := slug
 	finalFilename := filename
 	for counter := 2; ; counter++ {
@@ -285,7 +264,6 @@ source: %s
 	}
 	filename = finalFilename
 
-	// Escrever arquivo
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	os.MkdirAll(filepath.Dir(fullPath), 0755)
 	if err := os.WriteFile(fullPath, []byte(finalMarkdown), 0644); err != nil {
@@ -296,7 +274,6 @@ source: %s
 
 	slog.Info("Captura salva", "file", filename)
 
-	// Indexar e gerar embedding (forcando embedAll=true para garantir)
 	ev := watcher.FileEvent{
 		Path:     fullPath,
 		Filename: filename,
