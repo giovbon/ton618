@@ -12,11 +12,6 @@
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
-    .voronoi path {
-        transition:
-            fill 1s ease,
-            fill-opacity 1s ease;
-    }
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
@@ -90,14 +85,6 @@
             });
         }
 
-        // Centro dos pontos
-        var cx = d3.mean(nodes, function (d) {
-            return d.x;
-        });
-        var cy = d3.mean(nodes, function (d) {
-            return d.y;
-        });
-
         var CLUSTER_COLORS = [
             "#38bdf8",
             "#10b981",
@@ -119,17 +106,10 @@
             .append("svg")
             .attr("width", width)
             .attr("height", height)
-            .style("background", "#09090b");
+            .style("background", "#09090b")
+            .style("overflow", "hidden");
 
         var g = svg.append("g");
-
-        var zoom = d3
-            .zoom()
-            .scaleExtent([0.1, 8])
-            .on("zoom", function (event) {
-                g.attr("transform", event.transform);
-            });
-        svg.call(zoom);
 
         // ── K-means clustering ──
         function assignClusters(pts, k) {
@@ -180,17 +160,43 @@
             }
         }
 
-        // Clustering
         var clusterK = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
         assignClusters(nodes, clusterK);
+        statusEl.textContent =
+            nodes.length + " notas · " + clusterK + " grupos";
 
-        // ── Voronoi ──
-        function renderVoronoi() {
+        // ── Voronoi: sempre cobre a area visivel ──
+        var voronoiGroup = g.append("g").attr("class", "voronoi");
+
+        function renderVoronoi(bounds) {
+            // bounds = {x1, y1, x2, y2} em coordenadas do mundo
+            if (!bounds) {
+                var minX = Infinity,
+                    maxX = -Infinity,
+                    minY = Infinity,
+                    maxY = -Infinity;
+                nodes.forEach(function (n) {
+                    if (n.x < minX) minX = n.x;
+                    if (n.x > maxX) maxX = n.x;
+                    if (n.y < minY) minY = n.y;
+                    if (n.y > maxY) maxY = n.y;
+                });
+                var dx = maxX - minX || 1,
+                    dy = maxY - minY || 1;
+                var pad = Math.max(dx, dy) * 0.5;
+                bounds = {
+                    x1: minX - pad,
+                    y1: minY - pad,
+                    x2: maxX + pad,
+                    y2: maxY + pad,
+                };
+            }
+
             var pts = nodes.map(function (d) {
                 return [d.x, d.y];
             });
-            var unique = [];
-            var indices = [];
+            var unique = [],
+                indices = [];
             pts.forEach(function (p, i) {
                 var dup = false;
                 for (var j = 0; j < unique.length; j++) {
@@ -209,15 +215,14 @@
             if (unique.length >= 3) {
                 var delaunay = d3.Delaunay.from(unique);
                 var voronoi = delaunay.voronoi([
-                    -200,
-                    -200,
-                    width + 200,
-                    height + 200,
+                    bounds.x1,
+                    bounds.y1,
+                    bounds.x2,
+                    bounds.y2,
                 ]);
 
-                g.selectAll(".voronoi").remove();
-                var vg = g.insert("g", ":first-child").attr("class", "voronoi");
-                vg.selectAll("path")
+                voronoiGroup
+                    .selectAll("path")
                     .data(nodes)
                     .join("path")
                     .attr("d", function (d, i) {
@@ -244,7 +249,8 @@
             }
         }
 
-        renderVoronoi();
+        // Voronoi inicial com bounds da area total das notas
+        renderVoronoi(null);
 
         // ── Links ──
         g.append("g")
@@ -327,6 +333,34 @@
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
+        // ── Zoom com atualizacao do Voronoi ──
+        function getVisibleBounds(transform) {
+            // Converte cantos da tela para coordenadas do mundo
+            var inv = transform.invert;
+            var p1 = inv.call(transform, [0, 0]);
+            var p2 = inv.call(transform, [width, height]);
+            var dx = (p2[0] - p1[0]) * 0.2;
+            var dy = (p2[1] - p1[1]) * 0.2;
+            return {
+                x1: p1[0] - dx,
+                y1: p1[1] - dy,
+                x2: p2[0] + dx,
+                y2: p2[1] + dy,
+            };
+        }
+
+        var zoom = d3
+            .zoom()
+            .scaleExtent([0.05, 20])
+            .on("zoom", function (event) {
+                g.attr("transform", event.transform);
+                // Re-renderiza Voronoi para cobrir a area visivel
+                var vb = getVisibleBounds(event.transform);
+                renderVoronoi(vb);
+            });
+
+        svg.call(zoom);
+
         // ── Zoom inicial: fit all notes ──
         var minX = Infinity,
             maxX = -Infinity,
@@ -346,16 +380,16 @@
         var dy = maxY - minY || 1;
         var scale = Math.min(viewW / dx, viewH / dy);
 
-        svg.call(
-            zoom.transform,
-            d3.zoomIdentity
-                .translate(width / 2, height / 2)
-                .scale(scale)
-                .translate(-(minX + maxX) / 2, -(minY + maxY) / 2),
-        );
+        var initTransform = d3.zoomIdentity
+            .translate(width / 2, height / 2)
+            .scale(scale)
+            .translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
 
-        statusEl.textContent =
-            nodes.length + " notas · " + clusterK + " grupos";
+        svg.call(zoom.transform, initTransform);
+
+        // Voronoi inicial com bounds da viewport (apos zoom fit)
+        var vb = getVisibleBounds(initTransform);
+        renderVoronoi(vb);
     });
 </script>
 {{end}}
