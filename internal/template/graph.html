@@ -344,7 +344,7 @@
         var viewH = height - padding * 2;
         var dx = maxX - minX || 1;
         var dy = maxY - minY || 1;
-        var scale = Math.min(viewW / dx, viewH / dy, 3);
+        var scale = Math.min(viewW / dx, viewH / dy);
 
         svg.call(
             zoom.transform,

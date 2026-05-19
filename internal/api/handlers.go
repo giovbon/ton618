@@ -459,6 +459,53 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`]}`))
 }
 
+// scalePoints redimensiona um conjunto de pontos 2D para caber dentro de [-targetRange, targetRange]
+// mantendo a proporcao entre os eixos.
+func scalePoints(pts map[string]semantic.Point2D, targetRange float64) {
+	if len(pts) < 2 {
+		return
+	}
+
+	// Encontra bounding box
+	minX, maxX := math.MaxFloat64, -math.MaxFloat64
+	minY, maxY := math.MaxFloat64, -math.MaxFloat64
+	for _, p := range pts {
+		if p.X < minX {
+			minX = p.X
+		}
+		if p.X > maxX {
+			maxX = p.X
+		}
+		if p.Y < minY {
+			minY = p.Y
+		}
+		if p.Y > maxY {
+			maxY = p.Y
+		}
+	}
+
+	rangeX := maxX - minX
+	rangeY := maxY - minY
+	if rangeX < 1e-10 && rangeY < 1e-10 {
+		return // todos no mesmo ponto
+	}
+
+	// Usa o maior range para escalar (preserva proporcao)
+	maxRange := math.Max(rangeX, rangeY)
+	scale := (targetRange * 2) / maxRange
+
+	// Centraliza e escala
+	midX := (minX + maxX) / 2
+	midY := (minY + maxY) / 2
+
+	for id, p := range pts {
+		pts[id] = semantic.Point2D{
+			X: (p.X - midX) * scale,
+			Y: (p.Y - midY) * scale,
+		}
+	}
+}
+
 func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Request) {
 	embeddings, _ := ctx.Store.GetAllEmbeddings()
 	links, _ := ctx.Store.GetAllLinks()
@@ -515,6 +562,11 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	// Se ha vetores sem projecao 2D, executa PCA
 	if len(vecsForProjection) > 1 {
 		projected := semantic.Project2DReduce(vecsForProjection)
+
+		// Escala as coordenadas PCA para um range visivel (~[-500, 500])
+		// O PCA normaliza para [-1, 1], mas isso e pequeno demais para o zoom fit
+		scalePoints(projected, 500)
+
 		for arquivo, pt := range projected {
 			if n, ok := fileNodes[arquivo]; ok && n.X == 0 && n.Y == 0 {
 				n.X = pt.X
@@ -633,6 +685,7 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 		return
 	}
 	projected := semantic.Project2DReduce(vecs)
+	scalePoints(projected, 500)
 	count := 0
 	for arquivo, pt := range projected {
 		if docID, ok := fileToDoc[arquivo]; ok {
