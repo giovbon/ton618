@@ -12,6 +12,12 @@
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
+    .voronoi path {
+        transition:
+            d 0.4s ease,
+            fill 0.4s ease,
+            fill-opacity 0.4s ease;
+    }
 </style>
 <div class="graph-page">
     <div class="flex items-center justify-between mb-2" style="padding: 0 4px">
@@ -109,7 +115,17 @@
             .attr("height", height)
             .style("background", "#09090b");
 
-        var g = svg.append("g");
+        // Clip path para evitar que nos e Voronoi vazem do container
+        svg.append("defs")
+            .append("clipPath")
+            .attr("id", "graph-clip")
+            .append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("x", 0)
+            .attr("y", 0);
+
+        var g = svg.append("g").attr("clip-path", "url(#graph-clip)");
 
         // Zoom
         var zoom = d3
@@ -120,7 +136,7 @@
             });
         svg.call(zoom);
 
-        // Force simulation — alphaDecay acelerado para convergir em ~1-2s
+        // Force simulation
         var simulation = d3
             .forceSimulation(nodes)
             .alphaDecay(0.04)
@@ -138,10 +154,9 @@
             .force("center", d3.forceCenter(width / 2, height / 2))
             .force("collision", d3.forceCollide(25));
 
-        // Voronoi layer (rendered before nodes)
+        // Layers
         var voronoiGroup = g.append("g").attr("class", "voronoi");
 
-        // Links
         var link = g
             .append("g")
             .selectAll("line")
@@ -151,7 +166,6 @@
             .attr("stroke-width", 0.5)
             .attr("stroke-opacity", 0.4);
 
-        // Nodes
         var node = g
             .append("g")
             .selectAll("g")
@@ -187,12 +201,7 @@
             .attr("r", function (d) {
                 return 5 + Math.min((linkCounts[d.id] || 0) * 2, 15);
             })
-            .attr("fill", function (d) {
-                return (
-                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
-                    "#0ea5e9"
-                );
-            })
+            .attr("fill", "#0ea5e9")
             .attr("opacity", 0.9)
             .attr("stroke", "#18181b")
             .attr("stroke-width", 2);
@@ -218,7 +227,7 @@
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
-        // ── Clustering (k-means) ──
+        // ── K-means clustering ──
         function assignClusters(pts, k) {
             if (pts.length <= k) {
                 pts.forEach(function (p, i) {
@@ -232,7 +241,6 @@
             });
             for (var i = 0; i < k; i++)
                 centroids.push({ x: shuffled[i].x, y: shuffled[i].y });
-
             for (var iter = 0; iter < 30; iter++) {
                 pts.forEach(function (p) {
                     var best = 0,
@@ -268,12 +276,16 @@
             }
         }
 
-        // ── Voronoi progressivo (renderiza a cada 4 ticks) ──
-        var voronoiTick = 0;
+        // ── Voronoi: renderiza UMA vez quando alpha cruza 0.08 ──
+        var voronoiTriggered = false;
         var voronoiDone = false;
 
         function renderVoronoi() {
             if (voronoiDone) return;
+            voronoiDone = true;
+
+            // Remove classe de transicao para o primeiro frame (sem animacao)
+            voronoiGroup.selectAll("path").remove();
 
             var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
             assignClusters(nodes, k);
@@ -308,11 +320,12 @@
             if (unique.length >= 3) {
                 var delaunay = d3.Delaunay.from(unique);
                 var voronoi = delaunay.voronoi([
-                    -50,
-                    -50,
-                    width + 50,
-                    height + 50,
+                    -100,
+                    -100,
+                    width + 100,
+                    height + 100,
                 ]);
+
                 voronoiGroup
                     .selectAll("path")
                     .data(nodes)
@@ -342,7 +355,7 @@
             statusEl.textContent = nodes.length + " notas · " + k + " grupos";
         }
 
-        // Tick — nos + Voronoi a cada 4 quadros
+        // Tick — so atualiza nos, SEM Voronoi durante simulacao
         simulation.on("tick", function () {
             link.attr("x1", function (d) {
                 return d.source.x;
@@ -359,31 +372,36 @@
             node.attr("transform", function (d) {
                 return "translate(" + d.x + "," + d.y + ")";
             });
-            voronoiTick++;
-            if (voronoiTick % 4 === 0 && simulation.alpha() < 0.3) {
+
+            // Voronoi: unica vez quando alpha cruza 0.08
+            if (!voronoiTriggered && simulation.alpha() < 0.08) {
+                voronoiTriggered = true;
                 renderVoronoi();
             }
         });
 
-        // End — Voronoi final + auto-zoom
+        // End — Voronoi (fallback se nunca cruzou) + auto-zoom
         simulation.on("end", function () {
-            renderVoronoi();
-            voronoiDone = true;
-            var bounds = g.node().getBBox();
-            if (bounds.width > 0 && bounds.height > 0) {
-                var scale =
-                    0.85 /
-                    Math.max(bounds.width / width, bounds.height / height);
-                svg.call(
-                    zoom.transform,
-                    d3.zoomIdentity
-                        .translate(
-                            width / 2 - scale * (bounds.x + bounds.width / 2),
-                            height / 2 - scale * (bounds.y + bounds.height / 2),
-                        )
-                        .scale(Math.max(0.3, scale)),
-                );
-            }
+            if (!voronoiDone) renderVoronoi();
+            setTimeout(function () {
+                var bounds = g.node().getBBox();
+                if (bounds.width > 0 && bounds.height > 0) {
+                    var scale =
+                        0.85 /
+                        Math.max(bounds.width / width, bounds.height / height);
+                    svg.call(
+                        zoom.transform,
+                        d3.zoomIdentity
+                            .translate(
+                                width / 2 -
+                                    scale * (bounds.x + bounds.width / 2),
+                                height / 2 -
+                                    scale * (bounds.y + bounds.height / 2),
+                            )
+                            .scale(Math.max(0.3, scale)),
+                    );
+                }
+            }, 100);
         });
     });
 </script>
