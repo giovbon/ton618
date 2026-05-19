@@ -12,6 +12,9 @@
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
+    .graph-note {
+        cursor: pointer;
+    }
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
@@ -297,30 +300,8 @@
                 }
             });
 
-        // PDF nodes: render 📕 instead of a circle
-        node.filter(function (d) {
-            return d.id && d.id.indexOf("pdfs/") === 0;
-        })
-            .append("circle")
-            .attr("r", 10)
-            .attr("fill", "transparent")
-            .attr("stroke", "none");
-
-        node.filter(function (d) {
-            return d.id && d.id.indexOf("pdfs/") === 0;
-        })
-            .append("text")
-            .text("\uD83D\uDCD5")
-            .attr("text-anchor", "middle")
-            .attr("dy", 4)
-            .attr("font-size", "14px")
-            .style("cursor", "pointer");
-
-        // Non-PDF nodes: render a colored circle
-        node.filter(function (d) {
-            return !(d.id && d.id.indexOf("pdfs/") === 0);
-        })
-            .append("circle")
+        // All nodes: render a colored circle (PDFs get a 📕 prefix in the text label)
+        node.append("circle")
             .attr("r", 5)
             .attr("fill", function (d) {
                 return (
