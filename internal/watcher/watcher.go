@@ -258,11 +258,23 @@ func (w *Watcher) fsnotifyLoop(ctx context.Context) {
 	}
 }
 
-func (w *Watcher) handleCreateOrMod(absPath string) {
-	relPath := strings.TrimPrefix(absPath, w.cfg.DocsDir)
-	relPath = strings.TrimPrefix(relPath, "/")
+// relPathFromAbs converte um caminho absoluto para relativo a DocsDir
+// e normaliza para usar forward slashes.
+func (w *Watcher) relPathFromAbs(absPath string) (string, bool) {
+	rel, err := filepath.Rel(w.cfg.DocsDir, absPath)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "" || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return rel, true
+}
 
-	if relPath == "" || relPath == absPath {
+func (w *Watcher) handleCreateOrMod(absPath string) {
+	relPath, ok := w.relPathFromAbs(absPath)
+	if !ok {
 		return
 	}
 
@@ -285,10 +297,8 @@ func (w *Watcher) handleCreateOrMod(absPath string) {
 }
 
 func (w *Watcher) handleDelete(absPath string) {
-	relPath := strings.TrimPrefix(absPath, w.cfg.DocsDir)
-	relPath = strings.TrimPrefix(relPath, "/")
-
-	if relPath == "" || relPath == absPath {
+	relPath, ok := w.relPathFromAbs(absPath)
+	if !ok {
 		return
 	}
 
@@ -325,6 +335,20 @@ func (w *Watcher) PollAll() {
 	w.pollAll()
 }
 
+// relPathFromWalk normaliza o caminho retornado por filepath.WalkDir
+// para relativo a DocsDir com forward slashes.
+func (w *Watcher) relPathFromWalk(path string) (string, bool) {
+	rel, err := filepath.Rel(w.cfg.DocsDir, path)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "" || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return rel, true
+}
+
 func (w *Watcher) pollAll() {
 	// 1. Escaneia arquivos no disco
 	diskFiles := make(map[string]bool)
@@ -342,8 +366,10 @@ func (w *Watcher) pollAll() {
 			if err != nil {
 				return nil
 			}
-			relPath := strings.TrimPrefix(path, w.cfg.DocsDir)
-			relPath = strings.TrimPrefix(relPath, "/")
+			relPath, ok := w.relPathFromWalk(path)
+			if !ok {
+				return nil
+			}
 			diskFiles[relPath] = true
 			w.events <- FileEvent{
 				Path:     path,

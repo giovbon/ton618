@@ -27,7 +27,7 @@ type AppConfig struct {
 }
 
 func Load() *AppConfig {
-	return &AppConfig{
+	cfg := &AppConfig{
 		DocsDir:           getEnv("DOCS_DIR", "./docs"),
 		DBPath:            getEnv("DB_PATH", "./data/ton618.db"),
 		PollIntervalSec:   time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
@@ -40,10 +40,26 @@ func Load() *AppConfig {
 		OllamaModel:       getEnv("OLLAMA_MODEL", "nomic-embed-text"),
 		EmbeddingProvider: getEnv("EMBEDDING_PROVIDER", "gemini"),
 		EmbeddingAPIKey:   getEnv("EMBEDDING_API_KEY", ""),
-		EmbeddingModel:    getEnv("EMBEDDING_MODEL", "gemini-embedding-2"),
-		EmbeddingDim:      getEnvAsInt("EMBEDDING_DIM", 768),
-		EmbeddingAll:      getEnvAsBool("EMBEDDING_ALL", false),
+		EmbeddingModel:   getEnv("EMBEDDING_MODEL", "gemini-embedding-2"),
+		EmbeddingDim:     getEnvAsInt("EMBEDDING_DIM", 768),
+		EmbeddingAll:     getEnvAsBool("EMBEDDING_ALL", false),
 	}
+
+	// Resolve caminhos relativos para absolutos (essencial no Windows)
+	if absDir, err := filepath.Abs(cfg.DocsDir); err == nil {
+		cfg.DocsDir = absDir
+	}
+	if absDB, err := filepath.Abs(cfg.DBPath); err == nil {
+		cfg.DBPath = absDB
+	}
+	if absWeb, err := filepath.Abs(cfg.WebDir); err == nil {
+		cfg.WebDir = absWeb
+	}
+	if absState, err := filepath.Abs(cfg.StateDir); err == nil {
+		cfg.StateDir = absState
+	}
+
+	return cfg
 }
 
 func getEnv(key, fallback string) string {

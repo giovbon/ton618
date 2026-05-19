@@ -1,6 +1,20 @@
 {{template "layout" .}} {{define "graphContent"}}
-<div>
-    <div class="flex items-center justify-between mb-4">
+<style>
+    .graph-page {
+        margin-left: calc(-50vw + 50%);
+        margin-right: calc(-50vw + 50%);
+        width: 100vw;
+        padding-left: 16px;
+        padding-right: 16px;
+        box-sizing: border-box;
+    }
+    .graph-card {
+        height: calc(100vh - 140px) !important;
+        width: 100%;
+    }
+</style>
+<div class="graph-page">
+    <div class="flex items-center justify-between mb-2" style="padding: 0 4px">
         <h1 class="text-sm font-black tracking-tight text-zinc-200">
             Mapa Semântico
         </h1>
@@ -15,11 +29,11 @@
     </div>
 
     <div
-        class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card"
+        class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card graph-card"
     >
         <div
             id="graph-container"
-            style="width: 100%; height: 600px; position: relative"
+            style="width: 100%; height: 100%; position: relative"
         ></div>
     </div>
 
@@ -46,73 +60,32 @@
             return;
         }
 
-        const nodes = data.nodes || [];
+        var nodes = data.nodes || [];
         if (nodes.length === 0) {
             statusEl.textContent = "Nenhuma nota embedada";
             return;
         }
 
+        // Se todas as coordenadas forem (0,0), espalha os nos num grid
+        var allZero = nodes.every(function (n) {
+            return n.x === 0 && n.y === 0;
+        });
+        if (allZero) {
+            var cols = Math.ceil(Math.sqrt(nodes.length));
+            nodes.forEach(function (n, i) {
+                n.x = (i % cols) * 120 + 60;
+                n.y = Math.floor(i / cols) * 120 + 60;
+            });
+        }
+
         // Link count for sizing
-        const linkCounts = {};
+        var linkCounts = {};
         (data.links || []).forEach(function (l) {
             var s = typeof l.source === "object" ? l.source.id : l.source;
             var t = typeof l.target === "object" ? l.target.id : l.target;
             linkCounts[s] = (linkCounts[s] || 0) + 1;
             linkCounts[t] = (linkCounts[t] || 0) + 1;
         });
-
-        // Simple frontend clustering based on simulation positions
-        function assignClusters(pts, k) {
-            if (pts.length <= k) {
-                pts.forEach(function (p, i) {
-                    p.cluster = i;
-                });
-                return;
-            }
-            // Random initialization
-            var centroids = [];
-            var shuffled = pts.slice().sort(function () {
-                return Math.random() - 0.5;
-            });
-            for (var i = 0; i < k; i++)
-                centroids.push({ x: shuffled[i].x, y: shuffled[i].y });
-
-            for (var iter = 0; iter < 30; iter++) {
-                // Assign
-                pts.forEach(function (p) {
-                    var best = 0,
-                        bestDist = Infinity;
-                    centroids.forEach(function (c, j) {
-                        var d =
-                            (p.x - c.x) * (p.x - c.x) +
-                            (p.y - c.y) * (p.y - c.y);
-                        if (d < bestDist) {
-                            bestDist = d;
-                            best = j;
-                        }
-                    });
-                    p.cluster = best;
-                });
-                // Update centroids
-                var sums = [],
-                    counts = [];
-                for (var j = 0; j < k; j++) {
-                    sums.push({ x: 0, y: 0 });
-                    counts.push(0);
-                }
-                pts.forEach(function (p) {
-                    sums[p.cluster].x += p.x;
-                    sums[p.cluster].y += p.y;
-                    counts[p.cluster]++;
-                });
-                for (var j = 0; j < k; j++) {
-                    if (counts[j] > 0) {
-                        centroids[j].x = sums[j].x / counts[j];
-                        centroids[j].y = sums[j].y / counts[j];
-                    }
-                }
-            }
-        }
 
         var CLUSTER_COLORS = [
             "#38bdf8",
@@ -126,8 +99,8 @@
         ];
 
         var container = document.getElementById("graph-container");
-        var width = container.clientWidth,
-            height = 600;
+        var width = container.clientWidth;
+        var height = container.clientHeight;
 
         var svg = d3
             .select("#graph-container")
@@ -225,11 +198,14 @@
 
         node.append("text")
             .text(function (d) {
-                var name = (d.id.split("/").pop() || d.id).replace(
-                    /\.(md|pdf)$/i,
-                    "",
+                return (
+                    d.title ||
+                    d.id
+                        .split("/")
+                        .pop()
+                        .replace(/\.(md|pdf)$/i, "") ||
+                    "?"
                 );
-                return name.length > 18 ? name.slice(0, 16) + "..." : name;
             })
             .attr("text-anchor", "middle")
             .attr("dy", function (d) {
@@ -241,14 +217,63 @@
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
+        // ── Clustering (k-means) ──
+        function assignClusters(pts, k) {
+            if (pts.length <= k) {
+                pts.forEach(function (p, i) {
+                    p.cluster = i;
+                });
+                return;
+            }
+            var centroids = [];
+            var shuffled = pts.slice().sort(function () {
+                return Math.random() - 0.5;
+            });
+            for (var i = 0; i < k; i++)
+                centroids.push({ x: shuffled[i].x, y: shuffled[i].y });
+
+            for (var iter = 0; iter < 30; iter++) {
+                pts.forEach(function (p) {
+                    var best = 0,
+                        bestDist = Infinity;
+                    centroids.forEach(function (c, j) {
+                        var d =
+                            (p.x - c.x) * (p.x - c.x) +
+                            (p.y - c.y) * (p.y - c.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = j;
+                        }
+                    });
+                    p.cluster = best;
+                });
+                var sums = [],
+                    counts = [];
+                for (var j = 0; j < k; j++) {
+                    sums.push({ x: 0, y: 0 });
+                    counts.push(0);
+                }
+                pts.forEach(function (p) {
+                    sums[p.cluster].x += p.x;
+                    sums[p.cluster].y += p.y;
+                    counts[p.cluster]++;
+                });
+                for (var j = 0; j < k; j++) {
+                    if (counts[j] > 0) {
+                        centroids[j].x = sums[j].x / counts[j];
+                        centroids[j].y = sums[j].y / counts[j];
+                    }
+                }
+            }
+        }
+
         // Render Voronoi after simulation ends
         var voronoiRendered = false;
         simulation.on("end", function () {
             if (voronoiRendered) return;
             voronoiRendered = true;
 
-            // Assign clusters
-            var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 2)));
+            var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
             assignClusters(nodes, k);
 
             // Update node colors after clustering
@@ -259,39 +284,64 @@
                 );
             });
 
-            // Build Delaunay triangulation
-            var delaunay = d3.Delaunay.from(
-                nodes.map(function (d) {
-                    return [d.x, d.y];
-                }),
-            );
-            var voronoi = delaunay.voronoi([
-                -100,
-                -100,
-                width + 100,
-                height + 100,
-            ]);
+            // Build Voronoi from final positions
+            var pts = nodes.map(function (d) {
+                return [d.x, d.y];
+            });
 
-            // Render Voronoi cells
-            var cells = voronoiGroup
-                .selectAll("path")
-                .data(nodes)
-                .join("path")
-                .attr("d", function (d, i) {
-                    return voronoi.renderCell(i);
-                })
-                .attr("fill", function (d) {
-                    return (
-                        CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
-                        "#0ea5e9"
-                    );
-                })
-                .attr("fill-opacity", 0.06)
-                .attr("stroke", function (d) {
-                    return CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length];
-                })
-                .attr("stroke-opacity", 0.15)
-                .attr("stroke-width", 1);
+            // Remove duplicate points for Delaunay (they break Voronoi)
+            var unique = [];
+            var indices = [];
+            pts.forEach(function (p, i) {
+                var dup = false;
+                for (var j = 0; j < unique.length; j++) {
+                    if (unique[j][0] === p[0] && unique[j][1] === p[1]) {
+                        dup = true;
+                        indices.push(j);
+                        break;
+                    }
+                }
+                if (!dup) {
+                    unique.push(p);
+                    indices.push(unique.length - 1);
+                }
+            });
+
+            if (unique.length >= 3) {
+                var delaunay = d3.Delaunay.from(unique);
+                var voronoi = delaunay.voronoi([
+                    -50,
+                    -50,
+                    width + 50,
+                    height + 50,
+                ]);
+
+                voronoiGroup
+                    .selectAll("path")
+                    .data(nodes)
+                    .join("path")
+                    .attr("d", function (d, i) {
+                        try {
+                            return voronoi.renderCell(indices[i]);
+                        } catch (e) {
+                            return null;
+                        }
+                    })
+                    .attr("fill", function (d) {
+                        return (
+                            CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
+                            "#0ea5e9"
+                        );
+                    })
+                    .attr("fill-opacity", 0.06)
+                    .attr("stroke", function (d) {
+                        return CLUSTER_COLORS[
+                            d.cluster % CLUSTER_COLORS.length
+                        ];
+                    })
+                    .attr("stroke-opacity", 0.15)
+                    .attr("stroke-width", 1);
+            }
 
             statusEl.textContent = nodes.length + " notas · " + k + " grupos";
         });
@@ -315,9 +365,10 @@
             });
         });
 
-        // Auto-zoom after render
+        // Auto-zoom after simulation settles
         setTimeout(function () {
             var bounds = g.node().getBBox();
+            if (bounds.width === 0 || bounds.height === 0) return;
             var scale =
                 0.85 / Math.max(bounds.width / width, bounds.height / height);
             svg.call(
@@ -329,7 +380,7 @@
                     )
                     .scale(Math.max(0.3, scale)),
             );
-        }, 2000);
+        }, 2500);
     });
 </script>
 {{end}}

@@ -471,45 +471,50 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		Target string `json:"target"`
 	}
 
-	// Map doc IDs to filenames by consulting the documents table
-	var nodes []node
+	// Agrupa embeddings por arquivo (um arquivo pode ter varios docs/embeddings)
+	// e usa o primeiro embedding encontrado para cada arquivo.
+	fileNodes := make(map[string]node) // arquivo -> node
+	fileSeen := make(map[string]bool)
+
 	for docID, nv := range embeddings {
-		// Busca o documento para obter o nome real do arquivo
 		doc, _ := ctx.Store.GetDocument(docID)
-		fileName := ""
-		if doc != nil && doc.Arquivo != "" {
-			fileName = doc.Arquivo
+		if doc == nil || doc.Arquivo == "" {
+			continue
 		}
-
-		// Se nao achou o documento, tenta usar o titulo salvo
-		display := nv.Title
-		if fileName != "" {
-			// Usa o nome do arquivo como ID (para abrir a nota) e como titulo
-			parts := strings.Split(fileName, "/")
-			shortName := strings.TrimSuffix(parts[len(parts)-1], ".md")
-			if len(parts) > 1 {
-				shortName = parts[len(parts)-1] + " (" + parts[len(parts)-1] + ")"
-			}
-			display = shortName
-		} else if display == "" {
-			display = docID
-			if len(display) > 12 {
-				display = display[:12] + "..."
-			}
+		arquivo := doc.Arquivo
+		if fileSeen[arquivo] {
+			continue // ja processamos este arquivo
 		}
+		fileSeen[arquivo] = true
 
-		nodes = append(nodes, node{
-			ID:    fileName, // O ID real é o filename, nao o hash
-			Title: display,
+		// Nome de exibicao: apenas o nome do arquivo sem extensao
+		parts := strings.Split(arquivo, "/")
+		baseName := strings.TrimSuffix(parts[len(parts)-1], ".md")
+
+		fileNodes[arquivo] = node{
+			ID:    arquivo,
+			Title: baseName,
 			X:     nv.X,
 			Y:     nv.Y,
-		})
+		}
 	}
 
+	var nodes []node
+	for _, n := range fileNodes {
+		nodes = append(nodes, n)
+	}
+
+	// Filtra links: so inclui se ambos os arquivos existirem como nodes
+	fileSet := fileSeen
 	var edgeList []link
 	for fromFile, toFiles := range links {
+		if !fileSet[fromFile] {
+			continue
+		}
 		for _, toFile := range toFiles {
-			edgeList = append(edgeList, link{Source: fromFile, Target: toFile})
+			if fileSet[toFile] {
+				edgeList = append(edgeList, link{Source: fromFile, Target: toFile})
+			}
 		}
 	}
 
