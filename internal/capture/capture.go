@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"io"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -62,11 +63,23 @@ func getYouTubeTranscript(videoID string) (string, error) {
 
 // getYouTubeTitle extrai o titulo do video da pagina.
 func getYouTubeTitle(videoURL string) string {
-	article, err := readability.FromURL(videoURL, 10*time.Second)
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get(videoURL)
 	if err != nil {
 		return ""
 	}
-	title := strings.TrimSuffix(article.Title, " - YouTube")
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	re := regexp.MustCompile(`<title>([^<]+)</title>`)
+	matches := re.FindStringSubmatch(string(body))
+	if len(matches) < 2 {
+		return ""
+	}
+	title := strings.TrimSpace(matches[1])
+	title = strings.TrimSuffix(title, " - YouTube")
 	title = strings.TrimSpace(title)
 	return title
 }
@@ -86,6 +99,46 @@ func slugifyFilename(title string) string {
 		slug = "captura"
 	}
 	return slug
+}
+
+// cleanupMarkdown remove artefatos e texto duplicado gerado pelo html-to-markdown.
+func cleanupMarkdown(md string) string {
+	// Remove linhas que sao apenas texto duplicado de imagens: "texto" em linha propria
+	// quando a linha anterior ja continha esse texto como alt da imagem.
+	lines := strings.Split(md, "
+")
+	var cleaned []string
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Pula linhas que sao texto solto repetido logo apos uma imagem
+		if i > 0 && trimmed != "" {
+			prev := strings.TrimSpace(lines[i-1])
+			// Se a linha anterior tem uma imagem com este texto como alt/title
+			if strings.Contains(prev, "![") && strings.Contains(prev, trimmed) {
+				continue
+			}
+			// Remove legendas de imagem em linha separada apos a imagem
+			if strings.HasPrefix(prev, "!") && len(trimmed) < 120 {
+				continue
+			}
+		}
+		// Remove linhas de video incorporado
+		if strings.Contains(trimmed, "youtube.com/embed") || strings.Contains(trimmed, "player.vimeo.com") {
+			continue
+		}
+		cleaned = append(cleaned, line)
+	}
+	md = strings.Join(cleaned, "
+")
+
+	// Remove linhas em branco consecutivas (max 1)
+	re := regexp.MustCompile(`
+{3,}`)
+	md = re.ReplaceAllString(md, "
+
+")
+
+	return strings.TrimSpace(md)
 }
 
 // HandlerContext contem as dependencias para o handler de captura.
@@ -191,6 +244,9 @@ source: %s
 			http.Error(w, "Falha ao converter HTML", http.StatusInternalServerError)
 			return
 		}
+
+		// Limpa artefatos do HTML-to-markdown
+		mdContent = cleanupMarkdown(mdContent)
 
 		finalMarkdown = fmt.Sprintf(`---
 title: "%s"

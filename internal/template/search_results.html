@@ -28,7 +28,7 @@
                     href="/editor?file={{.Arquivo}}"
                     class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400"
                 >
-                    {{baseName .Arquivo}}
+                    {{if hasPrefix .Arquivo "notes/captura-"}}🌐 {{end}}{{baseName .Arquivo}}
                 </a>
                 {{end}}
             </div>
