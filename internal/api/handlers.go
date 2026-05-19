@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"ton618/internal/db"
 	"ton618/internal/search"
@@ -41,10 +42,134 @@ func sanitizeFilename(name string) string {
 	return base
 }
 
-// displayName retorna apenas o nome do arquivo (sem diretorio) para exibicao.
+// displayName retorna apenas o nome do arquivo (sem diretorio e sem .md) para exibicao.
 func displayName(name string) string {
 	base := filepath.Base(name)
-	return base
+	return strings.TrimSuffix(base, ".md")
+}
+
+// buildContextSnippet extrai janelas de contexto ao redor de cada termo da query.
+// Se os termos estiverem proximos (dentro de gapThreshold), mostra tudo junto.
+// Se estiverem distantes, usa "..." entre as janelas.
+func buildContextSnippet(text, query string, before, after int) string {
+	// Parse query into individual search terms
+	rawTerms := strings.Fields(query)
+	var terms []string
+	for _, t := range rawTerms {
+		t = strings.TrimSpace(t)
+		// Skip operators, single chars, quoted phrase boundaries
+		if len(t) <= 1 {
+			continue
+		}
+		if t[0] == '-' || t[0] == '#' || strings.HasPrefix(t, "+tags:") {
+			continue
+		}
+		// Strip surrounding quotes for phrase search
+		t = strings.Trim(t, `"`)
+		if len(t) <= 1 {
+			continue
+		}
+		// Only keep alphabetic and numeric chars for matching
+		cleaned := strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				return r
+			}
+			return -1
+		}, t)
+		if len(cleaned) > 1 {
+			terms = append(terms, cleaned)
+		}
+	}
+
+	if len(terms) == 0 {
+		if len(text) > 250 {
+			return text[:250] + "..."
+		}
+		return text
+	}
+
+	textLower := strings.ToLower(text)
+
+	// Find first occurrence of each term
+	type match struct {
+		pos  int
+		term string
+	}
+	var matches []match
+	seen := make(map[string]bool)
+	for _, term := range terms {
+		termLower := strings.ToLower(term)
+		if seen[termLower] {
+			continue
+		}
+		seen[termLower] = true
+		if pos := strings.Index(textLower, termLower); pos >= 0 {
+			matches = append(matches, match{pos: pos, term: termLower})
+		}
+	}
+
+	if len(matches) == 0 {
+		if len(text) > 250 {
+			return text[:250] + "..."
+		}
+		return text
+	}
+
+	// Sort by position
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].pos < matches[j].pos
+	})
+
+	// Build context windows, merging close ones
+	const gapThreshold = 150
+	type window struct {
+		start, end int
+	}
+	var windows []window
+
+	for _, m := range matches {
+		start := m.pos - before
+		if start < 0 {
+			start = 0
+		}
+		end := m.pos + len(m.term) + after
+		if end > len(text) {
+			end = len(text)
+		}
+
+		if len(windows) > 0 {
+			last := &windows[len(windows)-1]
+			// If this window overlaps or is close enough, merge
+			if start <= last.end+gapThreshold {
+				if end > last.end {
+					last.end = end
+				}
+				continue
+			}
+		}
+		windows = append(windows, window{start: start, end: end})
+	}
+
+	// Build final snippet with ellipsis
+	var parts []string
+	for i, w := range windows {
+		part := text[w.start:w.end]
+		// Trim to sentence boundaries at edges when possible
+		if w.start > 0 {
+			part = "... " + part
+		}
+		if w.end < len(text) {
+			part = part + " ..."
+		}
+
+		// If this is not the first window and previous window is far, add separator
+		if i > 0 {
+			parts = append(parts, "...")
+		}
+		parts = append(parts, part)
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // ── Pages ──
@@ -196,28 +321,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		// Normalize whitespace
 		snippet = strings.Join(strings.Fields(snippet), " ")
 
-		// Extract context window around the query term (first occurrence)
-		queryLower := strings.ToLower(query)
-		snippetLower := strings.ToLower(snippet)
-		if pos := strings.Index(snippetLower, queryLower); pos >= 0 {
-			start := pos - 80
-			if start < 0 {
-				start = 0
-			}
-			end := pos + len(query) + 120
-			if end > len(snippet) {
-				end = len(snippet)
-			}
-			snippet = snippet[start:end]
-			if start > 0 {
-				snippet = "... " + snippet
-			}
-			if end < len(snippet) {
-				snippet = snippet + " ..."
-			}
-		} else if len(snippet) > 250 {
-			snippet = snippet[:250] + "..."
-		}
+		// Extract multi-term context windows with ellipsis between distant terms
+		snippet = buildContextSnippet(snippet, query, 80, 120)
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		items = append(items, resultItem{
 			ID:         hit.Doc.ID,

@@ -233,6 +233,18 @@
         padding: 0;
         color: #a1a1aa;
     }
+    .ProseMirror a {
+        color: #38bdf8 !important;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(56, 189, 248, 0.3);
+        cursor: pointer;
+        font-weight: 500;
+        transition: text-decoration-color 0.15s;
+    }
+    .ProseMirror a:hover {
+        text-decoration-color: #38bdf8;
+    }
     .ProseMirror blockquote {
         border-left: 3px solid #3f3f46;
         padding-left: 1em;
@@ -1035,8 +1047,10 @@
 
         async function doRename() {
             var newName = filenameInput.value.trim();
+            // Remove .md se o usuario digitou, pois adicionamos automaticamente
+            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
             if (!newName || newName === originalDisplayName) return;
-            if (!newName.endsWith(".md")) newName += ".md";
+            newName += ".md";
             if (saveTimer) clearTimeout(saveTimer);
             setStatus("saving");
 

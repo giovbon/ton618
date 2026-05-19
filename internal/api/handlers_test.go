@@ -272,8 +272,8 @@ func TestHandleEditor_SemFilename_UsaNovoMd(t *testing.T) {
 
 	body := rec.Body.String()
 	// Deve conter o display name padrao (sem diretorio) e content vazio
-	if !strings.Contains(body, `value="novo.md"`) {
-		t.Error("sem filename, editor deveria usar novo.md como display name")
+	if !strings.Contains(body, `value="novo"`) {
+		t.Error("sem filename, editor deveria usar novo como display name (sem .md)")
 	}
 }
 
