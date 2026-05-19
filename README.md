@@ -1,13 +1,15 @@
-# 🌌 TON-618 v2 — Motor de Busca Personal Knowledge Management
+# 🌌 TON-618 v2 — Motor de Busca + Mapa Semântico Personal Knowledge Management
 
-**TON-618 v2** é um motor de busca pessoal (PKM) que indexa arquivos Markdown, combina busca textual **FTS5** com **embeddings semânticos** e entrega resultados via um frontend **HTMX + Tailwind CDN** — tudo sem dependências npm e com inicialização em **< 100ms**.
+**TON-618 v2** é um motor de busca pessoal (PKM) que indexa arquivos Markdown, combina busca textual **FTS5** com **embeddings semânticos**, e oferece um **mapa semântico interativo** com projeção PCA + diagrama de Voronoi. Tudo com um frontend **HTMX + Tailwind CDN** — sem dependências npm e com inicialização em **< 100ms**.
 
 | Aspecto | Stack |
 |---|---|
 | **Linguagem** | Go 1.24+ |
 | **Busca textual** | SQLite FTS5 |
-| **Embeddings** | Google Gemini / Ollama / OpenAI |
-| **Frontend** | HTMX + Tailwind CDN + TipTap (editor) + D3.js (grafo) |
+| **Embeddings** | Google Gemini / Ollama / OpenAI (768D a 1536D) |
+| **Projeção 2D** | PCA (Principal Component Analysis) puro em Go |
+| **Mapa semântico** | D3.js force graph + Voronoi diagram |
+| **Frontend** | HTMX + Tailwind CDN + TipTap (editor) |
 | **Banco** | SQLite (`mattn/go-sqlite3`) |
 | **Monitoramento** | `fsnotify` + polling |
 | **Dependências Go** | 3 (sqlite3, fsnotify, yaml.v3) |
@@ -77,6 +79,7 @@ EMBEDDING_DIM=768
 | `EMBEDDING_API_KEY` | — | Chave da API (obrigatório para Gemini/OpenAI) |
 | `EMBEDDING_MODEL` | `text-embedding-004` | Modelo de embedding (ex.: `text-embedding-3-small` para OpenAI) |
 | `EMBEDDING_DIM` | `768` | Dimensionalidade dos vetores de embedding |
+| `EMBEDDING_ALL` | `false` | `true` = gera embedding para **todas** as notas (não só as com tag `embed`) |
 | `DOCS_DIR` | `./docs` | Diretório com seus arquivos `.md` |
 | `DB_PATH` | `./data/ton618.db` | Caminho do banco SQLite |
 | `STATE_DIR` | `./data` | Diretório para estado interno |
@@ -200,14 +203,15 @@ curl http://localhost:6180/api/health
 ## 🏗️ Estrutura do Projeto
 
 ```
-ton618/                          # Módulo Go (import path: "ton618")
+ton618/
 ├── cmd/
 │   └── server/
 │       └── main.go              # Entry point — embed FS, servidor HTTP, graceful shutdown
 ├── internal/
 │   ├── api/
 │   │   ├── routes.go            # Registro de todas as rotas HTTP (HTMX-aware)
-│   │   ├── handlers.go          # Handlers: busca, CRUD, API, páginas
+│   │   ├── handlers.go          # Handlers: busca, CRUD, API, páginas, mapa semântico
+│   │   ├── handlers_test.go     # Testes unitários (~54 testes)
 │   │   ├── middleware.go        # Middleware: recovery, logging, basic auth
 │   │   └── render.go            # Server-side rendering com html/template
 │   ├── config/
@@ -215,9 +219,11 @@ ton618/                          # Módulo Go (import path: "ton618")
 │   ├── db/
 │   │   ├── db.go                # Conexão SQLite + schema (9 tabelas + FTS5)
 │   │   ├── documents.go         # CRUD de documentos
+│   │   ├── documents_test.go    # Testes de documentos
 │   │   ├── fts.go               # Busca FTS5 + fallback LIKE
 │   │   ├── state.go             # Popularidade, tags, links, file_mods, settings
-│   │   └── vectors.go           # Embeddings (vector BLOB + encode/decode)
+│   │   └── vectors.go           # Embeddings (vector BLOB + encode/decode + PCA 2D)
+│   │   └── vectors_test.go      # Testes de embeddings (encode, 2D, deleção por arquivo)
 │   ├── processor/
 │   │   └── markdown.go          # Parse: YAML frontmatter, hashtags, wikilinks, headers
 │   ├── search/
@@ -225,6 +231,8 @@ ton618/                          # Módulo Go (import path: "ton618")
 │   │   └── ranker.go            # Scoring com pesos (título, tag, frase, frescor, path)
 │   ├── semantic/
 │   │   ├── provider.go          # Interface Embedder + factory + cache LRU
+│   │   ├── projection.go        # PCA: redução de dimensionalidade 768D → 2D
+│   │   ├── projection_test.go   # Testes da projeção PCA (8 testes)
 │   │   ├── gemini.go            # Google Gemini Embeddings API
 │   │   ├── ollama.go            # Ollama local embeddings
 │   │   └── openai.go            # OpenAI Embeddings API
@@ -233,33 +241,152 @@ ton618/                          # Módulo Go (import path: "ton618")
 │   │   ├── index.html           # Página de busca principal
 │   │   ├── search_results.html  # Partial HTMX (renderizado server-side)
 │   │   ├── editor.html          # Editor rich text TipTap + gerenciamento de tags
-│   │   └── graph.html           # Mapa semântico interativo (D3.js force graph)
+│   │   └── graph.html           # Mapa semântico interativo (D3.js + Voronoi + PCA)
 │   └── watcher/
 │       └── watcher.go           # fsnotify + polling, processamento de arquivos
-├── go.mod                       # Módulo: ton618, Go 1.24.1
+├── web/                         # Assets estáticos (editor bundle)
+├── go.mod
 ├── go.sum
-├── Dockerfile                   # Multi-stage: golang:1.24-alpine → alpine:3.21
-├── docker-compose.yml           # Serviço + volumes + healthcheck
-├── run.sh                       # Script de inicialização rápida
-├── deploy.sh                    # Build multi-arch + push Docker Hub
-├── .gitignore                   # Ignora .env, data/, docs/, binário
-├── AGENT.md                     # Documentação interna do desenvolvedor
+├── Dockerfile
+├── docker-compose.yml
+├── run.sh
+├── deploy.sh
+├── .gitignore
+├── AGENT.md
 ├── README.md                    # ← Você está aqui
 └── LEGADO/                      # Projeto original (referência histórica)
 ```
 
-### Comparação com o LEGADO
+---
 
-| Aspecto | LEGADO | v2 |
+## 🗺️ Mapa Semântico
+
+O mapa semântico (`/graph`) é uma visualização interativa que mostra todas as notas embedadas como pontos em um **gráfico de força 2D**, coloridas por **clusters k-means**, com **arestas** representando links entre notas e um **diagrama de Voronoi** sobreposto.
+
+### Pipeline de dados
+
+```
+[Nota .md modificada]
+        ↓
+watcher.ProcessFile()
+        ↓
+ProcessMarkdown() → extrai texto
+        ↓
+embed.Embed(texto) → API Gemini → vetor 768D
+        ↓
+SetEmbedding(docID, vec, title) → SQLite (tabela embeddings, BLOB de 3072 bytes)
+        ↓
+HandleGraphData() → PCA (Project2DReduce) → coordenadas 2D
+        ↓
+SetEmbedding2D(docID, x, y) → SQLite (colunas X, Y na tabela embeddings)
+        ↓
+GET /api/graph/data → JSON com nós {id, title, x, y} + links
+        ↓
+D3.js forceSimulation + Voronoi diagram → renderização no navegador
+```
+
+### Projeção PCA
+
+A projeção de 768 dimensões para 2D é feita **em Go** (pacote `internal/semantic/projection.go`) usando **PCA (Principal Component Analysis)** com power iteration:
+
+| Etapa | Descrição |
+|---|---|
+| 1 | Centralizar dados (subtrair a média de cada dimensão) |
+| 2 | Calcular matriz de covariância (d × d) |
+| 3 | Power iteration (100 iterações) → 1º autovetor (maior variância) |
+| 4 | Power iteration deflacionada → 2º autovetor (ortogonal ao 1º) |
+| 5 | Projetar vetores centrados nos 2 autovetores |
+| 6 | Normalizar coordenadas para o range [-1, 1] |
+
+A projeção é **determinística** (semente fixa `42` e `123` para a iteração). O resultado é armazenado no banco (`SET embeddings SET x=?, y=?`) para ser reutilizado sem recalcular.
+
+### Diagrama de Voronoi
+
+O Voronoi é renderizado **progressivamente** durante a simulação:
+
+- **A cada 4 ticks** da simulação, se `alpha < 0.3`, o diagrama é atualizado
+- **Delaunay triangulation** via `d3.Delaunay.from()` com **deduplicação de pontos**
+- **Padding**: 50px nas bordas do container
+- **Opacidade**: fill 6%, stroke 15% — aparência sutil sobre o grafo
+
+### Controles
+
+| Ação | Efeito |
+|---|---|
+| **Arrastar** nó | Move o nó (fixa posição temporariamente) |
+| **Scroll** | Zoom in/out (0.1× a 4×) |
+| **Clique** no nó | Abre o editor na nota correspondente |
+| **Auto-zoom** | Ajusta automaticamente ao final da simulação |
+
+### Endpoints
+
+| Método | Rota | Descrição |
 |---|---|---|
-| **Motor de busca** | Bleve (~30 deps indiretas) | SQLite FTS5 (1 dep) |
-| **Estado** | BBolt + JSONs + mapas mutex | SQLite (tabelas relacionais) |
-| **Frontend** | Preact + Vite + 30 deps npm | HTMX + CDN (0 deps npm) |
-| **Frameworks** | React Query, Router, Tailwind build | Tailwind CDN, sem build step |
-| **Editor** | TipTap via `@tiptap/react` | TipTap via CDN UMD |
-| **Backup** | 5 arquivos/pastas | 1 arquivo `ton618.db` |
-| **Dependências totais** | ~30 Go + ~30 npm | 3 Go + 0 npm |
-| **Startup** | 2–3 segundos | < 100ms |
+| `GET` | `/graph` | Página do mapa semântico |
+| `GET` | `/api/graph/data` | JSON com nós (id, title, x, y) + links |
+| `POST` | `/api/graph/project` | Força reprojeção PCA de todos os embeddings |
+
+---
+
+## 🧪 Testes
+
+```ton618plus/terminal.sh#L1-1
+go test -tags sqlite_fts5 ./...
+```
+
+Atualmente **~54 testes** distribuídos em:
+
+| Pacote | Nº testes | O que cobre |
+|---|---|---|
+| `internal/api` | ~38 | CRUD de notas, busca, autenticação, templates, **deleção de embeddings** |
+| `internal/db/vectors` | ~10 | Encode/decode, 2D storage, **deleção por arquivo**, **limpeza de órfãos** |
+| `internal/semantic/projection` | 8 | PCA: vazio, 1 nó, 2 nós, 768D, consistência, colapso, normalização |
+
+### Testes específicos do mapa semântico
+
+| Teste | O que verifica |
+|---|---|
+| `TestHandleGraphData_SemEmbeddings_RetornaVazio` | Lista vazia sem embeddings |
+| `TestHandleGraphData_ComEmbeddings_RetornaNodes2D` | Nó com ID, título e coordenadas 2D |
+| `TestProject2DReduce_*` (8 testes) | PCA: vazio, 1 nó, 768D×10 nós, determinístico, colapso |
+| `TestDeleteEmbeddingsByFile_*` (2 testes) | Deleção por arquivo, isolamento entre arquivos |
+| `TestDeleteOrphanedEmbeddings_*` (2 testes) | Limpeza de órfãos, preservação de válidos |
+| `TestHandleFileDelete_RemoveEmbeddingTambem` | Deleção via HTTP remove embedding |
+| `TestHandleFileDelete_RemoveEmbeddingMultiplosDocs` | Múltiplos embeddings do mesmo arquivo |
+
+---
+
+## 🗄️ Banco de Dados
+
+### Tabela `embeddings`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `doc_id` | TEXT PK | Hash do documento (ex: `75dc11b0...`) |
+| `vector` | BLOB | Vetor 768D em 4 bytes/float LE (3072 bytes) |
+| `title` | TEXT | Título de exibição |
+| `x` | REAL | Coordenada X da projeção 2D (PCA) |
+| `y` | REAL | Coordenada Y da projeção 2D (PCA) |
+| `created_at` | TEXT | Timestamp de criação |
+
+A deleção de embeddings é feita **por arquivo** (não por `doc_id`):
+
+```go
+// Deleta todos os embeddings cujo documento pertence ao arquivo
+DELETE FROM embeddings WHERE doc_id IN (
+    SELECT id FROM documents WHERE arquivo = ?
+)
+```
+
+Isso garante que ao deletar uma nota, **todos os seus embeddings** (inclusive múltiplos fragmentos) são removidos.
+
+### Limpeza de embeddings órfãos
+
+`POST /api/graph/project` também executa `DeleteOrphanedEmbeddings()` que remove embeddings sem documento correspondente:
+
+```sql
+DELETE FROM embeddings WHERE doc_id NOT IN (SELECT id FROM documents)
+```
 
 ---
 
@@ -317,12 +444,14 @@ EMBEDDING_MODEL=text-embedding-3-small
 
 4. **Embeddings**: O texto é enviado ao provedor configurado (Gemini / Ollama / OpenAI) que retorna um vetor numérico. Esse vetor é armazenado como BLOB no banco para busca semântica.
 
-5. **Busca**: O motor (`internal/search/search.go`) executa:
+5. **Projeção 2D**: Na primeira requisição ao `/api/graph/data`, o PCA é executado para projetar os vetores 768D em 2D. O resultado é armazenado no banco para reuso.
+
+6. **Busca**: O motor (`internal/search/search.go`) executa:
    - Primeiro: busca全文 via FTS5
    - Fallback: `LIKE` para consultas parciais
    - Re-ranking: algoritmo em `internal/search/ranker.go` com pesos para título, tags, correspondência de frase, frescor (data de modificação) e path do arquivo
 
-6. **Frontend**: HTMX faz requisições ao servidor, que renderiza HTML parcial (server-side rendering) e devolve ao navegador — sem JavaScript complexo.
+7. **Frontend**: HTMX faz requisições ao servidor, que renderiza HTML parcial (server-side rendering) e devolve ao navegador — sem JavaScript complexo.
 
 ---
 
@@ -331,14 +460,22 @@ EMBEDDING_MODEL=text-embedding-3-small
 | Método | Rota | Descrição |
 |---|---|---|
 | `GET` | `/` | Página inicial (busca) |
-| `GET` | `/api/search?q=...` | Busca textual + semântica (HTMX partial) |
-| `GET` | `/api/document/{id}` | Detalhes de um documento |
+| `GET` | `/editor?file=...` | Editor TipTap |
+| `GET` | `/graph` | Mapa semântico interativo (D3.js) |
+| `GET` | `/login` | Página de login |
+| `POST` | `/search` | Busca full-text (HTMX partial) |
+| `GET` | `/file?name=...` | Servir arquivo markdown bruto |
+| `POST` | `/file/save` | Salvar nota (cria/atualiza) |
+| `POST` | `/file/delete` | Deletar nota + índice + embedding |
+| `POST` | `/file/rename` | Renomear nota |
+| `POST` | `/upload` | Upload de arquivo |
+| `GET` | `/api/status` | Status: contagem de docs e embeddings |
 | `GET` | `/api/health` | Healthcheck |
-| `GET` | `/editor` | Editor TipTap |
-| `GET` | `/graph` | Mapa semântico D3.js |
-| `POST` | `/api/document` | Criar novo documento |
-| `PUT` | `/api/document/{id}` | Atualizar documento |
-| `DELETE` | `/api/document/{id}` | Deletar documento |
+| `GET` | `/api/tags` | Lista de tags disponíveis |
+| `GET` | `/api/notes` | Lista de notas (modo compacto, JSON) |
+| `GET` | `/api/graph/data` | Dados do mapa semântico (nós + links, JSON) |
+| `POST` | `/api/graph/project` | Força reprojeção PCA + limpa órfãos |
+| `POST` | `/api/sync` | Sincronização manual (poll forçado) |
 
 ---
 
@@ -353,7 +490,7 @@ go build -tags sqlite_fts5 -ldflags="-s -w" -o ton618 ./cmd/server/
 ### Testes
 
 ```ton618plus/terminal.sh#L1-1
-go test ./...
+go test -tags sqlite_fts5 ./...
 ```
 
 ### Lint

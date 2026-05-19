@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/search"
+	"ton618/internal/semantic"
 	"ton618/internal/watcher"
 )
 
@@ -335,7 +337,7 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	// Remove from DB
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
-	ctx.Store.DeleteEmbedding(filename)
+	ctx.Store.DeleteEmbeddingsByFile(filename)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -373,6 +375,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	// Update DB: delete old, re-index new
 	ctx.Store.DeleteDocumentsByFile(oldName)
 	ctx.Store.DeleteFTSByFile(oldName)
+	ctx.Store.DeleteEmbeddingsByFile(oldName)
 
 	info, err := os.Stat(newPath)
 	if err == nil {
@@ -476,6 +479,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	fileNodes := make(map[string]node) // arquivo -> node
 	fileSeen := make(map[string]bool)
 
+	// Coleciona vetores para projecao PCA
+	vecsForProjection := make(map[string][]float32)
+
 	for docID, nv := range embeddings {
 		doc, _ := ctx.Store.GetDocument(docID)
 		if doc == nil || doc.Arquivo == "" {
@@ -491,28 +497,61 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		parts := strings.Split(arquivo, "/")
 		baseName := strings.TrimSuffix(parts[len(parts)-1], ".md")
 
+		// Se ja tem coordenadas 2D armazenadas, usa-as
+		x, y := nv.X, nv.Y
+		if x == 0 && y == 0 && len(nv.Vector) > 0 {
+			// Guarda para recalcular via PCA
+			vecsForProjection[arquivo] = nv.Vector
+		}
+
 		fileNodes[arquivo] = node{
 			ID:    arquivo,
 			Title: baseName,
-			X:     nv.X,
-			Y:     nv.Y,
+			X:     x,
+			Y:     y,
+		}
+	}
+
+	// Se ha vetores sem projecao 2D, executa PCA
+	if len(vecsForProjection) > 1 {
+		projected := semantic.Project2DReduce(vecsForProjection)
+		for arquivo, pt := range projected {
+			if n, ok := fileNodes[arquivo]; ok && n.X == 0 && n.Y == 0 {
+				n.X = pt.X
+				n.Y = pt.Y
+				fileNodes[arquivo] = n
+			}
+			// Armazena no banco para reuso
+			docs, _ := ctx.Store.GetDocumentsByFile(arquivo)
+			if len(docs) > 0 {
+				ctx.Store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
+			}
 		}
 	}
 
 	var nodes []node
 	for _, n := range fileNodes {
+		// Se ainda estao em (0,0) apos tentativa de projecao, espalha num grid
+		if n.X == 0 && n.Y == 0 {
+			idx := len(nodes)
+			cols := math.Ceil(math.Sqrt(float64(len(fileNodes))))
+			if cols < 3 {
+				cols = 3
+			}
+			n.X = float64(int(idx)%int(cols))*120 + 60
+			n.Y = float64(int(idx)/int(cols))*120 + 60
+		}
 		nodes = append(nodes, n)
 	}
 
 	// Filtra links: so inclui se ambos os arquivos existirem como nodes
-	fileSet := fileSeen
 	var edgeList []link
 	for fromFile, toFiles := range links {
-		if !fileSet[fromFile] {
+		if !fileSeen[fromFile] {
 			continue
 		}
 		for _, toFile := range toFiles {
-			if fileSet[toFile] {
+			if fileSeen[toFile] {
 				edgeList = append(edgeList, link{Source: fromFile, Target: toFile})
 			}
 		}
@@ -567,6 +606,43 @@ func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Reque
 	ctx.Watcher.PollAll()
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(`<div class="text-green-500">✓ Sincronização iniciada</div>`))
+}
+
+func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	embeddings, _ := ctx.Store.GetAllEmbeddings()
+	vecs := make(map[string][]float32)
+	fileToDoc := make(map[string]string)
+	for docID, nv := range embeddings {
+		doc, _ := ctx.Store.GetDocument(docID)
+		if doc == nil || doc.Arquivo == "" || len(nv.Vector) == 0 {
+			continue
+		}
+		if _, ok := fileToDoc[doc.Arquivo]; ok {
+			continue
+		}
+		fileToDoc[doc.Arquivo] = docID
+		vecs[doc.Arquivo] = nv.Vector
+	}
+	if len(vecs) < 2 {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"ok":true,"nodes":%d}`, len(vecs))
+		return
+	}
+	projected := semantic.Project2DReduce(vecs)
+	count := 0
+	for arquivo, pt := range projected {
+		if docID, ok := fileToDoc[arquivo]; ok {
+			if err := ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y); err == nil {
+				count++
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"ok":true,"nodes":%d,"projected":%d}`, len(vecs), count)
 }
 
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {

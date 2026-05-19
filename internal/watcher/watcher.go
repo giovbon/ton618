@@ -119,7 +119,7 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 	if ev.Type == "delete" {
 		store.DeleteDocumentsByFile(filename)
 		store.DeleteFTSByFile(filename)
-		store.DeleteEmbedding(filename)
+		store.DeleteEmbeddingsByFile(filename)
 		store.DeleteFileMod(filename)
 		store.ResetPopularity(filename)
 		store.SetFileTags(filename, nil) // limpa tags

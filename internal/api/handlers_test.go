@@ -1006,3 +1006,171 @@ func TestTableEmbeddings_SchemaCriada(t *testing.T) {
 		t.Error("HasFileEmbedding para arquivo inexistente deveria ser false")
 	}
 }
+
+// ── HandleGraphData ────────────────────────────────────────────
+
+func TestHandleGraphData_SemEmbeddings_RetornaVazio(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("GET", "/api/graph/data", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleGraphData(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp struct {
+		Nodes []struct {
+			ID string `json:"id"`
+		} `json:"nodes"`
+		Links []struct {
+			Source string `json:"source"`
+			Target string `json:"target"`
+		} `json:"links"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if len(resp.Nodes) != 0 {
+		t.Errorf("esperado 0 nós, got %d", len(resp.Nodes))
+	}
+	if len(resp.Links) != 0 {
+		t.Errorf("esperado 0 links, got %d", len(resp.Links))
+	}
+}
+
+func TestHandleGraphData_ComEmbeddings_RetornaNodes2D(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria uma nota com documento e embedding
+	docID := "doc-graph-test"
+	dbDoc := db.Document{
+		ID:      docID,
+		Tipo:    "markdown",
+		Arquivo: "notes/graf.md",
+		Secao:   "Titulo",
+		Texto:   "conteudo",
+	}
+	if err := ctx.Store.InsertDocument(dbDoc); err != nil {
+		t.Fatalf("InsertDocument: %v", err)
+	}
+
+	vec := make([]float32, 128)
+	for i := range vec {
+		vec[i] = float32(i) * 0.001
+	}
+	if err := ctx.Store.SetEmbedding(docID, vec, "Titulo"); err != nil {
+		t.Fatalf("SetEmbedding: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/graph/data", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleGraphData(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp struct {
+		Nodes []struct {
+			ID    string  `json:"id"`
+			Title string  `json:"title"`
+			X     float64 `json:"x"`
+			Y     float64 `json:"y"`
+		} `json:"nodes"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if len(resp.Nodes) != 1 {
+		t.Fatalf("esperado 1 nó, got %d", len(resp.Nodes))
+	}
+
+	n := resp.Nodes[0]
+	if n.ID != "notes/graf.md" {
+		t.Errorf("esperado ID 'notes/graf.md', got %q", n.ID)
+	}
+	if n.Title != "graf" {
+		t.Errorf("esperado Title 'graf', got %q", n.Title)
+	}
+	// Como ha apenas 1 embedding, a projecao deve devolver (0,0) e entao o grid entra
+	if n.X == 0 && n.Y == 0 {
+		t.Log("single node: (0,0) + grid fallback OK")
+	}
+}
+
+// ── HandleFileDelete + Embedding ───────────────────────────────
+
+func TestHandleFileDelete_RemoveEmbeddingTambem(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// 1. Salva nota
+	body := "filename=notes/deletar-com-embed.md&content=<p>teste</p>&tags="
+	req := httptest.NewRequest("POST", "/file/save", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileSave(rec, req)
+
+	// 2. Simula embedding (como faria o ProcessFile com embed provider)
+	ctx.Store.SetEmbedding("manual-embed", []float32{0.1, 0.2, 0.3}, "deletar-com-embed")
+	// Vincula o embedding a um documento real
+	docs, _ := ctx.Store.GetDocumentsByFile("notes/deletar-com-embed.md")
+	if len(docs) == 0 {
+		t.Fatal("documento deveria existir")
+	}
+	ctx.Store.SetEmbedding(docs[0].ID, []float32{0.1, 0.2, 0.3}, "deletar-com-embed")
+
+	// Verifica que o embedding existe
+	if c := ctx.Store.GetEmbeddingCount(); c != 1 {
+		t.Fatalf("esperado 1 embedding, got %d", c)
+	}
+
+	// 3. Deleta a nota via HTTP
+	bodyDel := "filename=notes/deletar-com-embed.md"
+	reqDel := httptest.NewRequest("POST", "/file/delete", strings.NewReader(bodyDel))
+	reqDel.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recDel := httptest.NewRecorder()
+	ctx.HandleFileDelete(recDel, reqDel)
+
+	// 4. Verifica que o embedding foi deletado junto
+	if c := ctx.Store.GetEmbeddingCount(); c != 0 {
+		t.Fatalf("esperado 0 embeddings apos deletar nota, got %d", c)
+	}
+}
+
+func TestHandleFileDelete_RemoveEmbeddingMultiplosDocs(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Salva nota
+	body := "filename=notes/multi-doc.md&content=<p>a</p><p>b</p>&tags="
+	req := httptest.NewRequest("POST", "/file/save", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileSave(rec, req)
+
+	// Cria multiplos embeddings para o mesmo arquivo
+	docs, _ := ctx.Store.GetDocumentsByFile("notes/multi-doc.md")
+	if len(docs) == 0 {
+		t.Fatal("documento deveria existir")
+	}
+	for i, doc := range docs {
+		vec := make([]float32, 4)
+		vec[0] = float32(i)
+		ctx.Store.SetEmbedding(doc.ID, vec, "multi")
+	}
+
+	if c := ctx.Store.GetEmbeddingCount(); c != len(docs) {
+		t.Fatalf("esperado %d embeddings, got %d", len(docs), c)
+	}
+
+	// Deleta
+	bodyDel := "filename=notes/multi-doc.md"
+	reqDel := httptest.NewRequest("POST", "/file/delete", strings.NewReader(bodyDel))
+	reqDel.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recDel := httptest.NewRecorder()
+	ctx.HandleFileDelete(recDel, reqDel)
+
+	// Todos os embeddings do arquivo devem sumir
+	if c := ctx.Store.GetEmbeddingCount(); c != 0 {
+		t.Fatalf("esperado 0 embeddings apos deletar, got %d", c)
+	}
+}

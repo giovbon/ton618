@@ -89,10 +89,34 @@ func (s *Store) GetAllEmbeddings() (map[string]NoteVector, error) {
 	return result, rows.Err()
 }
 
-// DeleteEmbedding removes the embedding for a document.
+// DeleteEmbedding removes the embedding for a document by its doc_id (hash).
 func (s *Store) DeleteEmbedding(docID string) error {
 	_, err := s.DB.Exec("DELETE FROM embeddings WHERE doc_id = ?", docID)
 	return err
+}
+
+// DeleteEmbeddingsByFile removes all embeddings for documents belonging to a file.
+// Usa JOIN com a tabela documents para mapear arquivo -> doc_ids.
+func (s *Store) DeleteEmbeddingsByFile(arquivo string) error {
+	_, err := s.DB.Exec(`
+		DELETE FROM embeddings WHERE doc_id IN (
+			SELECT id FROM documents WHERE arquivo = ?
+		)
+	`, arquivo)
+	return err
+}
+
+// DeleteOrphanedEmbeddings removes embeddings whose documents no longer exist.
+func (s *Store) DeleteOrphanedEmbeddings() (int64, error) {
+	res, err := s.DB.Exec(`
+		DELETE FROM embeddings WHERE doc_id NOT IN (
+			SELECT id FROM documents
+		)
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // HasFileEmbedding returns true if any document belonging to a file has an embedding stored.

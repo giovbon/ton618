@@ -120,9 +120,10 @@
             });
         svg.call(zoom);
 
-        // Force simulation
+        // Force simulation — alphaDecay acelerado para convergir em ~1-2s
         var simulation = d3
             .forceSimulation(nodes)
+            .alphaDecay(0.04)
             .force(
                 "link",
                 d3
@@ -267,16 +268,16 @@
             }
         }
 
-        // Render Voronoi after simulation ends
-        var voronoiRendered = false;
-        simulation.on("end", function () {
-            if (voronoiRendered) return;
-            voronoiRendered = true;
+        // ── Voronoi progressivo (renderiza a cada 4 ticks) ──
+        var voronoiTick = 0;
+        var voronoiDone = false;
+
+        function renderVoronoi() {
+            if (voronoiDone) return;
 
             var k = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
             assignClusters(nodes, k);
 
-            // Update node colors after clustering
             node.selectAll("circle").attr("fill", function (d) {
                 return (
                     CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
@@ -284,12 +285,9 @@
                 );
             });
 
-            // Build Voronoi from final positions
             var pts = nodes.map(function (d) {
                 return [d.x, d.y];
             });
-
-            // Remove duplicate points for Delaunay (they break Voronoi)
             var unique = [];
             var indices = [];
             pts.forEach(function (p, i) {
@@ -315,7 +313,6 @@
                     width + 50,
                     height + 50,
                 ]);
-
                 voronoiGroup
                     .selectAll("path")
                     .data(nodes)
@@ -342,11 +339,10 @@
                     .attr("stroke-opacity", 0.15)
                     .attr("stroke-width", 1);
             }
-
             statusEl.textContent = nodes.length + " notas · " + k + " grupos";
-        });
+        }
 
-        // Tick
+        // Tick — nos + Voronoi a cada 4 quadros
         simulation.on("tick", function () {
             link.attr("x1", function (d) {
                 return d.source.x;
@@ -363,24 +359,32 @@
             node.attr("transform", function (d) {
                 return "translate(" + d.x + "," + d.y + ")";
             });
+            voronoiTick++;
+            if (voronoiTick % 4 === 0 && simulation.alpha() < 0.3) {
+                renderVoronoi();
+            }
         });
 
-        // Auto-zoom after simulation settles
-        setTimeout(function () {
+        // End — Voronoi final + auto-zoom
+        simulation.on("end", function () {
+            renderVoronoi();
+            voronoiDone = true;
             var bounds = g.node().getBBox();
-            if (bounds.width === 0 || bounds.height === 0) return;
-            var scale =
-                0.85 / Math.max(bounds.width / width, bounds.height / height);
-            svg.call(
-                zoom.transform,
-                d3.zoomIdentity
-                    .translate(
-                        width / 2 - scale * (bounds.x + bounds.width / 2),
-                        height / 2 - scale * (bounds.y + bounds.height / 2),
-                    )
-                    .scale(Math.max(0.3, scale)),
-            );
-        }, 2500);
+            if (bounds.width > 0 && bounds.height > 0) {
+                var scale =
+                    0.85 /
+                    Math.max(bounds.width / width, bounds.height / height);
+                svg.call(
+                    zoom.transform,
+                    d3.zoomIdentity
+                        .translate(
+                            width / 2 - scale * (bounds.x + bounds.width / 2),
+                            height / 2 - scale * (bounds.y + bounds.height / 2),
+                        )
+                        .scale(Math.max(0.3, scale)),
+                );
+            }
+        });
     });
 </script>
 {{end}}

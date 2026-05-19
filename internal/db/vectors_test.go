@@ -133,3 +133,113 @@ func newTestStore(t *testing.T) *Store {
 	}
 	return s
 }
+
+func TestDeleteEmbeddingsByFile_RemovePorArquivo(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Cria documento e vincula embedding
+	doc := Document{
+		ID:      "doc-file-test",
+		Tipo:    "markdown",
+		Arquivo: "notes/teste.md",
+		Secao:   "Secao",
+		Texto:   "texto",
+	}
+	if err := store.InsertDocument(doc); err != nil {
+		t.Fatalf("InsertDocument: %v", err)
+	}
+	if err := store.SetEmbedding("doc-file-test", []float32{0.5, 0.6}, "Teste"); err != nil {
+		t.Fatalf("SetEmbedding: %v", err)
+	}
+	if c := store.GetEmbeddingCount(); c != 1 {
+		t.Fatalf("esperado 1 embedding apos inserir, got %d", c)
+	}
+
+	// Deleta pelo nome do arquivo
+	if err := store.DeleteEmbeddingsByFile("notes/teste.md"); err != nil {
+		t.Fatalf("DeleteEmbeddingsByFile: %v", err)
+	}
+	if c := store.GetEmbeddingCount(); c != 0 {
+		t.Fatalf("esperado 0 apos DeleteEmbeddingsByFile, got %d", c)
+	}
+}
+
+func TestDeleteEmbeddingsByFile_ApenasUmArquivo(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Dois documentos, dois arquivos, dois embeddings
+	store.InsertDocument(Document{ID: "doc-a", Tipo: "md", Arquivo: "notes/a.md", Secao: "A", Texto: "a"})
+	store.InsertDocument(Document{ID: "doc-b", Tipo: "md", Arquivo: "notes/b.md", Secao: "B", Texto: "b"})
+	store.SetEmbedding("doc-a", []float32{0.1}, "A")
+	store.SetEmbedding("doc-b", []float32{0.2}, "B")
+
+	if c := store.GetEmbeddingCount(); c != 2 {
+		t.Fatalf("esperado 2 embeddings, got %d", c)
+	}
+
+	// Deleta apenas um arquivo
+	store.DeleteEmbeddingsByFile("notes/a.md")
+
+	if c := store.GetEmbeddingCount(); c != 1 {
+		t.Fatalf("esperado 1 embedding restante, got %d", c)
+	}
+
+	// O embedding restante deve ser do arquivo b
+	nv, _ := store.GetEmbedding("doc-b")
+	if nv == nil {
+		t.Fatal("embedding de b foi deletado erroneamente")
+	}
+}
+
+func TestDeleteOrphanedEmbeddings_LimpaOrfaos(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Cria embedding SEM documento correspondente
+	store.SetEmbedding("orfao", []float32{0.9}, "Orfao")
+	if c := store.GetEmbeddingCount(); c != 1 {
+		t.Fatalf("esperado 1 embedding orfao, got %d", c)
+	}
+
+	count, err := store.DeleteOrphanedEmbeddings()
+	if err != nil {
+		t.Fatalf("DeleteOrphanedEmbeddings: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("esperado 1 orfao deletado, got %d", count)
+	}
+	if c := store.GetEmbeddingCount(); c != 0 {
+		t.Fatalf("esperado 0 apos limpar orfaos, got %d", c)
+	}
+}
+
+func TestDeleteOrphanedEmbeddings_MantemVinculados(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Cria documento com embedding (válido)
+	store.InsertDocument(Document{ID: "doc-valido", Tipo: "md", Arquivo: "notes/valido.md", Secao: "V", Texto: "v"})
+	store.SetEmbedding("doc-valido", []float32{0.3}, "Valido")
+
+	// Cria embedding orfão
+	store.SetEmbedding("orfao", []float32{0.9}, "Orfao")
+
+	count, err := store.DeleteOrphanedEmbeddings()
+	if err != nil {
+		t.Fatalf("DeleteOrphanedEmbeddings: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("esperado 1 orfao, got %d", count)
+	}
+
+	// Embedding válido deve permanecer
+	if c := store.GetEmbeddingCount(); c != 1 {
+		t.Fatalf("esperado 1 embedding valido restante, got %d", c)
+	}
+	nv, _ := store.GetEmbedding("doc-valido")
+	if nv == nil {
+		t.Fatal("embedding valido foi deletado erroneamente")
+	}
+}
