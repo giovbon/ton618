@@ -346,14 +346,23 @@
                 }
             }
             var safeName = n.arquivo.replace(/'/g, "\\'");
+            var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
-            html +=
-                '<a href="/editor?file=' +
-                encodeURIComponent(n.arquivo) +
-                '" class="flex-1 min-w-0">';
+            if (isPdf) {
+                html +=
+                    '<a href="/file?name=' +
+                    encodeURIComponent(n.arquivo) +
+                    '" target="_blank" class="flex-1 min-w-0">';
+            } else {
+                html +=
+                    '<a href="/editor?file=' +
+                    encodeURIComponent(n.arquivo) +
+                    '" class="flex-1 min-w-0">';
+            }
             html +=
                 '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
+                (isPdf ? "\uD83D\uDCD5 " : "") +
                 displayName +
                 "</span>";
             if (folder)

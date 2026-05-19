@@ -356,6 +356,28 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name required", http.StatusBadRequest)
 		return
 	}
+
+	ext := strings.ToLower(filepath.Ext(raw))
+	isPdf := ext == ".pdf"
+
+	if isPdf {
+		// PDF pode estar em pdfs/ ou notes/
+		basename := filepath.Base(raw)
+		subdirs := []string{"pdfs", "notes"}
+		for _, sd := range subdirs {
+			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+			if _, err := os.Stat(testPath); err == nil {
+				w.Header().Set("Content-Type", "application/pdf")
+				w.Header().Set("Content-Disposition", "inline")
+				http.ServeFile(w, r, testPath)
+				return
+			}
+		}
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	// Para arquivos .md e imagens, usa o comportamento anterior
 	filename := sanitizeFilename(raw)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	http.ServeFile(w, r, fullPath)
@@ -432,8 +454,32 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	filename := sanitizeFilename(raw)
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+	ext := strings.ToLower(filepath.Ext(raw))
+	var filename string
+	var fullPath string
+
+	if ext == ".pdf" {
+		// PDF files: search in pdfs/ or notes/
+		basename := filepath.Base(raw)
+		subdirs := []string{"pdfs", "notes"}
+		found := false
+		for _, sd := range subdirs {
+			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+			if err := os.Remove(testPath); err == nil {
+				filename = sd + "/" + basename
+				fullPath = testPath
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		filename = sanitizeFilename(raw)
+		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
+	}
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -507,14 +553,30 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	// Forca diretorio notes independente do subdir enviado
-	filename := "notes/" + filepath.Base(header.Filename)
-	// Garante .md
-	if !strings.HasSuffix(filename, ".md") {
-		filename += ".md"
-	}
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	isPdf := ext == ".pdf"
+	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
 
+	if !isPdf && !isImage {
+		http.Error(w, "apenas arquivos PDF ou imagens (.png, .jpg) sao permitidos", http.StatusForbidden)
+		return
+	}
+
+	var filename string
+	if isPdf {
+		filename = "pdfs/" + filepath.Base(header.Filename)
+		// Garante extensao .pdf
+		if !strings.HasSuffix(filename, ".pdf") {
+			filename += ".pdf"
+		}
+	} else {
+		// Imagem: salva em notes/ com prefixo img_ para evitar conflito
+		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+		cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
+		filename = fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
+	}
+
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	os.MkdirAll(filepath.Dir(fullPath), 0755)
 
 	dst, err := os.Create(fullPath)
@@ -526,13 +588,40 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 
 	io.Copy(dst, file)
 
-	// Process
+	// Check if user requested embedding
+	wantEmbed := r.FormValue("embed") == "true"
+
+	// Process the file (index, embed)
 	info, _ := os.Stat(fullPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+	}, ctx.Embed, ctx.Cfg.EmbeddingAll || wantEmbed)
 
-	http.Redirect(w, r, "/editor?file="+filename, http.StatusSeeOther)
+	// If embedding was requested but embedAll is false, force-tag the document with "embed"
+	// so the embedding persists across reprocessings
+	if wantEmbed && !ctx.Cfg.EmbeddingAll && isPdf {
+		tags := ctx.Store.GetFileTags(filename)
+		// Add "embed" to tags if not already present
+		hasEmbed := false
+		for _, t := range tags {
+			if t == "embed" {
+				hasEmbed = true
+				break
+			}
+		}
+		if !hasEmbed {
+			tags = append(tags, "embed")
+			ctx.Store.SetFileTags(filename, tags)
+		}
+	}
+
+	// Return JSON for editor integration
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"path":     filename,
+		"filename": filepath.Base(filename),
+		"url":      "/file?name=" + url.QueryEscape(filename),
+	})
 }
 
 // ── API ──
@@ -648,7 +737,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 		// Nome de exibicao: apenas o nome do arquivo sem extensao
 		parts := strings.Split(arquivo, "/")
-		baseName := strings.TrimSuffix(parts[len(parts)-1], ".md")
+		baseName := parts[len(parts)-1]
+		baseName = strings.TrimSuffix(baseName, ".md")
+		baseName = strings.TrimSuffix(baseName, ".pdf")
 
 		// Se ja tem coordenadas 2D armazenadas, usa-as
 		x, y := nv.X, nv.Y

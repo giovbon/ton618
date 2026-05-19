@@ -94,7 +94,7 @@ func (c *AppConfig) EnsureDirs() error {
 		}
 	}
 	// Create monitored subdirectories
-	for _, sub := range []string{"notes", "links", "voice"} {
+	for _, sub := range []string{"notes", "links", "voice", "pdfs"} {
 		if err := os.MkdirAll(filepath.Join(c.DocsDir, sub), 0755); err != nil {
 			return err
 		}

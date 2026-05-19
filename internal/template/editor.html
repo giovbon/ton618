@@ -25,6 +25,14 @@
         >
             Salvar
         </button>
+        <button
+            id="pdf-upload-btn"
+            class="text-[10px] font-bold tracking-wide uppercase text-zinc-500 hover:text-sky-400 transition-colors shrink-0"
+            title="Fazer upload de PDF e inserir link na nota"
+        >
+            <span class="mr-1">📕</span>PDF
+        </button>
+        <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
     </div>
 
     <!-- Frontmatter toggle -->
@@ -1033,6 +1041,62 @@
                 setStatus("dirty");
             }
         }
+
+        // ── PDF Upload ──
+        document
+            .getElementById("pdf-upload-btn")
+            .addEventListener("click", function () {
+                document.getElementById("pdf-file-input").click();
+            });
+
+        document
+            .getElementById("pdf-file-input")
+            .addEventListener("change", async function () {
+                var file = this.files[0];
+                if (!file) return;
+
+                var fd = new FormData();
+                fd.append("file", file);
+                fd.append("embed", "true");
+
+                var btn = document.getElementById("pdf-upload-btn");
+                btn.textContent = "...";
+                btn.disabled = true;
+
+                try {
+                    var resp = await fetch("/upload", {
+                        method: "POST",
+                        body: fd,
+                    });
+                    if (!resp.ok) {
+                        btn.textContent = "Erro";
+                        setTimeout(function () {
+                            btn.innerHTML = '<span class="mr-1">📕</span>PDF';
+                            btn.disabled = false;
+                        }, 2000);
+                        return;
+                    }
+                    var data = await resp.json();
+                    // Insere link do PDF na posicao do cursor
+                    var link = "[" + data.filename + "](" + data.url + ")";
+                    if (editor && !editor.isDestroyed) {
+                        editor.chain().focus().insertContent(link).run();
+                    }
+                    btn.innerHTML = '<span class="mr-1">📕</span>PDF';
+                    btn.disabled = false;
+                    setStatus("saved");
+                    // Salva automaticamente para indexar conteudo
+                    saveNow();
+                } catch (e) {
+                    btn.textContent = "Erro";
+                    setTimeout(function () {
+                        btn.innerHTML = '<span class="mr-1">📕</span>PDF';
+                        btn.disabled = false;
+                    }, 2000);
+                }
+
+                this.value = "";
+            });
 
         // ── Rename ──
         filenameInput.addEventListener("keydown", function (e) {

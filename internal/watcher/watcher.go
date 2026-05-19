@@ -22,11 +22,12 @@ import (
 var processMu sync.Mutex
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
-var MonitoredSubDirs = []string{"notes", "links", "voice"}
+var MonitoredSubDirs = []string{"notes", "links", "voice", "pdfs"}
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{
 	".md":   "markdown",
+	".pdf":  "pdf",
 	".png":  "imagem",
 	".jpg":  "imagem",
 	".jpeg": "imagem",
@@ -140,6 +141,8 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 	switch tipo {
 	case "markdown":
 		docs, links, fileTags = processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
+	case "pdf":
+		docs, links, fileTags = processor.ProcessPDF(ev.Path, filename, ev.ModTime)
 	case "imagem":
 		docs = []processor.Document{{
 			ID:         processor.HashFunc("img-" + filename),
@@ -180,7 +183,7 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 		}
 
 		// Generate embedding if provider is set and note should be embedded
-		if embed != nil && doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll) {
+		if embed != nil && (doc.Tipo == "markdown" || doc.Tipo == "pdf") && shouldEmbed(doc.Tags, embedAll) {
 			textToEmbed := doc.Secao + " " + doc.Texto
 			textToEmbed = strings.TrimSpace(textToEmbed)
 			if textToEmbed != "" && len(textToEmbed) > 10 {

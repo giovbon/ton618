@@ -291,11 +291,15 @@
             .style("cursor", "pointer");
 
         node.append("circle")
-            .attr("r", 5)
+            .attr("r", function (d) {
+                return d.id && d.id.indexOf("pdfs/") === 0 ? 7 : 5;
+            })
             .attr("fill", function (d) {
+                // PDF nodes get a distinct reddish color
+                var base = d.id && d.id.indexOf("pdfs/") === 0 ? 6 : 0;
                 return (
                     CLUSTER_COLORS[
-                        (d.cluster_id || 0) % CLUSTER_COLORS.length
+                        ((d.cluster_id || 0) + base) % CLUSTER_COLORS.length
                     ] || "#0ea5e9"
                 );
             })
@@ -305,20 +309,25 @@
 
         node.append("text")
             .text(function (d) {
-                return (
+                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
+                var label =
                     d.title ||
                     d.id
                         .split("/")
                         .pop()
                         .replace(/\.(md|pdf)$/i, "") ||
-                    "?"
-                );
+                    "?";
+                return isPdf ? "\uD83D\uDCD5 " + label : label;
             })
             .attr("text-anchor", "middle")
             .attr("dy", 15)
             .attr("font-size", "10px")
             .attr("font-weight", "500")
-            .attr("fill", "#71717a")
+            .attr("fill", function (d) {
+                return d.id && d.id.indexOf("pdfs/") === 0
+                    ? "#fb923c"
+                    : "#71717a";
+            })
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
