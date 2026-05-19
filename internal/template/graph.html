@@ -301,12 +301,19 @@
         node.filter(function (d) {
             return d.id && d.id.indexOf("pdfs/") === 0;
         })
+            .append("circle")
+            .attr("r", 10)
+            .attr("fill", "transparent")
+            .attr("stroke", "none");
+
+        node.filter(function (d) {
+            return d.id && d.id.indexOf("pdfs/") === 0;
+        })
             .append("text")
             .text("\uD83D\uDCD5")
             .attr("text-anchor", "middle")
-            .attr("dy", 0)
-            .attr("font-size", "22px")
-            .attr("pointer-events", "none")
+            .attr("dy", 4)
+            .attr("font-size", "14px")
             .style("cursor", "pointer");
 
         // Non-PDF nodes: render a colored circle
