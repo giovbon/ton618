@@ -347,6 +347,7 @@
             }
             var safeName = n.arquivo.replace(/'/g, "\\'");
             var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
+            var isCapture = (n.tags || []).indexOf("captura") !== -1;
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
             if (isPdf) {

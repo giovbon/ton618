@@ -129,25 +129,27 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		transcript, err := getYouTubeTranscript(videoID)
-		if err != nil {
-			slog.Error("erro ao obter transcricao do YouTube", "error", err)
-			http.Error(w, fmt.Sprintf("Erro ao obter transcricao: %v", err), http.StatusBadGateway)
-			return
-		}
-
+		// Tenta obter o titulo primeiro
 		title = getYouTubeTitle(req.URL)
 		if title == "" {
 			title = fmt.Sprintf("YouTube - %s", videoID)
 		}
 
-		finalMarkdown = fmt.Sprintf(`# %s
+		transcript, err := getYouTubeTranscript(videoID)
+		if err != nil {
+			slog.Warn("transcricao nao disponivel", "video", videoID, "error", err)
+			transcript = "*Transcricao nao disponivel para este video.*"
+		}
+
+		finalMarkdown = fmt.Sprintf(`---
+title: "%s"
+tags: [embed, youtube, captura]
+source: %s
+---
+
+# %s
 
 > Fonte: [YouTube](%s)
-
-#embed #youtube #captura
-
----
 
 ## Transcricao
 
@@ -155,7 +157,7 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 
 ---
 
-*Capturado em %s*`, title, req.URL, transcript, time.Now().Format("2006-01-02 15:04:05"))
+*Capturado em %s*`, title, req.URL, title, req.URL, transcript, time.Now().Format("2006-01-02 15:04:05"))
 	} else {
 		// ── Artigo web ──
 		article, err := readability.FromURL(req.URL, 20*time.Second)
@@ -190,19 +192,21 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		// Remove headers em negrito (eram # no HTML original)
-		reHeaders := regexp.MustCompile(`(?m)^#+\s+(.*)$`)
-		mdContent = reHeaders.ReplaceAllString(mdContent, "**$1**")
+		finalMarkdown = fmt.Sprintf(`---
+title: "%s"
+tags: [embed, artigo, captura]
+source: %s
+---
 
-		finalMarkdown = fmt.Sprintf(`# %s
+# %s
 
 > Fonte: [%s](%s)
 
-#embed #artigo #captura
+%s
 
 ---
 
-%s`, title, req.URL, req.URL, mdContent)
+*Capturado em %s*`, title, req.URL, title, req.URL, req.URL, mdContent, time.Now().Format("2006-01-02 15:04:05"))
 	}
 
 	// Slug para nome do arquivo
