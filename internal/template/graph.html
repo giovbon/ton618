@@ -12,11 +12,6 @@
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
-    .voronoi path {
-        transition:
-            fill-opacity 0.3s ease,
-            stroke-opacity 0.3s ease;
-    }
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
@@ -24,10 +19,6 @@
     .graph-note:hover text {
         fill: #e4e4e7 !important;
         font-weight: 700 !important;
-    }
-    .cluster-label {
-        pointer-events: none;
-        user-select: none;
     }
 </style>
 <div class="graph-page">
@@ -57,7 +48,7 @@
     <p
         class="text-[10px] text-zinc-600 mt-2 text-center tracking-wide uppercase"
     >
-        Scroll para zoom &middot; Passe o mouse para destacar grupo
+        Scroll para zoom &middot; Clique na bolinha para abrir
     </p>
 </div>
 
@@ -96,34 +87,6 @@
             });
         }
 
-        // Contagem de links por nota para dimensionar circulos
-        var linkCounts = {};
-        (data.links || []).forEach(function (l) {
-            var s = typeof l.source === "object" ? l.source.id : l.source;
-            var t = typeof l.target === "object" ? l.target.id : l.target;
-            linkCounts[s] = (linkCounts[s] || 0) + 1;
-            linkCounts[t] = (linkCounts[t] || 0) + 1;
-        });
-        var maxLinks = 1;
-        Object.values(linkCounts).forEach(function (c) {
-            if (c > maxLinks) maxLinks = c;
-        });
-
-        // Centro de cada cluster (media das posicoes)
-        var clusterCenters = {};
-        var clusterCounts = {};
-        nodes.forEach(function (n) {
-            var cid = n.cluster_id || 0;
-            if (!clusterCenters[cid]) clusterCenters[cid] = { x: 0, y: 0 };
-            clusterCenters[cid].x += n.x;
-            clusterCenters[cid].y += n.y;
-            clusterCounts[cid] = (clusterCounts[cid] || 0) + 1;
-        });
-        Object.keys(clusterCenters).forEach(function (cid) {
-            clusterCenters[cid].x /= clusterCounts[cid];
-            clusterCenters[cid].y /= clusterCounts[cid];
-        });
-
         var CLUSTER_COLORS = [
             "#38bdf8",
             "#10b981",
@@ -139,7 +102,7 @@
         var width = container.clientWidth;
         var height = container.clientHeight;
 
-        // --- SVG ---
+        // SVG
         var svg = d3
             .select("#graph-container")
             .append("svg")
@@ -153,140 +116,170 @@
         statusEl.textContent =
             nodes.length + " notas · " + clusterCount + " grupos";
 
-        // --- Voronoi ---
+        // ── Voronoi por cluster (um poligono por grupo, nao por nota) ──
+        // Calcula o centroide de cada cluster e faz o Voronoi sobre eles.
         var voronoiGroup = g.append("g").attr("class", "voronoi");
 
-        function renderVoronoi(bounds) {
-            if (!bounds) {
-                var mnX = Infinity,
-                    mxX = -Infinity,
-                    mnY = Infinity,
-                    mxY = -Infinity;
-                nodes.forEach(function (n) {
-                    if (n.x < mnX) mnX = n.x;
-                    if (n.x > mxX) mxX = n.x;
-                    if (n.y < mnY) mnY = n.y;
-                    if (n.y > mxY) mxY = n.y;
-                });
-                var dx = mxX - mnX || 1,
-                    dy = mxY - mnY || 1;
-                var pad = Math.max(dx, dy) * 0.5;
-                bounds = {
-                    x1: mnX - pad,
-                    y1: mnY - pad,
-                    x2: mxX + pad,
-                    y2: mxY + pad,
-                };
-            }
+        // 1. Agrupa notas por cluster_id e calcula centroides
+        var clusters = {};
+        nodes.forEach(function (n) {
+            var cid = n.cluster_id || 0;
+            if (!clusters[cid])
+                clusters[cid] = { x: 0, y: 0, count: 0, color: null };
+            clusters[cid].x += n.x;
+            clusters[cid].y += n.y;
+            clusters[cid].count++;
+            clusters[cid].color =
+                CLUSTER_COLORS[cid % CLUSTER_COLORS.length] || "#0ea5e9";
+        });
+        Object.keys(clusters).forEach(function (cid) {
+            clusters[cid].x /= clusters[cid].count;
+            clusters[cid].y /= clusters[cid].count;
+        });
 
-            var pts = nodes.map(function (d) {
-                return [d.x, d.y];
-            });
-            var unique = [],
-                indices = [];
-            pts.forEach(function (p, i) {
-                var dup = false;
-                for (var j = 0; j < unique.length; j++) {
-                    if (unique[j][0] === p[0] && unique[j][1] === p[1]) {
-                        dup = true;
-                        indices.push(j);
-                        break;
+        // 2. Converte para arrays para o Delaunay
+        var cIds = Object.keys(clusters).map(Number).sort();
+        var centroids = cIds.map(function (cid) {
+            return [clusters[cid].x, clusters[cid].y];
+        });
+
+        // 3. Voronoi dos centroides
+        if (centroids.length >= 3) {
+            var delaunay = d3.Delaunay.from(centroids);
+            var voronoi = delaunay.voronoi([-10000, -10000, 10000, 10000]);
+
+            voronoiGroup
+                .selectAll("path")
+                .data(cIds)
+                .join("path")
+                .attr("d", function (cid, i) {
+                    try {
+                        return voronoi.renderCell(i);
+                    } catch (e) {
+                        return null;
                     }
-                }
-                if (!dup) {
-                    unique.push(p);
-                    indices.push(unique.length - 1);
-                }
-            });
+                })
+                .attr("fill", function (cid) {
+                    return clusters[cid].color;
+                })
+                .attr("fill-opacity", 0.08)
+                .attr("stroke", function (cid) {
+                    return clusters[cid].color;
+                })
+                .attr("stroke-opacity", 0.25)
+                .attr("stroke-width", 1.5);
+        } else if (centroids.length === 2) {
+            // 2 clusters: divisao simples pelo ponto medio
+            var x1 = centroids[0][0],
+                y1 = centroids[0][1];
+            var x2 = centroids[1][0],
+                y2 = centroids[1][1];
+            var midX = (x1 + x2) / 2,
+                midY = (y1 + y2) / 2;
+            // Perpendicular a reta que conecta os dois centroides
+            var dx = x2 - x1,
+                dy = y2 - y1;
+            // Normal perpendicular
+            var len = Math.sqrt(dx * dx + dy * dy) || 1;
+            var nx = (-dy / len) * 10000;
+            var ny = (dx / len) * 10000;
+            // Dois poligonos: um de cada lado da linha divisoria
+            var p1 = [
+                [-10000, -10000],
+                [10000, -10000],
+                [10000, 10000],
+                [-10000, 10000],
+            ];
+            var clipA = null,
+                clipB = null;
 
-            if (unique.length >= 3) {
-                var delaunay = d3.Delaunay.from(unique);
-                var voronoi = delaunay.voronoi([
-                    bounds.x1,
-                    bounds.y1,
-                    bounds.x2,
-                    bounds.y2,
-                ]);
+            voronoiGroup
+                .selectAll("path")
+                .data(cIds)
+                .join("path")
+                .attr("d", function (cid, i) {
+                    // Poligono infinito cortado pela mediatriz
+                    var cx = clusters[cid].x,
+                        cy = clusters[cid].y;
+                    // Define se este lado esta "para cima" ou "para baixo" da mediatriz
+                    var side = (cx - midX) * nx + (cy - midY) * ny > 0 ? 1 : -1;
 
-                voronoiGroup
-                    .selectAll("path.voronoi-cell")
-                    .data(nodes)
-                    .join("path")
-                    .attr("class", "voronoi-cell")
-                    .attr("data-cluster", function (d) {
-                        return d.cluster_id || 0;
-                    })
-                    .attr("d", function (d, i) {
-                        try {
-                            return voronoi.renderCell(indices[i]);
-                        } catch (e) {
-                            return null;
-                        }
-                    })
-                    .attr("fill", function (d) {
+                    // Constroi poligono: bounding box + linha de corte
+                    var pts = [
+                        [-10000, -10000],
+                        [10000, -10000],
+                        [10000, 10000],
+                        [-10000, 10000],
+                    ];
+                    // Adiciona pontos da mediatriz
+                    var along = 20000;
+                    pts.push([midX + nx * along, midY + ny * along]);
+                    pts.push([midX - nx * along, midY - ny * along]);
+
+                    // Filtra pontos do lado correto
+                    var filtered = pts.filter(function (p) {
                         return (
-                            CLUSTER_COLORS[
-                                (d.cluster_id || 0) % CLUSTER_COLORS.length
-                            ] || "#0ea5e9"
+                            ((p[0] - midX) * nx + (p[1] - midY) * ny) * side >
+                            -1
                         );
-                    })
-                    .attr("fill-opacity", 0.04)
-                    .attr("stroke", function (d) {
-                        return CLUSTER_COLORS[
-                            (d.cluster_id || 0) % CLUSTER_COLORS.length
-                        ];
-                    })
-                    .attr("stroke-opacity", 0.12)
-                    .attr("stroke-width", 1);
-            }
+                    });
+
+                    // Ordena por angulo em torno do centroide
+                    filtered.sort(function (a, b) {
+                        var angA = Math.atan2(a[1] - cy, a[0] - cx);
+                        var angB = Math.atan2(b[1] - cy, b[0] - cx);
+                        return angA - angB;
+                    });
+
+                    return (
+                        "M" +
+                        filtered
+                            .map(function (p) {
+                                return p[0] + "," + p[1];
+                            })
+                            .join("L") +
+                        "Z"
+                    );
+                })
+                .attr("fill", function (cid) {
+                    return clusters[cid].color;
+                })
+                .attr("fill-opacity", 0.08)
+                .attr("stroke", function (cid) {
+                    return clusters[cid].color;
+                })
+                .attr("stroke-opacity", 0.25)
+                .attr("stroke-width", 1.5);
         }
 
-        renderVoronoi(null);
-
-        // --- Links ---
+        // ── Links ──
         g.append("g")
             .selectAll("line")
             .data(data.links || [])
             .join("line")
-            .attr("class", "graph-link")
             .attr("x1", function (d) {
-                return (
-                    d.source.x ||
-                    (typeof d.source === "object" ? d.source.x : 0)
-                );
+                return typeof d.source === "object" ? d.source.x : 0;
             })
             .attr("y1", function (d) {
-                return (
-                    d.source.y ||
-                    (typeof d.source === "object" ? d.source.y : 0)
-                );
+                return typeof d.source === "object" ? d.source.y : 0;
             })
             .attr("x2", function (d) {
-                return (
-                    d.target.x ||
-                    (typeof d.target === "object" ? d.target.x : 0)
-                );
+                return typeof d.target === "object" ? d.target.x : 0;
             })
             .attr("y2", function (d) {
-                return (
-                    d.target.y ||
-                    (typeof d.target === "object" ? d.target.y : 0)
-                );
+                return typeof d.target === "object" ? d.target.y : 0;
             })
             .attr("stroke", "#27272a")
             .attr("stroke-width", 0.5)
             .attr("stroke-opacity", 0.3);
 
-        // --- Nós com tamanho variável por conectividade ---
+        // ── Nodes ──
         var node = g
             .append("g")
             .selectAll("g")
             .data(nodes)
             .join("g")
             .attr("class", "graph-note")
-            .attr("data-cluster", function (d) {
-                return d.cluster_id || 0;
-            })
             .attr("transform", function (d) {
                 return "translate(" + d.x + "," + d.y + ")";
             })
@@ -298,10 +291,7 @@
             .style("cursor", "pointer");
 
         node.append("circle")
-            .attr("r", function (d) {
-                var links = linkCounts[d.id] || 0;
-                return 4 + (links / maxLinks) * 8;
-            })
+            .attr("r", 5)
             .attr("fill", function (d) {
                 return (
                     CLUSTER_COLORS[
@@ -325,131 +315,24 @@
                 );
             })
             .attr("text-anchor", "middle")
-            .attr("dy", function (d) {
-                var links = linkCounts[d.id] || 0;
-                return 12 + (links / maxLinks) * 8;
-            })
+            .attr("dy", 15)
             .attr("font-size", "10px")
             .attr("font-weight", "500")
             .attr("fill", "#71717a")
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
-        // --- Labels dos clusters (centroide + contagem) ---
-        var labelGroup = g.append("g").attr("class", "cluster-labels");
-        Object.keys(clusterCenters).forEach(function (cid) {
-            var c = clusterCenters[cid];
-            var color = CLUSTER_COLORS[parseInt(cid) % CLUSTER_COLORS.length];
-            var count = clusterCounts[cid];
-
-            labelGroup
-                .append("text")
-                .attr("class", "cluster-label")
-                .attr("x", c.x)
-                .attr("y", c.y - 18)
-                .attr("text-anchor", "middle")
-                .attr("font-size", "9px")
-                .attr("font-weight", "700")
-                .attr("fill", color)
-                .attr("opacity", 0.6)
-                .attr("font-family", "Inter, system-ui, sans-serif")
-                .text("Grupo " + (parseInt(cid) + 1) + " (" + count + ")");
-        });
-
-        // --- Hover: destaca o cluster inteiro ---
-        function highlightCluster(cid) {
-            voronoiGroup
-                .selectAll("path.voronoi-cell")
-                .transition()
-                .duration(200)
-                .attr("fill-opacity", function (d) {
-                    return (d.cluster_id || 0) === cid ? 0.12 : 0.02;
-                })
-                .attr("stroke-opacity", function (d) {
-                    return (d.cluster_id || 0) === cid ? 0.4 : 0.06;
-                });
-
-            // Escurece nos de outros clusters
-            node.style("opacity", function (d) {
-                return (d.cluster_id || 0) === cid ? 1 : 0.3;
-            });
-
-            // Labels dos clusters: destaca o atual, atenua outros
-            labelGroup
-                .selectAll("text.cluster-label")
-                .transition()
-                .duration(200)
-                .attr("opacity", function () {
-                    var elCid = parseInt(d3.select(this).attr("data-cid"));
-                    return elCid === cid ? 0.9 : 0.15;
-                });
-        }
-
-        function resetHighlight() {
-            voronoiGroup
-                .selectAll("path.voronoi-cell")
-                .transition()
-                .duration(300)
-                .attr("fill-opacity", 0.04)
-                .attr("stroke-opacity", 0.12);
-
-            node.style("opacity", 1);
-
-            labelGroup
-                .selectAll("text.cluster-label")
-                .transition()
-                .duration(300)
-                .attr("opacity", 0.6);
-        }
-
-        // Hover via mouseover nos nos
-        node.on("mouseover", function (event, d) {
-            highlightCluster(d.cluster_id || 0);
-        });
-
-        // Hover via mouseover nas celulas Voronoi
-        voronoiGroup
-            .selectAll("path.voronoi-cell")
-            .on("mouseover", function (event, d) {
-                highlightCluster(d.cluster_id || 0);
-            });
-
-        // Restaura ao sair do grafo
-        svg.on("mouseleave", resetHighlight);
-
-        // --- Zoom com recolculodo Voronoi ---
-        function getVisibleBounds(transform) {
-            var inv = transform.invert;
-            var p1 = inv.call(transform, [0, 0]);
-            var p2 = inv.call(transform, [width, height]);
-            var dx = (p2[0] - p1[0]) * 0.2;
-            var dy = (p2[1] - p1[1]) * 0.2;
-            return {
-                x1: p1[0] - dx,
-                y1: p1[1] - dy,
-                x2: p2[0] + dx,
-                y2: p2[1] + dy,
-            };
-        }
-
+        // ── Zoom simples (sem recalcular Voronoi) ──
         var zoom = d3
             .zoom()
             .scaleExtent([0.05, 20])
             .on("zoom", function (event) {
                 g.attr("transform", event.transform);
-                var vb = getVisibleBounds(event.transform);
-                renderVoronoi(vb);
-                // Reaplica hover states apos recriar paths
-                voronoiGroup
-                    .selectAll("path.voronoi-cell")
-                    .on("mouseover", function (event, d) {
-                        highlightCluster(d.cluster_id || 0);
-                    });
             });
 
         svg.call(zoom);
 
-        // --- Zoom inicial ---
+        // ── Zoom inicial ──
         var mnX = Infinity,
             mxX = -Infinity,
             mnY = Infinity,
@@ -461,17 +344,18 @@
             if (n.y > mxY) mxY = n.y;
         });
 
-        var viewW = width - 160;
-        var viewH = height - 160;
-        var sc = Math.min(viewW / (mxX - mnX || 1), viewH / (mxY - mnY || 1));
+        var sc = Math.min(
+            (width - 160) / (mxX - mnX || 1),
+            (height - 160) / (mxY - mnY || 1),
+        );
 
-        var initTransform = d3.zoomIdentity
-            .translate(width / 2, height / 2)
-            .scale(sc)
-            .translate(-(mnX + mxX) / 2, -(mnY + mxY) / 2);
-
-        svg.call(zoom.transform, initTransform);
-        renderVoronoi(getVisibleBounds(initTransform));
+        svg.call(
+            zoom.transform,
+            d3.zoomIdentity
+                .translate(width / 2, height / 2)
+                .scale(sc)
+                .translate(-(mnX + mxX) / 2, -(mnY + mxY) / 2),
+        );
     });
 </script>
 {{end}}
