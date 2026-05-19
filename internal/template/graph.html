@@ -18,10 +18,12 @@
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
+        filter: drop-shadow(0 0 8px currentColor);
     }
     .graph-note:hover text {
         fill: #e4e4e7 !important;
         font-weight: 700 !important;
+        font-size: 12px !important;
     }
 </style>
 <div class="graph-page">
@@ -288,19 +290,11 @@
             })
             .on("click", function (event, d) {
                 event.stopPropagation();
-                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
-                if (isPdf) {
-                    window.open(
-                        "/file?name=" + encodeURIComponent(d.id),
-                        "_blank",
-                    );
-                } else {
-                    window.location.href =
-                        "/editor?file=" + encodeURIComponent(d.id);
-                }
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(d.id);
             });
 
-        // All nodes: render a colored circle (PDFs get a 📕 prefix in the text label)
+        // Todos os nodes: circulo colorido + label — sem distincao por tipo
         node.append("circle")
             .attr("r", 5)
             .attr("fill", function (d) {
@@ -316,7 +310,6 @@
 
         node.append("text")
             .text(function (d) {
-                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
                 var label =
                     d.title ||
                     d.id
@@ -324,17 +317,13 @@
                         .pop()
                         .replace(/\.(md|pdf)$/i, "") ||
                     "?";
-                return isPdf ? "\uD83D\uDCD5 " + label : label;
+                return label;
             })
             .attr("text-anchor", "middle")
             .attr("dy", 15)
             .attr("font-size", "10px")
             .attr("font-weight", "500")
-            .attr("fill", function (d) {
-                return d.id && d.id.indexOf("pdfs/") === 0
-                    ? "#fb923c"
-                    : "#71717a";
-            })
+            .attr("fill", "#71717a")
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
