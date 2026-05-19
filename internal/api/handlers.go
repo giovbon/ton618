@@ -600,7 +600,7 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	// If embedding was requested but embedAll is false, force-tag the document with "embed"
 	// so the embedding persists across reprocessings
 	if wantEmbed && !ctx.Cfg.EmbeddingAll && isPdf {
-		tags := ctx.Store.GetFileTags(filename)
+		tags, _ := ctx.Store.GetFileTags(filename)
 		// Add "embed" to tags if not already present
 		hasEmbed := false
 		for _, t := range tags {
