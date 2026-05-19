@@ -290,11 +290,20 @@
             })
             .on("click", function (event, d) {
                 event.stopPropagation();
-                window.location.href =
-                    "/editor?file=" + encodeURIComponent(d.id);
+                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
+                if (isPdf) {
+                    window.open(
+                        "/file?name=" + encodeURIComponent(d.id),
+                        "_blank",
+                    );
+                } else {
+                    window.location.href =
+                        "/editor?file=" + encodeURIComponent(d.id);
+                }
             });
 
-        // Todos os nodes: circulo colorido + label — sem distincao por tipo
+        // Todos os nodes: circulo colorido + label
+        // PDFs tem icone 📕 no label e abrem em nova aba
         node.append("circle")
             .attr("r", 5)
             .attr("fill", function (d) {
@@ -310,6 +319,7 @@
 
         node.append("text")
             .text(function (d) {
+                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
                 var label =
                     d.title ||
                     d.id
@@ -317,13 +327,17 @@
                         .pop()
                         .replace(/\.(md|pdf)$/i, "") ||
                     "?";
-                return label;
+                return isPdf ? "\uD83D\uDCD5 " + label : label;
             })
             .attr("text-anchor", "middle")
             .attr("dy", 15)
             .attr("font-size", "10px")
             .attr("font-weight", "500")
-            .attr("fill", "#71717a")
+            .attr("fill", function (d) {
+                return d.id && d.id.indexOf("pdfs/") === 0
+                    ? "#fb923c"
+                    : "#71717a";
+            })
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
