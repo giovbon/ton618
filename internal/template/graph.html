@@ -73,6 +73,8 @@
             return;
         }
 
+        var clusterCount = data.clusters || 0;
+
         // Se todas as coordenadas forem (0,0), espalha os nos num grid
         var allZero = nodes.every(function (n) {
             return n.x === 0 && n.y === 0;
@@ -111,65 +113,13 @@
 
         var g = svg.append("g");
 
-        // ── K-means clustering ──
-        function assignClusters(pts, k) {
-            if (pts.length <= k) {
-                pts.forEach(function (p, i) {
-                    p.cluster = i;
-                });
-                return;
-            }
-            var centroids = [];
-            var shuffled = pts.slice().sort(function () {
-                return Math.random() - 0.5;
-            });
-            for (var i = 0; i < k; i++)
-                centroids.push({ x: shuffled[i].x, y: shuffled[i].y });
-            for (var iter = 0; iter < 30; iter++) {
-                pts.forEach(function (p) {
-                    var best = 0,
-                        bestDist = Infinity;
-                    centroids.forEach(function (c, j) {
-                        var d =
-                            (p.x - c.x) * (p.x - c.x) +
-                            (p.y - c.y) * (p.y - c.y);
-                        if (d < bestDist) {
-                            bestDist = d;
-                            best = j;
-                        }
-                    });
-                    p.cluster = best;
-                });
-                var sums = [],
-                    counts = [];
-                for (var j = 0; j < k; j++) {
-                    sums.push({ x: 0, y: 0 });
-                    counts.push(0);
-                }
-                pts.forEach(function (p) {
-                    sums[p.cluster].x += p.x;
-                    sums[p.cluster].y += p.y;
-                    counts[p.cluster]++;
-                });
-                for (var j = 0; j < k; j++) {
-                    if (counts[j] > 0) {
-                        centroids[j].x = sums[j].x / counts[j];
-                        centroids[j].y = sums[j].y / counts[j];
-                    }
-                }
-            }
-        }
-
-        var clusterK = Math.min(8, Math.max(2, Math.floor(nodes.length / 3)));
-        assignClusters(nodes, clusterK);
         statusEl.textContent =
-            nodes.length + " notas · " + clusterK + " grupos";
+            nodes.length + " notas · " + clusterCount + " grupos";
 
-        // ── Voronoi: sempre cobre a area visivel ──
+        // ── Voronoi: recalcula no zoom para cobrir area visivel ──
         var voronoiGroup = g.append("g").attr("class", "voronoi");
 
         function renderVoronoi(bounds) {
-            // bounds = {x1, y1, x2, y2} em coordenadas do mundo
             if (!bounds) {
                 var minX = Infinity,
                     maxX = -Infinity,
@@ -192,6 +142,7 @@
                 };
             }
 
+            // Deduplica pontos para Delaunay
             var pts = nodes.map(function (d) {
                 return [d.x, d.y];
             });
@@ -234,14 +185,15 @@
                     })
                     .attr("fill", function (d) {
                         return (
-                            CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
-                            "#0ea5e9"
+                            CLUSTER_COLORS[
+                                (d.cluster_id || 0) % CLUSTER_COLORS.length
+                            ] || "#0ea5e9"
                         );
                     })
                     .attr("fill-opacity", 0.06)
                     .attr("stroke", function (d) {
                         return CLUSTER_COLORS[
-                            d.cluster % CLUSTER_COLORS.length
+                            (d.cluster_id || 0) % CLUSTER_COLORS.length
                         ];
                     })
                     .attr("stroke-opacity", 0.15)
@@ -249,7 +201,6 @@
             }
         }
 
-        // Voronoi inicial com bounds da area total das notas
         renderVoronoi(null);
 
         // ── Links ──
@@ -285,7 +236,7 @@
             .attr("stroke-width", 0.5)
             .attr("stroke-opacity", 0.3);
 
-        // ── Nodes ──
+        // ── Nodes (usam cluster_id do servidor) ──
         var node = g
             .append("g")
             .selectAll("g")
@@ -306,8 +257,9 @@
             .attr("r", 5)
             .attr("fill", function (d) {
                 return (
-                    CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length] ||
-                    "#0ea5e9"
+                    CLUSTER_COLORS[
+                        (d.cluster_id || 0) % CLUSTER_COLORS.length
+                    ] || "#0ea5e9"
                 );
             })
             .attr("opacity", 0.9)
@@ -333,9 +285,8 @@
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
 
-        // ── Zoom com atualizacao do Voronoi ──
+        // ── Zoom com Voronoi dinâmico ──
         function getVisibleBounds(transform) {
-            // Converte cantos da tela para coordenadas do mundo
             var inv = transform.invert;
             var p1 = inv.call(transform, [0, 0]);
             var p2 = inv.call(transform, [width, height]);
@@ -354,14 +305,13 @@
             .scaleExtent([0.05, 20])
             .on("zoom", function (event) {
                 g.attr("transform", event.transform);
-                // Re-renderiza Voronoi para cobrir a area visivel
                 var vb = getVisibleBounds(event.transform);
                 renderVoronoi(vb);
             });
 
         svg.call(zoom);
 
-        // ── Zoom inicial: fit all notes ──
+        // ── Zoom inicial ──
         var minX = Infinity,
             maxX = -Infinity,
             minY = Infinity,
@@ -387,7 +337,6 @@
 
         svg.call(zoom.transform, initTransform);
 
-        // Voronoi inicial com bounds da viewport (apos zoom fit)
         var vb = getVisibleBounds(initTransform);
         renderVoronoi(vb);
     });

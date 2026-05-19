@@ -511,10 +511,11 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	links, _ := ctx.Store.GetAllLinks()
 
 	type node struct {
-		ID    string  `json:"id"`
-		Title string  `json:"title"`
-		X     float64 `json:"x"`
-		Y     float64 `json:"y"`
+		ID        string  `json:"id"`
+		Title     string  `json:"title"`
+		X         float64 `json:"x"`
+		Y         float64 `json:"y"`
+		ClusterID int     `json:"cluster_id"`
 	}
 	type link struct {
 		Source string `json:"source"`
@@ -564,7 +565,6 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		projected := semantic.Project2DReduce(vecsForProjection)
 
 		// Escala as coordenadas PCA para um range visivel (~[-500, 500])
-		// O PCA normaliza para [-1, 1], mas isso e pequeno demais para o zoom fit
 		scalePoints(projected, 500)
 
 		for arquivo, pt := range projected {
@@ -581,8 +581,25 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Clustering com silhouette score no servidor
+	var clusterMap map[string]int
+	var clusterCount int
+	{
+		pts := make(map[string]semantic.Point2D)
+		for arquivo, n := range fileNodes {
+			pts[arquivo] = semantic.Point2D{X: n.X, Y: n.Y}
+		}
+		clusterMap, clusterCount = semantic.ClusterPoints(pts)
+	}
+
 	var nodes []node
 	for _, n := range fileNodes {
+		// Atribui cluster_id
+		clusterID := 0
+		if c, ok := clusterMap[n.ID]; ok {
+			clusterID = c
+		}
+
 		// Se ainda estao em (0,0) apos tentativa de projecao, espalha num grid
 		if n.X == 0 && n.Y == 0 {
 			idx := len(nodes)
@@ -593,7 +610,15 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			n.X = float64(int(idx)%int(cols))*120 + 60
 			n.Y = float64(int(idx)/int(cols))*120 + 60
 		}
-		nodes = append(nodes, n)
+
+		// Adiciona cluster_id ao nó
+		nodes = append(nodes, node{
+			ID:        n.ID,
+			Title:     n.Title,
+			X:         n.X,
+			Y:         n.Y,
+			ClusterID: clusterID,
+		})
 	}
 
 	// Filtra links: so inclui se ambos os arquivos existirem como nodes
@@ -611,8 +636,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	result := map[string]interface{}{
-		"nodes": nodes,
-		"links": edgeList,
+		"nodes":   nodes,
+		"links":   edgeList,
+		"clusters": clusterCount,
 	}
 	json.NewEncoder(w).Encode(result)
 }
