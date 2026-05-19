@@ -54,32 +54,6 @@
     </li>
     {{end}}
 </ul>
-
-<script>
-    (function () {
-        var q =
-            (document.querySelector('[name="q"]') || {}).value || "{{.Query}}";
-        if (!q) return;
-        var words = q.split(/\s+/).filter(function (w) {
-            return w.length > 1;
-        });
-        if (!words.length) return;
-        document.querySelectorAll(".snippet-text").forEach(function (el) {
-            var html = el.textContent;
-            words.forEach(function (w) {
-                var re = new RegExp(
-                    "(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
-                    "gi",
-                );
-                html = html.replace(
-                    re,
-                    '<span class="search-highlight">$1</span>',
-                );
-            });
-            el.innerHTML = html;
-        });
-    })();
-</script>
 {{else}} {{if .Query}}
 <div class="text-center py-20">
     <p class="text-zinc-500 text-sm">

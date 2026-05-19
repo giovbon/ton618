@@ -256,6 +256,49 @@
         renderCompactNotes(filtered);
     }
 
+    function highlightSearchTerms(query) {
+        if (!query) return;
+        var words = query.split(/\s+/).filter(function (w) {
+            return w.length > 1;
+        });
+        if (!words.length) return;
+        // Destaca termos no snippet
+        document.querySelectorAll(".snippet-text").forEach(function (el) {
+            var html = el.textContent;
+            words.forEach(function (w) {
+                var re = new RegExp(
+                    "(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
+                    "gi",
+                );
+                html = html.replace(
+                    re,
+                    '<span class="search-highlight">$1</span>',
+                );
+            });
+            el.innerHTML = html;
+        });
+        // Destaca termos no nome do arquivo (igual ao modo compacto)
+        document
+            .querySelectorAll("#global-container a[href^='/editor']")
+            .forEach(function (el) {
+                var text = el.textContent;
+                if (!text) return;
+                words.forEach(function (w) {
+                    var re = new RegExp(
+                        "(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
+                        "gi",
+                    );
+                    text = text.replace(
+                        re,
+                        '<span class="search-highlight">$1</span>',
+                    );
+                });
+                if (text !== el.textContent) {
+                    el.innerHTML = text;
+                }
+            });
+    }
+
     var searchTimer = null;
     function doGlobalSearch(query) {
         if (searchTimer) clearTimeout(searchTimer);
@@ -271,6 +314,7 @@
                 })
                 .then(function (html) {
                     el.innerHTML = html;
+                    highlightSearchTerms(query);
                 })
                 .catch(function () {
                     el.innerHTML =
