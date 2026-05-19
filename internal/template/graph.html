@@ -285,21 +285,40 @@
             })
             .on("click", function (event, d) {
                 event.stopPropagation();
-                window.location.href =
-                    "/editor?file=" + encodeURIComponent(d.id);
-            })
+                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
+                if (isPdf) {
+                    window.open(
+                        "/file?name=" + encodeURIComponent(d.id),
+                        "_blank",
+                    );
+                } else {
+                    window.location.href =
+                        "/editor?file=" + encodeURIComponent(d.id);
+                }
+            });
+
+        // PDF nodes: render 📕 instead of a circle
+        node.filter(function (d) {
+            return d.id && d.id.indexOf("pdfs/") === 0;
+        })
+            .append("text")
+            .text("\uD83D\uDCD5")
+            .attr("text-anchor", "middle")
+            .attr("dy", 0)
+            .attr("font-size", "22px")
+            .attr("pointer-events", "none")
             .style("cursor", "pointer");
 
-        node.append("circle")
-            .attr("r", function (d) {
-                return d.id && d.id.indexOf("pdfs/") === 0 ? 7 : 5;
-            })
+        // Non-PDF nodes: render a colored circle
+        node.filter(function (d) {
+            return !(d.id && d.id.indexOf("pdfs/") === 0);
+        })
+            .append("circle")
+            .attr("r", 5)
             .attr("fill", function (d) {
-                // PDF nodes get a distinct reddish color
-                var base = d.id && d.id.indexOf("pdfs/") === 0 ? 6 : 0;
                 return (
                     CLUSTER_COLORS[
-                        ((d.cluster_id || 0) + base) % CLUSTER_COLORS.length
+                        (d.cluster_id || 0) % CLUSTER_COLORS.length
                     ] || "#0ea5e9"
                 );
             })
