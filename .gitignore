@@ -1,4 +1,3 @@
-# === Go ===
 ton618
 server
 *.exe
@@ -7,22 +6,18 @@ server
 *.test-output
 /tmp/
 
-# === Runtime Data (gerado pelo servidor) ===
 data/
 docs/
 *.db
 state/
 *.bleve/
 
-# === Ambiente ===
 .env
 .env.local
 .env.prod
 
-# === Docker ===
 ollama_data/
 
-# === IDE / Editores ===
 .vscode/
 .idea/
 *.swp
@@ -31,7 +26,6 @@ ollama_data/
 *.bak
 .vim/
 
-# === OS ===
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -42,7 +36,7 @@ Nul
 .Spotlight-V100
 .Trashes
 
-# === Go cache ===
 go.work
 go.work.sum
 vendor/
+.env

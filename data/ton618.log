@@ -1314,3 +1314,146 @@ time=2026-05-18T17:38:45.698-03:00 level=INFO msg=http method=GET path=/editor d
 time=2026-05-18T17:38:46.181-03:00 level=INFO msg=http method=GET path=/api/notes duration=2.207553ms
 time=2026-05-18T17:38:46.248-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=209.72µs
 time=2026-05-18T17:38:46.679-03:00 level=INFO msg=http method=GET path=/api/notes duration=761.477µs
+time=2026-05-20T13:28:44.986-03:00 level=INFO msg="TON-618 iniciando..."
+time=2026-05-20T13:28:46.244-03:00 level=INFO msg="Banco SQLite pronto"
+time=2026-05-20T13:28:46.244-03:00 level=INFO msg="Provedor de embedding" provider=gemini
+time=2026-05-20T13:28:46.245-03:00 level=INFO msg="Templates carregados"
+time=2026-05-20T13:28:46.245-03:00 level=INFO msg="Watcher fsnotify iniciado"
+time=2026-05-20T13:28:46.245-03:00 level=INFO msg="Indexação inicial..."
+time=2026-05-20T13:28:46.245-03:00 level=INFO msg="Indexação inicial concluída"
+time=2026-05-20T13:28:46.245-03:00 level=INFO msg="Servidor HTTP rodando" addr=http://localhost:6180
+time=2026-05-20T13:28:57.010-03:00 level=INFO msg=http method=GET path=/ duration=4.853059ms
+time=2026-05-20T13:28:58.420-03:00 level=INFO msg=http method=GET path=/login duration=1.007027ms
+time=2026-05-20T13:28:59.220-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=269.431µs
+time=2026-05-20T13:29:09.722-03:00 level=INFO msg=http method=GET path=/api/status duration=291.287µs
+time=2026-05-20T13:29:10.133-03:00 level=INFO msg=http method=GET path=/ duration=808.246µs
+time=2026-05-20T13:29:11.012-03:00 level=INFO msg=http method=GET path=/api/tags duration=368.991µs
+time=2026-05-20T13:29:11.014-03:00 level=INFO msg=http method=GET path=/api/notes duration=724.297µs
+time=2026-05-20T13:29:11.120-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=257.419µs
+time=2026-05-20T13:29:50.705-03:00 level=INFO msg=Capturando url=https://g1.globo.com/politica/noticia/2026/05/20/lula-atualiza-regras-para-big-techs-plataformas-podem-ser-punidas-por-nao-remover-conteudo-criminoso.ghtml
+time=2026-05-20T13:29:51.378-03:00 level=INFO msg="Captura salva" file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md
+time=2026-05-20T13:29:51.378-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:29:55.022-03:00 level=WARN msg="embedding failed" id=9a72e81f818e5c649786f3d088e13045 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:29:59.675-03:00 level=WARN msg="embedding failed" id=a7a38406404c5d6ee956b88251bf47ed arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:01.518-03:00 level=WARN msg="embedding failed" id=dcc4884065e8f7fefbb8aa7435a05e43 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:01.659-03:00 level=INFO msg=http method=POST path=/api/capture duration=10.953908877s
+time=2026-05-20T13:30:01.881-03:00 level=INFO msg=http method=GET path=/editor duration=178.973417ms
+time=2026-05-20T13:30:02.218-03:00 level=WARN msg="embedding failed" id=9a72e81f818e5c649786f3d088e13045 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:02.503-03:00 level=INFO msg=http method=GET path=/api/notes duration=570.768µs
+time=2026-05-20T13:30:02.612-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=983.086µs
+time=2026-05-20T13:30:02.771-03:00 level=WARN msg="embedding failed" id=a7a38406404c5d6ee956b88251bf47ed arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:03.166-03:00 level=INFO msg=http method=GET path=/api/notes duration=166.246653ms
+time=2026-05-20T13:30:03.392-03:00 level=WARN msg="embedding failed" id=dcc4884065e8f7fefbb8aa7435a05e43 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:03.597-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:30:04.064-03:00 level=WARN msg="embedding failed" id=9a72e81f818e5c649786f3d088e13045 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:04.453-03:00 level=WARN msg="embedding failed" id=a7a38406404c5d6ee956b88251bf47ed arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:04.747-03:00 level=WARN msg="embedding failed" id=dcc4884065e8f7fefbb8aa7435a05e43 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:07.245-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:30:07.613-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:07.689-03:00 level=INFO msg=http method=POST path=/file/save duration=444.331916ms
+time=2026-05-20T13:30:07.774-03:00 level=INFO msg=http method=GET path=/editor duration=81.470666ms
+time=2026-05-20T13:30:08.073-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:08.820-03:00 level=INFO msg=http method=GET path=/ duration=182.481µs
+time=2026-05-20T13:30:09.143-03:00 level=INFO msg=http method=GET path=/api/tags duration=503.621µs
+time=2026-05-20T13:30:09.147-03:00 level=INFO msg=http method=GET path=/api/notes duration=1.047351ms
+time=2026-05-20T13:30:09.166-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=219.205µs
+time=2026-05-20T13:30:11.419-03:00 level=INFO msg=http method=GET path=/editor duration=1.208813ms
+time=2026-05-20T13:30:11.857-03:00 level=INFO msg=http method=GET path=/api/notes duration=399.221µs
+time=2026-05-20T13:30:12.021-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=207.495µs
+time=2026-05-20T13:30:12.356-03:00 level=INFO msg=http method=GET path=/api/notes duration=430.236µs
+time=2026-05-20T13:30:16.248-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:30:16.891-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:18.824-03:00 level=INFO msg=http method=GET path=/ duration=268.317µs
+time=2026-05-20T13:30:19.160-03:00 level=INFO msg=http method=GET path=/api/tags duration=394.327µs
+time=2026-05-20T13:30:19.164-03:00 level=INFO msg=http method=GET path=/api/notes duration=520.017µs
+time=2026-05-20T13:30:19.184-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=243.737µs
+time=2026-05-20T13:30:22.688-03:00 level=INFO msg=http method=POST path=/search duration=75.791347ms
+time=2026-05-20T13:30:24.670-03:00 level=INFO msg=http method=POST path=/search duration=67.091526ms
+time=2026-05-20T13:30:26.289-03:00 level=INFO msg=http method=POST path=/search duration=30.360002ms
+time=2026-05-20T13:30:27.319-03:00 level=INFO msg=http method=POST path=/search duration=60.744952ms
+time=2026-05-20T13:30:28.624-03:00 level=INFO msg=http method=POST path=/search duration=98.372189ms
+time=2026-05-20T13:30:35.370-03:00 level=INFO msg=http method=POST path=/search duration=85.384633ms
+time=2026-05-20T13:30:45.558-03:00 level=INFO msg=http method=POST path=/search duration=90.743848ms
+time=2026-05-20T13:30:46.067-03:00 level=INFO msg=http method=POST path=/search duration=34.609876ms
+time=2026-05-20T13:30:46.246-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:30:46.622-03:00 level=INFO msg=http method=POST path=/search duration=98.360164ms
+time=2026-05-20T13:30:46.664-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:30:47.276-03:00 level=INFO msg=http method=POST path=/search duration=108.089322ms
+time=2026-05-20T13:30:57.374-03:00 level=INFO msg=http method=GET path=/editor duration=1.375346ms
+time=2026-05-20T13:30:57.808-03:00 level=INFO msg=http method=GET path=/api/notes duration=621.602µs
+time=2026-05-20T13:30:57.892-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=265.514µs
+time=2026-05-20T13:30:58.311-03:00 level=INFO msg=http method=GET path=/api/notes duration=978.572µs
+time=2026-05-20T13:31:16.262-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:31:16.633-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:31:46.270-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:31:46.648-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:32:16.274-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:32:16.645-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:32:46.248-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:32:46.603-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:33:16.274-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:33:16.610-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:33:46.275-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:33:46.629-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:33:59.659-03:00 level=INFO msg="TON-618 iniciando..."
+time=2026-05-20T13:33:59.738-03:00 level=INFO msg="Banco SQLite pronto"
+time=2026-05-20T13:33:59.739-03:00 level=INFO msg="Provedor de embedding" provider=gemini
+time=2026-05-20T13:33:59.740-03:00 level=INFO msg="Templates carregados"
+time=2026-05-20T13:33:59.741-03:00 level=INFO msg="Watcher fsnotify iniciado"
+time=2026-05-20T13:33:59.741-03:00 level=INFO msg="Indexação inicial..."
+time=2026-05-20T13:33:59.741-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:33:59.743-03:00 level=INFO msg="Indexação inicial concluída"
+time=2026-05-20T13:33:59.745-03:00 level=INFO msg="Servidor HTTP rodando" addr=http://localhost:6180
+time=2026-05-20T13:34:00.219-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:34:28.070-03:00 level=INFO msg=http method=GET path=/editor duration=7.750046ms
+time=2026-05-20T13:34:29.411-03:00 level=INFO msg=http method=GET path=/api/notes duration=1.866482ms
+time=2026-05-20T13:34:29.692-03:00 level=INFO msg=http method=GET path=/login duration=3.934369ms
+time=2026-05-20T13:34:29.744-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:34:30.203-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=367.279µs
+time=2026-05-20T13:34:30.226-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:34:49.918-03:00 level=INFO msg=http method=GET path=/api/status duration=936.263µs
+time=2026-05-20T13:34:49.966-03:00 level=INFO msg=http method=GET path=/ duration=251.641µs
+time=2026-05-20T13:34:50.466-03:00 level=INFO msg=http method=GET path=/api/tags duration=253.012µs
+time=2026-05-20T13:34:50.467-03:00 level=INFO msg=http method=GET path=/api/notes duration=1.017586ms
+time=2026-05-20T13:34:50.508-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=207.842µs
+time=2026-05-20T13:34:53.797-03:00 level=INFO msg=http method=GET path=/editor duration=1.849885ms
+time=2026-05-20T13:34:54.409-03:00 level=INFO msg=http method=GET path=/api/notes duration=569.839µs
+time=2026-05-20T13:34:54.541-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=2.762413ms
+time=2026-05-20T13:34:54.994-03:00 level=INFO msg=http method=GET path=/api/notes duration=6.668112ms
+time=2026-05-20T13:34:59.748-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:35:00.295-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:35:05.273-03:00 level=INFO msg=http method=GET path=/editor duration=8.179695ms
+time=2026-05-20T13:35:05.992-03:00 level=INFO msg=http method=GET path=/api/notes duration=2.188443ms
+time=2026-05-20T13:35:06.133-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=3.644219ms
+time=2026-05-20T13:35:06.515-03:00 level=INFO msg=http method=GET path=/api/notes duration=2.230541ms
+time=2026-05-20T13:35:29.750-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:35:30.083-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:35:59.770-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:36:00.255-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:36:21.908-03:00 level=INFO msg=http method=GET path=/editor duration=8.198491ms
+time=2026-05-20T13:36:23.147-03:00 level=INFO msg=http method=GET path=/api/notes duration=776.834µs
+time=2026-05-20T13:36:23.339-03:00 level=INFO msg=http method=GET path=/login duration=116.033µs
+time=2026-05-20T13:36:23.580-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=225.11µs
+time=2026-05-20T13:36:29.747-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:36:30.231-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:36:47.375-03:00 level=INFO msg=http method=GET path=/api/status duration=311.679µs
+time=2026-05-20T13:36:47.479-03:00 level=INFO msg=http method=GET path=/ duration=310.234µs
+time=2026-05-20T13:36:48.129-03:00 level=INFO msg=http method=GET path=/api/tags duration=281.961µs
+time=2026-05-20T13:36:48.134-03:00 level=INFO msg=http method=GET path=/api/notes duration=585.13µs
+time=2026-05-20T13:36:48.177-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=286.907µs
+time=2026-05-20T13:36:53.655-03:00 level=INFO msg=http method=GET path=/editor duration=3.337935ms
+time=2026-05-20T13:36:54.599-03:00 level=INFO msg=http method=GET path=/api/notes duration=554.543µs
+time=2026-05-20T13:36:54.764-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=318.655µs
+time=2026-05-20T13:36:55.111-03:00 level=INFO msg=http method=GET path=/api/notes duration=571.19µs
+time=2026-05-20T13:36:59.746-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:37:00.164-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:37:04.502-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=206.459µs
+time=2026-05-20T13:37:04.731-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=431.04µs
+time=2026-05-20T13:37:20.009-03:00 level=INFO msg=http method=GET path=/editor duration=1.926328ms
+time=2026-05-20T13:37:20.832-03:00 level=INFO msg=http method=GET path=/api/notes duration=2.129565ms
+time=2026-05-20T13:37:20.970-03:00 level=INFO msg=http method=GET path=/favicon.ico duration=228.757µs
+time=2026-05-20T13:37:21.374-03:00 level=INFO msg=http method=GET path=/api/notes duration=537.162µs
+time=2026-05-20T13:37:29.750-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:37:30.152-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
+time=2026-05-20T13:37:59.770-03:00 level=INFO msg=Processando file=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md type=modify
+time=2026-05-20T13:38:00.144-03:00 level=WARN msg="embedding failed" id=00c30dc2ba969c78bf4c9ca15e349575 arquivo=notes/captura-lula-atualiza-regras-para-big-techs-plataformas-podem-ser-pu.md error="gemini 403: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Your API key was reported as leaked. Please use another API key.\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n"
