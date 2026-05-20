@@ -497,11 +497,13 @@
 
     function renameNote(filename) {
         var oldName = filename.split("/").pop() || filename;
-        var newName = prompt("Novo titulo:", oldName.replace(/\.md$/i, ""));
-        if (!newName || newName.trim() === oldName.replace(/\.md$/i, ""))
-            return;
+        var ext = oldName.endsWith(".pdf") ? ".pdf" : ".md";
+        var displayName = oldName.replace(/\.(md|pdf)$/i, "");
+        var newName = prompt("Novo titulo:", displayName);
+        if (!newName || newName.trim() === displayName) return;
         newName = newName.trim();
-        if (!newName.endsWith(".md")) newName += ".md";
+        if (!newName.endsWith(".md") && !newName.endsWith(".pdf"))
+            newName += ext;
 
         var fd = new FormData();
         fd.append("old", filename);
