@@ -8,7 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
-	github.com/mattn/go-sqlite3 v1.14.22
+	modernc.org/sqlite v1.29.8
 	gopkg.in/yaml.v3 v3.0.1
 )
 
