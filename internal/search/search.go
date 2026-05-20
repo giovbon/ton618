@@ -262,13 +262,14 @@ func buildHighlight(text string, terms []string) map[string][]string {
 	lower := strings.ToLower(text)
 	var fragments []string
 	for _, term := range terms {
-		idx := strings.Index(lower, term)
+		termLower := strings.ToLower(term)
+		idx := strings.Index(lower, termLower)
 		if idx >= 0 {
 			start := idx - 40
 			if start < 0 {
 				start = 0
 			}
-			end := idx + len(term) + 40
+			end := idx + len(termLower) + 40
 			if end > len(text) {
 				end = len(text)
 			}

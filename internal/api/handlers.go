@@ -208,7 +208,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	// So ignora conteudo para o template exato "notes/novo.md"
 	// (para evitar que auto-save anterior polua o template de nova nota).
 	// Notas com nomes unicos (novo-*) devem carregar seu conteudo normalmente.
-	if filename != "notes/novo.md" {
+	if !strings.HasPrefix(filename, "notes/novo") {
 		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 		if data, err := os.ReadFile(fullPath); err == nil {
 			content = string(data)
@@ -250,11 +250,13 @@ func (ctx *HandlerContext) HandleGraph(w http.ResponseWriter, r *http.Request) {
 func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.FormValue("q")
 	if query == "" && r.Method == "POST" {
-		body, _ := io.ReadAll(r.Body)
-		query = string(body)
-		// parse form-encoded or simple string
-		if strings.HasPrefix(query, "q=") {
-			query = strings.TrimPrefix(query, "q=")
+		if r.Body != nil {
+			body, _ := io.ReadAll(r.Body)
+			query = string(body)
+			// parse form-encoded or simple string
+			if strings.HasPrefix(query, "q=") {
+				query = strings.TrimPrefix(query, "q=")
+			}
 		}
 	}
 
@@ -487,9 +489,9 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Remove from DB
+	ctx.Store.DeleteEmbeddingsByFile(filename)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
-	ctx.Store.DeleteEmbeddingsByFile(filename)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -685,6 +687,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		X         float64 `json:"x"`
 		Y         float64 `json:"y"`
 		ClusterID int     `json:"cluster_id"`
+		NoteType  string  `json:"note_type"`
 	}
 	type link struct {
 		Source string `json:"source"`
@@ -723,11 +726,31 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			vecsForProjection[arquivo] = nv.Vector
 		}
 
+		// Detecta tipo de nota pelo arquivo / tags / tipo de documento
+		noteType := "note"
+		if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") || doc.Tipo == "pdf" {
+			noteType = "pdf"
+		} else {
+			tags := db.TagsToSlice(doc.Tags)
+			for _, tag := range tags {
+				switch strings.ToLower(strings.TrimSpace(tag)) {
+				case "youtube", "video":
+					noteType = "video"
+					break
+				case "artigo", "article", "captura":
+					if noteType != "video" {
+						noteType = "article"
+					}
+				}
+			}
+		}
+
 		fileNodes[arquivo] = node{
-			ID:    arquivo,
-			Title: baseName,
-			X:     x,
-			Y:     y,
+			ID:       arquivo,
+			Title:    baseName,
+			X:        x,
+			Y:        y,
+			NoteType: noteType,
 		}
 	}
 
@@ -807,8 +830,8 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	result := map[string]interface{}{
-		"nodes":   nodes,
-		"links":   edgeList,
+		"nodes":    nodes,
+		"links":    edgeList,
 		"clusters": clusterCount,
 	}
 	json.NewEncoder(w).Encode(result)

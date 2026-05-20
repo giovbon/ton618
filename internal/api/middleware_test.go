@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -72,8 +74,7 @@ func TestCheckCredentials_CookieUrlEncoded(t *testing.T) {
 	// Cookie URL-encoded (ex: se encodeURIComponent foi usado)
 	req := httptest.NewRequest("GET", "/", nil)
 	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
-	// Simula URL-encoding de caracteres no base64
-	urlEncoded := raw[:5] + "%3D" + raw[6:] // substitui '=' por %3D
+	urlEncoded := url.QueryEscape(raw)
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: urlEncoded})
 
 	if !checkCredentials(req, "admin", "ton618") {
@@ -96,7 +97,8 @@ func TestCheckCredentials_CookieComPrefixoBasicUrlEncoded(t *testing.T) {
 	// Cookie legado com URL-encoding: "Basic%20" + base64
 	req := httptest.NewRequest("GET", "/", nil)
 	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
-	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: "Basic%20" + raw})
+	urlEncoded := strings.ReplaceAll("Basic "+raw, " ", "%20")
+	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: urlEncoded})
 
 	if !checkCredentials(req, "admin", "ton618") {
 		t.Error("cookie com prefixo 'Basic%20' URL-encoded deveria retornar true")

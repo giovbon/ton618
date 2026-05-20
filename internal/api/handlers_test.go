@@ -1134,8 +1134,6 @@ func TestHandleFileDelete_RemoveEmbeddingTambem(t *testing.T) {
 	ctx.HandleFileSave(rec, req)
 
 	// 2. Simula embedding (como faria o ProcessFile com embed provider)
-	ctx.Store.SetEmbedding("manual-embed", []float32{0.1, 0.2, 0.3}, "deletar-com-embed")
-	// Vincula o embedding a um documento real
 	docs, _ := ctx.Store.GetDocumentsByFile("notes/deletar-com-embed.md")
 	if len(docs) == 0 {
 		t.Fatal("documento deveria existir")
@@ -1368,8 +1366,8 @@ func TestHandleUpload_Sucesso(t *testing.T) {
 
 	var buf bytes.Buffer
 	mp := multipart.NewWriter(&buf)
-	part, _ := mp.CreateFormFile("file", "upload-nota.md")
-	part.Write([]byte("# Nota via upload"))
+	part, _ := mp.CreateFormFile("file", "upload.pdf")
+	part.Write([]byte("%PDF-1.4\n%âãÏÓ\n"))
 	mp.Close()
 
 	req := httptest.NewRequest("POST", "/upload", &buf)
@@ -1381,7 +1379,7 @@ func TestHandleUpload_Sucesso(t *testing.T) {
 		t.Fatalf("esperado 303, got %d", rec.Code)
 	}
 
-	uploadPath := filepath.Join(ctx.Cfg.DocsDir, "notes/upload-nota.md")
+	uploadPath := filepath.Join(ctx.Cfg.DocsDir, "pdfs/upload.pdf")
 	if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
 		t.Error("arquivo upload nao foi salvo")
 	}

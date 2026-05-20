@@ -231,9 +231,9 @@
             // Flag para evitar condição de corrida entre validação automática e submit
             var _loginSubmitted = false;
 
-            // Se já tem auth em sessionStorage, tenta validar
+            // Se já tem auth em localStorage, tenta validar
             (function () {
-                var existing = sessionStorage.getItem("ton_auth");
+                var existing = localStorage.getItem("ton_auth");
                 if (existing) {
                     fetch("/api/status", {
                         headers: { Authorization: existing },
@@ -249,13 +249,13 @@
                                     ";path=/;SameSite=Lax;max-age=86400";
                                 window.location.href = "/";
                             } else {
-                                sessionStorage.removeItem("ton_auth");
+                                localStorage.removeItem("ton_auth");
                                 document.cookie = "ton_auth=;path=/;max-age=0";
                             }
                         })
                         .catch(function () {
                             if (_loginSubmitted) return;
-                            sessionStorage.removeItem("ton_auth");
+                            localStorage.removeItem("ton_auth");
                             document.cookie = "ton_auth=;path=/;max-age=0";
                         });
                 }
@@ -281,7 +281,7 @@
                             headers: { Authorization: basicHeader },
                         });
                         if (resp.ok) {
-                            sessionStorage.setItem("ton_auth", basicHeader);
+                            localStorage.setItem("ton_auth", basicHeader);
                             // Cookie apenas com base64 bruto (sem prefixo "Basic ")
                             // para evitar problemas com URL-encoding do espaço
                             document.cookie =

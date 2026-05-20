@@ -106,6 +106,10 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 		}
 	}
 
+	if strings.TrimSpace(text) == "" {
+		return nil, links, fileTags
+	}
+
 	// Extract hashtags from body
 	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
 	for _, m := range tagMatches {

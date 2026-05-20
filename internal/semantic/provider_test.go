@@ -54,7 +54,7 @@ func TestCache_SetAndGet(t *testing.T) {
 	}
 }
 
-func TestNormalizeVector(t *testing.T) {
+func TestNormalizeVectorFloat32(t *testing.T) {
 	vec := []float32{3.0, 4.0}
 	NormalizeVector(vec)
 

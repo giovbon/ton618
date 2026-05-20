@@ -272,7 +272,7 @@ func TestKMeans_KIgualAN(t *testing.T) {
 func TestKMeans_MaisClustersQuePontos(t *testing.T) {
 	pts := []ClusterResult{{X: 0}, {X: 1}}
 	kmeans(pts, 5, 10)
-	for i, p := range pts {
+	for _, p := range pts {
 		if p.ClusterID < 0 || p.ClusterID >= len(pts) {
 			t.Errorf("clusterID %d fora do range [0, %d]", p.ClusterID, len(pts)-1)
 		}

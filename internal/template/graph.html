@@ -21,13 +21,24 @@
     .graph-note:hover circle {
         stroke: #fff !important;
         stroke-width: 3px !important;
-        filter: drop-shadow(0 0 8px currentColor);
+        filter: drop-shadow(0 0 10px currentColor);
     }
 
-    .graph-note:hover text {
+    .graph-note text.icon {
+        pointer-events: none;
+    }
+
+    .graph-note text.label {
+        opacity: 0;
+        transition: opacity 120ms ease;
+        pointer-events: none;
+    }
+
+    .graph-note:hover text.label {
+        opacity: 1;
         fill: #e4e4e7 !important;
         font-weight: 700 !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
     }
 </style>
 <div class="graph-page">
@@ -298,44 +309,54 @@
                 }
             });
 
-        // Todos os nodes: circulo colorido + label
-        // PDFs tem icone 📕 no label e abrem em nova aba
+        var NOTE_ICONS = {
+            pdf: "📕",
+            video: "🎬",
+            article: "📝",
+            note: "🗒️",
+            imagem: "🖼️",
+        };
+
         node.append("circle")
-            .attr("r", 5)
+            .attr("r", 8)
             .attr("fill", function (d) {
                 return (
                     CLUSTER_COLORS[
-                    (d.cluster_id || 0) % CLUSTER_COLORS.length
+                        (d.cluster_id || 0) % CLUSTER_COLORS.length
                     ] || "#0ea5e9"
                 );
             })
-            .attr("opacity", 0.9)
+            .attr("opacity", 0.95)
             .attr("stroke", "#18181b")
             .attr("stroke-width", 2);
 
         node.append("text")
+            .attr("class", "icon")
             .text(function (d) {
-                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
-                var label =
-                    d.title ||
-                    d.id
-                        .split("/")
-                        .pop()
-                        .replace(/\.(md|pdf)$/i, "") ||
-                    "?";
-                return isPdf ? "\uD83D\uDCD5 " + label : label;
+                return NOTE_ICONS[d.note_type] || "🗒️";
             })
             .attr("text-anchor", "middle")
-            .attr("dy", 15)
+            .attr("dy", "0.35em")
             .attr("font-size", "10px")
-            .attr("font-weight", "500")
-            .attr("fill", function (d) {
-                return d.id && d.id.indexOf("pdfs/") === 0
-                    ? "#fb923c"
-                    : "#71717a";
-            })
+            .attr("fill", "#f8fafc")
             .attr("font-family", "Inter, system-ui, sans-serif")
             .attr("pointer-events", "none");
+
+        node.append("text")
+            .attr("class", "label")
+            .text(function (d) {
+                return d.title || d.id.split("/").pop().replace(/\.(md|pdf)$/i, "") || "?";
+            })
+            .attr("text-anchor", "middle")
+            .attr("dy", 22)
+            .attr("font-size", "10px")
+            .attr("font-weight", "500")
+            .attr("fill", "#71717a")
+            .attr("font-family", "Inter, system-ui, sans-serif");
+
+        node.append("title").text(function (d) {
+            return d.title || d.id;
+        });
 
         // ── Zoom simples (sem recalcular Voronoi) ──
         var zoom = d3

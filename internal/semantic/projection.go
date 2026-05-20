@@ -73,14 +73,14 @@ func Project2DReduce(vectors map[string][]float32) map[string]Point2D {
 	}
 
 	cov := make([][]float64, d)
-	for j := range d {
+	for j := 0; j < d; j++ {
 		cov[j] = make([]float64, d)
 	}
-	factor := 1.0 / float64(n-1)
-	for j := range d {
+factor := 1.0 / float64(n-1)
+	for j := 0; j < d; j++ {
 		for k := j; k < d; k++ {
 			var sum float64
-			for i := range n {
+			for i := 0; i < n; i++ {
 				sum += centered[i][j] * centered[i][k]
 			}
 			cov[j][k] = sum * factor
@@ -113,22 +113,22 @@ func powerIteration(matrix [][]float64, d int, maxIter int) []float64 {
 		v[i] = rng.Float64()*2 - 1
 	}
 	normalize(v)
-	for iter := range maxIter {
+	for iter := 0; iter < maxIter; iter++ {
 		vNew := make([]float64, d)
-		for j := range d {
+		for j := 0; j < d; j++ {
 			var sum float64
-			for k := range d {
+			for k := 0; k < d; k++ {
 				sum += matrix[j][k] * v[k]
 			}
 			vNew[j] = sum
 		}
 		normalize(vNew)
 		var dot float64
-		for j := range d {
+		for j := 0; j < d; j++ {
 			dot += v[j] * vNew[j]
 		}
 		if dot < 0 {
-			for j := range d {
+			for j := 0; j < d; j++ {
 				vNew[j] = -vNew[j]
 			}
 			dot = -dot
@@ -143,15 +143,15 @@ func powerIteration(matrix [][]float64, d int, maxIter int) []float64 {
 
 func powerIterationDeflated(matrix [][]float64, d int, eig1 []float64, maxIter int) []float64 {
 	aux := make([]float64, d)
-	for j := range d {
+	for j := 0; j < d; j++ {
 		var sum float64
-		for k := range d {
+		for k := 0; k < d; k++ {
 			sum += matrix[j][k] * eig1[k]
 		}
 		aux[j] = sum
 	}
 	var lambda float64
-	for j := range d {
+	for j := 0; j < d; j++ {
 		lambda += eig1[j] * aux[j]
 	}
 	rng := rand.New(rand.NewSource(123))
@@ -160,45 +160,44 @@ func powerIterationDeflated(matrix [][]float64, d int, eig1 []float64, maxIter i
 		v[i] = rng.Float64()*2 - 1
 	}
 	var dot float64
-	for j := range d {
+	for j := 0; j < d; j++ {
 		dot += eig1[j] * v[j]
 	}
-	for j := range d {
+	for j := 0; j < d; j++ {
 		v[j] -= dot * eig1[j]
 	}
 	normalize(v)
-	for iter := range maxIter {
+	for iter := 0; iter < maxIter; iter++ {
 		vNew := make([]float64, d)
-		for j := range d {
+		for j := 0; j < d; j++ {
 			var sum float64
-			for k := range d {
+			for k := 0; k < d; k++ {
 				sum += matrix[j][k] * v[k]
 			}
 			vNew[j] = sum
 		}
 		var proj float64
-		for j := range d {
+		for j := 0; j < d; j++ {
 			proj += eig1[j] * v[j]
 		}
 		proj *= lambda
-		for j := range d {
+		for j := 0; j < d; j++ {
 			vNew[j] -= proj * eig1[j]
 		}
 		dot = 0
-		for j := range d {
+		for j := 0; j < d; j++ {
 			dot += eig1[j] * vNew[j]
 		}
-		for j := range d {
+		for j := 0; j < d; j++ {
 			vNew[j] -= dot * eig1[j]
 		}
 		normalize(vNew)
 		dot = 0
-		for j := range d {
+		for j := 0; j < d; j++ {
 			dot += v[j] * vNew[j]
 		}
 		if dot < 0 {
-			for j := range d {
-				vNew[j] = -vNew[j]
+			for j := 0; j < d; j++ {
 			}
 			dot = -dot
 		}
@@ -275,6 +274,9 @@ type ClusterResult struct {
 // (in the same order as input ids).
 func ClusterPoints(pts map[string]Point2D) (map[string]int, int) {
 	n := len(pts)
+	if n == 0 {
+		return nil, 0
+	}
 	if n <= 2 {
 		result := make(map[string]int)
 		i := 0
@@ -285,11 +287,15 @@ func ClusterPoints(pts map[string]Point2D) (map[string]int, int) {
 		return result, n
 	}
 
-	// Extract ordered points
+	// Extract ordered points with deterministic key sorting.
 	ids := make([]string, 0, n)
 	points := make([]ClusterResult, 0, n)
-	for id, p := range pts {
+	for id := range pts {
 		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		p := pts[id]
 		points = append(points, ClusterResult{X: p.X, Y: p.Y})
 	}
 
