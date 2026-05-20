@@ -1,5 +1,7 @@
 ton618
 server
+!cmd/server/
+!cmd/server/main.go
 *.exe
 *.test
 *.out
