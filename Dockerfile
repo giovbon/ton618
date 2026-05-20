@@ -17,7 +17,6 @@ RUN go mod download
 ARG TARGETARCH
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -tags sqlite_fts5 \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
 
