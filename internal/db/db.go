@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Store gerencia a conexão com o banco SQLite e todas as operações.
@@ -14,7 +14,7 @@ type Store struct {
 
 // NewStore abre (ou cria) o banco e inicializa o schema.
 func NewStore(path string) (*Store, error) {
-	database, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	database, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("db open: %w", err)
 	}

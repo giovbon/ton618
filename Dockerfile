@@ -1,27 +1,29 @@
 # ─── Estágio 1: Build ───────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24 AS builder
 
-# Instalar dependências de build com suporte multi-arch
-RUN apk add --no-cache gcc musl-dev sqlite-dev linux-headers
+# Instalações mínimas (sem CGO necessário)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Cache de dependências
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download && go mod tidy
 
-# Build com arquitetura correta (buildx injeta via ARG)
+# Build SEM CGO (driver sqlite puro Go)
 ARG TARGETARCH
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -tags sqlite_fts5 \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
 
 # ─── Estágio 2: Runtime ──────────────────────────────────
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates sqlite-libs tzdata
+RUN apk add --no-cache ca-certificates tzdata
 
 # Usuário não-root
 RUN adduser -D -h /app appuser
