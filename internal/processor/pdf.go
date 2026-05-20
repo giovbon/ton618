@@ -38,8 +38,8 @@ func ProcessPDF(path, filename string, modTime time.Time) ([]Document, []string,
 		return nil, nil, nil
 	}
 
-	// Extrai keywords (top 30 termos mais frequentes)
-	keywords := ExtractKeywords(text, 10)
+	// Extrai keywords (top 3 termos mais frequentes)
+	keywords := ExtractKeywords(text, 3)
 
 	// Nome do arquivo sem extensao para o titulo
 	baseName := strings.TrimSuffix(filepath.Base(filename), ".pdf")
@@ -57,8 +57,8 @@ func ProcessPDF(path, filename string, modTime time.Time) ([]Document, []string,
 		Tags:       keywords,
 	}
 
-	// Retorna nil como tags para que keywords nao aparecam como # na interface
-	return []Document{doc}, nil, nil
+	// Retorna keywords como fileTags para aparecerem na listagem compacta
+	return []Document{doc}, nil, keywords
 }
 
 // ExtractKeywords extrai os N termos mais frequentes do texto,

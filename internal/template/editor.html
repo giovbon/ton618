@@ -25,6 +25,14 @@
         >
             Salvar
         </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-sm px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            ✕
+        </button>
     </div>
 
     <!-- Frontmatter toggle -->
@@ -1098,6 +1106,26 @@
             } catch (e) {
                 setStatus("dirty");
             }
+        }
+
+        // ── Delete current note ──
+        function deleteCurrentNote() {
+            var filename = filenameInput.value;
+            if (!filename) return;
+            if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fetch("/file/delete", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (r.ok || r.status === 303) {
+                        window.location.href = "/";
+                    } else {
+                        alert("Erro ao excluir nota.");
+                    }
+                })
+                .catch(function () {
+                    alert("Erro ao excluir nota.");
+                });
         }
 
         // ── Ctrl+S ──

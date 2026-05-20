@@ -378,7 +378,8 @@
             }
             html +=
                 '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
-                noteIcon + " " +
+                noteIcon +
+                " " +
                 displayName +
                 "</span>";
             if (folder)
@@ -405,6 +406,10 @@
                 });
                 html += "</div>";
             }
+            html +=
+                "<button onclick=\"renameNote('" +
+                safeName +
+                '\')" class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs" title="Editar titulo">\u270E</button>';
             html +=
                 "<button onclick=\"deleteNote('" +
                 safeName +
@@ -488,6 +493,37 @@
                 renderCompactNotes(allNotes);
             }
         });
+    }
+
+    function renameNote(filename) {
+        var oldName = filename.split("/").pop() || filename;
+        var newName = prompt("Novo titulo:", oldName.replace(/\.md$/i, ""));
+        if (!newName || newName.trim() === oldName.replace(/\.md$/i, ""))
+            return;
+        newName = newName.trim();
+        if (!newName.endsWith(".md")) newName += ".md";
+
+        var fd = new FormData();
+        fd.append("old", filename);
+        fd.append("new", newName);
+        fetch("/file/rename", { method: "POST", body: fd })
+            .then(function (r) {
+                if (r.ok || r.status === 303) {
+                    return fetch("/api/notes");
+                }
+                throw new Error("Erro ao renomear.");
+            })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                allNotes = data.notes || [];
+                var filter = document.getElementById("search-input").value;
+                onSearchInput(filter);
+            })
+            .catch(function (err) {
+                alert("Erro ao renomear: " + err.message);
+            });
     }
 
     document.addEventListener("DOMContentLoaded", function () {

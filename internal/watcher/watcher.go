@@ -183,8 +183,9 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 		}
 
 		// Generate embedding if provider is set and note should be embedded
-		// PDFs sao sempre embedados; markdown segue a regra shouldEmbed
-		if embed != nil && (doc.Tipo == "pdf" || (doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll))) {
+		// PDFs: apenas se o nome do arquivo contiver "embed" (ex: "-embed-", "livrotalembed")
+		// Markdown: segue a regra shouldEmbed (tag "embed" no frontmatter ou EMBEDDING_ALL=true)
+		if embed != nil && ((doc.Tipo == "pdf" && strings.Contains(strings.ToLower(doc.Arquivo), "embed")) || (doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll))) {
 			textToEmbed := doc.Secao + " " + doc.Texto
 			textToEmbed = strings.TrimSpace(textToEmbed)
 			if textToEmbed != "" && len(textToEmbed) > 10 {
