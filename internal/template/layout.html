@@ -1,363 +1,274 @@
 {{define "layout"}}
 <!doctype html>
 <html lang="pt-BR" class="dark">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{{.Title}} — TON-618</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap"
-            rel="stylesheet"
-        />
-        <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        fontFamily: {
-                            sans: ["Inter", "system-ui", "sans-serif"],
-                        },
-                        animation: {
-                            "fast-spin": "fast-spin 0.4s linear infinite",
-                        },
-                        keyframes: {
-                            "fast-spin": {
-                                from: { transform: "rotate(0deg)" },
-                                to: { transform: "rotate(360deg)" },
-                            },
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}} — TON-618</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ["Inter", "system-ui", "sans-serif"],
+                    },
+                    animation: {
+                        "fast-spin": "fast-spin 0.4s linear infinite",
+                    },
+                    keyframes: {
+                        "fast-spin": {
+                            from: { transform: "rotate(0deg)" },
+                            to: { transform: "rotate(360deg)" },
                         },
                     },
                 },
-            };
-        </script>
-        {{if .LoadTipTap}}
-        <script src="/static/editor.js"></script>
-        {{end}}
-        <style>
-            * {
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
-                scrollbar-width: thin;
-                scrollbar-color: #27272a transparent;
-            }
-            ::-webkit-scrollbar {
-                width: 8px;
-                height: 8px;
-            }
-            ::-webkit-scrollbar-track {
-                background: transparent;
-            }
-            ::-webkit-scrollbar-thumb {
-                background: #27272a;
-                border-radius: 4px;
-            }
-            ::-webkit-scrollbar-thumb:hover {
-                background: #3f3f46;
-            }
-            body {
-                margin: 0;
-                min-width: 320px;
-                min-height: 100vh;
-                background-color: #09090b;
-                color: #a1a1aa;
-            }
-            .search-highlight {
-                background-color: rgba(14, 165, 233, 0.25);
-                color: #38bdf8;
-                font-weight: 700;
-                padding: 0 4px;
-                border-radius: 4px;
-            }
-            .htmx-indicator {
-                opacity: 0;
-                transition: opacity 200ms ease-in;
-            }
-            .htmx-request .htmx-indicator {
-                opacity: 1;
-            }
-            .htmx-request.htmx-indicator {
-                opacity: 1;
-            }
-            .premium-card {
-                box-shadow:
-                    inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
-                    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-            }
-        </style>
-    </head>
-    <body class="font-sans antialiased">
-        <nav
-            class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50"
-        >
-            <div
-                class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between"
-            >
-                <a
-                    href="/"
-                    class="flex items-center gap-2.5 group"
-                    title="TON-618 — Sistema de Gestão de Conhecimento"
-                >
-                    <div
-                        class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300"
-                    >
-                        <svg
-                            viewBox="0 0 100 100"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]"
-                        >
-                            <defs>
-                                <filter
-                                    id="logoGlow"
-                                    x="-50%"
-                                    y="-50%"
-                                    width="200%"
-                                    height="200%"
-                                >
-                                    <feGaussianBlur
-                                        stdDeviation="3"
-                                        result="blur"
-                                    />
-                                    <feColorMatrix
-                                        in="blur"
-                                        type="matrix"
-                                        values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7"
-                                        result="glow"
-                                    />
-                                    <feComposite
-                                        in="SourceGraphic"
-                                        in2="glow"
-                                        operator="over"
-                                    />
-                                </filter>
-                                <radialGradient
-                                    id="singularityGrad"
-                                    cx="50%"
-                                    cy="50%"
-                                    r="50%"
-                                >
-                                    <stop offset="65%" stop-color="#000000" />
-                                    <stop offset="100%" stop-color="#0f172a" />
-                                </radialGradient>
-                            </defs>
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="45"
-                                fill="white"
-                                filter="url(#logoGlow)"
-                                opacity="0.25"
-                            />
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="28"
-                                stroke="white"
-                                stroke-width="1.2"
-                                stroke-opacity="0.85"
-                                fill="none"
-                                filter="url(#logoGlow)"
-                            />
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="26"
-                                fill="url(#singularityGrad)"
-                            />
-                            <circle cx="50" cy="50" r="22" fill="#000000" />
-                            <path
-                                d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
-                                fill="white"
-                                opacity="0.7"
-                                transform="rotate(0 50 50)"
-                            />
-                            <path
-                                d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
-                                fill="#e2e8f0"
-                                opacity="0.3"
-                                transform="rotate(120 50 50)"
-                            />
-                            <path
-                                d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
-                                fill="white"
-                                opacity="0.5"
-                                transform="rotate(240 50 50)"
-                            />
-                        </svg>
-                    </div>
-                    <span
-                        class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors"
-                        >TON-618</span
-                    >
-                </a>
-                <div
-                    class="flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase"
-                >
-                    <a
-                        href="/"
-                        class="text-zinc-400 hover:text-white transition-colors"
-                        >Busca</a
-                    >
-                    <a
-                        href="#"
-                        onclick="return createNewNote();"
-                        class="text-zinc-400 hover:text-white transition-colors"
-                        >📄 NOTA</a
-                    >
-                    <a
-                        href="#"
-                        id="pdf-upload-link"
-                        class="text-zinc-400 hover:text-sky-400 transition-colors"
-                        >📕 PDF</a
-                    >
-                    <input
-                        id="pdf-file-input"
-                        type="file"
-                        accept=".pdf"
-                        class="hidden"
-                    />
-                    <button
-                        onclick="return promptCapture();"
-                        class="text-zinc-400 hover:text-emerald-400 transition-colors"
-                    >
-                        🌐 CAPTURA
-                    </button>
-                    <a
-                        href="/graph"
-                        class="text-zinc-400 hover:text-white transition-colors"
-                        >🗺️ Mapa</a
-                    >
-                    <button
-                        onclick="logout()"
-                        class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
-                        title="Sair"
-                    >
-                        Sair
-                    </button>
+            },
+        };
+    </script>
+    {{if .LoadTipTap}}
+    <script src="/static/editor.js"></script>
+    {{end}}
+    <style>
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            scrollbar-width: thin;
+            scrollbar-color: #27272a transparent;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+
+        body {
+            margin: 0;
+            min-width: 320px;
+            min-height: 100vh;
+            background-color: #09090b;
+            color: #a1a1aa;
+        }
+
+        .search-highlight {
+            background-color: rgba(14, 165, 233, 0.25);
+            color: #38bdf8;
+            font-weight: 700;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 200ms ease-in;
+        }
+
+        .htmx-request .htmx-indicator {
+            opacity: 1;
+        }
+
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+
+        .premium-card {
+            box-shadow:
+                inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased">
+    <nav class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2.5 group" title="TON-618 — Sistema de Gestão de Conhecimento">
+                <div class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300">
+                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]">
+                        <defs>
+                            <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feColorMatrix in="blur" type="matrix"
+                                    values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7" result="glow" />
+                                <feComposite in="SourceGraphic" in2="glow" operator="over" />
+                            </filter>
+                            <radialGradient id="singularityGrad" cx="50%" cy="50%" r="50%">
+                                <stop offset="65%" stop-color="#000000" />
+                                <stop offset="100%" stop-color="#0f172a" />
+                            </radialGradient>
+                        </defs>
+                        <circle cx="50" cy="50" r="45" fill="white" filter="url(#logoGlow)" opacity="0.25" />
+                        <circle cx="50" cy="50" r="28" stroke="white" stroke-width="1.2" stroke-opacity="0.85"
+                            fill="none" filter="url(#logoGlow)" />
+                        <circle cx="50" cy="50" r="26" fill="url(#singularityGrad)" />
+                        <circle cx="50" cy="50" r="22" fill="#000000" />
+                        <path d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
+                            fill="white" opacity="0.7" transform="rotate(0 50 50)" />
+                        <path d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
+                            fill="#e2e8f0" opacity="0.3" transform="rotate(120 50 50)" />
+                        <path d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
+                            fill="white" opacity="0.5" transform="rotate(240 50 50)" />
+                    </svg>
                 </div>
+                <span
+                    class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
+            </a>
+            <div class="flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase">
+
+                <a href="#" onclick="return createNewNote();"
+                    class="text-zinc-400 hover:text-white transition-colors">📄 NOTA</a>
+                <a href="#" id="pdf-upload-link" class="text-zinc-400 hover:text-sky-400 transition-colors">📕 PDF</a>
+                <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
+                <button onclick="return promptCapture();"
+                    class="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    🌐 CAPTURA
+                </button>
+                <a href="/graph" class="text-zinc-400 hover:text-white transition-colors">🗺️ Mapa</a>
+                <button onclick="logout()" class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                    title="Sair">
+                    Sair
+                </button>
             </div>
-        </nav>
-        <main class="max-w-4xl mx-auto px-4 py-6">
-            {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
-            .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
-            "editorContent" .}}{{end}} {{if eq .ContentBlock
-            "graphContent"}}{{template "graphContent" .}}{{end}}
-        </main>
-    </body>
+        </div>
+    </nav>
+    <main class="max-w-4xl mx-auto px-4 py-6">
+        {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
+        .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
+        "editorContent" .}}{{end}} {{if eq .ContentBlock
+        "graphContent"}}{{template "graphContent" .}}{{end}}
+    </main>
+</body>
 
-    <script>
-        // ── PDF Upload ──
-        document.addEventListener("click", function (e) {
-            if (e.target && e.target.id === "pdf-upload-link") {
-                e.preventDefault();
-                document.getElementById("pdf-file-input").click();
-            }
-        });
+<script>
+    // ── PDF Upload ──
+    document.addEventListener("click", function (e) {
+        if (e.target && e.target.id === "pdf-upload-link") {
+            e.preventDefault();
+            document.getElementById("pdf-file-input").click();
+        }
+    });
 
-        document.addEventListener("change", async function (e) {
-            if (e.target && e.target.id === "pdf-file-input") {
-                var file = e.target.files[0];
-                if (!file) return;
-                var link = document.getElementById("pdf-upload-link");
-                link.textContent = "...";
-                var fd = new FormData();
-                fd.append("file", file);
-                try {
-                    var resp = await fetch("/upload", {
-                        method: "POST",
-                        body: fd,
-                    });
-                    if (resp.ok) {
-                        window.location.href = "/";
-                    } else {
-                        link.textContent = "📕 PDF";
-                        alert("Erro ao fazer upload do PDF.");
-                    }
-                } catch (e) {
+    document.addEventListener("change", async function (e) {
+        if (e.target && e.target.id === "pdf-file-input") {
+            var file = e.target.files[0];
+            if (!file) return;
+            var link = document.getElementById("pdf-upload-link");
+            link.textContent = "...";
+            var fd = new FormData();
+            fd.append("file", file);
+            try {
+                var resp = await fetch("/upload", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (resp.ok) {
+                    window.location.href = "/";
+                } else {
                     link.textContent = "📕 PDF";
                     alert("Erro ao fazer upload do PDF.");
                 }
-                e.target.value = "";
+            } catch (e) {
+                link.textContent = "📕 PDF";
+                alert("Erro ao fazer upload do PDF.");
             }
-        });
+            e.target.value = "";
+        }
+    });
 
-        // ── New Note com nome único ──
-        
-        // ── Captura de artigo/YouTube ──
-        function promptCapture() {
-            var url = prompt("Insira a URL do artigo ou video do YouTube:");
-            if (!url) return false;
-            fetch("/api/capture", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: url }),
+    // ── New Note com nome único ──
+
+    // ── Captura de artigo/YouTube ──
+    function promptCapture() {
+        var url = prompt("Insira a URL do artigo ou video do YouTube:");
+        if (!url) return false;
+        fetch("/api/capture", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: url }),
+        })
+            .then(function (r) {
+                if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+                return r.json();
             })
-                .then(function (r) {
-                    if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
-                    return r.json();
-                })
-                .then(function (data) {
-                    window.location.href = "/editor?file=" + encodeURIComponent(data.filename);
-                })
-                .catch(function (err) {
-                    alert("Erro ao capturar: " + err.message);
-                });
-            return false;
-        }
+            .then(function (data) {
+                window.location.href = "/editor?file=" + encodeURIComponent(data.filename);
+            })
+            .catch(function (err) {
+                alert("Erro ao capturar: " + err.message);
+            });
+        return false;
+    }
 
-function createNewNote() {
-            var ts = Date.now();
-            var random = Math.random().toString(36).substring(2, 6);
-            window.location.href =
-                "/editor?file=notes/novo-" + ts + "-" + random + ".md";
-            return false;
-        }
+    function createNewNote() {
+        var ts = Date.now();
+        var random = Math.random().toString(36).substring(2, 6);
+        window.location.href =
+            "/editor?file=notes/novo-" + ts + "-" + random + ".md";
+        return false;
+    }
 
-        // ── Auth Integration ──
-        function logout() {
-            sessionStorage.removeItem("ton_auth");
-            document.cookie = "ton_auth=;path=/;max-age=0";
+    // ── Auth Integration ──
+    function logout() {
+        sessionStorage.removeItem("ton_auth");
+        document.cookie = "ton_auth=;path=/;max-age=0";
+        window.location.href = "/login";
+    }
+
+    (function () {
+        var auth = sessionStorage.getItem("ton_auth");
+
+        // Redirect to login if not authenticated (skip for login page and static)
+        var path = window.location.pathname;
+        if (!auth && path !== "/login" && !path.startsWith("/static/")) {
             window.location.href = "/login";
+            return;
         }
 
-        (function () {
-            var auth = sessionStorage.getItem("ton_auth");
+        // Inject auth header into HTMX requests
+        if (typeof htmx !== "undefined") {
+            document.body.addEventListener(
+                "htmx:configRequest",
+                function (evt) {
+                    if (auth) evt.detail.headers["Authorization"] = auth;
+                },
+            );
+        }
 
-            // Redirect to login if not authenticated (skip for login page and static)
-            var path = window.location.pathname;
-            if (!auth && path !== "/login" && !path.startsWith("/static/")) {
-                window.location.href = "/login";
-                return;
-            }
-
-            // Inject auth header into HTMX requests
-            if (typeof htmx !== "undefined") {
-                document.body.addEventListener(
-                    "htmx:configRequest",
-                    function (evt) {
-                        if (auth) evt.detail.headers["Authorization"] = auth;
-                    },
-                );
-            }
-
-            // Wrap fetch to always include auth
-            var origFetch = window.fetch;
-            window.fetch = function (url, opts) {
-                opts = opts || {};
-                opts.headers = opts.headers || {};
-                if (auth && !opts.headers["Authorization"]) {
-                    if (opts.headers instanceof Headers) {
-                        opts.headers.set("Authorization", auth);
-                    } else {
-                        opts.headers["Authorization"] = auth;
-                    }
+        // Wrap fetch to always include auth
+        var origFetch = window.fetch;
+        window.fetch = function (url, opts) {
+            opts = opts || {};
+            opts.headers = opts.headers || {};
+            if (auth && !opts.headers["Authorization"]) {
+                if (opts.headers instanceof Headers) {
+                    opts.headers.set("Authorization", auth);
+                } else {
+                    opts.headers["Authorization"] = auth;
                 }
-                return origFetch(url, opts);
-            };
-        })();
-    </script>
+            }
+            return origFetch(url, opts);
+        };
+    })();
+</script>
+
 </html>
 {{end}}

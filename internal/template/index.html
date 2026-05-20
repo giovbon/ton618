@@ -348,6 +348,21 @@
             var safeName = n.arquivo.replace(/'/g, "\\'");
             var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
             var isCapture = (n.tags || []).indexOf("captura") !== -1;
+            var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
+            var isArticle = (n.tags || []).indexOf("artigo") !== -1;
+
+            // Determine icon based on note type
+            var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
+            if (isPdf) {
+                noteIcon = "\uD83D\uDCD5"; // 📕 PDF
+            } else if (isYoutube) {
+                noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
+            } else if (isArticle) {
+                noteIcon = "\uD83D\uDCF0"; // 📰 artigo
+            } else if (isCapture) {
+                noteIcon = "\uD83D\uDCCB"; // 📋 captura genérica
+            }
+
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
             if (isPdf) {
@@ -363,7 +378,7 @@
             }
             html +=
                 '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
-                (isPdf ? "\uD83D\uDCD5 " : "") +
+                noteIcon + " " +
                 displayName +
                 "</span>";
             if (folder)

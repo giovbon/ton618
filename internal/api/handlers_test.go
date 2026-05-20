@@ -50,6 +50,27 @@ func newTestContext(t *testing.T) *HandlerContext {
 			return parts[len(parts)-1]
 		},
 		"join": strings.Join,
+		"noteIcon": func(arquivo string, tags []string) string {
+			isPdf := strings.HasPrefix(arquivo, "pdfs/")
+			hasTag := func(tag string) bool {
+				for _, t := range tags {
+					if t == tag {
+						return true
+					}
+				}
+				return false
+			}
+			if isPdf {
+				return "📕"
+			} else if hasTag("youtube") {
+				return "🎬"
+			} else if hasTag("artigo") {
+				return "📰"
+			} else if hasTag("captura") {
+				return "📋"
+			}
+			return "📝"
+		},
 	})
 	tpl, _ = tpl.ParseFS(internalTpl.TemplatesFS, "*.html")
 

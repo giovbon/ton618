@@ -102,7 +102,19 @@ func slugifyFilename(title string) string {
 }
 
 // cleanupMarkdown remove artefatos e texto duplicado gerado pelo html-to-markdown.
+// Também remove tags HTML residuais que o conversor pode deixar no output.
 func cleanupMarkdown(md string) string {
+	// Remove tags HTML residuais que o conversor pode não tratar (e.g. <p>, </p>)
+	reHTML := regexp.MustCompile(`</?[a-zA-Z][^>]*>`)
+	md = reHTML.ReplaceAllString(md, "")
+
+	// Corrige entidades HTML comuns
+	md = strings.ReplaceAll(md, "&gt;", ">")
+	md = strings.ReplaceAll(md, "&lt;", "<")
+	md = strings.ReplaceAll(md, "&amp;", "&")
+	md = strings.ReplaceAll(md, "&quot;", "\"")
+	md = strings.ReplaceAll(md, "&#39;", "'")
+
 	lines := strings.Split(md, "\n")
 	var cleaned []string
 	for i, line := range lines {
