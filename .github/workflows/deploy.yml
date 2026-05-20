@@ -3,22 +3,22 @@ name: 🐳 Deploy Docker Multi-Arch
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
     branches:
       - main
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag da imagem Docker'
+        description: "Tag da imagem Docker"
         required: false
-        default: 'latest'
+        default: "latest"
       mode:
-        description: 'Modo de build: 1 = ARM64, 2 = Multi-Arch'
+        description: "Modo de build: 1 = ARM64, 2 = Multi-Arch"
         required: false
-        default: '2'
+        default: "2"
 
 env:
-  IMAGE_NAME: giovbon/ton618plus
+  IMAGE_NAME: giovbon/ton618v2
 
 jobs:
   deploy:

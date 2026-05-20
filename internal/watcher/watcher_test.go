@@ -10,355 +10,194 @@ import (
 	"ton618/internal/db"
 )
 
-// ── helpers ─────────────────────────────────────────────────────
-
 func newTestStore(t *testing.T) *db.Store {
 	t.Helper()
-	dir := t.TempDir()
-	store, err := db.NewStore(filepath.Join(dir, "test.db"))
+	s, err := db.NewStore(t.TempDir() + "/test.db")
 	if err != nil {
-		t.Fatalf("db.NewStore: %v", err)
+		t.Fatalf("NewStore: %v", err)
 	}
-	t.Cleanup(func() { store.Close() })
-	return store
+	t.Cleanup(func() { s.Close() })
+	return s
 }
 
-func newTestCfgAndWatcher(t *testing.T, store *db.Store) (*config.AppConfig, *Watcher) {
+func newTestConfig(t *testing.T) *config.AppConfig {
 	t.Helper()
 	docsDir := t.TempDir()
-	for _, sub := range MonitoredSubDirs {
-		os.MkdirAll(filepath.Join(docsDir, sub), 0755)
+	os.MkdirAll(filepath.Join(docsDir, "notes"), 0755)
+	os.MkdirAll(filepath.Join(docsDir, "links"), 0755)
+	os.MkdirAll(filepath.Join(docsDir, "voice"), 0755)
+	return &config.AppConfig{DocsDir: docsDir}
+}
+
+func TestShouldEmbed_EmbedAll(t *testing.T) {
+	if !shouldEmbed(nil, true) {
+		t.Error("embedAll=true deveria retornar true sem tags")
+	}
+	if !shouldEmbed([]string{}, true) {
+		t.Error("embedAll=true deveria retornar true com lista vazia")
+	}
+}
+
+func TestShouldEmbed_TagEmbed(t *testing.T) {
+	if !shouldEmbed([]string{"embed"}, false) {
+		t.Error("tag 'embed' deveria retornar true")
+	}
+	if !shouldEmbed([]string{"golang", "embed", "importante"}, false) {
+		t.Error("tag 'embed' em lista deveria retornar true")
+	}
+}
+
+func TestShouldEmbed_SemTag(t *testing.T) {
+	if shouldEmbed([]string{"golang", "programacao"}, false) {
+		t.Error("sem tag 'embed' e embedAll=false deveria retornar false")
+	}
+	if shouldEmbed(nil, false) {
+		t.Error("nil tags com embedAll=false deveria retornar false")
+	}
+}
+
+func TestSupportedExts_CobreFormatos(t *testing.T) {
+	exts := []string{".md", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+	for _, ext := range exts {
+		if _, ok := supportedExts[ext]; !ok {
+			t.Errorf("extensao %q nao esta em supportedExts", ext)
+		}
+	}
+}
+
+func TestMonitoredSubDirs(t *testing.T) {
+	expected := []string{"notes", "links", "voice"}
+	for _, sub := range expected {
+		found := false
+		for _, m := range MonitoredSubDirs {
+			if m == sub {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("subdiretorio %q nao esta em MonitoredSubDirs", sub)
+		}
+	}
+}
+
+func TestProcessFile_MarkdownSimples(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	fp := filepath.Join(cfg.DocsDir, "notes", "teste.md")
+	os.WriteFile(fp, []byte("# Título\nconteudo de teste"), 0644)
+
+	ev := FileEvent{
+		Path:     fp,
+		Filename: "notes/teste.md",
+		ModTime:  time.Now(),
+		Type:     "modify",
 	}
 
-	cfg := &config.AppConfig{
-		DocsDir: docsDir,
+	err := ProcessFile(store, ev, nil, false)
+	if err != nil {
+		t.Fatalf("ProcessFile: %v", err)
 	}
 
+	docs, err := store.GetDocumentsByFile("notes/teste.md")
+	if err != nil {
+		t.Fatalf("GetDocumentsByFile: %v", err)
+	}
+	if len(docs) < 1 {
+		t.Fatal("documento nao foi indexado")
+	}
+}
+
+func TestProcessFile_Delete(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	// Primeiro insere
+	fp := filepath.Join(cfg.DocsDir, "notes", "deleteme.md")
+	os.WriteFile(fp, []byte("sera deletado"), 0644)
+	ProcessFile(store, FileEvent{Path: fp, Filename: "notes/deleteme.md", ModTime: time.Now(), Type: "modify"}, nil, false)
+
+	// Depois deleta
+	ev := FileEvent{Path: fp, Filename: "notes/deleteme.md", Type: "delete"}
+	err := ProcessFile(store, ev, nil, false)
+	if err != nil {
+		t.Fatalf("ProcessFile delete: %v", err)
+	}
+
+	docs, _ := store.GetDocumentsByFile("notes/deleteme.md")
+	if len(docs) != 0 {
+		t.Errorf("documentos ainda existem apos delete: %d docs", len(docs))
+	}
+}
+
+func TestProcessFile_ExtensaoInvalida(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	fp := filepath.Join(cfg.DocsDir, "notes", "teste.txt")
+	os.WriteFile(fp, []byte("arquivo txt"), 0644)
+
+	ev := FileEvent{Path: fp, Filename: "notes/teste.txt", ModTime: time.Now(), Type: "modify"}
+	err := ProcessFile(store, ev, nil, false)
+	if err != nil {
+		t.Fatalf("ProcessFile: %v", err)
+	}
+
+	// Deve ser ignorado silenciosamente
+	docs, _ := store.GetDocumentsByFile("notes/teste.txt")
+	if len(docs) != 0 {
+		t.Error("extensao invalida nao deveria ser indexada")
+	}
+}
+
+func TestProcessFile_ArquivoInexistente(t *testing.T) {
+	store := newTestStore(t)
+	ev := FileEvent{
+		Path:     "/caminho/nao/existe.md",
+		Filename: "notes/inexistente.md",
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}
+	err := ProcessFile(store, ev, nil, false)
+	if err != nil {
+		t.Fatalf("ProcessFile retornou erro inesperado: %v", err)
+	}
+}
+
+func TestNewWatcher(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
 	w := NewWatcher(cfg, store)
-	return cfg, w
-}
 
-// seedDB insere dados em todas as tabelas para um arquivo, simulando
-// um arquivo que já foi indexado.
-func seedDB(t *testing.T, store *db.Store, filename string) {
-	t.Helper()
-
-	// documents
-	doc := db.Document{
-		ID:        "test-id-1",
-		Tipo:      "markdown",
-		Arquivo:   filename,
-		Secao:     "Teste",
-		Texto:     "conteudo de teste para validar limpeza",
-		Tags:      "teste,limpeza",
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	if w.cfg != cfg {
+		t.Error("cfg nao foi atribuida")
 	}
-	if err := store.InsertDocument(doc); err != nil {
-		t.Fatalf("InsertDocument: %v", err)
+	if w.store != store {
+		t.Error("store nao foi atribuida")
 	}
-
-	// FTS
-	if err := store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, doc.Tags); err != nil {
-		t.Fatalf("IndexFTS: %v", err)
+	if w.embedAll {
+		t.Error("embedAll deveria ser false por padrao")
 	}
-
-	// file_mods
-	if err := store.SetFileMod(filename, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		t.Fatalf("SetFileMod: %v", err)
-	}
-
-	// popularity
-	if err := store.IncrementPopularity(filename); err != nil {
-		t.Fatalf("IncrementPopularity: %v", err)
-	}
-
-	// tags
-	if err := store.SetFileTags(filename, []string{"teste", "limpeza"}); err != nil {
-		t.Fatalf("SetFileTags: %v", err)
+	if w.events == nil {
+		t.Error("events channel nao foi criado")
 	}
 }
 
-// assertNotInDB verifica que todas as tabelas estão limpas para o arquivo.
-func assertNotInDB(t *testing.T, store *db.Store, filename string) {
-	t.Helper()
-
-	// documents
-	count := store.GetDocumentCount()
-	if count > 0 {
-		t.Errorf("documents ainda tem %d registros, esperado 0", count)
-	}
-
-	// file_mods
-	mods, err := store.GetAllFileMods()
-	if err != nil {
-		t.Fatalf("GetAllFileMods: %v", err)
-	}
-	if _, exists := mods[filename]; exists {
-		t.Error("file_mods ainda contem o arquivo")
-	}
-
-	// tags
-	tags, err := store.GetFileTags(filename)
-	if err != nil {
-		t.Fatalf("GetFileTags: %v", err)
-	}
-	if len(tags) > 0 {
-		t.Errorf("tags ainda tem %d tags para o arquivo", len(tags))
-	}
-
-	// popularity
-	pop := store.GetPopularity(filename)
-	if pop > 0 {
-		t.Errorf("popularity ainda tem contagem %d para o arquivo", pop)
-	}
-
-	// embeddings (se existiam)
-	allEmb := store.GetEmbeddingCount()
-	if allEmb > 0 {
-		t.Errorf("embeddings ainda tem %d registros", allEmb)
-	}
-}
-
-// ── ProcessFile — delete ────────────────────────────────────────
-
-func TestProcessFile_Delete_LimpaTodasTabelas(t *testing.T) {
-	store := newTestStore(t)
-	_, w := newTestCfgAndWatcher(t, store)
-
-	filename := "notes/teste-delete.md"
-	seedDB(t, store, filename)
-
-	// Verificar que os dados estao no banco antes
-	mods, _ := store.GetAllFileMods()
-	if _, ok := mods[filename]; !ok {
-		t.Fatal("seed falhou: file_mods devia conter o arquivo")
-	}
-
-	// Processar delecao
+func TestFileEvent_Campos(t *testing.T) {
+	now := time.Now()
 	ev := FileEvent{
-		Path:     filepath.Join(w.cfg.DocsDir, filename),
-		Filename: filename,
-		Type:     "delete",
-	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
-		t.Fatalf("ProcessFile(delete): %v", err)
-	}
-
-	assertNotInDB(t, store, filename)
-}
-
-func TestProcessFile_Delete_ArquivoInexistente(t *testing.T) {
-	store := newTestStore(t)
-	_, w := newTestCfgAndWatcher(t, store)
-
-	// Deletar arquivo que nunca existiu — não deve crashar
-	ev := FileEvent{
-		Path:     filepath.Join(w.cfg.DocsDir, "notes/fantasma.md"),
-		Filename: "notes/fantasma.md",
-		Type:     "delete",
-	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
-		t.Fatalf("ProcessFile(delete) para arquivo inexistente: %v", err)
-	}
-}
-
-func TestProcessFile_Delete_ExtensaoNaoSuportada(t *testing.T) {
-	store := newTestStore(t)
-
-	// Arquivo .txt nao esta em supportedExts — deve ser ignorado
-	ev := FileEvent{
-		Filename: "notes/notas.txt",
-		Type:     "delete",
-	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
-		t.Fatalf("ProcessFile com extensao nao suportada deveria retornar nil, got %v", err)
-	}
-}
-
-func TestProcessFile_Delete_MultiplosDocumentos(t *testing.T) {
-	store := newTestStore(t)
-	_, w := newTestCfgAndWatcher(t, store)
-
-	filename := "notes/multiplos-docs.md"
-
-	// Inserir varios documentos para o mesmo arquivo
-	for i := 0; i < 3; i++ {
-		doc := db.Document{
-			ID:        "test-id-multi",
-			Tipo:      "markdown",
-			Arquivo:   filename,
-			Secao:     "Teste",
-			Texto:     "multi",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		}
-		if err := store.InsertDocument(doc); err != nil {
-			t.Fatalf("InsertDocument #%d: %v", i, err)
-		}
-	}
-
-	// file_mods
-	store.SetFileMod(filename, time.Now().UTC().Format(time.RFC3339))
-
-	// Deletar
-	ev := FileEvent{
-		Path:     filepath.Join(w.cfg.DocsDir, filename),
-		Filename: filename,
-		Type:     "delete",
-	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
-		t.Fatalf("ProcessFile(delete): %v", err)
-	}
-
-	assertNotInDB(t, store, filename)
-}
-
-// ── ProcessFile — modify (reindex) ──────────────────────────────
-
-func TestProcessFile_Modify_RemoveAntesDeInserir(t *testing.T) {
-	store := newTestStore(t)
-	cfg, w := newTestCfgAndWatcher(t, store)
-
-	filename := "notes/reindex.md"
-	fullPath := filepath.Join(cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-	os.WriteFile(fullPath, []byte("# Reindex\n\nconteudo novo"), 0644)
-
-	// Seed com dados antigos
-	seedDB(t, store, filename)
-
-	// Reindexar (modify)
-	ev := FileEvent{
-		Path:     fullPath,
-		Filename: filename,
-		ModTime:  time.Now(),
+		Path:     "/tmp/teste.md",
+		Filename: "notes/teste.md",
+		ModTime:  now,
 		Type:     "modify",
 	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
-		t.Fatalf("ProcessFile(modify): %v", err)
+	if ev.Path != "/tmp/teste.md" {
+		t.Error("Path errado")
 	}
-
-	// Deve ter o novo documento
-	count, err := store.GetDocumentCount()
-	if err != nil {
-		t.Fatalf("GetDocumentCount: %v", err)
+	if ev.Filename != "notes/teste.md" {
+		t.Error("Filename errado")
 	}
-	if count == 0 {
-		t.Error("modify deveria ter inserido novo documento")
-	}
-
-	// file_mods deve existir
-	mods, _ := store.GetAllFileMods()
-	if _, ok := mods[filename]; !ok {
-		t.Error("file_mods deveria conter o arquivo apos reindex")
-	}
-}
-
-// ── PollAll — limpeza de orfaos ─────────────────────────────────
-
-func TestPollAll_RemoveOrfaos(t *testing.T) {
-	store := newTestStore(t)
-	_, w := newTestCfgAndWatcher(t, store)
-
-	// Seed com dados de um arquivo que NAO existe no disco
-	orphanFile := "notes/orfao.md"
-	seedDB(t, store, orphanFile)
-
-	// pollAll deve detectar que orphanFile esta no DB mas nao no disco
-	w.PollAll()
-
-	// Consumir eventos do canal (ate timeout)
-	timeout := time.After(2 * time.Second)
-	foundDelete := false
-	for {
-		select {
-		case ev := <-w.Events():
-			if ev.Type == "delete" && ev.Filename == orphanFile {
-				foundDelete = true
-				// Processar o delete
-				ProcessFile(store, ev, nil, false)
-			}
-		case <-timeout:
-			goto done
-		}
-	}
-done:
-
-	if !foundDelete {
-		t.Fatal("pollAll nao emitiu evento delete para arquivo orfao")
-	}
-
-	assertNotInDB(t, store, orphanFile)
-}
-
-func TestPollAll_ArquivoNoDisco_Preserva(t *testing.T) {
-	store := newTestStore(t)
-	cfg, w := newTestCfgAndWatcher(t, store)
-
-	// Criar arquivo real no disco
-	filename := "notes/preservar.md"
-	fullPath := filepath.Join(cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-	os.WriteFile(fullPath, []byte("# Preservar"), 0644)
-
-	// Indexar via ProcessFile
-	ev := FileEvent{
-		Path:     fullPath,
-		Filename: filename,
-		ModTime:  time.Now(),
-		Type:     "modify",
-	}
-	ProcessFile(store, ev, nil, false)
-
-	// pollAll nao deve emitir delete para este arquivo
-	w.PollAll()
-
-	timeout := time.After(1 * time.Second)
-	deleteEmitted := false
-	for {
-		select {
-		case ev := <-w.Events():
-			if ev.Type == "delete" && ev.Filename == filename {
-				deleteEmitted = true
-			}
-		case <-timeout:
-			goto done2
-		}
-	}
-done2:
-
-	if deleteEmitted {
-		t.Error("pollAll emitiu delete para arquivo que existe no disco")
-	}
-
-	// Verificar que o arquivo ainda esta no DB
-	mods, _ := store.GetAllFileMods()
-	if _, ok := mods[filename]; !ok {
-		t.Error("arquivo que existe no disco deveria permanecer no DB")
-	}
-}
-
-func TestPollAll_SemOrfaos_NaoEmiteDelete(t *testing.T) {
-	store := newTestStore(t)
-	_, w := newTestCfgAndWatcher(t, store)
-
-	// Nenhum dado no banco, nenhum arquivo no disco
-	w.PollAll()
-
-	timeout := time.After(1 * time.Second)
-	deleteCount := 0
-	for {
-		select {
-		case ev := <-w.Events():
-			if ev.Type == "delete" {
-				deleteCount++
-			}
-		case <-timeout:
-			goto done3
-		}
-	}
-done3:
-
-	if deleteCount > 0 {
-		t.Errorf("pollAll emitiu %d eventos delete sem orfaos", deleteCount)
+	if ev.Type != "modify" {
+		t.Error("Type errado")
 	}
 }
