@@ -1,8 +1,15 @@
 # ─── Estágio 1: Build ───────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24 AS builder
 
-# Instalar dependências de build com suporte multi-arch
-RUN apk add --no-cache gcc musl-dev sqlite-dev linux-headers
+# Instalar dependências com suporte multi-arch
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    pkg-config \
+    sqlite3 \
+    libsqlite3-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
