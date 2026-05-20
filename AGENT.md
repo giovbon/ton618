@@ -410,3 +410,108 @@ Atualmente **36 testes**:
 6. **Docker** — Dockerfile + docker-compose prontos
 7. **Sincronização de embeddings** — background após indexar
 8. **Export/Backup** — download do `ton618.db` compactado
+
+# Next
+
+Vou inspecionar rapidamente o fluxo atual de embeddings e projeção para sugerir melhorias de escala precisas.
+
+Read [](file:///workspaces/ton618plus/internal/api/handlers.go#640-640), lines 640 to 820
+
+Read [](file:///workspaces/ton618plus/internal/api/handlers.go#820-820), lines 820 to 900
+
+Read [](file:///workspaces/ton618plus/internal/api/handlers.go#900-900), lines 900 to 936
+
+## O que precisa mudar para escalar bem as embeddings
+
+### 1. Pare de carregar todos os embeddings no pedido
+No código atual, `HandleGraphData` e `HandleGraphProject` fazem:
+- `ctx.Store.GetAllEmbeddings()`
+
+Isso não escala para centenas de milhares de embeddings.
+
+### 2. Use projeção 2D pré-computada e incremental
+Já existe parte disso:
+- `SetEmbedding2D(docID, pt.X, pt.Y)`
+
+Mas não basta recalcular no pedido. O ideal é:
+- manter `x,y` persistidos
+- recalcular apenas quando o embedding mudar ou quando um novo documento aparecer
+- servir o gráfico a partir dessas coordenadas prontas
+
+### 3. Não renderize meio milhão de nós no mapa
+Mesmo se o banco suportar, o navegador não vai renderizar bem:
+- use amostragem / clusterização hierárquica
+- mostre apenas top-`N`, ou grupos resumidos
+- carregue detalhes sob demanda
+
+### 4. Saia do SQLite para indexação vetorial se quiser alto volume
+SQLite + BLOB em `embeddings` funciona, mas não é feito para:
+- 500k vetores
+- buscas vetoriais rápidas
+- atualizações frequentes
+
+Melhores opções:
+- serviço de vetor dedicado (Milvus, Pinecone, Weaviate, Redis Vector, Qdrant)
+- biblioteca local em Go/C++ com HNSW/Faiss/Annoy
+
+### 5. Evite clustering dinâmico pesado no pedido
+`semantic.ClusterPoints` roda K-means + silhouette em toda a projeção.
+Isso é caro e cresce rápido com mais pontos.
+
+Melhor:
+- cache resultados de cluster
+- atualizar clusters só quando houver mudanças significativas
+- ou reduzir a entrada para cada nível de zoom
+
+### 6. Use seleção de nó ao invés de “todas as notas”
+Para uma UI de gráfico:
+- exibir primeiro `N` notas mais relevantes
+- permitir filtro por tag / tipo / tempo
+- não carregar tudo de uma vez
+
+---
+
+## Resumo rápido
+
+Para escalar melhor na parte de embeddings, a melhor estratégia é essa:
+
+1. persista `x,y` e não recompute tudo a cada acesso
+2. limite o tamanho do grafo mostrado
+3. evite `GetAllEmbeddings()` em requests de UI
+4. use um índice vetorial mais apropriado para 500k vetores
+5. cache clusterizações/projeções e atualize incrementalmente
+
+Se quiser, posso apontar mudanças exatas no código para transformar `HandleGraphData` em uma rota incremental e `HandleGraphProject` em batch/background.
+
+
+---
+
+
+
+O mapa semântico é, sem dúvida, a funcionalidade mais fascinante desse projeto, mas também a que mais tem espaço para evoluir. Para transformar esse mapa de uma "prova de conceito muito legal" em uma ferramenta de nível empresarial, as melhorias precisariam atacar três frentes: **matemática, renderização e usabilidade**.
+
+Aqui estão as principais formas de melhorar o mapa semântico:
+
+### 1. Melhorias de Algoritmo (Backend / IA)
+
+Atualmente, o projeto usa **PCA (Análise de Componentes Principais)**. O PCA é rápido e fácil de implementar em Go puro, mas é linear. Ele não é o melhor para agrupar conceitos complexos.
+
+* **Mudar para UMAP ou t-SNE:** O **UMAP** (*Uniform Manifold Approximation and Projection*) é o padrão ouro atual para visualização de *embeddings* de IA. Em vez de criar uma "nuvem" de pontos dispersa, o UMAP consegue criar "arquipélagos" muito definidos. Notas sobre programação ficariam em uma ilha isolada e densa, bem separada de notas sobre culinária, por exemplo.
+* **Cálculo Assíncrono:** Recalcular as posições toda vez que uma nota nova entra pode ser custoso. O ideal seria ter uma fila (job queue) rodando em segundo plano (background) para atualizar as coordenadas 2D de tempos em tempos.
+
+### 2. Melhorias de Performance Visual (Frontend)
+
+O D3.js renderizando em SVG (Manipulação de DOM) é o que causa o travamento quando passamos de milhares de notas.
+
+* **Migrar de SVG para WebGL/Canvas:** Trocar o D3.js padrão por bibliotecas gráficas aceleradas por hardware (placa de vídeo), como **Three.js**, **PixiJS** ou **Deck.gl**. Renderizar 10.000 pontos num elemento `<canvas>` via WebGL é instantâneo e roda a 60 FPS lisos.
+* **Clustering (Agrupamento Dinâmico):** Quando o usuário estiver com o "zoom out" máximo, em vez de desenhar 5.000 pontos, o mapa agruparia áreas próximas em círculos maiores (ex: um bolota gigante escrita "150 notas de tecnologia"). Ao dar zoom, esse círculo "estouraria" revelando as notas individuais.
+* **Web Workers para Física:** Se mantiver a física de grafos (onde os pontos se empurram como ímãs), esse cálculo deveria ir para um *Web Worker*. Isso tira o peso da *thread* principal do navegador, evitando que a página congele durante o cálculo.
+
+### 3. Melhorias de Usabilidade (UX/UI)
+
+O mapa precisa ser mais do que bonito; ele precisa ser uma ferramenta de navegação útil.
+
+* **Filtros no Mapa:** Poder digitar algo na barra de busca (ex: `#ideias`) e o mapa apagar o resto, iluminando apenas os pontos que correspondem ao filtro.
+* **Coloração Semântica (Color Coding):** Atualmente, os mapas costumam ser de cor única. Seria incrível se o sistema lesse as tags do Markdown e atribuísse cores diferentes. Exemplo: notas com a tag `#trabalho` em azul, `#pessoal` em verde.
+* **Tamanho por Relevância:** Notas que recebem muitos links (backlinks) de outras notas poderiam ser desenhadas com um raio maior, funcionando como "Nós Principais" do seu cérebro digital, simulando um *PageRank* próprio.
+* **Pré-visualização Rápida (Hover Preview):** Ao passar o mouse sobre um ponto, abrir um pequeno card flutuante com o resumo da nota gerado por IA, sem precisar clicar e sair do mapa.

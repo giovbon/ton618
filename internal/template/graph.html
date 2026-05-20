@@ -55,13 +55,28 @@
         <h1 class="text-sm font-black tracking-tight text-zinc-200">
             Mapa Semântico
         </h1>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5">
+                <input
+                    id="semantic-search-input"
+                    type="text"
+                    placeholder="Pergunte algo..."
+                    class="w-36 md:w-48 px-3 py-1.5 text-[11px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500/50 focus:w-56 transition-all"
+                    spellcheck="false"
+                />
+                <button
+                    id="semantic-search-btn"
+                    class="text-[11px] font-bold text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                    Buscar
+                </button>
+            </div>
             <span
                 id="graph-status"
                 class="text-[10px] text-zinc-600 font-medium"
                 >—</span
             >
-            <span class="text-[10px] text-zinc-700">✦ notas embedadas</span>
+            <span class="text-[10px] text-zinc-700 hidden md:inline">✦ embedadas</span>
         </div>
     </div>
     <div
@@ -323,6 +338,16 @@
                 ctx.strokeStyle = "#18181b";
                 ctx.lineWidth = 2 / scale;
                 ctx.stroke();
+                // Highlight glow for semantic search results
+                if (n._highlighted) {
+                    ctx.beginPath();
+                    ctx.arc(px, py, r + 6, 0, Math.PI * 2);
+                    ctx.strokeStyle = "#38bdf8";
+                    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(Date.now() / 800);
+                    ctx.lineWidth = 2 / scale;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
                 ctx.fillStyle = "#f8fafc";
                 ctx.font = 10 / scale + "px Inter,system-ui,sans-serif";
                 ctx.textAlign = "center";
@@ -346,6 +371,49 @@
                     );
                 }
             });
+
+            // ── Query point (if set) ──
+            if (queryPoint) {
+                ctx.strokeStyle = "#38bdf8";
+                ctx.globalAlpha = 0.3;
+                ctx.lineWidth = 1 / scale;
+                ctx.setLineDash([4 / scale, 4 / scale]);
+                var qn = queryPoint.nearest || [];
+                qn.forEach(function (nr) {
+                    ctx.beginPath();
+                    ctx.moveTo(queryPoint.x, queryPoint.y);
+                    ctx.lineTo(nr.x, nr.y);
+                    ctx.stroke();
+                });
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1;
+                var pulse = (Math.sin(Date.now() / 600) + 1) / 2;
+                var qr = 8 + pulse * 5;
+                ctx.beginPath();
+                ctx.arc(queryPoint.x, queryPoint.y, qr + 3, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(56,189,248,0.15)";
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(queryPoint.x, queryPoint.y, qr, 0, Math.PI * 2);
+                ctx.fillStyle = "#38bdf8";
+                ctx.globalAlpha = 0.85;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1.5 / scale;
+                ctx.stroke();
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold " + (10 / scale) + "px Inter,system-ui,sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("?", queryPoint.x, queryPoint.y);
+                if (scale >= 0.5 && queryPoint.text) {
+                    ctx.fillStyle = "#38bdf8";
+                    ctx.font = "500 " + (10 / scale) + "px Inter,system-ui,sans-serif";
+                    var label = queryPoint.text.length > 30 ? queryPoint.text.slice(0, 30) + "..." : queryPoint.text;
+                    ctx.fillText(label, queryPoint.x, queryPoint.y + qr + 14 / scale);
+                }
+            }
             ctx.restore();
         }
 
@@ -521,6 +589,54 @@
             drag = false;
             t0 = null;
         });
+
+        // ── Semantic search ──
+        var queryPoint = null;
+        var animationFrame = null;
+
+        document.getElementById("semantic-search-btn").addEventListener("click", doSemanticSearch);
+        document.getElementById("semantic-search-input").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") doSemanticSearch();
+        });
+
+        async function doSemanticSearch() {
+            var input = document.getElementById("semantic-search-input");
+            var q = input.value.trim();
+            if (!q) return;
+            var btn = document.getElementById("semantic-search-btn");
+            var origText = btn.textContent;
+            btn.textContent = "...";
+            btn.style.pointerEvents = "none";
+            try {
+                var resp = await fetch("/api/graph/query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: q }),
+                });
+                if (!resp.ok) { var err = await resp.text(); throw new Error(err); }
+                var data = await resp.json();
+                data.nearest = (data.nearest || []).filter(function(nr) {
+                    var found = nodes.find(function(gn) { return gn.id === nr.arquivo; });
+                    if (found) { nr.x = found.x; nr.y = found.y; return true; }
+                    return false;
+                });
+                queryPoint = { x: data.query_x || 0, y: data.query_y || 0, text: data.query_text || q, nearest: data.nearest };
+                nodes.forEach(function(n) { n._highlighted = data.nearest.some(function(nr) { return nr.arquivo === n.id; }); });
+                var r = canvas.getBoundingClientRect();
+                tx = r.width / 2 - queryPoint.x * scale;
+                ty = r.height / 2 - queryPoint.y * scale;
+                if (animationFrame) cancelAnimationFrame(animationFrame);
+                function animatePulse() { render(); animationFrame = requestAnimationFrame(animatePulse); }
+                animatePulse();
+                setTimeout(function() {
+                    if (animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = null; }
+                    queryPoint = null;
+                    nodes.forEach(function(n) { n._highlighted = false; });
+                    render();
+                }, 5000);
+            } catch (err) { alert("Erro na busca: " + err.message); }
+            finally { btn.textContent = origText; btn.style.pointerEvents = ""; }
+        }
 
         render();
     });

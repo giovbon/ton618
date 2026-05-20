@@ -976,6 +976,73 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 	fmt.Fprintf(w, `{"ok":true,"nodes":%d,"projected":%d}`, len(vecs), count)
 }
 
+func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Query string `json:"query"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
+		http.Error(w, "query required", http.StatusBadRequest)
+		return
+	}
+	if ctx.Embed == nil {
+		http.Error(w, "embedding not configured", http.StatusServiceUnavailable)
+		return
+	}
+	queryVec, err := ctx.Embed.Embed(r.Context(), body.Query)
+	if err != nil {
+		http.Error(w, "embedding failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	allEmbeddings, err := ctx.Store.GetAllEmbeddings()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type nearest struct {
+		Arquivo    string  `json:"arquivo"`
+		Title      string  `json:"title"`
+		Similarity float64 `json:"similarity"`
+		X          float64 `json:"x"`
+		Y          float64 `json:"y"`
+	}
+	var results []nearest
+	for docID, nv := range allEmbeddings {
+		if len(nv.Vector) == 0 { continue }
+		doc, _ := ctx.Store.GetDocument(docID)
+		if doc == nil || doc.Arquivo == "" { continue }
+		sim := semantic.CosineSimilarity(queryVec, nv.Vector)
+		if sim < 0.25 { continue }
+		title := nv.Title
+		if title == "" {
+			parts := strings.Split(doc.Arquivo, "/")
+			title = parts[len(parts)-1]
+		}
+		results = append(results, nearest{Arquivo: doc.Arquivo, Title: title, Similarity: sim, X: nv.X, Y: nv.Y})
+	}
+	sort.Slice(results, func(i, j int) bool { return results[i].Similarity > results[j].Similarity })
+	if len(results) > 20 { results = results[:20] }
+	var qx, qy, totalWeight float64
+	n := 5
+	if len(results) < n { n = len(results) }
+	for i := 0; i < n; i++ {
+		weight := results[i].Similarity
+		qx += results[i].X * weight
+		qy += results[i].Y * weight
+		totalWeight += weight
+	}
+	if totalWeight > 0 { qx /= totalWeight; qy /= totalWeight }
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"query_x": qx, "query_y": qy, "query_text": body.Query, "nearest": results,
+	})
+}
+
+
+
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	ctx.renderLogin(w, "login.html", map[string]interface{}{
 		"Title": "Login - TON-618",

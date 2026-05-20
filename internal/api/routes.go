@@ -55,6 +55,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 	mux.HandleFunc("GET /api/graph/data", ctx.HandleGraphData)
+	mux.HandleFunc("POST /api/graph/query", ctx.HandleGraphQuery)
 	mux.HandleFunc("POST /api/graph/project", ctx.HandleGraphProject)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
