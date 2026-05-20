@@ -1,7 +1,8 @@
 # ─── Estágio 1: Build ───────────────────────────────────
 FROM golang:1.24-alpine AS builder
 
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+# Instalar dependências de build com suporte multi-arch
+RUN apk add --no-cache gcc musl-dev sqlite-dev linux-headers
 
 WORKDIR /app
 
@@ -9,9 +10,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Build
+# Build com arquitetura correta (buildx injeta via ARG)
+ARG TARGETARCH
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -tags sqlite_fts5 -ldflags="-s -w" -o /ton618 ./cmd/server/
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -tags sqlite_fts5 \
+    -ldflags="-s -w" \
+    -o /ton618 ./cmd/server/
 
 # ─── Estágio 2: Runtime ──────────────────────────────────
 FROM alpine:3.21

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"html/template"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1172,5 +1174,287 @@ func TestHandleFileDelete_RemoveEmbeddingMultiplosDocs(t *testing.T) {
 	// Todos os embeddings do arquivo devem sumir
 	if c := ctx.Store.GetEmbeddingCount(); c != 0 {
 		t.Fatalf("esperado 0 embeddings apos deletar, got %d", c)
+	}
+}
+
+// ── HandleHealth ────────────────────────────────────────────────
+
+func TestHandleHealth_RetornaUp(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp struct {
+		Status    string `json:"status"`
+		Timestamp string `json:"timestamp"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Status != "up" {
+		t.Errorf("esperado status 'up', got %q", resp.Status)
+	}
+	if resp.Timestamp == "" {
+		t.Error("timestamp vazio")
+	}
+}
+
+func TestHandleHealth_ContentType(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleHealth(rec, req)
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("esperado Content-Type application/json, got %q", ct)
+	}
+}
+
+// ── HandleFile ─────────────────────────────────────────────────
+
+func TestHandleFile_NotFound(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/file?name=inexistente.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFile(rec, req)
+
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusOK {
+		t.Fatalf("esperado 404 ou 200, got %d", rec.Code)
+	}
+}
+
+func TestHandleFile_ServeArquivo(t *testing.T) {
+	ctx := newTestContext(t)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/servir.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("# Arquivo para servir"), 0644)
+
+	req := httptest.NewRequest("GET", "/file?name=servir.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFile(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Arquivo para servir") {
+		t.Error("conteudo do arquivo nao foi servido")
+	}
+}
+
+func TestHandleFile_NormalizaCaminho(t *testing.T) {
+	ctx := newTestContext(t)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/normalizado.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("# Normalizado"), 0644)
+
+	req := httptest.NewRequest("GET", "/file?name=normalizado.md", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFile(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+}
+
+func TestHandleFile_SemParametro_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/file", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFile(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+// ── HandleFileRename ────────────────────────────────────────────
+
+func TestHandleFileRename_Sucesso(t *testing.T) {
+	ctx := newTestContext(t)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/velho.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("# Nota velha"), 0644)
+	ctx.Store.SetFileMod("notes/velho.md", time.Now().Format(time.RFC3339))
+
+	body := "old=velho.md&new=novo.md"
+	req := httptest.NewRequest("POST", "/file/rename", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	novoPath := filepath.Join(ctx.Cfg.DocsDir, "notes/novo.md")
+	if _, err := os.Stat(novoPath); os.IsNotExist(err) {
+		t.Error("arquivo novo nao foi criado")
+	}
+
+	velhoPath := filepath.Join(ctx.Cfg.DocsDir, "notes/velho.md")
+	if _, err := os.Stat(velhoPath); !os.IsNotExist(err) {
+		t.Error("arquivo velho ainda existe")
+	}
+}
+
+func TestHandleFileRename_MesmoNome(t *testing.T) {
+	ctx := newTestContext(t)
+	body := "old=notes/mesmo.md&new=notes/mesmo.md"
+	req := httptest.NewRequest("POST", "/file/rename", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+}
+
+func TestHandleFileRename_MetodoInvalido(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/file/rename", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("esperado 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleFileRename_SemParametros(t *testing.T) {
+	ctx := newTestContext(t)
+	body := "old=&new="
+	req := httptest.NewRequest("POST", "/file/rename", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+// ── HandleUpload ────────────────────────────────────────────────
+
+func TestHandleUpload_Sucesso(t *testing.T) {
+	ctx := newTestContext(t)
+
+	var buf bytes.Buffer
+	mp := multipart.NewWriter(&buf)
+	part, _ := mp.CreateFormFile("file", "upload-nota.md")
+	part.Write([]byte("# Nota via upload"))
+	mp.Close()
+
+	req := httptest.NewRequest("POST", "/upload", &buf)
+	req.Header.Set("Content-Type", mp.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUpload(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	uploadPath := filepath.Join(ctx.Cfg.DocsDir, "notes/upload-nota.md")
+	if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
+		t.Error("arquivo upload nao foi salvo")
+	}
+}
+
+func TestHandleUpload_MetodoInvalido(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/upload", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleUpload(rec, req)
+
+	if rec.Code == 0 {
+		t.Error("nenhuma resposta")
+	}
+}
+
+// ── HandleGraphProject ──────────────────────────────────────────
+
+func TestHandleGraphProject_SemEmbeddings(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("POST", "/api/graph/project", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleGraphProject(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp struct {
+		Ok    bool `json:"ok"`
+		Nodes int  `json:"nodes"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Ok {
+		t.Error("ok deveria ser true")
+	}
+}
+
+func TestHandleGraphProject_MetodoInvalido(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("GET", "/api/graph/project", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleGraphProject(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("esperado 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleGraphProject_ComEmbeddings(t *testing.T) {
+	ctx := newTestContext(t)
+
+	for i, pair := range [][2]string{{"a", "golang"}, {"b", "python"}} {
+		id := "doc-" + pair[0]
+		doc := db.Document{
+			ID:      id,
+			Tipo:    "markdown",
+			Arquivo: "notes/" + pair[1] + ".md",
+			Secao:   pair[1],
+			Texto:   "conteudo sobre " + pair[1],
+		}
+		ctx.Store.InsertDocument(doc)
+		vec := make([]float32, 128)
+		for j := range vec {
+			vec[j] = float32(i*100+j) * 0.001
+		}
+		ctx.Store.SetEmbedding(id, vec, pair[1])
+	}
+
+	req := httptest.NewRequest("POST", "/api/graph/project", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleGraphProject(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp struct {
+		Ok        bool `json:"ok"`
+		Nodes     int  `json:"nodes"`
+		Projected int  `json:"projected"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Ok {
+		t.Error("ok deveria ser true")
+	}
+	if resp.Nodes != 2 {
+		t.Errorf("esperado 2 nodes, got %d", resp.Nodes)
+	}
+	if resp.Projected != 2 {
+		t.Errorf("esperado 2 projected, got %d", resp.Projected)
 	}
 }
