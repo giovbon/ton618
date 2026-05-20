@@ -682,12 +682,16 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	links, _ := ctx.Store.GetAllLinks()
 
 	type node struct {
-		ID        string  `json:"id"`
-		Title     string  `json:"title"`
-		X         float64 `json:"x"`
-		Y         float64 `json:"y"`
-		ClusterID int     `json:"cluster_id"`
-		NoteType  string  `json:"note_type"`
+		ID         string   `json:"id"`
+		Title      string   `json:"title"`
+		X          float64  `json:"x"`
+		Y          float64  `json:"y"`
+		ClusterID  int      `json:"cluster_id"`
+		NoteType   string   `json:"note_type"`
+		Tags       []string `json:"tags"`
+		Popularity int      `json:"popularity"`
+		Radius     float64  `json:"radius"`
+		Color      string   `json:"color"`
 	}
 	type link struct {
 		Source string `json:"source"`
@@ -745,18 +749,56 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
+		// Tags do arquivo
+		fileTags := []string{}
+		if t, err := ctx.Store.GetFileTags(arquivo); err == nil {
+			fileTags = t
+		}
+
+		// Popularidade
+		pop := ctx.Store.GetPopularity(arquivo)
+
+		// Raio: base 6, escala com log da popularidade (max ~20)
+		radius := 6.0 + math.Log2(float64(pop)+1)*2.0
+		if radius > 20 {
+			radius = 20
+		}
+
+		// Cor: derivada da primeira tag (hash simples → HSL)
+		color := "#38bdf8" // azul padrao
+		if len(fileTags) > 0 {
+			color = tagColor(fileTags[0])
+		} else if noteType == "pdf" {
+			color = "#f59e0b" // laranja pra PDFs
+		}
+
 		fileNodes[arquivo] = node{
-			ID:       arquivo,
-			Title:    baseName,
-			X:        x,
-			Y:        y,
-			NoteType: noteType,
+			ID:         arquivo,
+			Title:      baseName,
+			X:          x,
+			Y:          y,
+			NoteType:   noteType,
+			Tags:       fileTags,
+			Popularity: pop,
+			Radius:     radius,
+			Color:      color,
 		}
 	}
 
-	// Se ha vetores sem projecao 2D, executa PCA
+	// Se ha vetores sem projecao 2D, executa t-SNE (preferido) ou PCA (fallback)
 	if len(vecsForProjection) > 1 {
-		projected := semantic.Project2DReduce(vecsForProjection)
+		var projected map[string]semantic.Point2D
+
+		// t-SNE aplica otimizacao nao-linear — melhor para visualizacao de clusters
+		if len(vecsForProjection) <= 200 {
+			tsne := semantic.DefaultTSNE()
+			projected = tsne.Project(vecsForProjection)
+		}
+
+		// Fallback: PCA para conjuntos grandes ou se t-SNE retornar vazio
+		if len(projected) == 0 {
+			projected = semantic.Project2DReduce(vecsForProjection)
+		}
 
 		// Escala as coordenadas PCA para um range visivel (~[-500, 500])
 		scalePoints(projected, 500)
@@ -807,11 +849,16 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 		// Adiciona cluster_id ao nó
 		nodes = append(nodes, node{
-			ID:        n.ID,
-			Title:     n.Title,
-			X:         n.X,
-			Y:         n.Y,
-			ClusterID: clusterID,
+			ID:         n.ID,
+			Title:      n.Title,
+			X:          n.X,
+			Y:          n.Y,
+			ClusterID:  clusterID,
+			NoteType:   n.NoteType,
+			Tags:       n.Tags,
+			Popularity: n.Popularity,
+			Radius:     n.Radius,
+			Color:      n.Color,
 		})
 	}
 
@@ -835,6 +882,17 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		"clusters": clusterCount,
 	}
 	json.NewEncoder(w).Encode(result)
+}
+
+// tagColor gera uma cor HSL deterministica a partir de uma string de tag.
+// Mesma tag sempre gera a mesma cor.
+func tagColor(tag string) string {
+	h := 0
+	for _, c := range tag {
+		h = (h*31 + int(c)) % 360
+	}
+	// HSL: hue variavel, saturacao 60%, lightness 55%
+	return fmt.Sprintf("hsl(%d, 60%%, 55%%)", h)
 }
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {

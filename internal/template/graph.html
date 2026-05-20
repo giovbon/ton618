@@ -8,37 +8,46 @@
         padding-right: 16px;
         box-sizing: border-box;
     }
-
     .graph-card {
         height: calc(100vh - 140px) !important;
         width: 100%;
     }
-
-    .graph-note {
-        cursor: pointer;
+    canvas#graph-canvas {
+        display: block;
     }
-
-    .graph-note:hover circle {
-        stroke: #fff !important;
-        stroke-width: 3px !important;
-        filter: drop-shadow(0 0 10px currentColor);
-    }
-
-    .graph-note text.icon {
+    .graph-tooltip {
+        position: fixed;
+        display: none;
+        background: #18181b;
+        border: 1px solid #3f3f46;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 11px;
+        max-width: 320px;
+        z-index: 9999;
         pointer-events: none;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        line-height: 1.5;
     }
-
-    .graph-note text.label {
-        opacity: 0;
-        transition: opacity 120ms ease;
-        pointer-events: none;
+    .graph-tooltip .tt-title {
+        font-weight: 700;
+        font-size: 12px;
+        color: #f4f4f5;
+        margin-bottom: 4px;
     }
-
-    .graph-note:hover text.label {
-        opacity: 1;
-        fill: #e4e4e7 !important;
-        font-weight: 700 !important;
-        font-size: 11px !important;
+    .graph-tooltip .tt-meta {
+        color: #a1a1aa;
+        font-size: 10px;
+        margin-top: 4px;
+    }
+    .graph-tooltip .tt-tag {
+        display: inline-block;
+        background: #27272a;
+        color: #d4d4d8;
+        padding: 1px 6px;
+        border-radius: 3px;
+        margin: 1px 2px;
+        font-size: 10px;
     }
 </style>
 <div class="graph-page">
@@ -47,22 +56,25 @@
             Mapa Semântico
         </h1>
         <div class="flex items-center gap-4">
-            <span id="graph-status" class="text-[10px] text-zinc-600 font-medium">—</span>
+            <span
+                id="graph-status"
+                class="text-[10px] text-zinc-600 font-medium"
+                >—</span
+            >
             <span class="text-[10px] text-zinc-700">✦ notas embedadas</span>
         </div>
     </div>
-
-    <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card graph-card">
-        <div id="graph-container" style="width: 100%; height: 100%; position: relative"></div>
+    <div
+        class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden premium-card graph-card"
+    >
+        <canvas id="graph-canvas" style="width: 100%; height: 100%"></canvas>
     </div>
-
     <p
         class="text-[10px] text-zinc-600 mt-2 text-center tracking-wide uppercase"
     >
         Use o scroll do mouse para dar zoom · Clique no nó para abrir
     </p>
 </div>
-
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", async function () {
@@ -86,7 +98,6 @@
 
         var clusterCount = data.clusters || 0;
 
-        // Grid fallback se todas as coordenadas forem (0,0)
         var allZero = nodes.every(function (n) {
             return n.x === 0 && n.y === 0;
         });
@@ -98,6 +109,57 @@
             });
         }
 
+        statusEl.textContent =
+            nodes.length + " notas · " + clusterCount + " grupos";
+
+        // ── Canvas ──
+        var canvas = document.getElementById("graph-canvas");
+        var ctx = canvas.getContext("2d");
+        var dpr = window.devicePixelRatio || 1;
+
+        function resizeCanvas() {
+            var r = canvas.parentElement.getBoundingClientRect();
+            canvas.width = r.width * dpr;
+            canvas.height = r.height * dpr;
+            canvas.style.width = r.width + "px";
+            canvas.style.height = r.height + "px";
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            return [r.width, r.height];
+        }
+        var dim = resizeCanvas();
+        var W = dim[0],
+            H = dim[1];
+
+        window.addEventListener("resize", function () {
+            dim = resizeCanvas();
+            W = dim[0];
+            H = dim[1];
+            render();
+        });
+
+        // ── Tooltip ──
+        var tooltip = document.createElement("div");
+        tooltip.className = "graph-tooltip";
+        document.body.appendChild(tooltip);
+
+        // ── Voronoi precompute ──
+        var clusters = {};
+        nodes.forEach(function (n) {
+            var cid = n.cluster_id || 0;
+            if (!clusters[cid]) clusters[cid] = { x: 0, y: 0, count: 0 };
+            clusters[cid].x += n.x;
+            clusters[cid].y += n.y;
+            clusters[cid].count++;
+        });
+        var cIds = Object.keys(clusters).map(Number).sort();
+        cIds.forEach(function (cid) {
+            var c = clusters[cid];
+            c.x /= c.count;
+            c.y /= c.count;
+        });
+        var centroids = cIds.map(function (cid) {
+            return [clusters[cid].x, clusters[cid].y];
+        });
         var CLUSTER_COLORS = [
             "#38bdf8",
             "#10b981",
@@ -109,266 +171,74 @@
             "#6366f1",
         ];
 
-        var container = document.getElementById("graph-container");
-        var width = container.clientWidth;
-        var height = container.clientHeight;
-
-        // SVG
-        var svg = d3
-            .select("#graph-container")
-            .append("svg")
-            .attr("width", width)
-            .attr("height", height)
-            .style("background", "#09090b")
-            .style("overflow", "hidden")
-            .style("touch-action", "none");
-
-        var g = svg.append("g");
-
-        statusEl.textContent =
-            nodes.length + " notas · " + clusterCount + " grupos";
-
-        // ── Voronoi por cluster (um poligono por grupo, nao por nota) ──
-        // Calcula o centroide de cada cluster e faz o Voronoi sobre eles.
-        var voronoiGroup = g.append("g").attr("class", "voronoi");
-
-        // 1. Agrupa notas por cluster_id e calcula centroides
-        var clusters = {};
-        nodes.forEach(function (n) {
-            var cid = n.cluster_id || 0;
-            if (!clusters[cid])
-                clusters[cid] = { x: 0, y: 0, count: 0, color: null };
-            clusters[cid].x += n.x;
-            clusters[cid].y += n.y;
-            clusters[cid].count++;
-            clusters[cid].color =
-                CLUSTER_COLORS[cid % CLUSTER_COLORS.length] || "#0ea5e9";
-        });
-        Object.keys(clusters).forEach(function (cid) {
-            clusters[cid].x /= clusters[cid].count;
-            clusters[cid].y /= clusters[cid].count;
-        });
-
-        // 2. Converte para arrays para o Delaunay
-        var cIds = Object.keys(clusters).map(Number).sort();
-        var centroids = cIds.map(function (cid) {
-            return [clusters[cid].x, clusters[cid].y];
-        });
-
-        // 3. Voronoi dos centroides
-        if (centroids.length >= 3) {
-            var delaunay = d3.Delaunay.from(centroids);
-            var voronoi = delaunay.voronoi([-10000, -10000, 10000, 10000]);
-
-            voronoiGroup
-                .selectAll("path")
-                .data(cIds)
-                .join("path")
-                .attr("d", function (cid, i) {
+        var voronoiPaths = [];
+        try {
+            if (centroids.length >= 3) {
+                var delaunay = d3.Delaunay.from(centroids);
+                var voronoi = delaunay.voronoi([-10000, -10000, 10000, 10000]);
+                cIds.forEach(function (cid, i) {
                     try {
-                        return voronoi.renderCell(i);
-                    } catch (e) {
-                        return null;
-                    }
-                })
-                .attr("fill", function (cid) {
-                    return clusters[cid].color;
-                })
-                .attr("fill-opacity", 0.08)
-                .attr("stroke", function (cid) {
-                    return clusters[cid].color;
-                })
-                .attr("stroke-opacity", 0.25)
-                .attr("stroke-width", 1.5);
-        } else if (centroids.length === 2) {
-            // 2 clusters: divisao simples pelo ponto medio
-            var x1 = centroids[0][0],
-                y1 = centroids[0][1];
-            var x2 = centroids[1][0],
-                y2 = centroids[1][1];
-            var midX = (x1 + x2) / 2,
-                midY = (y1 + y2) / 2;
-            // Perpendicular a reta que conecta os dois centroides
-            var dx = x2 - x1,
-                dy = y2 - y1;
-            // Normal perpendicular
-            var len = Math.sqrt(dx * dx + dy * dy) || 1;
-            var nx = (-dy / len) * 10000;
-            var ny = (dx / len) * 10000;
-            // Dois poligonos: um de cada lado da linha divisoria
-            var p1 = [
-                [-10000, -10000],
-                [10000, -10000],
-                [10000, 10000],
-                [-10000, 10000],
-            ];
-            var clipA = null,
-                clipB = null;
-
-            voronoiGroup
-                .selectAll("path")
-                .data(cIds)
-                .join("path")
-                .attr("d", function (cid, i) {
-                    // Poligono infinito cortado pela mediatriz
+                        voronoiPaths.push({
+                            cid: cid,
+                            path: new Path2D(voronoi.renderCell(i)),
+                        });
+                    } catch (e) {}
+                });
+            } else if (centroids.length === 2) {
+                var x1 = centroids[0][0],
+                    y1 = centroids[0][1],
+                    x2 = centroids[1][0],
+                    y2 = centroids[1][1];
+                var midX = (x1 + x2) / 2,
+                    midY = (y1 + y2) / 2,
+                    dx = x2 - x1,
+                    dy = y2 - y1;
+                var len = Math.sqrt(dx * dx + dy * dy) || 1;
+                var nx = (-dy / len) * 10000,
+                    ny = (dx / len) * 10000;
+                cIds.forEach(function (cid, i) {
                     var cx = clusters[cid].x,
                         cy = clusters[cid].y;
-                    // Define se este lado esta "para cima" ou "para baixo" da mediatriz
                     var side = (cx - midX) * nx + (cy - midY) * ny > 0 ? 1 : -1;
-
-                    // Constroi poligono: bounding box + linha de corte
                     var pts = [
                         [-10000, -10000],
                         [10000, -10000],
                         [10000, 10000],
                         [-10000, 10000],
                     ];
-                    // Adiciona pontos da mediatriz
                     var along = 20000;
-                    pts.push([midX + nx * along, midY + ny * along]);
-                    pts.push([midX - nx * along, midY - ny * along]);
-
-                    // Filtra pontos do lado correto
-                    var filtered = pts.filter(function (p) {
+                    pts.push(
+                        [midX + nx * along, midY + ny * along],
+                        [midX - nx * along, midY - ny * along],
+                    );
+                    var f = pts.filter(function (p) {
                         return (
                             ((p[0] - midX) * nx + (p[1] - midY) * ny) * side >
                             -1
                         );
                     });
-
-                    // Ordena por angulo em torno do centroide
-                    filtered.sort(function (a, b) {
-                        var angA = Math.atan2(a[1] - cy, a[0] - cx);
-                        var angB = Math.atan2(b[1] - cy, b[0] - cx);
-                        return angA - angB;
+                    f.sort(function (a, b) {
+                        return (
+                            Math.atan2(a[1] - cy, a[0] - cx) -
+                            Math.atan2(b[1] - cy, b[0] - cx)
+                        );
                     });
-
-                    return (
-                        "M" +
-                        filtered
-                            .map(function (p) {
-                                return p[0] + "," + p[1];
-                            })
-                            .join("L") +
-                        "Z"
-                    );
-                })
-                .attr("fill", function (cid) {
-                    return clusters[cid].color;
-                })
-                .attr("fill-opacity", 0.08)
-                .attr("stroke", function (cid) {
-                    return clusters[cid].color;
-                })
-                .attr("stroke-opacity", 0.25)
-                .attr("stroke-width", 1.5);
+                    var p2 = new Path2D();
+                    p2.moveTo(f[0][0], f[0][1]);
+                    for (var k = 1; k < f.length; k++)
+                        p2.lineTo(f[k][0], f[k][1]);
+                    p2.closePath();
+                    voronoiPaths.push({ cid: cid, path: p2 });
+                });
+            }
+        } catch (e) {
+            console.warn("Voronoi:" + e.message);
         }
 
-        // ── Links ──
-        g.append("g")
-            .selectAll("line")
-            .data(data.links || [])
-            .join("line")
-            .attr("x1", function (d) {
-                return typeof d.source === "object" ? d.source.x : 0;
-            })
-            .attr("y1", function (d) {
-                return typeof d.source === "object" ? d.source.y : 0;
-            })
-            .attr("x2", function (d) {
-                return typeof d.target === "object" ? d.target.x : 0;
-            })
-            .attr("y2", function (d) {
-                return typeof d.target === "object" ? d.target.y : 0;
-            })
-            .attr("stroke", "#27272a")
-            .attr("stroke-width", 0.5)
-            .attr("stroke-opacity", 0.3);
-
-        // ── Nodes ──
-        var node = g
-            .append("g")
-            .selectAll("g")
-            .data(nodes)
-            .join("g")
-            .attr("class", "graph-note")
-            .attr("transform", function (d) {
-                return "translate(" + d.x + "," + d.y + ")";
-            })
-            .on("click", function (event, d) {
-                event.stopPropagation();
-                var isPdf = d.id && d.id.indexOf("pdfs/") === 0;
-                if (isPdf) {
-                    window.open(
-                        "/file?name=" + encodeURIComponent(d.id),
-                        "_blank"
-                    );
-                } else {
-                    window.location.href =
-                        "/editor?file=" + encodeURIComponent(d.id);
-                }
-            });
-
-        var NOTE_ICONS = {
-            pdf: "📕",
-            video: "🎬",
-            article: "📝",
-            note: "🗒️",
-            imagem: "🖼️",
-        };
-
-        node.append("circle")
-            .attr("r", 8)
-            .attr("fill", function (d) {
-                return (
-                    CLUSTER_COLORS[
-                        (d.cluster_id || 0) % CLUSTER_COLORS.length
-                    ] || "#0ea5e9"
-                );
-            })
-            .attr("opacity", 0.95)
-            .attr("stroke", "#18181b")
-            .attr("stroke-width", 2);
-
-        node.append("text")
-            .attr("class", "icon")
-            .text(function (d) {
-                return NOTE_ICONS[d.note_type] || "🗒️";
-            })
-            .attr("text-anchor", "middle")
-            .attr("dy", "0.35em")
-            .attr("font-size", "10px")
-            .attr("fill", "#f8fafc")
-            .attr("font-family", "Inter, system-ui, sans-serif")
-            .attr("pointer-events", "none");
-
-        node.append("text")
-            .attr("class", "label")
-            .text(function (d) {
-                return d.title || d.id.split("/").pop().replace(/\.(md|pdf)$/i, "") || "?";
-            })
-            .attr("text-anchor", "middle")
-            .attr("dy", 22)
-            .attr("font-size", "10px")
-            .attr("font-weight", "500")
-            .attr("fill", "#71717a")
-            .attr("font-family", "Inter, system-ui, sans-serif");
-
-        node.append("title").text(function (d) {
-            return d.title || d.id;
-        });
-
-        // ── Zoom simples (sem recalcular Voronoi) ──
-        var zoom = d3
-            .zoom()
-            .scaleExtent([0.05, 20])
-            .on("zoom", function (event) {
-                g.attr("transform", event.transform);
-            });
-
-        svg.call(zoom);
-
-        // ── Zoom inicial ──
+        // ── View state ──
+        var tx = W / 2,
+            ty = H / 2,
+            scale = 1;
         var mnX = Infinity,
             mxX = -Infinity,
             mnY = Infinity,
@@ -379,19 +249,280 @@
             if (n.y < mnY) mnY = n.y;
             if (n.y > mxY) mxY = n.y;
         });
+        scale = Math.min(
+            (W - 160) / (mxX - mnX || 1),
+            (H - 160) / (mxY - mnY || 1),
+        );
+        if (scale > 2) scale = 2;
+        tx = W / 2 - ((mnX + mxX) / 2) * scale;
+        ty = H / 2 - ((mnY + mxY) / 2) * scale;
 
-        var sc = Math.min(
-            (width - 160) / (mxX - mnX || 1),
-            (height - 160) / (mxY - mnY || 1),
+        // ── Render ──
+        function render() {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.fillStyle = "#09090b";
+            ctx.fillRect(0, 0, W, H);
+            ctx.save();
+            ctx.translate(tx, ty);
+            ctx.scale(scale, scale);
+
+            // Voronoi
+            var ccCache = {};
+            voronoiPaths.forEach(function (vp) {
+                var col =
+                    ccCache[vp.cid] ||
+                    (ccCache[vp.cid] =
+                        CLUSTER_COLORS[vp.cid % CLUSTER_COLORS.length]);
+                ctx.fillStyle = col;
+                ctx.globalAlpha = 0.08;
+                ctx.fill(vp.path);
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = col;
+                ctx.globalAlpha = 0.25;
+                ctx.lineWidth = 1.5 / scale;
+                ctx.stroke(vp.path);
+                ctx.globalAlpha = 1;
+            });
+
+            // Links
+            var links = data.links || [];
+            ctx.strokeStyle = "#27272a";
+            ctx.globalAlpha = 0.3;
+            ctx.lineWidth = 0.5 / scale;
+            ctx.beginPath();
+            links.forEach(function (l) {
+                var sx = typeof l.source === "object" ? l.source.x : 0;
+                var sy = typeof l.source === "object" ? l.source.y : 0;
+                var tx2 = typeof l.target === "object" ? l.target.x : 0;
+                var ty2 = typeof l.target === "object" ? l.target.y : 0;
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx2, ty2);
+            });
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Nodes
+            var ICONS = {
+                pdf: "📕",
+                video: "🎬",
+                article: "📝",
+                note: "🗒️",
+                imagem: "🖼️",
+            };
+            var showLabels = scale >= 0.5; // só mostra labels com zoom próximo
+            nodes.forEach(function (n) {
+                var r = n.radius || 7,
+                    px = n.x,
+                    py = n.y;
+                ctx.beginPath();
+                ctx.arc(px, py, r, 0, Math.PI * 2);
+                ctx.fillStyle = n.color || "#38bdf8";
+                ctx.globalAlpha = 0.9;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = "#18181b";
+                ctx.lineWidth = 2 / scale;
+                ctx.stroke();
+                ctx.fillStyle = "#f8fafc";
+                ctx.font = 10 / scale + "px Inter,system-ui,sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(ICONS[n.note_type] || "🗒️", px, py);
+
+                // Label: só aparece com zoom (scale >= 0.5)
+                if (showLabels) {
+                    ctx.fillStyle = "#71717a";
+                    ctx.font =
+                        "500 " + 10 / scale + "px Inter,system-ui,sans-serif";
+                    ctx.fillText(
+                        n.title ||
+                            n.id
+                                .split("/")
+                                .pop()
+                                .replace(/\.(md|pdf)$/i, "") ||
+                            "?",
+                        px,
+                        py + r + 14 / scale,
+                    );
+                }
+            });
+            ctx.restore();
+        }
+
+        // ── Hit test ──
+        function hitNode(sx, sy) {
+            var found = null,
+                minD = 30;
+            nodes.forEach(function (n) {
+                var nx = n.x * scale + tx,
+                    ny = n.y * scale + ty;
+                var d = Math.sqrt(
+                    (sx - nx) * (sx - nx) + (sy - ny) * (sy - ny),
+                );
+                if (d < minD) {
+                    minD = d;
+                    found = n;
+                }
+            });
+            return found;
+        }
+
+        // ── Mouse ──
+        var hover = null;
+        canvas.addEventListener("mousemove", function (e) {
+            var r = canvas.getBoundingClientRect();
+            var n = hitNode(e.clientX - r.left, e.clientY - r.top);
+            if (n !== hover) {
+                canvas.style.cursor = n ? "pointer" : "default";
+                hover = n;
+            }
+            if (n) {
+                var tHtml = "";
+                if (n.tags && n.tags.length > 0)
+                    tHtml = n.tags
+                        .map(function (t) {
+                            return '<span class="tt-tag">#' + t + "</span>";
+                        })
+                        .join(" ");
+                var im = { pdf: "📕", video: "🎬", article: "📝", note: "🗒️" };
+                tooltip.style.display = "block";
+                tooltip.innerHTML =
+                    '<div class="tt-title">' +
+                    (im[n.note_type] || "") +
+                    " " +
+                    (n.title || "?") +
+                    "</div>" +
+                    (tHtml
+                        ? '<div style="margin-top:4px">' + tHtml + "</div>"
+                        : "") +
+                    '<div class="tt-meta">' +
+                    (n.popularity ? "Acessos: " + n.popularity + " · " : "") +
+                    "Cluster " +
+                    (n.cluster_id || 0) +
+                    "</div>";
+                tooltip.style.left = e.pageX + 14 + "px";
+                tooltip.style.top = e.pageY - 10 + "px";
+            } else {
+                tooltip.style.display = "none";
+            }
+        });
+        canvas.addEventListener("mouseout", function () {
+            tooltip.style.display = "none";
+            hover = null;
+            canvas.style.cursor = "default";
+        });
+        canvas.addEventListener("click", function (e) {
+            var r = canvas.getBoundingClientRect();
+            var n = hitNode(e.clientX - r.left, e.clientY - r.top);
+            if (!n) return;
+            if (n.id && n.id.indexOf("pdfs/") === 0)
+                window.open("/file?name=" + encodeURIComponent(n.id), "_blank");
+            else
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(n.id);
+        });
+
+        // ── Wheel zoom ──
+        canvas.addEventListener(
+            "wheel",
+            function (e) {
+                e.preventDefault();
+                var r = canvas.getBoundingClientRect();
+                var mx = e.clientX - r.left,
+                    my = e.clientY - r.top;
+                var f = e.deltaY < 0 ? 1.1 : 0.9;
+                var ns = scale * f;
+                if (ns < 0.05 || ns > 20) return;
+                tx = mx - (mx - tx) * f;
+                ty = my - (my - ty) * f;
+                scale = ns;
+                render();
+            },
+            { passive: false },
         );
 
-        svg.call(
-            zoom.transform,
-            d3.zoomIdentity
-                .translate(width / 2, height / 2)
-                .scale(sc)
-                .translate(-(mnX + mxX) / 2, -(mnY + mxY) / 2),
+        // ── Pan ──
+        var drag = false,
+            dx,
+            dy;
+        canvas.addEventListener("mousedown", function (e) {
+            drag = true;
+            dx = e.clientX;
+            dy = e.clientY;
+            canvas.style.cursor = "grabbing";
+        });
+        window.addEventListener("mousemove", function (e) {
+            if (!drag) return;
+            tx += e.clientX - dx;
+            ty += e.clientY - dy;
+            dx = e.clientX;
+            dy = e.clientY;
+            render();
+        });
+        window.addEventListener("mouseup", function () {
+            drag = false;
+            canvas.style.cursor = hover ? "pointer" : "default";
+        });
+
+        // Touch
+        var t0 = null;
+        canvas.addEventListener("touchstart", function (e) {
+            if (e.touches.length === 1) {
+                drag = true;
+                dx = e.touches[0].clientX;
+                dy = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+                drag = false;
+                t0 = [
+                    { x: e.touches[0].clientX, y: e.touches[0].clientY },
+                    { x: e.touches[1].clientX, y: e.touches[1].clientY },
+                ];
+            }
+        });
+        canvas.addEventListener(
+            "touchmove",
+            function (e) {
+                e.preventDefault();
+                if (e.touches.length === 1 && drag) {
+                    tx += e.touches[0].clientX - dx;
+                    ty += e.touches[0].clientY - dy;
+                    dx = e.touches[0].clientX;
+                    dy = e.touches[0].clientY;
+                    render();
+                } else if (e.touches.length === 2 && t0) {
+                    var t1 = {
+                            x: e.touches[0].clientX,
+                            y: e.touches[0].clientY,
+                        },
+                        t2 = {
+                            x: e.touches[1].clientX,
+                            y: e.touches[1].clientY,
+                        };
+                    var d0 = Math.hypot(t0[0].x - t0[1].x, t0[0].y - t0[1].y),
+                        d1 = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+                    var f = d1 / d0;
+                    if (Math.abs(f - 1) > 0.01) {
+                        var mx = (t1.x + t2.x) / 2,
+                            my = (t1.y + t2.y) / 2,
+                            r = canvas.getBoundingClientRect();
+                        var sx = mx - r.left,
+                            sy = my - r.top;
+                        tx = sx - (sx - tx) * f;
+                        ty = sy - (sy - ty) * f;
+                        scale = Math.max(0.05, Math.min(20, scale * f));
+                        render();
+                    }
+                    t0 = [t1, t2];
+                }
+            },
+            { passive: false },
         );
+        canvas.addEventListener("touchend", function () {
+            drag = false;
+            t0 = null;
+        });
+
+        render();
     });
 </script>
 {{end}}
