@@ -32,6 +32,7 @@ WORKDIR /app
 
 # Copia binário
 COPY --from=builder /ton618 .
+COPY --from=builder /app/web /app/web
 
 # Diretórios de dados
 RUN mkdir -p /app/docs /app/data && chown -R appuser:appuser /app
