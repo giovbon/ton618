@@ -397,7 +397,7 @@
                     '<span class="shrink-0 text-[10px] text-zinc-700/50" title="Sem embedding">○</span>';
             }
             if (tags.length) {
-                html += '<div class="flex gap-1 shrink-0">';
+                html += '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {
                     html +=
                         '<span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#' +
@@ -409,7 +409,7 @@
             html +=
                 "<button onclick=\"renameNote('" +
                 safeName +
-                '\')" class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs" title="Editar titulo">\u270E</button>';
+                '\')" class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs max-sm:text-lg max-sm:px-2 max-sm:py-1" title="Editar titulo">\u270E</button>';
             html +=
                 "<button onclick=\"deleteNote('" +
                 safeName +
@@ -497,6 +497,7 @@
 
     function renameNote(filename) {
         var oldName = filename.split("/").pop() || filename;
+        var prefix = filename.substring(0, filename.lastIndexOf("/") + 1);
         var ext = oldName.endsWith(".pdf") ? ".pdf" : ".md";
         var displayName = oldName.replace(/\.(md|pdf)$/i, "");
         var newName = prompt("Novo titulo:", displayName);
@@ -504,6 +505,8 @@
         newName = newName.trim();
         if (!newName.endsWith(".md") && !newName.endsWith(".pdf"))
             newName += ext;
+        // Preserva o diretório (ex: pdfs/, notes/)
+        newName = prefix + newName;
 
         var fd = new FormData();
         fd.append("old", filename);

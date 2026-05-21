@@ -57,6 +57,12 @@ type Watcher struct {
 	watcher  *fsnotify.Watcher
 	events   chan FileEvent
 	wg       sync.WaitGroup
+
+	// reprojectNeeded é setado quando novas embeddings precisam ser projetadas
+	// com t-SNE (o PCA é usado como fallback instantâneo até o t-SNE ficar pronto).
+	reprojectMu      sync.Mutex
+	reprojectNeeded  bool
+	reprojectRunning bool
 }
 
 // NewWatcher creates a new watcher instance.
@@ -90,13 +96,91 @@ func (w *Watcher) Start(ctx context.Context) {
 		w.watcher.Add(dir)
 	}
 
-	w.wg.Add(2)
+	w.wg.Add(3)
 	go w.fsnotifyLoop(ctx)
 	go w.pollLoop(ctx)
+	go w.reprojectLoop(ctx)
 	slog.Info("Watcher fsnotify iniciado")
 }
 
-// Events retorna o canal de eventos.
+// QueueReproject marca que as embeddings precisam ser reprojetadas com t-SNE.
+// O PCA continua sendo usado como fallback instantâneo até o t-SNE ficar pronto.
+func (w *Watcher) QueueReproject() {
+	w.reprojectMu.Lock()
+	w.reprojectNeeded = true
+	w.reprojectMu.Unlock()
+}
+
+// reprojectLoop roda em background e reprojeta embeddings com t-SNE quando necessário.
+func (w *Watcher) reprojectLoop(ctx context.Context) {
+	defer w.wg.Done()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.reprojectMu.Lock()
+			needed := w.reprojectNeeded && !w.reprojectRunning
+			w.reprojectMu.Unlock()
+			if needed {
+				w.runReprojection()
+			}
+		}
+	}
+}
+
+func (w *Watcher) runReprojection() {
+	w.reprojectMu.Lock()
+	w.reprojectRunning = true
+	w.reprojectNeeded = false
+	w.reprojectMu.Unlock()
+
+	defer func() {
+		w.reprojectMu.Lock()
+		w.reprojectRunning = false
+		w.reprojectMu.Unlock()
+	}()
+
+	embeddings, err := w.store.GetAllEmbeddings()
+	if err != nil || len(embeddings) < 2 {
+		return
+	}
+
+	// Coleta vetores de todas as embeddings
+	vecs := make(map[string][]float32)
+	for docID, nv := range embeddings {
+		if len(nv.Vector) > 0 {
+			doc, _ := w.store.GetDocument(docID)
+			if doc != nil && doc.Arquivo != "" {
+				vecs[doc.Arquivo] = nv.Vector
+			}
+		}
+	}
+
+	if len(vecs) < 2 {
+		return
+	}
+
+	slog.Info("Reprojetando embeddings com t-SNE", "total", len(vecs))
+
+	// t-SNE (sem limite - roda em background)
+	tsne := semantic.DefaultTSNE()
+	projected := tsne.Project(vecs)
+
+	// Armazena coordenadas no banco
+	for arquivo, pt := range projected {
+		docs, _ := w.store.GetDocumentsByFile(arquivo)
+		if len(docs) > 0 {
+			w.store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
+		}
+	}
+
+	slog.Info("Reprojecao t-SNE concluida", "total", len(vecs))
+}
+
 func (w *Watcher) Events() <-chan FileEvent {
 	return w.events
 }

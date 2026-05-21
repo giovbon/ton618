@@ -213,6 +213,8 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		if data, err := os.ReadFile(fullPath); err == nil {
 			content = string(data)
 		}
+		// Incrementa popularidade ao abrir nota existente
+		ctx.Store.IncrementPopularity(filename)
 	}
 	fileTags, err := ctx.Store.GetFileTags(filename)
 	if err == nil {
@@ -272,11 +274,6 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		slog.Error("search error", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	// Track popularity
-	for _, hit := range results.Hits {
-		ctx.Store.IncrementPopularity(hit.Doc.Arquivo)
 	}
 
 	// Build template data
@@ -370,6 +367,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		for _, sd := range subdirs {
 			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
 			if _, err := os.Stat(testPath); err == nil {
+				ctx.Store.IncrementPopularity(sd + "/" + basename)
 				w.Header().Set("Content-Type", "application/pdf")
 				w.Header().Set("Content-Disposition", "inline")
 				http.ServeFile(w, r, testPath)
@@ -382,6 +380,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 
 	// Para arquivos .md e imagens, usa o comportamento anterior
 	filename := sanitizeFilename(raw)
+	ctx.Store.IncrementPopularity(filename)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	http.ServeFile(w, r, fullPath)
 }
@@ -510,16 +509,47 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	oldName := sanitizeFilename(rawOld)
-	newName := sanitizeFilename(rawNew)
+	ext := strings.ToLower(filepath.Ext(rawOld))
+	isPdf := ext == ".pdf"
 
-	if oldName == newName {
-		http.Redirect(w, r, "/editor?file="+newName, http.StatusSeeOther)
-		return
+	var oldName, newName string
+	var oldPath, newPath string
+
+	if isPdf {
+		// Para PDFs, busca o arquivo em pdfs/ ou notes/
+		basename := filepath.Base(rawOld)
+		newBasename := filepath.Base(rawNew)
+		if !strings.HasSuffix(strings.ToLower(newBasename), ".pdf") {
+			newBasename += ".pdf"
+		}
+
+		subdirs := []string{"pdfs", "notes"}
+		found := false
+		for _, sd := range subdirs {
+			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+			if _, err := os.Stat(testPath); err == nil {
+				oldName = sd + "/" + basename
+				newName = sd + "/" + newBasename
+				oldPath = testPath
+				newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		oldName = sanitizeFilename(rawOld)
+		newName = sanitizeFilename(rawNew)
+		if oldName == newName {
+			http.Redirect(w, r, "/editor?file="+newName, http.StatusSeeOther)
+			return
+		}
+		oldPath = filepath.Join(ctx.Cfg.DocsDir, oldName)
+		newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
 	}
-
-	oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
-	newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 
 	if err := os.Rename(oldPath, newPath); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -538,7 +568,8 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}, ctx.Embed, ctx.Cfg.EmbeddingAll)
 	}
 
-	http.Redirect(w, r, "/editor?file="+url.QueryEscape(newName), http.StatusSeeOther)
+	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }
 
 func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) {
@@ -785,22 +816,12 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Se ha vetores sem projecao 2D, executa t-SNE (preferido) ou PCA (fallback)
+	// Se ha vetores sem projecao 2D, usa PCA (instantâneo) e agenda reprojecao t-SNE em background
 	if len(vecsForProjection) > 1 {
-		var projected map[string]semantic.Point2D
+		// PCA é instantâneo e serve como fallback visual imediato
+		projected := semantic.Project2DReduce(vecsForProjection)
 
-		// t-SNE aplica otimizacao nao-linear — melhor para visualizacao de clusters
-		if len(vecsForProjection) <= 200 {
-			tsne := semantic.DefaultTSNE()
-			projected = tsne.Project(vecsForProjection)
-		}
-
-		// Fallback: PCA para conjuntos grandes ou se t-SNE retornar vazio
-		if len(projected) == 0 {
-			projected = semantic.Project2DReduce(vecsForProjection)
-		}
-
-		// Escala as coordenadas PCA para um range visivel (~[-500, 500])
+		// Escala as coordenadas para um range visivel (~[-500, 500])
 		scalePoints(projected, 500)
 
 		for arquivo, pt := range projected {
@@ -815,6 +836,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 				ctx.Store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
 			}
 		}
+
+		// Agenda reprojecao t-SNE em background para qualidade superior
+		ctx.Watcher.QueueReproject()
 	}
 
 	// Clustering com silhouette score no servidor
@@ -1011,11 +1035,17 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 	}
 	var results []nearest
 	for docID, nv := range allEmbeddings {
-		if len(nv.Vector) == 0 { continue }
+		if len(nv.Vector) == 0 {
+			continue
+		}
 		doc, _ := ctx.Store.GetDocument(docID)
-		if doc == nil || doc.Arquivo == "" { continue }
+		if doc == nil || doc.Arquivo == "" {
+			continue
+		}
 		sim := semantic.CosineSimilarity(queryVec, nv.Vector)
-		if sim < 0.25 { continue }
+		if sim < 0.5 {
+			continue
+		}
 		title := nv.Title
 		if title == "" {
 			parts := strings.Split(doc.Arquivo, "/")
@@ -1024,24 +1054,29 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		results = append(results, nearest{Arquivo: doc.Arquivo, Title: title, Similarity: sim, X: nv.X, Y: nv.Y})
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Similarity > results[j].Similarity })
-	if len(results) > 20 { results = results[:20] }
+	if len(results) > 20 {
+		results = results[:20]
+	}
 	var qx, qy, totalWeight float64
 	n := 5
-	if len(results) < n { n = len(results) }
+	if len(results) < n {
+		n = len(results)
+	}
 	for i := 0; i < n; i++ {
 		weight := results[i].Similarity
 		qx += results[i].X * weight
 		qy += results[i].Y * weight
 		totalWeight += weight
 	}
-	if totalWeight > 0 { qx /= totalWeight; qy /= totalWeight }
+	if totalWeight > 0 {
+		qx /= totalWeight
+		qy /= totalWeight
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"query_x": qx, "query_y": qy, "query_text": body.Query, "nearest": results,
 	})
 }
-
-
 
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	ctx.renderLogin(w, "login.html", map[string]interface{}{

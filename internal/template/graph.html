@@ -70,13 +70,22 @@
                 >
                     Buscar
                 </button>
+                <button
+                    id="semantic-clear-btn"
+                    class="hidden text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                    title="Limpar busca"
+                >
+                    ✕
+                </button>
             </div>
             <span
                 id="graph-status"
                 class="text-[10px] text-zinc-600 font-medium"
                 >—</span
             >
-            <span class="text-[10px] text-zinc-700 hidden md:inline">✦ embedadas</span>
+            <span class="text-[10px] text-zinc-700 hidden md:inline"
+                >✦ embedadas</span
+            >
         </div>
     </div>
     <div
@@ -317,14 +326,7 @@
             ctx.globalAlpha = 1;
 
             // Nodes
-            var ICONS = {
-                pdf: "📕",
-                video: "🎬",
-                article: "📝",
-                note: "🗒️",
-                imagem: "🖼️",
-            };
-            var showLabels = scale >= 0.5; // só mostra labels com zoom próximo
+            var showLabels = scale >= 0.5;
             nodes.forEach(function (n) {
                 var r = n.radius || 7,
                     px = n.x,
@@ -341,9 +343,13 @@
                 // Highlight glow for semantic search results
                 if (n._highlighted) {
                     ctx.beginPath();
+                    ctx.arc(px, py, r + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(56,189,248,0.10)";
+                    ctx.fill();
+                    ctx.beginPath();
                     ctx.arc(px, py, r + 6, 0, Math.PI * 2);
                     ctx.strokeStyle = "#38bdf8";
-                    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(Date.now() / 800);
+                    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(Date.now() / 800);
                     ctx.lineWidth = 2 / scale;
                     ctx.stroke();
                     ctx.globalAlpha = 1;
@@ -352,11 +358,10 @@
                 ctx.font = 10 / scale + "px Inter,system-ui,sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
-                ctx.fillText(ICONS[n.note_type] || "🗒️", px, py);
 
-                // Label: só aparece com zoom (scale >= 0.5)
-                if (showLabels) {
-                    ctx.fillStyle = "#71717a";
+                // Label: só aparece com zoom (scale >= 0.5), exceto notas destacadas pela busca
+                if (showLabels || n._highlighted) {
+                    ctx.fillStyle = n._highlighted ? "#38bdf8" : "#71717a";
                     ctx.font =
                         "500 " + 10 / scale + "px Inter,system-ui,sans-serif";
                     ctx.fillText(
@@ -403,15 +408,24 @@
                 ctx.lineWidth = 1.5 / scale;
                 ctx.stroke();
                 ctx.fillStyle = "#fff";
-                ctx.font = "bold " + (10 / scale) + "px Inter,system-ui,sans-serif";
+                ctx.font =
+                    "bold " + 10 / scale + "px Inter,system-ui,sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("?", queryPoint.x, queryPoint.y);
                 if (scale >= 0.5 && queryPoint.text) {
                     ctx.fillStyle = "#38bdf8";
-                    ctx.font = "500 " + (10 / scale) + "px Inter,system-ui,sans-serif";
-                    var label = queryPoint.text.length > 30 ? queryPoint.text.slice(0, 30) + "..." : queryPoint.text;
-                    ctx.fillText(label, queryPoint.x, queryPoint.y + qr + 14 / scale);
+                    ctx.font =
+                        "500 " + 10 / scale + "px Inter,system-ui,sans-serif";
+                    var label =
+                        queryPoint.text.length > 30
+                            ? queryPoint.text.slice(0, 30) + "..."
+                            : queryPoint.text;
+                    ctx.fillText(
+                        label,
+                        queryPoint.x,
+                        queryPoint.y + qr + 14 / scale,
+                    );
                 }
             }
             ctx.restore();
@@ -594,10 +608,34 @@
         var queryPoint = null;
         var animationFrame = null;
 
-        document.getElementById("semantic-search-btn").addEventListener("click", doSemanticSearch);
-        document.getElementById("semantic-search-input").addEventListener("keydown", function(e) {
-            if (e.key === "Enter") doSemanticSearch();
-        });
+        function clearSearch() {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+            document.getElementById("semantic-search-input").value = "";
+            document
+                .getElementById("semantic-clear-btn")
+                .classList.add("hidden");
+            queryPoint = null;
+            nodes.forEach(function (n) {
+                n._highlighted = false;
+            });
+            render();
+        }
+
+        document
+            .getElementById("semantic-clear-btn")
+            .addEventListener("click", clearSearch);
+
+        document
+            .getElementById("semantic-search-btn")
+            .addEventListener("click", doSemanticSearch);
+        document
+            .getElementById("semantic-search-input")
+            .addEventListener("keydown", function (e) {
+                if (e.key === "Enter") doSemanticSearch();
+            });
 
         async function doSemanticSearch() {
             var input = document.getElementById("semantic-search-input");
@@ -613,29 +651,62 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ query: q }),
                 });
-                if (!resp.ok) { var err = await resp.text(); throw new Error(err); }
+                if (!resp.ok) {
+                    var err = await resp.text();
+                    throw new Error(err);
+                }
                 var data = await resp.json();
-                data.nearest = (data.nearest || []).filter(function(nr) {
-                    var found = nodes.find(function(gn) { return gn.id === nr.arquivo; });
-                    if (found) { nr.x = found.x; nr.y = found.y; return true; }
+                data.nearest = (data.nearest || []).filter(function (nr) {
+                    var found = nodes.find(function (gn) {
+                        return gn.id === nr.arquivo;
+                    });
+                    if (found) {
+                        nr.x = found.x;
+                        nr.y = found.y;
+                        return true;
+                    }
                     return false;
                 });
-                queryPoint = { x: data.query_x || 0, y: data.query_y || 0, text: data.query_text || q, nearest: data.nearest };
-                nodes.forEach(function(n) { n._highlighted = data.nearest.some(function(nr) { return nr.arquivo === n.id; }); });
-                var r = canvas.getBoundingClientRect();
-                tx = r.width / 2 - queryPoint.x * scale;
-                ty = r.height / 2 - queryPoint.y * scale;
+                // Posiciona o ponto da busca no centroide ponderado dos resultados
+                var best = data.nearest[0];
+                var qpx = data.query_x || 0;
+                var qpy = data.query_y || 0;
+                // Se ha poucos resultados, desloca um pouco do melhor pra ficar visivel
+                if (best && data.nearest.length < 4) {
+                    var dx = qpx - best.x;
+                    var dy = qpy - best.y;
+                    var dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 20) {
+                        qpx = best.x + 30;
+                        qpy = best.y - 30;
+                    }
+                }
+                queryPoint = {
+                    x: qpx,
+                    y: qpy,
+                    text: data.query_text || q,
+                    nearest: data.nearest,
+                };
+                nodes.forEach(function (n) {
+                    n._highlighted = data.nearest.some(function (nr) {
+                        return nr.arquivo === n.id;
+                    });
+                });
                 if (animationFrame) cancelAnimationFrame(animationFrame);
-                function animatePulse() { render(); animationFrame = requestAnimationFrame(animatePulse); }
-                animatePulse();
-                setTimeout(function() {
-                    if (animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = null; }
-                    queryPoint = null;
-                    nodes.forEach(function(n) { n._highlighted = false; });
+                function animatePulse() {
                     render();
-                }, 5000);
-            } catch (err) { alert("Erro na busca: " + err.message); }
-            finally { btn.textContent = origText; btn.style.pointerEvents = ""; }
+                    animationFrame = requestAnimationFrame(animatePulse);
+                }
+                animatePulse();
+                document
+                    .getElementById("semantic-clear-btn")
+                    .classList.remove("hidden");
+            } catch (err) {
+                alert("Erro na busca: " + err.message);
+            } finally {
+                btn.textContent = origText;
+                btn.style.pointerEvents = "";
+            }
         }
 
         render();

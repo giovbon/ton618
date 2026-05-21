@@ -10,7 +10,7 @@
         />
         <span
             id="editor-status"
-            class="text-[10px] font-mono text-zinc-600 shrink-0"
+            class="text-base font-mono text-zinc-600 shrink-0"
             >—</span
         >
         <span
@@ -21,17 +21,19 @@
         >
         <button
             id="save-btn"
-            class="text-[10px] font-bold tracking-wide uppercase text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+            onclick="saveNow()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar"
         >
-            Salvar
+            💾
         </button>
         <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
-            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-sm px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
             title="Excluir esta nota"
         >
-            ✕
+            🗑️
         </button>
     </div>
 
@@ -104,9 +106,9 @@
 
     <div
         id="slash-menu"
-        class="fixed hidden z-50 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
+        class="fixed hidden z-50 min-w-[160px] max-w-[90vw] bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
     >
-        <div class="py-1 max-h-64 overflow-y-auto" id="slash-items"></div>
+        <div class="py-0.5 max-h-60 overflow-y-auto" id="slash-items"></div>
     </div>
 
     <textarea id="content-output" class="hidden">{{.Content}}</textarea>
@@ -139,10 +141,10 @@
     .slash-item {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         width: 100%;
-        padding: 8px 14px;
-        font-size: 12px;
+        padding: 6px 12px;
+        font-size: 13px;
         color: #a1a1aa;
         background: transparent;
         border: none;
@@ -163,11 +165,6 @@
     }
     .slash-item .label {
         font-weight: 600;
-    }
-    .slash-item .desc {
-        font-size: 10px;
-        color: #52525b;
-        margin-top: 1px;
     }
     .ProseMirror {
         outline: none;
@@ -366,63 +363,54 @@
                 id: "h1",
                 icon: "H1",
                 label: "Heading 1",
-                desc: "Titulo grande",
                 action: makeSlashAction("heading", { level: 1 }),
             },
             {
                 id: "h2",
                 icon: "H2",
                 label: "Heading 2",
-                desc: "Titulo medio",
                 action: makeSlashAction("heading", { level: 2 }),
             },
             {
                 id: "h3",
                 icon: "H3",
                 label: "Heading 3",
-                desc: "Titulo pequeno",
                 action: makeSlashAction("heading", { level: 3 }),
             },
             {
                 id: "bullet",
                 icon: "\u2022",
                 label: "Lista",
-                desc: "Lista nao ordenada",
                 action: makeSlashAction("bulletList"),
             },
             {
                 id: "ordered",
                 icon: "1.",
                 label: "Lista numerada",
-                desc: "Lista ordenada",
                 action: makeSlashAction("orderedList"),
             },
             {
                 id: "task",
                 icon: "\u2611",
                 label: "Checklist",
-                desc: "Lista de tarefas",
                 action: makeSlashAction("taskList"),
             },
             {
                 id: "quote",
                 icon: "\u275D",
                 label: "Citacao",
-                desc: "Bloco de citacao",
                 action: makeSlashAction("blockquote"),
             },
             {
                 id: "code",
                 icon: "\u2394",
                 label: "Bloco de codigo",
-                desc: "Codigo",
                 action: makeSlashAction("codeBlock"),
             },
             {
                 id: "table",
                 icon: "\u229E",
                 label: "Tabela",
-                desc: "Inserir tabela 3x3",
                 action: function () {
                     hideSlashMenu();
                     if (slashPos !== null && editor) {
@@ -449,7 +437,6 @@
                 id: "hr",
                 icon: "\u2014",
                 label: "Linha horizontal",
-                desc: "Separador",
                 action: makeSlashAction("horizontalRule"),
             },
         ];
@@ -615,6 +602,13 @@
             editorProps: {
                 attributes: { spellcheck: "false" },
                 handleKeyDown: function (view, event) {
+                    if (
+                        event.key === "Backspace" &&
+                        !slashEl.classList.contains("hidden")
+                    ) {
+                        hideSlashMenu();
+                        return false;
+                    }
                     if (event.key === "/" && !event.ctrlKey && !event.metaKey) {
                         var $from = view.state.selection.$from;
                         var textBefore = $from.parent.textBetween(
@@ -804,10 +798,7 @@
         function renderSlashItems(filter) {
             var f = filter.toLowerCase();
             var items = SLASH_COMMANDS.filter(function (c) {
-                return (
-                    c.label.toLowerCase().indexOf(f) !== -1 ||
-                    c.desc.toLowerCase().indexOf(f) !== -1
-                );
+                return c.label.toLowerCase().indexOf(f) !== -1;
             });
             slashItems.innerHTML = "";
             items.forEach(function (cmd, i) {
@@ -816,11 +807,9 @@
                 btn.innerHTML =
                     '<span class="icon">' +
                     cmd.icon +
-                    '</span><div><div class="label">' +
+                    '</span><span class="label">' +
                     cmd.label +
-                    '</div><div class="desc">' +
-                    cmd.desc +
-                    "</div></div>";
+                    "</span>";
                 btn.onclick = cmd.action;
                 btn.dataset.index = i;
                 slashItems.appendChild(btn);
@@ -1001,8 +990,19 @@
         // ── Status ──
         function setStatus(s) {
             currentStatus = s;
-            statusEl.textContent =
-                s === "saved" ? "\u2713" : s === "saving" ? "\u27F3" : "\u25CF";
+            if (s === "saved") {
+                statusEl.textContent = "\u2713";
+                statusEl.className =
+                    "text-base font-mono text-emerald-500 shrink-0";
+            } else if (s === "saving") {
+                statusEl.textContent = "\u27F3";
+                statusEl.className =
+                    "text-base font-mono text-sky-400 shrink-0";
+            } else {
+                statusEl.textContent = "\u25CF";
+                statusEl.className =
+                    "text-base font-mono text-amber-500 shrink-0";
+            }
         }
 
         // ── Save ──
@@ -1036,8 +1036,15 @@
                     method: "POST",
                     body: fd,
                 });
-                if (resp.ok || resp.status === 303) setStatus("saved");
-                else setStatus("dirty");
+                if (resp.ok || resp.status === 303) {
+                    setStatus("saved");
+                } else {
+                    var errText = await resp.text().catch(function () {
+                        return "";
+                    });
+                    setStatus("dirty");
+                    console.error("Save failed:", resp.status, errText);
+                }
             } catch (e) {
                 setStatus("dirty");
             }
