@@ -1,23 +1,25 @@
 services:
-  ton618:
-    build: .
+  ton618-pkm:
+    image: giovbon/ton618v2:latest
     container_name: ton618
     restart: unless-stopped
     ports:
       - "6180:6180"
-    volumes:
-      - ./docs:/app/docs
-      - ./data:/app/data
-    env_file:
-      - .env
     environment:
       - DOCS_DIR=/app/docs
       - DB_PATH=/app/data/ton618.db
       - STATE_DIR=/app/data
+      - WEB_DIR=/app/web
       - PORT=6180
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6180/api/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+      - EMBEDDING_PROVIDER=gemini
+      - EMBEDDING_API_KEY= # Replace with your actual API key
+      - EMBEDDING_MODEL=gemini-embedding-2
+      - POLL_INTERVAL_SEC=30
+      - EMBEDDING_DIM=768
+      # if you want to use Ollama for embeddings, set the following environment variables and ensure Ollama is running locally
+     # - OLLAMA_HOST=http://localhost:11434
+     # - OLLAMA_MODEL=nomic-embed-text
+    volumes:
+      - ./docs:/app/docs
+      - ./state:/app/state
+      - ./data:/app/data

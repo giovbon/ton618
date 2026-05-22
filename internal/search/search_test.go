@@ -34,6 +34,14 @@ func TestBuildFTSQuery_QuotedPhrase(t *testing.T) {
 	}
 }
 
+func TestBuildFTSQuery_SingleQuoteProximity(t *testing.T) {
+	result := buildFTSQuery(`'texto proximo'`)
+	expected := `(secao:("texto" NEAR/10 "proximo") OR texto:("texto" NEAR/10 "proximo"))`
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
 func TestBuildFTSQuery_StopwordSkipped(t *testing.T) {
 	result := buildFTSQuery("de")
 	if result != "" {

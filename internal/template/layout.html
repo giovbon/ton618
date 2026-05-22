@@ -94,6 +94,29 @@
                 inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
                 inset 0 0 0 1px rgba(255, 255, 255, 0.03);
         }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 0.9rem;
+            height: 0.9rem;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 999px;
+            animation: spin 0.8s linear infinite;
+            vertical-align: -0.12em;
+            margin-right: 0.4rem;
+        }
+
+        .button-loading {
+            opacity: 0.75;
+            pointer-events: none;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
@@ -138,7 +161,7 @@
                     class="text-zinc-400 hover:text-white transition-colors">📄 NOTA</a>
                 <a href="#" id="pdf-upload-link" class="text-zinc-400 hover:text-sky-400 transition-colors">📕 PDF</a>
                 <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
-                <button onclick="return promptCapture();"
+                <button id="capture-link" onclick="return promptCapture(this);"
                     class="text-zinc-400 hover:text-emerald-400 transition-colors">
                     🌐 CAPTURA
                 </button>
@@ -164,7 +187,7 @@
                 class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">📄 NOTA</a>
             <a href="#" id="mobile-pdf-link"
                 class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors">📕 PDF</a>
-            <button onclick="document.getElementById('mobile-menu').classList.add('hidden'); return promptCapture();"
+            <button id="mobile-capture-link" onclick="document.getElementById('mobile-menu').classList.add('hidden'); return promptCapture(this);"
                 class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 transition-colors">🌐 CAPTURA</button>
             <a href="/graph"
                 class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">🗺️ Mapa</a>
@@ -182,10 +205,13 @@
 
 <script>
     // ── PDF Upload ──
+    var activePdfUploadButton = null;
+
     document.addEventListener("click", function (e) {
         var target = e.target && e.target.closest && e.target.closest("#pdf-upload-link, #mobile-pdf-link");
         if (target) {
             e.preventDefault();
+            activePdfUploadButton = target;
             if (target.id === "mobile-pdf-link") {
                 document.getElementById("mobile-menu").classList.add("hidden");
                 document.getElementById("mobile-menu-toggle").setAttribute("aria-expanded", "false");
@@ -198,8 +224,8 @@
         if (e.target && e.target.id === "pdf-file-input") {
             var file = e.target.files[0];
             if (!file) return;
-            var link = document.getElementById("pdf-upload-link");
-            link.textContent = "...";
+            var link = activePdfUploadButton || document.getElementById("pdf-upload-link");
+            setButtonLoading(link, true, "Processando...", "📕");
             var fd = new FormData();
             fd.append("file", file);
             try {
@@ -209,12 +235,12 @@
                 });
                 if (resp.ok) {
                     window.location.href = "/";
-                } else {
-                    link.textContent = "📕 PDF";
-                    alert("Erro ao fazer upload do PDF.");
+                    return;
                 }
-            } catch (e) {
-                link.textContent = "📕 PDF";
+                setButtonLoading(link, false, "PDF", "📕");
+                alert("Erro ao fazer upload do PDF.");
+            } catch (err) {
+                setButtonLoading(link, false, "PDF", "📕");
                 alert("Erro ao fazer upload do PDF.");
             }
             e.target.value = "";
@@ -236,9 +262,12 @@
     // ── New Note com nome único ──
 
     // ── Captura de artigo/YouTube ──
-    function promptCapture() {
+    function promptCapture(button) {
         var url = prompt("Insira a URL do artigo ou video do YouTube:");
         if (!url) return false;
+        if (button) {
+            setButtonLoading(button, true, "Capturando...", "🌐");
+        }
         fetch("/api/capture", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -252,9 +281,23 @@
                 window.location.href = "/editor?file=" + encodeURIComponent(data.filename);
             })
             .catch(function (err) {
+                if (button) {
+                    setButtonLoading(button, false, "CAPTURA", "🌐");
+                }
                 alert("Erro ao capturar: " + err.message);
             });
         return false;
+    }
+
+    function setButtonLoading(el, loading, text, icon) {
+        if (!el) return;
+        if (loading) {
+            el.classList.add("button-loading");
+            el.innerHTML = '<span class="loading-spinner"></span>' + text;
+        } else {
+            el.classList.remove("button-loading");
+            el.innerHTML = icon ? icon + ' ' + text : text;
+        }
     }
 
     function createNewNote() {

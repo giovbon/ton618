@@ -206,7 +206,7 @@ source: %s
 
 ---
 
-*Capturado em %s*`, title, req.URL, title, req.URL, transcript, time.Now().Format("2006-01-02 15:04:05"))
+*Capturado em %s*`, title, req.URL, title, req.URL, transcript, formatCaptureTimestamp(time.Now()))
 	} else {
 		article, err := readability.FromURL(req.URL, 20*time.Second)
 		if err != nil {
@@ -255,7 +255,7 @@ source: %s
 
 ---
 
-*Capturado em %s*`, title, req.URL, title, req.URL, req.URL, mdContent, time.Now().Format("2006-01-02 15:04:05"))
+*Capturado em %s*`, title, req.URL, title, req.URL, req.URL, mdContent, formatCaptureTimestamp(time.Now()))
 	}
 
 	slug := slugifyFilename(title)
@@ -301,4 +301,7 @@ source: %s
 		"status":   "success",
 		"filename": filename,
 	})
+}
+func formatCaptureTimestamp(t time.Time) string {
+	return t.Format("2006-01-02 15:04:05 MST")
 }

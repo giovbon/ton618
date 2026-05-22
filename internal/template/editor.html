@@ -774,6 +774,14 @@
             if (btn.id === "bubble-link") promptLink();
         });
 
+        window.addEventListener("scroll", function () {
+            if (!bubbleEl.classList.contains("hidden")) updateBubble();
+        }, true);
+
+        window.addEventListener("resize", function () {
+            if (!bubbleEl.classList.contains("hidden")) updateBubble();
+        });
+
         // ── Slash Menu ──
         function showSlashMenu(view) {
             var coords = view.coordsAtPos(view.state.selection.from);

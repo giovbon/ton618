@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ton618/internal/db"
@@ -26,11 +27,12 @@ type SearchResults struct {
 }
 
 var (
-	quoteRegex     = regexp.MustCompile(`"([^"]*)"`)
-	tagFilterRegex = regexp.MustCompile(`\+?tags:("[^"]+"|[^\s]+)`)
-	cleanQueryRe   = regexp.MustCompile(`[\+\*"]`)
-	spacesRe       = regexp.MustCompile(`\s+`)
-	nativeHashtag  = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
+	quoteRegex       = regexp.MustCompile(`"([^"]*)"`)
+	singleQuoteRegex = regexp.MustCompile(`'([^']*)'`)
+	tagFilterRegex   = regexp.MustCompile(`\+?tags:("[^"]+"|[^\s]+)`)
+	cleanQueryRe     = regexp.MustCompile(`[\+\*"]`)
+	spacesRe         = regexp.MustCompile(`\s+`)
+	nativeHashtag    = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
 )
 
 var stopwords = map[string]bool{
@@ -179,12 +181,24 @@ func buildFTSQuery(raw string) string {
 
 	var parts []string
 
-	// Extract quoted phrases — aplica a todas as colunas
+	// Extract exact quoted phrases — aplica a todas as colunas
 	quotes := quoteRegex.FindAllStringSubmatch(raw, -1)
 	for _, q := range quotes {
 		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
 			ph := `"` + strings.TrimSpace(q[1]) + `"`
 			parts = append(parts, `(tags:`+ph+` OR arquivo:`+ph+` OR secao:`+ph+` OR texto:`+ph+`)`)
+		}
+		raw = strings.Replace(raw, q[0], " ", 1)
+	}
+
+	// Extract proximity phrases in single quotes
+	proximity := singleQuoteRegex.FindAllStringSubmatch(raw, -1)
+	for _, q := range proximity {
+		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
+			ph := buildProximityExpression(strings.TrimSpace(q[1]), 10)
+			if ph != "" {
+				parts = append(parts, ph)
+			}
 		}
 		raw = strings.Replace(raw, q[0], " ", 1)
 	}
@@ -211,6 +225,35 @@ func buildFTSQuery(raw string) string {
 		return ""
 	}
 	return strings.Join(parts, " AND ")
+}
+
+func buildProximityExpression(phrase string, distance int) string {
+	words := strings.Fields(phrase)
+	if len(words) == 0 {
+		return ""
+	}
+	if len(words) == 1 {
+		w := strings.Trim(words[0], "?,;.:!+-")
+		if w == "" || stopwords[strings.ToLower(w)] {
+			return ""
+		}
+		return `(tags:` + w + ` OR arquivo:` + w + ` OR secao:` + w + ` OR texto:` + w + `)`
+	}
+
+	var terms []string
+	for _, w := range words {
+		w = strings.Trim(w, "?,;.:!+-")
+		if w == "" || stopwords[strings.ToLower(w)] {
+			continue
+		}
+		terms = append(terms, `"`+w+`"`)
+	}
+	if len(terms) < 2 {
+		return ""
+	}
+
+	near := strings.Join(terms, ` NEAR/`+strconv.Itoa(distance)+` `)
+	return `(secao:(` + near + `) OR texto:(` + near + `))`
 }
 
 // extractTerms extrai termos relevantes da query (para re-ranking).
