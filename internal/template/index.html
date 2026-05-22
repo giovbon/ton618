@@ -485,14 +485,18 @@
         if (!confirm('Excluir "' + filename + '"?')) return;
         var fd = new FormData();
         fd.append("filename", filename);
-        fetch("/file/delete", { method: "POST", body: fd }).then(function (r) {
-            if (r.ok || r.status === 303) {
-                allNotes = allNotes.filter(function (n) {
-                    return n.arquivo !== filename;
-                });
-                renderCompactNotes(allNotes);
-            }
-        });
+        fetch("/file/delete", { method: "POST", body: fd })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                if (data && data.ok) {
+                    allNotes = allNotes.filter(function (n) {
+                        return n.arquivo !== filename;
+                    });
+                    renderCompactNotes(allNotes);
+                }
+            });
     }
 
     function renameNote(filename) {

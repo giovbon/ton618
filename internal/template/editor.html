@@ -1132,7 +1132,10 @@
             fd.append("filename", filename);
             fetch("/file/delete", { method: "POST", body: fd })
                 .then(function (r) {
-                    if (r.ok || r.status === 303) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.ok) {
                         window.location.href = "/";
                     } else {
                         alert("Erro ao excluir nota.");

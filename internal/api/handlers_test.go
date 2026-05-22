@@ -530,8 +530,8 @@ func TestHandleFileDelete_RemoveArquivo(t *testing.T) {
 
 	ctx.HandleFileDelete(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("esperado 303, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
 	}
 
 	// Verificar que o arquivo foi removido
@@ -555,10 +555,10 @@ func TestHandleFileDelete_SemFilename_Retorna400(t *testing.T) {
 	}
 }
 
-func TestHandleFileDelete_ArquivoInexistente_Retorna303(t *testing.T) {
+func TestHandleFileDelete_ArquivoInexistente_Retorna200(t *testing.T) {
 	ctx := newTestContext(t)
 
-	// Deletar arquivo que nunca existiu — deve retornar 303 (idempotente)
+	// Deletar arquivo que nunca existiu — deve retornar 200 (idempotente)
 	body := "filename=notes/inexistente.md"
 	req := httptest.NewRequest("POST", "/file/delete", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -566,8 +566,8 @@ func TestHandleFileDelete_ArquivoInexistente_Retorna303(t *testing.T) {
 
 	ctx.HandleFileDelete(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("esperado 303 para arquivo inexistente, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200 para arquivo inexistente, got %d", rec.Code)
 	}
 }
 
@@ -602,7 +602,7 @@ func TestRenameFlow_SalvaNovoEDeletaVelho(t *testing.T) {
 	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec3 := httptest.NewRecorder()
 	ctx.HandleFileDelete(rec3, req3)
-	if rec3.Code != http.StatusSeeOther {
+	if rec3.Code != http.StatusOK {
 		t.Fatalf("delete velho falhou: %d", rec3.Code)
 	}
 

@@ -492,7 +492,9 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
 func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Request) {
