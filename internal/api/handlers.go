@@ -208,7 +208,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	// So ignora conteudo para o template exato "notes/novo.md"
 	// (para evitar que auto-save anterior polua o template de nova nota).
 	// Notas com nomes unicos (novo-*) devem carregar seu conteudo normalmente.
-	if !strings.HasPrefix(filename, "notes/novo") {
+	if filename != "notes/novo.md" {
 		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 		if data, err := os.ReadFile(fullPath); err == nil {
 			content = string(data)

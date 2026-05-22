@@ -238,13 +238,13 @@ func TestHandleEditor_NovoMd_IgnoraConteudoNoDisco(t *testing.T) {
 	}
 }
 
-func TestHandleEditor_NovoComTimestamp_IgnoraConteudoNoDisco(t *testing.T) {
+func TestHandleEditor_NovoComTimestamp_CarregaConteudo(t *testing.T) {
 	ctx := newTestContext(t)
 
 	// Cria arquivo notes/novo-1234-abcd.md no disco
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/novo-1234-abcd.md")
 	os.MkdirAll(filepath.Dir(fullPath), 0755)
-	os.WriteFile(fullPath, []byte("<p>conteudo fantasma</p>"), 0644)
+	os.WriteFile(fullPath, []byte("<p>conteudo real</p>"), 0644)
 
 	req := httptest.NewRequest("GET", "/editor?file=notes/novo-1234-abcd.md", nil)
 	rec := httptest.NewRecorder()
@@ -255,8 +255,8 @@ func TestHandleEditor_NovoComTimestamp_IgnoraConteudoNoDisco(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if strings.Contains(body, "conteudo fantasma") {
-		t.Error("HandleEditor carregou conteudo existente de notes/novo-*")
+	if !strings.Contains(body, "conteudo real") {
+		t.Error("HandleEditor deveria carregar conteudo existente de notes/novo-*")
 	}
 }
 
