@@ -36,9 +36,12 @@ func TestBuildFTSQuery_QuotedPhrase(t *testing.T) {
 
 func TestBuildFTSQuery_SingleQuoteProximity(t *testing.T) {
 	result := buildFTSQuery(`'texto proximo'`)
-	expected := `(secao:("texto" NEAR/10 "proximo") OR texto:("texto" NEAR/10 "proximo"))`
-	if result != expected {
-		t.Errorf("esperado %q, got %q", expected, result)
+	// FTS5 nao suporta NEAR, usa AND por coluna
+	if !strings.Contains(result, "texto:\"texto\" AND texto:\"proximo\"") {
+		t.Errorf("esperado AND query, got %q", result)
+	}
+	if !strings.Contains(result, "secao:\"texto\" AND secao:\"proximo\"") {
+		t.Errorf("esperado secao AND, got %q", result)
 	}
 }
 
@@ -719,4 +722,122 @@ func newTestStore(t *testing.T) *db.Store {
 		t.Fatalf("db.NewStore: %v", err)
 	}
 	return s
+}
+
+// ── buildProximityExpression ───────────────────────────────────
+
+func TestBuildProximityExpression_SingleWord(t *testing.T) {
+	result := buildProximityExpression("golang")
+	if !strings.Contains(result, "texto:golang") {
+		t.Errorf("esperado termo unico, got %q", result)
+	}
+}
+
+func TestBuildProximityExpression_MultipleWords(t *testing.T) {
+	result := buildProximityExpression("parcialmente artigo")
+	if !strings.Contains(result, `texto:"parcialmente" AND texto:"artigo"`) {
+		t.Errorf("esperado AND entre termos no texto, got %q", result)
+	}
+	if !strings.Contains(result, `secao:"parcialmente" AND secao:"artigo"`) {
+		t.Errorf("esperado AND entre termos na secao, got %q", result)
+	}
+}
+
+func TestBuildProximityExpression_StopwordsFiltered(t *testing.T) {
+	result := buildProximityExpression("de um artigo")
+	// "de" e "um" sao stopwords, devem ser filtrados; sobra "artigo" (1 palavra)
+	if !strings.Contains(result, "texto:artigo") {
+		t.Errorf("so 'artigo' deveria sobrar, got %q", result)
+	}
+}
+
+// ── extractTerms (quoted phrases) ──────────────────────────────
+
+func TestExtractTerms_DoubleQuotedPhrase(t *testing.T) {
+	terms := extractTerms(`"parcialmente artigo"`)
+	if !containsTerm(terms, "parcialmente artigo") {
+		t.Errorf("frase entre aspas deveria ser termo unico, got %v", terms)
+	}
+}
+
+func TestExtractTerms_SingleQuotedPhrase(t *testing.T) {
+	terms := extractTerms(`'parcialmente artigo'`)
+	if !containsTerm(terms, "parcialmente artigo") {
+		t.Errorf("frase entre aspas simples deveria ser termo unico, got %v", terms)
+	}
+}
+
+func TestExtractTerms_QuotedPhraseAddsIndividualWords(t *testing.T) {
+	terms := extractTerms(`'parcialmente artigo'`)
+	if !containsTerm(terms, "parcialmente") {
+		t.Errorf("palavra 'parcialmente' deveria estar nos termos (fallback), got %v", terms)
+	}
+	if !containsTerm(terms, "artigo") {
+		t.Errorf("palavra 'artigo' deveria estar nos termos (fallback), got %v", terms)
+	}
+}
+
+func TestExtractTerms_MixedQuotedAndUnquoted(t *testing.T) {
+	terms := extractTerms(`'proximo termo' golang`)
+	if !containsTerm(terms, "proximo termo") {
+		t.Errorf("frase entre aspas deveria ser termo unico, got %v", terms)
+	}
+	if !containsTerm(terms, "golang") {
+		t.Errorf("termo solto 'golang' deveria estar nos termos, got %v", terms)
+	}
+}
+
+func TestExtractTerms_EmptyQuote_Ignored(t *testing.T) {
+	terms := extractTerms(`"" golang`)
+	// aspas vazias nao devem adicionar termo vazio
+	if containsTerm(terms, "") {
+		t.Errorf("aspas vazias nao deveriam adicionar termo vazio, got %v", terms)
+	}
+	if !containsTerm(terms, "golang") {
+		t.Errorf("'golang' deveria estar nos termos, got %v", terms)
+	}
+}
+
+// ── buildHighlight (phrase) ────────────────────────────────────
+
+func TestBuildHighlight_PhraseExata(t *testing.T) {
+	text := "Este documento fala sobre parcialmente artigo e outros assuntos."
+	result := buildHighlight(text, []string{"parcialmente artigo"})
+	if result == nil {
+		t.Fatal("esperado highlight para frase exata, got nil")
+	}
+	frags := result["texto"]
+	if len(frags) == 0 {
+		t.Fatal("esperado fragmentos, got vazio")
+	}
+	if !contains(frags[0], "parcialmente artigo") {
+		t.Errorf("fragmento deveria conter a frase, got %q", frags[0])
+	}
+}
+
+func TestBuildHighlight_PhraseNaoAdjacente_AindaDestaca(t *testing.T) {
+	text := "parcialmente um artigo interessante"
+	result := buildHighlight(text, []string{"parcialmente", "artigo"})
+	if result == nil {
+		t.Fatal("esperado highlight para palavras individuais, got nil")
+	}
+	frags := result["texto"]
+	if len(frags) == 0 {
+		t.Fatal("esperado fragmentos, got vazio")
+	}
+	if !contains(frags[0], "parcialmente") {
+		t.Errorf("fragmento deveria conter 'parcialmente', got %q", frags[0])
+	}
+}
+
+// ── buildFTSQuery edge cases ──────────────────────────────────
+
+func TestBuildFTSQuery_MixedQuotes(t *testing.T) {
+	result := buildFTSQuery(`"exato" 'proximo'`)
+	if !strings.Contains(result, `"exato"`) {
+		t.Errorf("esperado frase exata com aspas duplas, got %q", result)
+	}
+	if !strings.Contains(result, "proximo") {
+		t.Errorf("esperado termo de proximidade, got %q", result)
+	}
 }

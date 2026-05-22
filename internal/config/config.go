@@ -40,9 +40,9 @@ func Load() *AppConfig {
 		OllamaModel:       getEnv("OLLAMA_MODEL", "nomic-embed-text"),
 		EmbeddingProvider: getEnv("EMBEDDING_PROVIDER", "gemini"),
 		EmbeddingAPIKey:   getEnv("EMBEDDING_API_KEY", ""),
-		EmbeddingModel:   getEnv("EMBEDDING_MODEL", "gemini-embedding-2"),
-		EmbeddingDim:     getEnvAsInt("EMBEDDING_DIM", 768),
-		EmbeddingAll:     getEnvAsBool("EMBEDDING_ALL", false),
+		EmbeddingModel:    getEnv("EMBEDDING_MODEL", "gemini-embedding-2"),
+		EmbeddingDim:      getEnvAsInt("EMBEDDING_DIM", 768),
+		EmbeddingAll:      getEnvAsBool("EMBEDDING_ALL", false),
 	}
 
 	// Resolve caminhos relativos para absolutos (essencial no Windows)
@@ -94,7 +94,7 @@ func (c *AppConfig) EnsureDirs() error {
 		}
 	}
 	// Create monitored subdirectories
-	for _, sub := range []string{"notes", "links", "voice", "pdfs"} {
+	for _, sub := range []string{"notes", "links", "voice", "pdfs", "attachments"} {
 		if err := os.MkdirAll(filepath.Join(c.DocsDir, sub), 0755); err != nil {
 			return err
 		}

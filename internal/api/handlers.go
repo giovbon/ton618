@@ -1,6 +1,8 @@
 package api
 
 import (
+	"archive/zip"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +21,7 @@ import (
 
 	"ton618/internal/capture"
 	"ton618/internal/db"
+	"ton618/internal/processor"
 	"ton618/internal/search"
 	"ton618/internal/semantic"
 	"ton618/internal/watcher"
@@ -49,28 +53,57 @@ func displayName(name string) string {
 	return strings.TrimSuffix(base, ".md")
 }
 
-// buildContextSnippet extrai janelas de contexto ao redor de cada termo da query.
-// Se os termos estiverem proximos (dentro de gapThreshold), mostra tudo junto.
-// Se estiverem distantes, usa "..." entre as janelas.
-func buildContextSnippet(text, query string, before, after int) string {
-	// Parse query into individual search terms
-	rawTerms := strings.Fields(query)
+// buildContextSnippet gera um trecho do texto com contexto ao redor de termos encontrados.
+// Suporta "frases exatas" entre aspas como termo único.
+func buildContextSnippet(query, text string) string {
+	const before = 80
+	const after = 120
+
+	if text == "" {
+		return "..."
+	}
+
+	// Extrai frases exatas e termos individuais
 	var terms []string
+	remaining := query
+
+	// Primeiro: extrai frases entre aspas
+	quotedRe := regexp.MustCompile(`"([^"]+)"`)
+	for {
+		m := quotedRe.FindStringSubmatch(remaining)
+		if m == nil {
+			break
+		}
+		phrase := strings.TrimSpace(m[1])
+		if phrase == "" {
+			phrase = strings.TrimSpace(m[2])
+		}
+		if len(phrase) > 1 {
+			terms = append(terms, phrase)
+			// Adiciona palavras individuais como fallback
+			for _, pw := range strings.Fields(phrase) {
+				if len(pw) > 1 {
+					terms = append(terms, pw)
+				}
+			}
+		}
+		remaining = strings.Replace(remaining, m[0], " ", 1)
+	}
+
+	// Depois: extrai termos individuais do restante
+	rawTerms := strings.Fields(remaining)
 	for _, t := range rawTerms {
 		t = strings.TrimSpace(t)
-		// Skip operators, single chars, quoted phrase boundaries
 		if len(t) <= 1 {
 			continue
 		}
 		if t[0] == '-' || t[0] == '#' || strings.HasPrefix(t, "+tags:") {
 			continue
 		}
-		// Strip surrounding quotes for phrase search
 		t = strings.Trim(t, `"`)
 		if len(t) <= 1 {
 			continue
 		}
-		// Only keep alphabetic and numeric chars for matching
 		cleaned := strings.Map(func(r rune) rune {
 			if unicode.IsLetter(r) || unicode.IsDigit(r) {
 				return r
@@ -322,7 +355,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		snippet = strings.Join(strings.Fields(snippet), " ")
 
 		// Extract multi-term context windows with ellipsis between distant terms
-		snippet = buildContextSnippet(snippet, query, 80, 120)
+		snippet = buildContextSnippet(query, snippet)
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		items = append(items, resultItem{
 			ID:         hit.Doc.ID,
@@ -373,6 +406,19 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 				http.ServeFile(w, r, testPath)
 				return
 			}
+		}
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	// Anexos (ZIPs): serve como download
+	if strings.HasPrefix(raw, "attachments/") {
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, raw)
+		if _, err := os.Stat(fullPath); err == nil {
+			w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(raw)+"\"")
+			w.Header().Set("Content-Type", "application/zip")
+			http.ServeFile(w, r, fullPath)
+			return
 		}
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
@@ -478,6 +524,20 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "file not found", http.StatusNotFound)
 			return
 		}
+	} else if ext == ".zip" {
+		// ZIP attachments: stored in attachments/
+		basename := filepath.Base(raw)
+		testPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
+		if err := os.Remove(testPath); err == nil {
+			filename = "attachments/" + basename
+			fullPath = testPath
+		} else if os.IsNotExist(err) {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	} else {
 		filename = sanitizeFilename(raw)
 		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
@@ -491,6 +551,9 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	ctx.Store.DeleteEmbeddingsByFile(filename)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
+	ctx.Store.DeleteFileMod(filename)
+	ctx.Store.ResetPopularity(filename)
+	ctx.Store.SetFileTags(filename, nil)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -513,6 +576,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 
 	ext := strings.ToLower(filepath.Ext(rawOld))
 	isPdf := ext == ".pdf"
+	isZip := ext == ".zip"
 
 	var oldName, newName string
 	var oldPath, newPath string
@@ -542,6 +606,17 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "file not found", http.StatusNotFound)
 			return
 		}
+	} else if isZip {
+		// Para Zips, busca em attachments/
+		basename := filepath.Base(rawOld)
+		newBasename := filepath.Base(rawNew)
+		if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
+			newBasename += ".zip"
+		}
+		oldName = "attachments/" + basename
+		newName = "attachments/" + newBasename
+		oldPath = filepath.Join(ctx.Cfg.DocsDir, oldName)
+		newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
 	} else {
 		oldName = sanitizeFilename(rawOld)
 		newName = sanitizeFilename(rawNew)
@@ -572,6 +647,89 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 
 	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
 	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
+}
+
+func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseMultipartForm(50 << 20); err != nil { // 50MB
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		http.Error(w, "no files uploaded", http.StatusBadRequest)
+		return
+	}
+
+	// Gera nome aleatorio pro zip
+	randBytes := make([]byte, 4)
+	rand.Read(randBytes)
+	zipName := fmt.Sprintf("%x.zip", randBytes)
+
+	// Diretorio de anexos
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	zipPath := filepath.Join(attachDir, zipName)
+
+	// Cria o ZIP
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	zw := zip.NewWriter(zipFile)
+	var fileList []map[string]string
+	var listText strings.Builder
+
+	for _, fh := range files {
+		src, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		w, err := zw.Create(fh.Filename)
+		if err != nil {
+			src.Close()
+			continue
+		}
+		io.Copy(w, src)
+		src.Close()
+		listText.WriteString(fh.Filename + " ")
+		fileList = append(fileList, map[string]string{
+			"name": fh.Filename,
+			"size": fmt.Sprintf("%d", fh.Size),
+		})
+	}
+	zw.Close()
+	zipFile.Close()
+
+	// Cria documento FTS com a lista de arquivos (pesquisavel)
+	filename := "attachments/" + zipName
+	docID := processor.HashFunc("att-" + zipName)
+	fileListStr := listText.String()
+
+	doc := db.Document{
+		ID:        docID,
+		Tipo:      "attachment",
+		Arquivo:   filename,
+		Secao:     "\U0001f4e6 " + zipName,
+		Texto:     "Arquivos: " + fileListStr,
+		Tags:      "",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Hash:      processor.CalculateHash("att", zipName, nil),
+	}
+	ctx.Store.InsertDocument(doc)
+	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
+	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	// Redireciona pra lista compacta (mesmo comportamento do upload de PDF)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) {
@@ -1045,7 +1203,7 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 		sim := semantic.CosineSimilarity(queryVec, nv.Vector)
-		if sim < 0.5 {
+		if sim < 0.7 {
 			continue
 		}
 		title := nv.Title
@@ -1056,6 +1214,7 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		results = append(results, nearest{Arquivo: doc.Arquivo, Title: title, Similarity: sim, X: nv.X, Y: nv.Y})
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Similarity > results[j].Similarity })
+
 	if len(results) > 20 {
 		results = results[:20]
 	}

@@ -201,3 +201,102 @@ func TestFileEvent_Campos(t *testing.T) {
 		t.Error("Type errado")
 	}
 }
+
+// ── ProcessFile — attachment (ZIP) ─────────────────────────────
+
+func TestProcessFile_Attachment_SoRegistraFileMod(t *testing.T) {
+	store := newTestStore(t)
+	cfg := newTestConfig(t)
+
+	filename := "attachments/teste.zip"
+	fullPath := filepath.Join(cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("fake zip"), 0644)
+
+	// Processar como modify
+	ev := FileEvent{
+		Path:     fullPath,
+		Filename: filename,
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}
+	if err := ProcessFile(store, ev, nil, false); err != nil {
+		t.Fatalf("ProcessFile(attachment): %v", err)
+	}
+
+	// Deve ter file_mod
+	mods, _ := store.GetAllFileMods()
+	if _, ok := mods[filename]; !ok {
+		t.Error("attachment deveria estar em file_mods")
+	}
+
+	// NAO deve ter documentos (diferente de como o upload cria)
+	count := store.GetDocumentCount()
+	if count > 0 {
+		t.Errorf("ProcessFile attachment nao deveria criar documentos, got %d", count)
+	}
+}
+
+func TestProcessFile_Attachment_DeleteLimpaFileMod(t *testing.T) {
+	store := newTestStore(t)
+
+	filename := "attachments/deletar.zip"
+	store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	ev := FileEvent{
+		Filename: filename,
+		Type:     "delete",
+	}
+	if err := ProcessFile(store, ev, nil, false); err != nil {
+		t.Fatalf("ProcessFile(attachment delete): %v", err)
+	}
+
+	mods, _ := store.GetAllFileMods()
+	if _, ok := mods[filename]; ok {
+		t.Error("file_mods deveria ter sido removido no delete")
+	}
+}
+
+func TestProcessFile_Attachment_NaoRemoveDocsExistentes(t *testing.T) {
+	store := newTestStore(t)
+	cfg := newTestConfig(t)
+
+	filename := "attachments/preservar.zip"
+	fullPath := filepath.Join(cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("zip"), 0644)
+
+	// Simula documento criado pelo upload handler (como o HandleUploadAttachment faz)
+	store.InsertDocument(db.Document{
+		ID:      "att-preservar",
+		Tipo:    "attachment",
+		Arquivo: filename,
+		Secao:   "📦 preservar.zip",
+		Texto:   "Arquivos: documento.txt",
+	})
+	store.IndexFTS("att-preservar", "attachment", filename, "📦 preservar.zip", "Arquivos: documento.txt", "")
+	store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	// ProcessFile com tipo attachment nao deve deletar o documento
+	ev := FileEvent{
+		Path:     fullPath,
+		Filename: filename,
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}
+	if err := ProcessFile(store, ev, nil, false); err != nil {
+		t.Fatalf("ProcessFile: %v", err)
+	}
+
+	// Documento deve permanecer
+	count := store.GetDocumentCount()
+	if count != 1 {
+		t.Errorf("documento deveria ter sido preservado (1), got %d", count)
+	}
+
+	// file_mods deve estar atualizado
+	mods, _ := store.GetAllFileMods()
+	if _, ok := mods[filename]; !ok {
+		t.Error("file_mods deveria conter o attachment")
+	}
+}

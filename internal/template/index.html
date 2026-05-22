@@ -258,14 +258,36 @@
 
     function highlightSearchTerms(query) {
         if (!query) return;
-        var words = query.split(/\s+/).filter(function (w) {
-            return w.length > 1;
+
+        // Extrai frases exatas entre aspas como termo unico
+        var terms = [];
+        var remaining = query;
+        var quoteRe = /"([^"]*)"|'([^']*)'/g;
+        var m;
+        while ((m = quoteRe.exec(query)) !== null) {
+            var phrase = m[1] || m[2];
+            if (phrase && phrase.length > 1) {
+                terms.push(phrase);
+                // Adiciona palavras individuais como fallback (pra quando a frase exata nao for adjacente)
+                var phraseWords = phrase.split(/\s+/);
+                phraseWords.forEach(function (pw) {
+                    if (pw.length > 1 && terms.indexOf(pw) === -1)
+                        terms.push(pw);
+                });
+            }
+            remaining = remaining.replace(m[0], " ");
+        }
+        // Extrai termos individuais do restante
+        var words = remaining.split(/\s+/).filter(function (w) {
+            return w.length > 1 && w !== '"';
         });
-        if (!words.length) return;
+        terms = terms.concat(words);
+
+        if (!terms.length) return;
         // Destaca termos no snippet
         document.querySelectorAll(".snippet-text").forEach(function (el) {
             var html = el.textContent;
-            words.forEach(function (w) {
+            terms.forEach(function (w) {
                 var re = new RegExp(
                     "(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
                     "gi",
@@ -283,7 +305,7 @@
             .forEach(function (el) {
                 var text = el.textContent;
                 if (!text) return;
-                words.forEach(function (w) {
+                terms.forEach(function (w) {
                     var re = new RegExp(
                         "(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
                         "gi",
@@ -347,6 +369,7 @@
             }
             var safeName = n.arquivo.replace(/'/g, "\\'");
             var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
+            var isZip = n.arquivo && n.arquivo.indexOf("attachments/") === 0;
             var isCapture = (n.tags || []).indexOf("captura") !== -1;
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
@@ -355,6 +378,8 @@
             var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
             if (isPdf) {
                 noteIcon = "\uD83D\uDCD5"; // 📕 PDF
+            } else if (isZip) {
+                noteIcon = "\uD83D\uDCE6"; // 📦 ZIP
             } else if (isYoutube) {
                 noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
             } else if (isArticle) {
@@ -365,7 +390,7 @@
 
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
-            if (isPdf) {
+            if (isPdf || isZip) {
                 html +=
                     '<a href="/file?name=' +
                     encodeURIComponent(n.arquivo) +
@@ -502,12 +527,20 @@
     function renameNote(filename) {
         var oldName = filename.split("/").pop() || filename;
         var prefix = filename.substring(0, filename.lastIndexOf("/") + 1);
-        var ext = oldName.endsWith(".pdf") ? ".pdf" : ".md";
-        var displayName = oldName.replace(/\.(md|pdf)$/i, "");
+        var ext = oldName.endsWith(".pdf")
+            ? ".pdf"
+            : oldName.endsWith(".zip")
+              ? ".zip"
+              : ".md";
+        var displayName = oldName.replace(/\.(md|pdf|zip)$/i, "");
         var newName = prompt("Novo titulo:", displayName);
         if (!newName || newName.trim() === displayName) return;
         newName = newName.trim();
-        if (!newName.endsWith(".md") && !newName.endsWith(".pdf"))
+        if (
+            !newName.endsWith(".md") &&
+            !newName.endsWith(".pdf") &&
+            !newName.endsWith(".zip")
+        )
             newName += ext;
         // Preserva o diretório (ex: pdfs/, notes/)
         newName = prefix + newName;

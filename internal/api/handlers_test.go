@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"html/template"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -1475,5 +1476,319 @@ func TestHandleGraphProject_ComEmbeddings(t *testing.T) {
 	}
 	if resp.Projected != 2 {
 		t.Errorf("esperado 2 projected, got %d", resp.Projected)
+	}
+}
+
+// ── buildContextSnippet ────────────────────────────────────────
+
+func TestBuildContextSnippet_QuerySimples(t *testing.T) {
+	text := "Este e um texto sobre golang e concorrencia."
+	snippet := buildContextSnippet("golang", text)
+	if !strings.Contains(snippet, "golang") {
+		t.Errorf("snippet deveria conter o termo buscado, got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_DoubleQuotedPhrase(t *testing.T) {
+	text := "Este documento fala sobre parcialmente artigo e outros topicos."
+	snippet := buildContextSnippet(`"parcialmente artigo"`, text)
+	if !strings.Contains(snippet, "parcialmente artigo") {
+		t.Errorf("snippet deveria conter a frase exata, got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_SingleQuotedPhrase(t *testing.T) {
+	text := "Este documento fala sobre parcialmente artigo e outros topicos."
+	snippet := buildContextSnippet(`'parcialmente artigo'`, text)
+	if !strings.Contains(snippet, "parcialmente artigo") {
+		t.Errorf("snippet deveria conter a frase entre aspas simples, got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_SingleQuoteNaoAdjacente_AindaGeraContexto(t *testing.T) {
+	text := "Este documento fala sobre parcialmente um artigo e outros topicos."
+	snippet := buildContextSnippet(`'parcialmente artigo'`, text)
+	// Mesmo nao sendo adjacentes, o snippet deve conter pelo menos uma das palavras
+	if !strings.Contains(snippet, "parcialmente") && !strings.Contains(snippet, "artigo") {
+		t.Errorf("snippet deveria conter ao menos uma palavra do termo, got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_TextoVazio(t *testing.T) {
+	snippet := buildContextSnippet("golang", "")
+	if snippet != "..." {
+		t.Errorf("texto vazio deveria retornar '...', got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_SemMatch_RetornaInicio(t *testing.T) {
+	text := "Um texto qualquer sem relacao."
+	snippet := buildContextSnippet("golang", text)
+	if !strings.Contains(snippet, text) {
+		t.Errorf("sem match, deveria retornar inicio do texto, got %q", snippet)
+	}
+}
+
+func TestBuildContextSnippet_StopwordsNaoAfetam(t *testing.T) {
+	text := "Golang e uma linguagem de programacao."
+	snippet := buildContextSnippet("golang", text)
+	if !strings.Contains(strings.ToLower(snippet), "golang") {
+		t.Errorf("stopword 'e' nao deveria impedir match de 'golang', got %q", snippet)
+	}
+}
+
+// ── HandleUploadAttachment ─────────────────────────────────────
+
+func TestHandleUploadAttachment_SemArquivos_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+	req := httptest.NewRequest("POST", "/api/upload-attachment", nil)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=xxx")
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+func TestHandleUploadAttachment_CriaZipEIndexaFTS(t *testing.T) {
+	ctx := newTestContext(t)
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, _ := w.CreateFormFile("files", "teste.txt")
+	io.Copy(part, strings.NewReader("conteudo do arquivo"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	// Deve ter um arquivo .zip em attachments/
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	entries, _ := os.ReadDir(attachDir)
+	var zipFile string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".zip") {
+			zipFile = e.Name()
+			break
+		}
+	}
+	if zipFile == "" {
+		t.Fatal("nenhum zip foi criado em attachments/")
+	}
+
+	filename := "attachments/" + zipFile
+
+	// Deve ter um documento FTS
+	docs, _ := ctx.Store.GetDocumentsByFile(filename)
+	if len(docs) == 0 {
+		t.Fatal("documento FTS deveria existir para o zip")
+	}
+	if !strings.Contains(docs[0].Texto, "teste.txt") {
+		t.Errorf("texto do documento deveria conter 'teste.txt', got %q", docs[0].Texto)
+	}
+
+	// Deve estar em file_mods
+	mods, _ := ctx.Store.GetAllFileMods()
+	if _, ok := mods[filename]; !ok {
+		t.Error("zip deveria estar registrado em file_mods")
+	}
+
+	// Nao deve ter tags
+	tags, _ := ctx.Store.GetFileTags(filename)
+	if len(tags) > 0 {
+		t.Errorf("zip nao deveria ter tags, got %v", tags)
+	}
+}
+
+func TestHandleUploadAttachment_MultiplosArquivos(t *testing.T) {
+	ctx := newTestContext(t)
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	f1, _ := w.CreateFormFile("files", "doc.pdf")
+	io.Copy(f1, strings.NewReader("pdf"))
+	f2, _ := w.CreateFormFile("files", "foto.jpg")
+	io.Copy(f2, strings.NewReader("jpg"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	entries, _ := os.ReadDir(attachDir)
+	var zipFile string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".zip") {
+			zipFile = e.Name()
+			break
+		}
+	}
+	if zipFile == "" {
+		t.Fatal("nenhum zip criado")
+	}
+
+	filename := "attachments/" + zipFile
+	docs, _ := ctx.Store.GetDocumentsByFile(filename)
+	if len(docs) == 0 {
+		t.Fatal("documento FTS deveria existir")
+	}
+	if !strings.Contains(docs[0].Texto, "doc.pdf") || !strings.Contains(docs[0].Texto, "foto.jpg") {
+		t.Errorf("texto deveria listar ambos arquivos, got %q", docs[0].Texto)
+	}
+}
+
+// ── HandleFileDelete (ZIP) ────────────────────────────────────
+
+func TestHandleFileDelete_ZIP_RemoveArquivoEDocs(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Simula criação de ZIP (cria diretorio, arquivo, documento FTS e file_mods)
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	zipName := "teste-delete.zip"
+	zipPath := filepath.Join(attachDir, zipName)
+	os.WriteFile(zipPath, []byte("fake zip content"), 0644)
+
+	filename := "attachments/" + zipName
+	docID := "att-test-delete"
+	ctx.Store.InsertDocument(db.Document{
+		ID:      docID,
+		Tipo:    "attachment",
+		Arquivo: filename,
+		Secao:   "📦 " + zipName,
+		Texto:   "Arquivos: deletar.txt",
+	})
+	ctx.Store.IndexFTS(docID, "attachment", filename, "📦 "+zipName, "Arquivos: deletar.txt", "")
+	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	// Deleta via handler
+	body := "filename=" + filename
+	req := httptest.NewRequest("POST", "/file/delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	// Arquivo removido do disco
+	if _, err := os.Stat(zipPath); !os.IsNotExist(err) {
+		t.Error("arquivo zip deveria ter sido removido do disco")
+	}
+
+	// Documento removido
+	if c := ctx.Store.GetDocumentCount(); c != 0 {
+		t.Errorf("documentos deveriam ser 0, got %d", c)
+	}
+
+	// file_mods removido
+	mods, _ := ctx.Store.GetAllFileMods()
+	if _, ok := mods[filename]; ok {
+		t.Error("file_mods deveria ter sido removido")
+	}
+}
+
+func TestHandleFileDelete_ZIP_Inexistente_Retorna404(t *testing.T) {
+	ctx := newTestContext(t)
+	body := "filename=attachments/fantasma.zip"
+	req := httptest.NewRequest("POST", "/file/delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("esperado 404 para ZIP inexistente, got %d", rec.Code)
+	}
+}
+
+// ── HandleFileRename (ZIP) ────────────────────────────────────
+
+func TestHandleFileRename_ZIP_RenomeiaComSucesso(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria ZIP real
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	oldName := "attachments/velho.zip"
+	oldPath := filepath.Join(attachDir, "velho.zip")
+	os.WriteFile(oldPath, []byte("zip content"), 0644)
+
+	filename := oldName
+	docID := "att-test-rename"
+	ctx.Store.InsertDocument(db.Document{
+		ID:      docID,
+		Tipo:    "attachment",
+		Arquivo: filename,
+		Secao:   "📦 velho.zip",
+		Texto:   "Arquivos: velho.txt",
+	})
+	ctx.Store.IndexFTS(docID, "attachment", filename, "📦 velho.zip", "Arquivos: velho.txt", "")
+	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	// Renomeia
+	body := "old=attachments/velho.zip&new=attachments/novo.zip"
+	req := httptest.NewRequest("POST", "/file/rename", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	// Arquivo novo existe, velho nao
+	newPath := filepath.Join(attachDir, "novo.zip")
+	if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		t.Error("novo arquivo zip deveria existir")
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("arquivo zip velho deveria ter sido removido")
+	}
+}
+
+func TestHandleFileRename_ZIP_SemExtensao_AdicionaZip(t *testing.T) {
+	ctx := newTestContext(t)
+
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	oldPath := filepath.Join(attachDir, "original.zip")
+	os.WriteFile(oldPath, []byte("zip"), 0644)
+	ctx.Store.SetFileMod("attachments/original.zip", time.Now().Format(time.RFC3339))
+
+	// Renomeia sem extensao — backend deve adicionar .zip
+	body := "old=attachments/original.zip&new=attachments/renomeado"
+	req := httptest.NewRequest("POST", "/file/rename", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("esperado 303, got %d", rec.Code)
+	}
+
+	// Deve ter criado renomeado.zip
+	newPath := filepath.Join(attachDir, "renomeado.zip")
+	if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		t.Error("deveria ter criado renomeado.zip, got file not found")
+	}
+
+	// Redirecionamento deve conter o nome correto
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "renomeado.zip") {
+		t.Errorf("redirect deveria conter renomeado.zip, got %q", loc)
 	}
 }

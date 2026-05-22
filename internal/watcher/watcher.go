@@ -22,7 +22,7 @@ import (
 var processMu sync.Mutex
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
-var MonitoredSubDirs = []string{"notes", "links", "voice", "pdfs"}
+var MonitoredSubDirs = []string{"notes", "links", "voice", "pdfs", "attachments"}
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{
@@ -35,6 +35,7 @@ var supportedExts = map[string]string{
 	".webp": "imagem",
 	".bmp":  "imagem",
 	".svg":  "imagem",
+	".zip":  "attachment",
 }
 
 // ── FileEvent ──
@@ -212,6 +213,12 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 		return nil
 	}
 
+	// Anexos (ZIPs): nao deleta docs/FTS — foram criados pelo upload handler
+	if tipo == "attachment" {
+		store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
+		return nil
+	}
+
 	// Remove old docs for this file
 	store.DeleteDocumentsByFile(filename)
 	store.DeleteFTSByFile(filename)
@@ -241,8 +248,6 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 			Tags:       nil,
 		}}
 	}
-
-	// Insert documents
 	for _, doc := range docs {
 		dbDoc := db.Document{
 			ID:         doc.ID,

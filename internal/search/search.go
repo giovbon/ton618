@@ -6,7 +6,6 @@ import (
 	"math"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"ton618/internal/db"
@@ -195,7 +194,7 @@ func buildFTSQuery(raw string) string {
 	proximity := singleQuoteRegex.FindAllStringSubmatch(raw, -1)
 	for _, q := range proximity {
 		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
-			ph := buildProximityExpression(strings.TrimSpace(q[1]), 10)
+			ph := buildProximityExpression(strings.TrimSpace(q[1]))
 			if ph != "" {
 				parts = append(parts, ph)
 			}
@@ -227,7 +226,7 @@ func buildFTSQuery(raw string) string {
 	return strings.Join(parts, " AND ")
 }
 
-func buildProximityExpression(phrase string, distance int) string {
+func buildProximityExpression(phrase string) string {
 	words := strings.Fields(phrase)
 	if len(words) == 0 {
 		return ""
@@ -240,29 +239,76 @@ func buildProximityExpression(phrase string, distance int) string {
 		return `(tags:` + w + ` OR arquivo:` + w + ` OR secao:` + w + ` OR texto:` + w + `)`
 	}
 
-	var terms []string
-	for _, w := range words {
-		w = strings.Trim(w, "?,;.:!+-")
-		if w == "" || stopwords[strings.ToLower(w)] {
-			continue
+	// FTS5 nao suporta NEAR. Usa AND simples para que o LIKE fallback
+	// (no search.go) possa fazer a correspondencia de proximidade.
+	var colQueries []string
+	for _, col := range []string{"texto", "secao"} {
+		var colTerms []string
+		for _, w := range words {
+			w = strings.Trim(w, "?,;.:!+-")
+			if w == "" || stopwords[strings.ToLower(w)] {
+				continue
+			}
+			colTerms = append(colTerms, col+":\""+w+"\"")
 		}
-		terms = append(terms, `"`+w+`"`)
+		if len(colTerms) >= 2 {
+			colQueries = append(colQueries, "("+strings.Join(colTerms, " AND ")+")")
+		}
 	}
-	if len(terms) < 2 {
-		return ""
+	// Fallback: se apos filtrar stopwords sobrou 1 termo, retorna como termo unico
+	if len(colQueries) == 0 {
+		var single string
+		for _, w := range words {
+			w = strings.Trim(w, "?,;.:!+-")
+			if w == "" || stopwords[strings.ToLower(w)] {
+				continue
+			}
+			single = w
+			break
+		}
+		if single != "" {
+			return `(tags:` + single + ` OR arquivo:` + single + ` OR secao:` + single + ` OR texto:` + single + `)`
+		}
 	}
-
-	near := strings.Join(terms, ` NEAR/`+strconv.Itoa(distance)+` `)
-	return `(secao:(` + near + `) OR texto:(` + near + `))`
+	if len(colQueries) > 0 {
+		return strings.Join(colQueries, " OR ")
+	}
+	return ""
 }
 
 // extractTerms extrai termos relevantes da query (para re-ranking).
+// Preserva frases entre aspas duplas ou simples como termo unico.
 func extractTerms(raw string) []string {
-	clean := tagFilterRegex.ReplaceAllString(raw, " ")
+	var terms []string
+	remaining := raw
+
+	quotedRe := regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
+	for {
+		m := quotedRe.FindStringSubmatch(remaining)
+		if m == nil {
+			break
+		}
+		phrase := strings.TrimSpace(m[1])
+		if phrase == "" {
+			phrase = strings.TrimSpace(m[2])
+		}
+		if len(phrase) > 1 && !stopwords[phrase] {
+			terms = append(terms, phrase)
+			// Adiciona palavras individuais como fallback
+			for _, pw := range strings.Fields(phrase) {
+				pl := strings.ToLower(strings.Trim(pw, "?,;.:!+-"))
+				if pl != "" && !stopwords[pl] && len(pl) > 1 {
+					terms = append(terms, pl)
+				}
+			}
+		}
+		remaining = strings.Replace(remaining, m[0], " ", 1)
+	}
+
+	clean := tagFilterRegex.ReplaceAllString(remaining, " ")
 	clean = cleanQueryRe.ReplaceAllString(clean, " ")
 	words := strings.Fields(strings.ToLower(clean))
 
-	var terms []string
 	for _, w := range words {
 		w = strings.Trim(w, "?,;.:!+-")
 		if w != "" && !stopwords[w] && len(w) > 1 {
@@ -278,6 +324,7 @@ func cleanQuery(raw string) string {
 }
 
 // extractTags extrai tags formatadas (tags:xxx ou #hashtag) da query bruta.
+
 func extractTags(raw string) (tags []string, remaining string) {
 	remaining = raw
 	matches := tagFilterRegex.FindAllStringSubmatch(remaining, -1)
@@ -298,6 +345,7 @@ func extractTags(raw string) (tags []string, remaining string) {
 }
 
 // buildHighlight gera fragmentos de destaque (simplificado).
+// Termos com espacos (frases exatas) sao buscados como bloco unico.
 func buildHighlight(text string, terms []string) map[string][]string {
 	if len(terms) == 0 {
 		return nil
