@@ -336,6 +336,12 @@
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
                     >📕 PDF</a
                 >
+                <a
+                    href="#"
+                    id="mobile-zip-link"
+                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
+                    >📦 ANEXO</a
+                >
                 <button
                     id="mobile-capture-link"
                     onclick="
@@ -432,9 +438,17 @@
             var target =
                 e.target &&
                 e.target.closest &&
-                e.target.closest("#zip-upload-link");
+                e.target.closest("#zip-upload-link, #mobile-zip-link");
             if (target) {
                 e.preventDefault();
+                if (target.id === "mobile-zip-link") {
+                    document
+                        .getElementById("mobile-menu")
+                        .classList.add("hidden");
+                    document
+                        .getElementById("mobile-menu-toggle")
+                        .setAttribute("aria-expanded", "false");
+                }
                 document.getElementById("zip-file-input").click();
             }
         });
