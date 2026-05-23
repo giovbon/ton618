@@ -1209,11 +1209,7 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "embedding failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	allEmbeddings, err := ctx.Store.GetAllEmbeddings()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+
 	type nearest struct {
 		Arquivo    string  `json:"arquivo"`
 		Title      string  `json:"title"`
@@ -1222,25 +1218,61 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		Y          float64 `json:"y"`
 	}
 	var results []nearest
-	for docID, nv := range allEmbeddings {
-		if len(nv.Vector) == 0 {
-			continue
+
+	// 1. Carrega pool de candidatos com coordenadas 2D (leve, sem BLOBs)
+	//    Limitado a 2000 para evitar OOM com muitas notas.
+	const maxCandidates = 2000
+	candidates, err := ctx.Store.GetEmbeddings2DForGraph(maxCandidates)
+	if err != nil {
+		slog.Error("graph query: candidates", "error", err)
+	}
+
+	// 2. Se nao ha candidatos 2D suficientes, busca embeddings sem projecao
+	if len(candidates) < maxCandidates/2 {
+		extra, err := ctx.Store.GetEmbeddings2DWithVectors(maxCandidates - len(candidates))
+		if err == nil {
+			for docID, nv := range extra {
+				doc, _ := ctx.Store.GetDocument(docID)
+				if doc == nil || doc.Arquivo == "" {
+					continue
+				}
+				candidates = append(candidates, db.Embedding2D{
+					DocID:   docID,
+					Title:   nv.Title,
+					Arquivo: doc.Arquivo,
+					X:       nv.X,
+					Y:       nv.Y,
+				})
+			}
 		}
-		doc, _ := ctx.Store.GetDocument(docID)
-		if doc == nil || doc.Arquivo == "" {
+	}
+
+	// 3. Para cada candidato, carrega o vetor individualmente e calcula similaridade
+	for _, e := range candidates {
+		nv, _ := ctx.Store.GetEmbedding(e.DocID)
+		if nv == nil || len(nv.Vector) == 0 {
 			continue
 		}
 		sim := semantic.CosineSimilarity(queryVec, nv.Vector)
 		if sim < 0.7 {
 			continue
 		}
-		title := nv.Title
+		title := e.Title
 		if title == "" {
-			parts := strings.Split(doc.Arquivo, "/")
+			parts := strings.Split(e.Arquivo, "/")
 			title = parts[len(parts)-1]
+			title = strings.TrimSuffix(title, ".md")
+			title = strings.TrimSuffix(title, ".pdf")
 		}
-		results = append(results, nearest{Arquivo: doc.Arquivo, Title: title, Similarity: sim, X: nv.X, Y: nv.Y})
+		results = append(results, nearest{
+			Arquivo:    e.Arquivo,
+			Title:      title,
+			Similarity: sim,
+			X:          e.X,
+			Y:          e.Y,
+		})
 	}
+
 	sort.Slice(results, func(i, j int) bool { return results[i].Similarity > results[j].Similarity })
 
 	if len(results) > 20 {

@@ -143,6 +143,31 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 	return docs, rows.Err()
 }
 
+// GetDocumentsPaginated returns a page of documents, along with the total count.
+func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
+	var total int
+	s.DB.QueryRow("SELECT COUNT(*) FROM documents").Scan(&total)
+
+	rows, err := s.DB.Query(`
+		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
+		FROM documents ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var docs []Document
+	for rows.Next() {
+		var doc Document
+		if err := rows.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
+			&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash); err != nil {
+			return nil, 0, err
+		}
+		docs = append(docs, doc)
+	}
+	return docs, total, rows.Err()
+}
+
 // GetDocumentCount returns the total number of documents in the database.
 func (s *Store) GetDocumentCount() int {
 	var count int

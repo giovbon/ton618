@@ -151,22 +151,10 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 }
 
 func listAll(store *db.Store, from, size int) (*SearchResults, error) {
-	docs, err := store.GetAllDocuments()
+	docs, total, err := store.GetDocumentsPaginated(from, size)
 	if err != nil {
 		return nil, err
 	}
-
-	total := len(docs)
-
-	// Apply pagination
-	if from >= total {
-		return &SearchResults{Hits: []SearchHit{}, Total: total}, nil
-	}
-	end := from + size
-	if end > total {
-		end = total
-	}
-	docs = docs[from:end]
 
 	var hits []SearchHit
 	for _, doc := range docs {

@@ -181,29 +181,36 @@ func (w *Watcher) runReprojection() {
 		w.reprojectMu.Unlock()
 	}()
 
-	embeddings, err := w.store.GetAllEmbeddings()
-	if err != nil || len(embeddings) < 2 {
+	// Carrega apenas embeddings que AINDA não têm projeção 2D e têm vetor
+	// (limitado a 2000 para evitar OOM com muitas notas)
+	const maxReproject = 2000
+	unprojected, err := w.store.GetEmbeddings2DWithVectors(maxReproject)
+	if err != nil || len(unprojected) < 2 {
 		return
 	}
 
-	// Coleta vetores de todas as embeddings
+	// Coleta vetores mapeando por arquivo (um por arquivo)
 	vecs := make(map[string][]float32)
-	for docID, nv := range embeddings {
-		if len(nv.Vector) > 0 {
-			doc, _ := w.store.GetDocument(docID)
-			if doc != nil && doc.Arquivo != "" {
-				vecs[doc.Arquivo] = nv.Vector
-			}
+	fileSeen := make(map[string]bool)
+	for docID, nv := range unprojected {
+		if len(nv.Vector) == 0 {
+			continue
 		}
+		doc, _ := w.store.GetDocument(docID)
+		if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] {
+			continue
+		}
+		fileSeen[doc.Arquivo] = true
+		vecs[doc.Arquivo] = nv.Vector
 	}
 
 	if len(vecs) < 2 {
 		return
 	}
 
-	slog.Info("Reprojetando embeddings com t-SNE", "total", len(vecs))
+	slog.Info("Reprojetando embeddings não-projetados com t-SNE", "total", len(vecs), "max", maxReproject)
 
-	// t-SNE (sem limite - roda em background)
+	// t-SNE (limitado aos não-projetados — rápido e incremental)
 	tsne := semantic.DefaultTSNE()
 	projected := tsne.Project(vecs)
 
@@ -215,7 +222,7 @@ func (w *Watcher) runReprojection() {
 		}
 	}
 
-	slog.Info("Reprojecao t-SNE concluida", "total", len(vecs))
+	slog.Info("Reprojecao t-SNE incremental concluida", "projetados", len(vecs))
 }
 
 func (w *Watcher) Events() <-chan FileEvent {
