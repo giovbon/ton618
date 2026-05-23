@@ -2,6 +2,7 @@ package api
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -283,6 +284,10 @@ func (ctx *HandlerContext) HandleGraph(w http.ResponseWriter, r *http.Request) {
 // ── Search (HTMX partial) ──
 
 func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) {
+	// Set request timeout
+	rCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
 	query := r.FormValue("q")
 	if query == "" && r.Method == "POST" {
 		if r.Body != nil {
@@ -301,7 +306,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		size = 20
 	}
 
-	results, err := search.Search(r.Context(), ctx.Store, query, from, size,
+	results, err := search.Search(rCtx, ctx.Store, query, from, size,
 		ctx.Store.GetLinkCount, ctx.Store.GetPopularity)
 	if err != nil {
 		slog.Error("search error", "error", err)
@@ -485,6 +490,9 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 	if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, ctx.Cfg.EmbeddingAll); err != nil {
 		slog.Error("process file after save", "error", err)
 	}
+
+	// Mark as recently processed to prevent watcher from reprocessing
+	watcher.MarkRecentlyProcessed(filename)
 
 	// Redirect back to editor
 	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
@@ -869,7 +877,19 @@ func scalePoints(pts map[string]semantic.Point2D, targetRange float64) {
 }
 
 func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Request) {
-	embeddings, _ := ctx.Store.GetAllEmbeddings()
+	limit := 500
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 2000 {
+			limit = v
+		}
+	}
+
+	// 1. Carrega embeddings ja projetadas (2D) — rápido, sem BLOBs
+	emb2D, err := ctx.Store.GetEmbeddings2DForGraph(limit)
+	if err != nil {
+		slog.Error("graph 2d query", "error", err)
+	}
+
 	links, _ := ctx.Store.GetAllLinks()
 
 	type node struct {
@@ -889,49 +909,33 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		Target string `json:"target"`
 	}
 
-	// Agrupa embeddings por arquivo (um arquivo pode ter varios docs/embeddings)
-	// e usa o primeiro embedding encontrado para cada arquivo.
-	fileNodes := make(map[string]node) // arquivo -> node
+	fileNodes := make(map[string]node)
 	fileSeen := make(map[string]bool)
 
-	// Coleciona vetores para projecao PCA
-	vecsForProjection := make(map[string][]float32)
-
-	for docID, nv := range embeddings {
-		doc, _ := ctx.Store.GetDocument(docID)
-		if doc == nil || doc.Arquivo == "" {
+	// 2. Processa embeddings 2D existentes
+	for _, e := range emb2D {
+		if e.Arquivo == "" || fileSeen[e.Arquivo] {
 			continue
 		}
-		arquivo := doc.Arquivo
-		if fileSeen[arquivo] {
-			continue // ja processamos este arquivo
-		}
-		fileSeen[arquivo] = true
+		fileSeen[e.Arquivo] = true
 
-		// Nome de exibicao: apenas o nome do arquivo sem extensao
-		parts := strings.Split(arquivo, "/")
+		parts := strings.Split(e.Arquivo, "/")
 		baseName := parts[len(parts)-1]
 		baseName = strings.TrimSuffix(baseName, ".md")
 		baseName = strings.TrimSuffix(baseName, ".pdf")
 
-		// Se ja tem coordenadas 2D armazenadas, usa-as
-		x, y := nv.X, nv.Y
-		if x == 0 && y == 0 && len(nv.Vector) > 0 {
-			// Guarda para recalcular via PCA
-			vecsForProjection[arquivo] = nv.Vector
+		noteType := "note"
+		if strings.HasPrefix(e.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(e.Arquivo), ".pdf") {
+			noteType = "pdf"
 		}
 
-		// Detecta tipo de nota pelo arquivo / tags / tipo de documento
-		noteType := "note"
-		if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") || doc.Tipo == "pdf" {
-			noteType = "pdf"
-		} else {
-			tags := db.TagsToSlice(doc.Tags)
-			for _, tag := range tags {
+		fileTags := []string{}
+		if t, err := ctx.Store.GetFileTags(e.Arquivo); err == nil {
+			fileTags = t
+			for _, tag := range fileTags {
 				switch strings.ToLower(strings.TrimSpace(tag)) {
 				case "youtube", "video":
 					noteType = "video"
-					break
 				case "artigo", "article", "captura":
 					if noteType != "video" {
 						noteType = "article"
@@ -940,34 +944,24 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
-		// Tags do arquivo
-		fileTags := []string{}
-		if t, err := ctx.Store.GetFileTags(arquivo); err == nil {
-			fileTags = t
-		}
-
-		// Popularidade
-		pop := ctx.Store.GetPopularity(arquivo)
-
-		// Raio: base 6, escala com log da popularidade (max ~20)
+		pop := ctx.Store.GetPopularity(e.Arquivo)
 		radius := 6.0 + math.Log2(float64(pop)+1)*2.0
 		if radius > 20 {
 			radius = 20
 		}
 
-		// Cor: derivada da primeira tag (hash simples → HSL)
-		color := "#38bdf8" // azul padrao
+		color := "#38bdf8"
 		if len(fileTags) > 0 {
 			color = tagColor(fileTags[0])
 		} else if noteType == "pdf" {
-			color = "#f59e0b" // laranja pra PDFs
+			color = "#f59e0b"
 		}
 
-		fileNodes[arquivo] = node{
-			ID:         arquivo,
+		fileNodes[e.Arquivo] = node{
+			ID:         e.Arquivo,
 			Title:      baseName,
-			X:          x,
-			Y:          y,
+			X:          e.X,
+			Y:          e.Y,
 			NoteType:   noteType,
 			Tags:       fileTags,
 			Popularity: pop,
@@ -976,32 +970,56 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Se ha vetores sem projecao 2D, usa PCA (instantâneo) e agenda reprojecao t-SNE em background
-	if len(vecsForProjection) > 1 {
-		// PCA é instantâneo e serve como fallback visual imediato
-		projected := semantic.Project2DReduce(vecsForProjection)
-
-		// Escala as coordenadas para um range visivel (~[-500, 500])
-		scalePoints(projected, 500)
-
-		for arquivo, pt := range projected {
-			if n, ok := fileNodes[arquivo]; ok && n.X == 0 && n.Y == 0 {
-				n.X = pt.X
-				n.Y = pt.Y
-				fileNodes[arquivo] = n
+	// 3. Se ha poucos nos, projeta embeddings sem 2D via PCA e agenda t-SNE
+	if len(fileNodes) < limit/2 {
+		vecsForProjection, err := ctx.Store.GetEmbeddings2DWithVectors(limit)
+		if err == nil && len(vecsForProjection) > 0 {
+			vecs := make(map[string][]float32)
+			vecToArquivo := make(map[string]string) // docID -> arquivo
+			fileToDocID := make(map[string]string)   // arquivo -> docID
+			for docID, nv := range vecsForProjection {
+				doc, _ := ctx.Store.GetDocument(docID)
+				if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] || len(nv.Vector) == 0 {
+					continue
+				}
+				if _, ok := fileToDocID[doc.Arquivo]; ok {
+					continue
+				}
+				vecs[doc.Arquivo] = nv.Vector
+				vecToArquivo[docID] = doc.Arquivo
+				fileToDocID[doc.Arquivo] = docID
 			}
-			// Armazena no banco para reuso
-			docs, _ := ctx.Store.GetDocumentsByFile(arquivo)
-			if len(docs) > 0 {
-				ctx.Store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
+
+			if len(vecs) > 1 {
+				projected := semantic.Project2DReduce(vecs)
+				scalePoints(projected, 500)
+				for arquivo, pt := range projected {
+					if docID, ok := fileToDocID[arquivo]; ok {
+						ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y)
+					}
+					if !fileSeen[arquivo] {
+						fileSeen[arquivo] = true
+						parts := strings.Split(arquivo, "/")
+						baseName := parts[len(parts)-1]
+						baseName = strings.TrimSuffix(baseName, ".md")
+						baseName = strings.TrimSuffix(baseName, ".pdf")
+						fileNodes[arquivo] = node{
+							ID:        arquivo,
+							Title:     baseName,
+							X:         pt.X,
+							Y:         pt.Y,
+							NoteType:  "note",
+							Radius:    6,
+							Color:     "#38bdf8",
+						}
+					}
+				}
+				ctx.Watcher.QueueReproject()
 			}
 		}
-
-		// Agenda reprojecao t-SNE em background para qualidade superior
-		ctx.Watcher.QueueReproject()
 	}
 
-	// Clustering com silhouette score no servidor
+	// 4. Clustering (amostra max 500 pontos para performance)
 	var clusterMap map[string]int
 	var clusterCount int
 	{
@@ -1014,13 +1032,11 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 	var nodes []node
 	for _, n := range fileNodes {
-		// Atribui cluster_id
 		clusterID := 0
 		if c, ok := clusterMap[n.ID]; ok {
 			clusterID = c
 		}
 
-		// Se ainda estao em (0,0) apos tentativa de projecao, espalha num grid
 		if n.X == 0 && n.Y == 0 {
 			idx := len(nodes)
 			cols := math.Ceil(math.Sqrt(float64(len(fileNodes))))
@@ -1031,7 +1047,6 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			n.Y = float64(int(idx)/int(cols))*120 + 60
 		}
 
-		// Adiciona cluster_id ao nó
 		nodes = append(nodes, node{
 			ID:         n.ID,
 			Title:      n.Title,
@@ -1046,7 +1061,6 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		})
 	}
 
-	// Filtra links: so inclui se ambos os arquivos existirem como nodes
 	var edgeList []link
 	for fromFile, toFiles := range links {
 		if !fileSeen[fromFile] {
@@ -1080,7 +1094,13 @@ func tagColor(tag string) string {
 }
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
-	mods, err := ctx.Store.GetAllFileMods()
+	from, _ := strconv.Atoi(r.URL.Query().Get("from"))
+	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+	if size <= 0 || size > 200 {
+		size = 50
+	}
+
+	mods, total, err := ctx.Store.GetFileModsPaginated(from, size)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1112,6 +1132,9 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"notes": notes,
+		"total": total,
+		"from":  from,
+		"size":  size,
 	})
 }
 
@@ -1165,6 +1188,11 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Set request timeout
+	rCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	var body struct {
 		Query string `json:"query"`
 	}
@@ -1176,7 +1204,7 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "embedding not configured", http.StatusServiceUnavailable)
 		return
 	}
-	queryVec, err := ctx.Embed.Embed(r.Context(), body.Query)
+	queryVec, err := ctx.Embed.Embed(rCtx, body.Query)
 	if err != nil {
 		http.Error(w, "embedding failed: "+err.Error(), http.StatusInternalServerError)
 		return

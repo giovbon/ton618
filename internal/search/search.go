@@ -32,7 +32,17 @@ var (
 	cleanQueryRe     = regexp.MustCompile(`[\+\*"]`)
 	spacesRe         = regexp.MustCompile(`\s+`)
 	nativeHashtag    = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
+	ftsUnsafeRe      = regexp.MustCompile(`[\^~()]`) // chars que interferem com sintaxe FTS5
 )
+
+// sanitizeFTS5Term removes characters that interfere with FTS5 query syntax.
+func sanitizeFTS5Term(term string) string {
+	term = ftsUnsafeRe.ReplaceAllString(term, "")
+	if len(term) > 100 {
+		term = term[:100]
+	}
+	return term
+}
 
 var stopwords = map[string]bool{
 	"de": true, "da": true, "do": true, "em": true, "no": true, "na": true,
@@ -209,6 +219,7 @@ func buildFTSQuery(raw string) string {
 	words := strings.Fields(raw)
 	for _, w := range words {
 		w = strings.Trim(w, "?,;.:!+-")
+		w = sanitizeFTS5Term(w)
 		if w == "" || stopwords[strings.ToLower(w)] {
 			continue
 		}

@@ -21,6 +21,42 @@ import (
 // entre o processamento direto (HandleFileSave) e o watcher fsnotify.
 var processMu sync.Mutex
 
+// recentlyProcessed tracks files that were recently processed by HandleFileSave
+// to prevent the watcher from reprocessing them immediately.
+var (
+	recentlyProcessedMu sync.RWMutex
+	recentlyProcessed   = make(map[string]time.Time)
+)
+
+// MarkRecentlyProcessed records that a file was just processed by the HTTP handler.
+// The watcher will skip this file for the given duration.
+func MarkRecentlyProcessed(filename string) {
+	recentlyProcessedMu.Lock()
+	recentlyProcessed[filename] = time.Now()
+	recentlyProcessedMu.Unlock()
+}
+
+// isRecentlyProcessed checks if a file was processed recently (within 3 seconds).
+// If so, it removes the entry to avoid permanent skipping.
+func isRecentlyProcessed(filename string) bool {
+	recentlyProcessedMu.RLock()
+	t, ok := recentlyProcessed[filename]
+	recentlyProcessedMu.RUnlock()
+	if !ok {
+		return false
+	}
+	if time.Since(t) < 3*time.Second {
+		recentlyProcessedMu.Lock()
+		delete(recentlyProcessed, filename)
+		recentlyProcessedMu.Unlock()
+		return true
+	}
+	recentlyProcessedMu.Lock()
+	delete(recentlyProcessed, filename)
+	recentlyProcessedMu.Unlock()
+	return false
+}
+
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
 var MonitoredSubDirs = []string{"notes", "links", "voice", "pdfs", "attachments"}
 
@@ -188,12 +224,33 @@ func (w *Watcher) Events() <-chan FileEvent {
 
 // ── ProcessFile ──
 
+// ProcessBatch processes multiple file events sequentially, holding the
+// processMu mutex for the entire batch. This prevents interleaving with
+// other goroutines (e.g., HandleFileSave) and allows SQLite to batch
+// internal WAL checkpoints, significantly improving throughput during
+// bulk operations like initial indexing.
+func ProcessBatch(store *db.Store, events []FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
+	processMu.Lock()
+	defer processMu.Unlock()
+
+	for _, ev := range events {
+		if err := processFileLocked(store, ev, embed, embedAll); err != nil {
+			slog.Error("batch process file", "file", ev.Filename, "error", err)
+		}
+	}
+	return nil
+}
+
 // ProcessFile processes a single file event: reads, parses, indexes, and optionally embeds the content.
-// O mutex processMu serializa chamadas concorrentes para evitar duplicacao
-// quando o HandleFileSave e o fsnotify disparam simultaneamente.
 func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
 	processMu.Lock()
 	defer processMu.Unlock()
+	return processFileLocked(store, ev, embed, embedAll)
+}
+
+// processFileLocked é a implementação compartilhada entre ProcessFile e ProcessBatch.
+// REQUER que processMu já esteja lockado pelo caller.
+func processFileLocked(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
 
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -372,6 +429,12 @@ func (w *Watcher) handleCreateOrMod(absPath string) {
 		return
 	}
 
+	// Skip if this file was just processed by HandleFileSave
+	if isRecentlyProcessed(relPath) {
+		slog.Debug("Skipping recently processed file", "file", relPath)
+		return
+	}
+
 	ext := strings.ToLower(filepath.Ext(relPath))
 	if _, ok := supportedExts[ext]; !ok {
 		return
@@ -446,6 +509,8 @@ func (w *Watcher) relPathFromWalk(path string) (string, bool) {
 func (w *Watcher) pollAll() {
 	// 1. Escaneia arquivos no disco
 	diskFiles := make(map[string]bool)
+	var batchEvents []FileEvent
+
 	for _, sub := range MonitoredSubDirs {
 		dir := filepath.Join(w.cfg.DocsDir, sub)
 		filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -465,14 +530,28 @@ func (w *Watcher) pollAll() {
 				return nil
 			}
 			diskFiles[relPath] = true
-			w.events <- FileEvent{
+			batchEvents = append(batchEvents, FileEvent{
 				Path:     path,
 				Filename: relPath,
 				ModTime:  info.ModTime(),
 				Type:     "modify",
-			}
+			})
 			return nil
 		})
+	}
+
+	// 2. Processa lotes de eventos em transação única (mais rápido)
+	if len(batchEvents) > 0 {
+		if len(batchEvents) == 1 {
+			// Evento único: ProcessFile já faz lock + transação implícita
+			w.events <- batchEvents[0]
+		} else {
+			// Vários eventos: processa em lote com transação única
+			slog.Info("Processando lote de arquivos", "count", len(batchEvents))
+			if err := ProcessBatch(w.store, batchEvents, w.embed, w.embedAll); err != nil {
+				slog.Error("batch process error", "error", err)
+			}
+		}
 	}
 
 	// 2. Remove do banco arquivos que existem no DB mas não estão no disco

@@ -114,7 +114,16 @@ func initSchema(database *sql.DB) error {
 	`
 
 	_, err := database.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Performance PRAGMAs
+	database.Exec("PRAGMA synchronous=NORMAL")
+	database.Exec("PRAGMA cache_size=-8000")
+	database.Exec("PRAGMA temp_store=MEMORY")
+
+	return nil
 }
 
 // Close fecha a conexão com o banco.

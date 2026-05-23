@@ -12,6 +12,14 @@ type NoteVector struct {
 	X, Y   float64
 }
 
+// Embedding2D holds a light 2D projection point for graph rendering (no vector blob).
+type Embedding2D struct {
+	DocID   string
+	Title   string
+	Arquivo string
+	X, Y    float64
+}
+
 // EncodeVector serializes a []float32 slice into a []byte (little-endian).
 func EncodeVector(vec []float32) []byte {
 	buf := make([]byte, len(vec)*4)
@@ -134,6 +142,62 @@ func (s *Store) GetEmbeddingCount() int {
 	var count int
 	s.DB.QueryRow("SELECT COUNT(*) FROM embeddings").Scan(&count)
 	return count
+}
+
+// GetEmbeddings2DForGraph returns embeddings with 2D coords joined with document info,
+// without loading the full vector BLOB. Limited and randomized for graph display.
+func (s *Store) GetEmbeddings2DForGraph(limit int) ([]Embedding2D, error) {
+	rows, err := s.DB.Query(`
+		SELECT e.doc_id, e.title, e.x, e.y, COALESCE(d.arquivo, '')
+		FROM embeddings e
+		LEFT JOIN documents d ON d.id = e.doc_id
+		WHERE e.x != 0 OR e.y != 0
+		ORDER BY RANDOM()
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []Embedding2D
+	for rows.Next() {
+		var e Embedding2D
+		if err := rows.Scan(&e.DocID, &e.Title, &e.X, &e.Y, &e.Arquivo); err != nil {
+			continue
+		}
+		results = append(results, e)
+	}
+	return results, rows.Err()
+}
+
+// GetEmbeddings2DWithVectors returns embeddings that have vectors but no 2D coords yet,
+// so they can be projected later. Returns a map keyed by doc_id.
+func (s *Store) GetEmbeddings2DWithVectors(limit int) (map[string]NoteVector, error) {
+	rows, err := s.DB.Query(`
+		SELECT e.doc_id, e.vector, e.title, e.x, e.y, COALESCE(d.arquivo, '')
+		FROM embeddings e
+		LEFT JOIN documents d ON d.id = e.doc_id
+		WHERE (e.x = 0 AND e.y = 0) AND e.vector IS NOT NULL
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]NoteVector)
+	for rows.Next() {
+		var docID, arquivo string
+		var data []byte
+		var nv NoteVector
+		if err := rows.Scan(&docID, &data, &nv.Title, &nv.X, &nv.Y, &arquivo); err != nil {
+			continue
+		}
+		nv.Vector = DecodeVector(data)
+		result[docID] = nv
+	}
+	return result, rows.Err()
 }
 
 // GetEmbeddingsByFile returns embeddings for all documents belonging to a file.
