@@ -31,9 +31,8 @@ func NewStore(path string) (*Store, error) {
 
 // initSchema cria as tabelas necessárias se ainda não existirem.
 func initSchema(database *sql.DB) error {
-	// Drop old contentless FTS5 to recreate with column-qualified query support
-	database.Exec("DROP TABLE IF EXISTS docs_fts")
-
+	// NOTE: FTS5 table is created below with IF NOT EXISTS.
+	// The old contentless FTS5 schema was already migrated in a previous version.
 	schema := `
 	CREATE TABLE IF NOT EXISTS documents (
 		id          TEXT PRIMARY KEY,

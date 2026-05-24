@@ -81,10 +81,13 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Anexos (ZIPs): serve como download
-	if strings.HasPrefix(raw, "attachments/") {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, raw)
+	// NOTA: usa filepath.Base para evitar path traversal.
+	// O prefixo "attachments/" é forçado para manter a organização.
+	if strings.HasPrefix(raw, "attachments/") || strings.HasPrefix(raw, "attachments\\") {
+		basename := filepath.Base(raw)
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
 		if _, err := os.Stat(fullPath); err == nil {
-			w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(raw)+"\"")
+			w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
 			w.Header().Set("Content-Type", "application/zip")
 			http.ServeFile(w, r, fullPath)
 			return

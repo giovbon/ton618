@@ -64,7 +64,6 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 
 func TestSetEmbedding_And_GetEmbeddingCount(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	// Inicialmente zero
 	if c := store.GetEmbeddingCount(); c != 0 {
@@ -96,7 +95,6 @@ func TestSetEmbedding_And_GetEmbeddingCount(t *testing.T) {
 
 func TestDeleteEmbedding(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	store.SetEmbedding("doc-del", []float32{1.0}, "Delete")
 	if c := store.GetEmbeddingCount(); c != 1 {
@@ -111,7 +109,6 @@ func TestDeleteEmbedding(t *testing.T) {
 
 func TestEmbedding2D(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	store.SetEmbedding("doc2d", []float32{0.5, 0.5}, "2D")
 	if err := store.SetEmbedding2D("doc2d", 10.5, -20.3); err != nil {
@@ -124,19 +121,8 @@ func TestEmbedding2D(t *testing.T) {
 	}
 }
 
-// Helper para criar store de teste
-func newTestStore(t *testing.T) *Store {
-	t.Helper()
-	s, err := NewStore(t.TempDir() + "/test.db")
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	return s
-}
-
 func TestDeleteEmbeddingsByFile_RemovePorArquivo(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	// Cria documento e vincula embedding
 	doc := Document{
@@ -167,7 +153,6 @@ func TestDeleteEmbeddingsByFile_RemovePorArquivo(t *testing.T) {
 
 func TestDeleteEmbeddingsByFile_ApenasUmArquivo(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	// Dois documentos, dois arquivos, dois embeddings
 	store.InsertDocument(Document{ID: "doc-a", Tipo: "md", Arquivo: "notes/a.md", Secao: "A", Texto: "a"})
@@ -195,7 +180,6 @@ func TestDeleteEmbeddingsByFile_ApenasUmArquivo(t *testing.T) {
 
 func TestDeleteOrphanedEmbeddings_LimpaOrfaos(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	// Cria embedding SEM documento correspondente
 	store.SetEmbedding("orfao", []float32{0.9}, "Orfao")
@@ -217,7 +201,6 @@ func TestDeleteOrphanedEmbeddings_LimpaOrfaos(t *testing.T) {
 
 func TestDeleteOrphanedEmbeddings_MantemVinculados(t *testing.T) {
 	store := newTestStore(t)
-	defer store.Close()
 
 	// Cria documento com embedding (válido)
 	store.InsertDocument(Document{ID: "doc-valido", Tipo: "md", Arquivo: "notes/valido.md", Secao: "V", Texto: "v"})

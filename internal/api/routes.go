@@ -3,6 +3,7 @@ package api
 import (
 	"html/template"
 	"net/http"
+	"time"
 
 	"ton618/internal/config"
 	"ton618/internal/db"
@@ -31,6 +32,12 @@ func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watche
 
 // SetupRoutes registra todas as rotas no ServeMux.
 func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
+	// Rate limiters para endpoints pesados
+	// Busca FTS: 30 req/min por IP
+	searchLimiter := NewRateLimiter(30, time.Minute)
+	// API de embedding (Gemini/Ollama): 10 req/min por IP (evita estourar quota)
+	embedLimiter := NewRateLimiter(10, time.Minute)
+
 	// Páginas HTML (server-side rendered)
 	mux.HandleFunc("GET /", ctx.HandleIndex)
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
@@ -38,9 +45,9 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /login", ctx.HandleLogin)
 
-	// Busca (HTMX partial)
-	mux.HandleFunc("POST /search", ctx.HandleSearch)
-	mux.HandleFunc("GET /search", ctx.HandleSearch)
+	// Busca (HTMX partial) — rate limited
+	mux.Handle("POST /search", searchLimiter.Middleware(http.HandlerFunc(ctx.HandleSearch)))
+	mux.Handle("GET /search", searchLimiter.Middleware(http.HandlerFunc(ctx.HandleSearch)))
 
 	// Arquivos
 	mux.HandleFunc("GET /file", ctx.HandleFile)
@@ -50,12 +57,12 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /upload", ctx.HandleUpload)
 
 	// API
-	mux.HandleFunc("POST /api/capture", ctx.HandleCapture)
+	mux.Handle("POST /api/capture", embedLimiter.Middleware(http.HandlerFunc(ctx.HandleCapture)))
 	mux.HandleFunc("GET /api/status", ctx.HandleStatus)
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 	mux.HandleFunc("GET /api/graph/data", ctx.HandleGraphData)
-	mux.HandleFunc("POST /api/graph/query", ctx.HandleGraphQuery)
+	mux.Handle("POST /api/graph/query", embedLimiter.Middleware(http.HandlerFunc(ctx.HandleGraphQuery)))
 	mux.HandleFunc("POST /api/graph/project", ctx.HandleGraphProject)
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)

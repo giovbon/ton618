@@ -6,6 +6,12 @@ import (
 	"sort"
 )
 
+// rngPCA e rngPCAAlt são reutilizados via closures para Power Iteration.
+// Usamos funções que retornam um novo *rand.Rand a cada chamada para garantir
+// determinismo: cada execução de PCA produz os mesmos resultados.
+func newRngPCA() *rand.Rand    { return rand.New(rand.NewSource(42)) }
+func newRngPCAAlt() *rand.Rand { return rand.New(rand.NewSource(123)) }
+
 // Point2D represents a 2D coordinate in the projection.
 type Point2D struct {
 	X, Y float64
@@ -107,7 +113,7 @@ func Project2DReduce(vectors map[string][]float32) map[string]Point2D {
 }
 
 func powerIteration(matrix [][]float64, d int, maxIter int) []float64 {
-	rng := rand.New(rand.NewSource(42))
+	rng := newRngPCA()
 	v := make([]float64, d)
 	for i := range v {
 		v[i] = rng.Float64()*2 - 1
@@ -154,7 +160,7 @@ func powerIterationDeflated(matrix [][]float64, d int, eig1 []float64, maxIter i
 	for j := 0; j < d; j++ {
 		lambda += eig1[j] * aux[j]
 	}
-	rng := rand.New(rand.NewSource(123))
+	rng := newRngPCAAlt()
 	v := make([]float64, d)
 	for i := range v {
 		v[i] = rng.Float64()*2 - 1
@@ -198,6 +204,7 @@ func powerIterationDeflated(matrix [][]float64, d int, eig1 []float64, maxIter i
 		}
 		if dot < 0 {
 			for j := 0; j < d; j++ {
+				vNew[j] = -vNew[j]
 			}
 			dot = -dot
 		}
@@ -222,10 +229,16 @@ func normalize(v []float64) {
 	}
 }
 
-func normalizePoints(pts map[string]Point2D) {
-	if len(pts) == 0 {
+// ScalePoints redimensiona um conjunto de pontos 2D para caber dentro de [-targetRange, targetRange],
+// mantendo a proporção entre os eixos. Se targetRange <= 0, usa 1 como padrão.
+func ScalePoints(pts map[string]Point2D, targetRange float64) {
+	if len(pts) < 2 {
 		return
 	}
+	if targetRange <= 0 {
+		targetRange = 1
+	}
+
 	minX, maxX := math.MaxFloat64, -math.MaxFloat64
 	minY, maxY := math.MaxFloat64, -math.MaxFloat64
 	for _, p := range pts {
@@ -242,22 +255,31 @@ func normalizePoints(pts map[string]Point2D) {
 			maxY = p.Y
 		}
 	}
+
 	rangeX := maxX - minX
 	rangeY := maxY - minY
-	if rangeX < 1e-10 {
-		rangeX = 1
+	if rangeX < 1e-10 && rangeY < 1e-10 {
+		return // todos no mesmo ponto
 	}
-	if rangeY < 1e-10 {
-		rangeY = 1
-	}
+
+	// Usa o maior range para escalar (preserva proporção)
+	maxRange := math.Max(rangeX, rangeY)
+	scale := (targetRange * 2) / maxRange
+
 	midX := (minX + maxX) / 2
 	midY := (minY + maxY) / 2
+
 	for id, p := range pts {
 		pts[id] = Point2D{
-			X: (p.X - midX) / (rangeX / 2),
-			Y: (p.Y - midY) / (rangeY / 2),
+			X: (p.X - midX) * scale,
+			Y: (p.Y - midY) * scale,
 		}
 	}
+}
+
+// normalizePoints escala pontos para [-1, 1] preservando proporção.
+func normalizePoints(pts map[string]Point2D) {
+	ScalePoints(pts, 1)
 }
 
 // ── K-Means clustering com silhouette score ──

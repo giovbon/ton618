@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -86,8 +85,11 @@ func (ctx *HandlerContext) HandleGraph(w http.ResponseWriter, r *http.Request) {
 
 func (ctx *HandlerContext) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	embCount := ctx.Store.GetEmbeddingCount()
-	fmt.Fprintf(w, `{"status":"ok","documents":%d,"embeddings":%d}`, ctx.Store.GetDocumentCount(), embCount)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":     "ok",
+		"documents":  ctx.Store.GetDocumentCount(),
+		"embeddings": ctx.Store.GetEmbeddingCount(),
+	})
 }
 
 func (ctx *HandlerContext) HandleHealth(w http.ResponseWriter, r *http.Request) {
@@ -101,14 +103,9 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		tags = nil
 	}
-	fmt.Fprintf(w, `{"tags":[`)
-	for i, t := range tags {
-		if i > 0 {
-			w.Write([]byte(","))
-		}
-		fmt.Fprintf(w, `"%s"`, t)
-	}
-	w.Write([]byte(`]}`))
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tags": tags,
+	})
 }
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {

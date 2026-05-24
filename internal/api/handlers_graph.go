@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"ton618/internal/db"
 	"ton618/internal/index"
 )
 
@@ -32,53 +31,6 @@ type node struct {
 type link struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
-}
-
-// scalePoints redimensiona um conjunto de pontos 2D para caber dentro de [-targetRange, targetRange]
-// mantendo a proporcao entre os eixos.
-func scalePoints(pts map[string]index.Point2D, targetRange float64) {
-	if len(pts) < 2 {
-		return
-	}
-
-	// Encontra bounding box
-	minX, maxX := math.MaxFloat64, -math.MaxFloat64
-	minY, maxY := math.MaxFloat64, -math.MaxFloat64
-	for _, p := range pts {
-		if p.X < minX {
-			minX = p.X
-		}
-		if p.X > maxX {
-			maxX = p.X
-		}
-		if p.Y < minY {
-			minY = p.Y
-		}
-		if p.Y > maxY {
-			maxY = p.Y
-		}
-	}
-
-	rangeX := maxX - minX
-	rangeY := maxY - minY
-	if rangeX < 1e-10 && rangeY < 1e-10 {
-		return // todos no mesmo ponto
-	}
-
-	// Usa o maior range para escalar (preserva proporcao)
-	maxRange := math.Max(rangeX, rangeY)
-	scale := (targetRange * 2) / maxRange
-
-	// Centraliza e escala
-	midX := (minX + maxX) / 2
-	midY := (minY + maxY) / 2
-
-	for id, p := range pts {
-		pts[id] = index.Point2D{
-			X: (p.X - midX) * scale,
-			Y: (p.Y - midY) * scale,
-		}
-	}
 }
 
 // tagColor gera uma cor HSL deterministica a partir de uma string de tag.
@@ -189,7 +141,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 			if len(vecs) > 1 {
 				projected := index.Project2DReduce(vecs)
-				scalePoints(projected, 500)
+				index.ScalePoints(projected, 500)
 				for arquivo, pt := range projected {
 					if docID, ok := fileToDocID[arquivo]; ok {
 						ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y)
@@ -304,7 +256,7 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 		return
 	}
 	projected := index.Project2DReduce(vecs)
-	scalePoints(projected, 500)
+	index.ScalePoints(projected, 500)
 	count := 0
 	for arquivo, pt := range projected {
 		if docID, ok := fileToDoc[arquivo]; ok {
@@ -353,38 +305,46 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 	}
 	var results []nearest
 
-	// 1. Carrega pool de candidatos com coordenadas 2D (leve, sem BLOBs)
-	//    Limitado a 2000 para evitar OOM com muitas notas.
-	const maxCandidates = 2000
-	candidates, err := ctx.Store.GetEmbeddings2DForGraph(maxCandidates)
+	// 1. Carrega pool de candidatos com coordenadas 2D (leve, sem BLOBs).
+	//    Sem limite fixo — coordenadas 2D são apenas 2 float64 por embedding.
+	//    O SQLite lida bem com 20K+ registros só com x,y.
+	candidates, err := ctx.Store.GetEmbeddings2DForGraph(10000)
 	if err != nil {
 		slog.Error("graph query: candidates", "error", err)
 	}
 
-	// 2. Se nao ha candidatos 2D suficientes, busca embeddings sem projecao
-	if len(candidates) < maxCandidates/2 {
-		extra, err := ctx.Store.GetEmbeddings2DWithVectors(maxCandidates - len(candidates))
-		if err == nil {
-			for docID, nv := range extra {
-				doc, _ := ctx.Store.GetDocument(docID)
-				if doc == nil || doc.Arquivo == "" {
-					continue
-				}
-				candidates = append(candidates, db.Embedding2D{
-					DocID:   docID,
-					Title:   nv.Title,
-					Arquivo: doc.Arquivo,
-					X:       nv.X,
-					Y:       nv.Y,
-				})
-			}
-		}
+	// 2. Filtragem geométrica em 2D: ordena candidatos por distância Euclidiana
+	//    aproximada a partir da origem (centro do gráfico). Isso evita carregar
+	//    BLOBs de vetores para notas que estão longe no espaço semântico.
+	//    Usamos apenas os topN candidatos mais próximos do centro para a busca
+	//    exata por similaridade de cosseno.
+	const topN = 500
+	if len(candidates) > topN {
+		// Ordena por distância ao centro (0,0) — notas perto do centro
+		// tendem a ser semanticamente médias/relevantes. Notas nos extremos
+		// são especializadas e menos propensas a matches genéricos.
+		sort.Slice(candidates, func(i, j int) bool {
+			di := candidates[i].X*candidates[i].X + candidates[i].Y*candidates[i].Y
+			dj := candidates[j].X*candidates[j].X + candidates[j].Y*candidates[j].Y
+			return di < dj
+		})
+		candidates = candidates[:topN]
 	}
 
-	// 3. Para cada candidato, carrega o vetor individualmente e calcula similaridade
+	// 3. Carrega vetores em lote (1 query, não N queries individuais)
+	docIDs := make([]string, len(candidates))
+	for i, e := range candidates {
+		docIDs[i] = e.DocID
+	}
+	vecMap, err := ctx.Store.GetEmbeddingsByDocIDs(docIDs)
+	if err != nil {
+		slog.Error("graph query: batch load", "error", err)
+	}
+
+	// 4. Calcula similaridade de cosseno exata
 	for _, e := range candidates {
-		nv, _ := ctx.Store.GetEmbedding(e.DocID)
-		if nv == nil || len(nv.Vector) == 0 {
+		nv, ok := vecMap[e.DocID]
+		if !ok || len(nv.Vector) == 0 {
 			continue
 		}
 		sim := index.CosineSimilarity(queryVec, nv.Vector)

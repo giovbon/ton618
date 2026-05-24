@@ -3,6 +3,7 @@ package db
 import (
 	"encoding/binary"
 	"math"
+	"strings"
 )
 
 // NoteVector holds an embedding vector and its associated metadata.
@@ -214,6 +215,41 @@ func (s *Store) GetEmbeddingsByFile(arquivo string) (map[string]NoteVector, erro
 	defer rows.Close()
 
 	result := make(map[string]NoteVector)
+	for rows.Next() {
+		var docID string
+		var data []byte
+		var nv NoteVector
+		if err := rows.Scan(&docID, &data, &nv.Title, &nv.X, &nv.Y); err != nil {
+			continue
+		}
+		nv.Vector = DecodeVector(data)
+		result[docID] = nv
+	}
+	return result, rows.Err()
+}
+
+// GetEmbeddingsByDocIDs returns embeddings for a list of document IDs in a single query.
+// Muito mais eficiente que N chamadas individuais a GetEmbedding.
+func (s *Store) GetEmbeddingsByDocIDs(docIDs []string) (map[string]NoteVector, error) {
+	if len(docIDs) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(docIDs))
+	args := make([]any, len(docIDs))
+	for i, id := range docIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := "SELECT doc_id, vector, title, x, y FROM embeddings WHERE doc_id IN (" +
+		strings.Join(placeholders, ",") + ")"
+
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]NoteVector, len(docIDs))
 	for rows.Next() {
 		var docID string
 		var data []byte

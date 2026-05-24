@@ -17,6 +17,85 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// ── Embedding Worker Pool ──
+// O embedding (chamada de rede para Gemini/Ollama/OpenAI) é o gargalo.
+// Um worker pool executa essas chamadas concorrentemente, enquanto o
+// processamento de arquivos (rápido, só DB) continua serializado pelo mutex.
+
+const numEmbedWorkers = 5
+
+// embedJob carrega os dados necessários para gerar um embedding em background.
+type embedJob struct {
+	store *db.Store
+	docID string
+	title string
+	text  string
+	embed index.EmbeddingProvider
+}
+
+var (
+	embedQueue   chan embedJob
+	embedWg      sync.WaitGroup
+	embedOnce    sync.Once
+	embedStartMu sync.Mutex
+)
+
+// reprojectPending é um flag package-level que o worker de embedding seta
+// quando um novo embedding é armazenado. O reprojectLoop verifica este flag
+// a cada tick e aciona a reprojeção se necessário.
+var reprojectPending bool
+var reprojectPendingMu sync.Mutex
+
+// startEmbedWorkers inicializa o worker pool (lazy, chamado na primeira vez).
+func startEmbedWorkers(ctx context.Context) {
+	embedOnce.Do(func() {
+		embedQueue = make(chan embedJob, 200)
+		for i := range numEmbedWorkers {
+			embedWg.Add(1)
+			go embedWorker(ctx, i)
+		}
+		slog.Info("Worker pool de embeddings iniciado", "workers", numEmbedWorkers)
+	})
+}
+
+// embedWorker processa jobs de embedding concorrentemente.
+// Usa select multiplexado para responder tanto a jobs quanto a cancelamento.
+func embedWorker(ctx context.Context, id int) {
+	defer embedWg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job, ok := <-embedQueue:
+			if !ok {
+				return // canal fechado
+			}
+			slog.Debug("embed worker processando", "worker", id, "doc", job.docID, "arquivo", job.title)
+			vec, err := job.embed.Embed(ctx, job.text)
+			if err != nil {
+				slog.Warn("embedding falhou (worker)", "worker", id, "doc", job.docID, "arquivo", job.title, "error", err)
+				continue
+			}
+			if err := job.store.SetEmbedding(job.docID, vec, job.title); err != nil {
+				slog.Error("store embedding (worker)", "worker", id, "doc", job.docID, "error", err)
+			} else {
+				slog.Info("embedding armazenado (worker)", "worker", id, "doc", job.docID, "arquivo", job.title)
+				// Sinaliza que novas embeddings precisam de projeção 2D
+				reprojectPendingMu.Lock()
+				reprojectPending = true
+				reprojectPendingMu.Unlock()
+			}
+		}
+	}
+}
+
+// stopEmbedWorkers aguarda a fila esvaziar e para os workers.
+func stopEmbedWorkers() {
+	close(embedQueue)
+	embedWg.Wait()
+	embedOnce = sync.Once{} // permite reiniciar se necessário
+}
+
 // processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
 // entre o processamento direto (HandleFileSave) e o watcher fsnotify.
 var processMu sync.Mutex
@@ -133,6 +212,9 @@ func (w *Watcher) Start(ctx context.Context) {
 		w.watcher.Add(dir)
 	}
 
+	// Inicia worker pool de embeddings (chamadas de rede concorrentes)
+	startEmbedWorkers(ctx)
+
 	w.wg.Add(3)
 	go w.fsnotifyLoop(ctx)
 	go w.pollLoop(ctx)
@@ -149,9 +231,11 @@ func (w *Watcher) QueueReproject() {
 }
 
 // reprojectLoop roda em background e reprojeta embeddings com t-SNE quando necessário.
+// Verifica tanto o flag explícito (QueueReproject) quanto o flag automático
+// setado pelo worker pool quando um embedding é armazenado.
 func (w *Watcher) reprojectLoop(ctx context.Context) {
 	defer w.wg.Done()
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // mais responsivo
 	defer ticker.Stop()
 
 	for {
@@ -159,9 +243,17 @@ func (w *Watcher) reprojectLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Verifica flags explícito e automático
 			w.reprojectMu.Lock()
-			needed := w.reprojectNeeded && !w.reprojectRunning
+			needed := (w.reprojectNeeded || reprojectPending) && !w.reprojectRunning
+			if needed {
+				w.reprojectNeeded = false
+				reprojectPendingMu.Lock()
+				reprojectPending = false
+				reprojectPendingMu.Unlock()
+			}
 			w.reprojectMu.Unlock()
+
 			if needed {
 				w.runReprojection()
 			}
@@ -335,26 +427,22 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 			slog.Error("index fts", "id", doc.ID, "error", err)
 		}
 
-		// Generate embedding if provider is set and note should be embedded
-		// PDFs: apenas se o nome do arquivo contiver "embed" (ex: "-embed-", "livrotalembed")
-		// Markdown: segue a regra shouldEmbed (tag "embed" no frontmatter ou EMBEDDING_ALL=true)
+		// Generate embedding via worker pool (assíncrono) se o provider estiver configurado.
+		// PDFs: apenas se o nome do arquivo contiver "embed".
+		// Markdown: segue a regra shouldEmbed (tag "embed" no frontmatter ou EMBEDDING_ALL=true).
 		if embed != nil && ((doc.Tipo == "pdf" && strings.Contains(strings.ToLower(doc.Arquivo), "embed")) || (doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll))) {
 			textToEmbed := doc.Secao + " " + doc.Texto
 			textToEmbed = strings.TrimSpace(textToEmbed)
 			if textToEmbed != "" && len(textToEmbed) > 10 {
-				vec, err := embed.Embed(context.Background(), textToEmbed)
-				if err != nil {
-					slog.Warn("embedding failed", "id", doc.ID, "arquivo", doc.Arquivo, "error", err)
-				} else {
-					title := doc.Secao
-					if title == "" {
-						title = doc.Arquivo
-					}
-					if err := store.SetEmbedding(doc.ID, vec, title); err != nil {
-						slog.Error("store embedding", "id", doc.ID, "error", err)
-					} else {
-						slog.Info("embedding stored", "id", doc.ID, "arquivo", doc.Arquivo)
-					}
+				title := doc.Secao
+				if title == "" {
+					title = doc.Arquivo
+				}
+				// Enfileira o job para o worker pool — não bloqueia o mutex.
+				select {
+				case embedQueue <- embedJob{store: store, docID: doc.ID, title: title, text: textToEmbed, embed: embed}:
+				default:
+					slog.Warn("fila de embedding cheia, pulando", "id", doc.ID, "arquivo", doc.Arquivo)
 				}
 			}
 		}
