@@ -1,4 +1,4 @@
-package capture
+package api
 
 import (
 	"encoding/json"
@@ -18,9 +18,6 @@ import (
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript"
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript_formatters"
 
-	"ton618/internal/config"
-	"ton618/internal/db"
-	"ton618/internal/semantic"
 	"ton618/internal/watcher"
 )
 
@@ -139,14 +136,6 @@ func cleanupMarkdown(md string) string {
 	return strings.TrimSpace(md)
 }
 
-// HandlerContext contem as dependencias para o handler de captura.
-type HandlerContext struct {
-	Cfg      *config.AppConfig
-	Store    *db.Store
-	Embed    semantic.EmbeddingProvider
-	EmbedAll bool
-}
-
 // HandleCapture processa uma URL (artigo web ou video YouTube) e salva como nota.
 func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -192,7 +181,7 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 
 		finalMarkdown = fmt.Sprintf(`---
 title: "%s"
-tags: [embed, youtube, captura]
+tags: [captura]
 source: %s
 ---
 
@@ -243,7 +232,7 @@ source: %s
 
 		finalMarkdown = fmt.Sprintf(`---
 title: "%s"
-tags: [embed, artigo, captura]
+tags: [captura]
 source: %s
 ---
 
@@ -302,6 +291,7 @@ source: %s
 		"filename": filename,
 	})
 }
+
 func formatCaptureTimestamp(t time.Time) string {
 	return t.Format("2006-01-02 15:04:05 MST")
 }

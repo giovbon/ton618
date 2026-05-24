@@ -12,7 +12,7 @@ import (
 	"ton618/internal/config"
 	"ton618/internal/db"
 	"ton618/internal/processor"
-	"ton618/internal/semantic"
+	"ton618/internal/index"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -89,7 +89,7 @@ type FileEvent struct {
 type Watcher struct {
 	cfg      *config.AppConfig
 	store    *db.Store
-	embed    semantic.EmbeddingProvider
+	embed    index.EmbeddingProvider
 	embedAll bool
 	watcher  *fsnotify.Watcher
 	events   chan FileEvent
@@ -113,7 +113,7 @@ func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
 }
 
 // SetEmbedProvider sets the embedding provider for generating vectors.
-func (w *Watcher) SetEmbedProvider(embed semantic.EmbeddingProvider) {
+func (w *Watcher) SetEmbedProvider(embed index.EmbeddingProvider) {
 	w.embed = embed
 }
 
@@ -211,7 +211,7 @@ func (w *Watcher) runReprojection() {
 	slog.Info("Reprojetando embeddings não-projetados com t-SNE", "total", len(vecs), "max", maxReproject)
 
 	// t-SNE (limitado aos não-projetados — rápido e incremental)
-	tsne := semantic.DefaultTSNE()
+	tsne := index.DefaultTSNE()
 	projected := tsne.Project(vecs)
 
 	// Armazena coordenadas no banco
@@ -236,7 +236,7 @@ func (w *Watcher) Events() <-chan FileEvent {
 // other goroutines (e.g., HandleFileSave) and allows SQLite to batch
 // internal WAL checkpoints, significantly improving throughput during
 // bulk operations like initial indexing.
-func ProcessBatch(store *db.Store, events []FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
+func ProcessBatch(store *db.Store, events []FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
 	processMu.Lock()
 	defer processMu.Unlock()
 
@@ -249,7 +249,7 @@ func ProcessBatch(store *db.Store, events []FileEvent, embed semantic.EmbeddingP
 }
 
 // ProcessFile processes a single file event: reads, parses, indexes, and optionally embeds the content.
-func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
+func ProcessFile(store *db.Store, ev FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
 	processMu.Lock()
 	defer processMu.Unlock()
 	return processFileLocked(store, ev, embed, embedAll)
@@ -257,7 +257,7 @@ func ProcessFile(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider
 
 // processFileLocked é a implementação compartilhada entre ProcessFile e ProcessBatch.
 // REQUER que processMu já esteja lockado pelo caller.
-func processFileLocked(store *db.Store, ev FileEvent, embed semantic.EmbeddingProvider, embedAll bool) error {
+func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
 
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))

@@ -42,3 +42,6 @@ go.work
 go.work.sum
 vendor/
 .env
+repomix-output.xml
+*.log
+coverage.out

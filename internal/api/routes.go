@@ -6,7 +6,7 @@ import (
 
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/semantic"
+	"ton618/internal/index"
 	"ton618/internal/watcher"
 )
 
@@ -15,12 +15,12 @@ type HandlerContext struct {
 	Cfg       *config.AppConfig
 	Store     *db.Store
 	Watcher   *watcher.Watcher
-	Embed     semantic.EmbeddingProvider
+	Embed     index.EmbeddingProvider
 	Templates *template.Template // será populado em main
 }
 
 // NewHandlerContext cria o contexto.
-func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watcher, embed semantic.EmbeddingProvider) *HandlerContext {
+func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watcher, embed index.EmbeddingProvider) *HandlerContext {
 	return &HandlerContext{
 		Cfg:     cfg,
 		Store:   store,
@@ -60,6 +60,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
+	mux.HandleFunc("POST /api/bulk-delete", ctx.HandleBulkDelete)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))

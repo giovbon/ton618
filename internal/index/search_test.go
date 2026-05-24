@@ -1,4 +1,4 @@
-package search
+package index
 
 import (
 	"context"
@@ -248,15 +248,15 @@ func TestBuildHighlight_ContextAroundTerm(t *testing.T) {
 
 func TestScoreTitle_ExactMatch(t *testing.T) {
 	score := scoreTitle("Go › Concorrencia", []string{"concorrencia"})
-	if score != weights.BoostTitleExact {
-		t.Errorf("esperado %v (exact match), got %v", weights.BoostTitleExact, score)
+	if score != 1.0 {
+		t.Errorf("esperado 1.0 (exact match), got %v", score)
 	}
 }
 
 func TestScoreTitle_PartialMatch(t *testing.T) {
 	score := scoreTitle("Go › Concorrencia", []string{"concor"})
-	if score != weights.BoostTitlePartial {
-		t.Errorf("esperado %v (partial match), got %v", weights.BoostTitlePartial, score)
+	if score != 0.4 {
+		t.Errorf("esperado 0.4 (partial match), got %v", score)
 	}
 }
 
@@ -269,48 +269,8 @@ func TestScoreTitle_NoMatch(t *testing.T) {
 
 func TestScoreTitle_MultipleTerms(t *testing.T) {
 	score := scoreTitle("Go › Concorrencia Channels", []string{"concorrencia"})
-	// Verifica que pelo menos um match foi encontrado
 	if score <= 0 {
 		t.Errorf("esperado > 0 para match com último segmento, got %v", score)
-	}
-}
-
-// ── scoreKeywords ───────────────────────────────────────────────
-
-func TestScoreKeywords_MatchTag(t *testing.T) {
-	score := scoreKeywords("golang,programacao", "texto generico", []string{"golang"})
-	if score != 3.0 {
-		t.Errorf("esperado 3.0 (match exato em tag), got %v", score)
-	}
-}
-
-func TestScoreKeywords_MatchTexto(t *testing.T) {
-	score := scoreKeywords("", "aprendendo golang concorrencia", []string{"golang"})
-	if score != 1.0 {
-		t.Errorf("esperado 1.0 (match no texto), got %v", score)
-	}
-}
-
-func TestScoreKeywords_MatchRadical(t *testing.T) {
-	// "programacao" com radical "prog" (4 primeiras letras)
-	score := scoreKeywords("", "programando em go", []string{"programacao"})
-	if score != 0.5 {
-		t.Errorf("esperado 0.5 (match por radical), got %v", score)
-	}
-}
-
-func TestScoreKeywords_NoMatch(t *testing.T) {
-	score := scoreKeywords("", "texto generico qualquer", []string{"xyzabc"})
-	if score != 0 {
-		t.Errorf("esperado 0 (sem match), got %v", score)
-	}
-}
-
-func TestScoreKeywords_StopwordIgnored(t *testing.T) {
-	score := scoreKeywords("de,RUST", "texto generico", []string{"de"})
-	// "de" é stopword e tem len < 3 → deve ser ignorada
-	if score != 0 {
-		t.Errorf("esperado 0 (stopword ignorada), got %v", score)
 	}
 }
 
@@ -318,8 +278,8 @@ func TestScoreKeywords_StopwordIgnored(t *testing.T) {
 
 func TestScorePath_Match(t *testing.T) {
 	score := scorePath("notas/golang-dicas.md", []string{"golang"})
-	if score != weights.BoostPathContext {
-		t.Errorf("esperado %v (match no path), got %v", weights.BoostPathContext, score)
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (match no path), got %v", score)
 	}
 }
 
@@ -332,15 +292,13 @@ func TestScorePath_NoMatch(t *testing.T) {
 
 func TestScorePath_MultipleTerms(t *testing.T) {
 	score := scorePath("notas/golang-dicas.md", []string{"golang", "rust"})
-	// Apenas "golang" deve dar match → 0.5
-	if score != weights.BoostPathContext {
-		t.Errorf("esperado %v (apenas um termo match), got %v", weights.BoostPathContext, score)
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (apenas um termo match), got %v", score)
 	}
 }
 
 func TestScorePath_ShortTermIgnored(t *testing.T) {
 	score := scorePath("notas/go-dicas.md", []string{"go"})
-	// "go" tem len < 3 → deve ser ignorado
 	if score != 0 {
 		t.Errorf("esperado 0 (termo curto ignorado), got %v", score)
 	}
@@ -351,24 +309,24 @@ func TestScorePath_ShortTermIgnored(t *testing.T) {
 func TestScoreFreshness_Today(t *testing.T) {
 	now := time.Now().Add(-1 * time.Hour).Format(time.RFC3339)
 	score := scoreFreshness(now)
-	if score != weights.BoostFreshness {
-		t.Errorf("esperado %v (today), got %v", weights.BoostFreshness, score)
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (today), got %v", score)
 	}
 }
 
 func TestScoreFreshness_ThreeDaysAgo(t *testing.T) {
 	ts := time.Now().Add(-72 * time.Hour).Format(time.RFC3339)
 	score := scoreFreshness(ts)
-	if score != weights.BoostFreshness*0.5 {
-		t.Errorf("esperado %v (3 dias), got %v", weights.BoostFreshness*0.5, score)
+	if score != 0.25 {
+		t.Errorf("esperado 0.25 (3 dias), got %v", score)
 	}
 }
 
 func TestScoreFreshness_FourteenDaysAgo(t *testing.T) {
 	ts := time.Now().Add(-14 * 24 * time.Hour).Format(time.RFC3339)
 	score := scoreFreshness(ts)
-	if score != weights.BoostFreshness*0.2 {
-		t.Errorf("esperado %v (14 dias), got %v", weights.BoostFreshness*0.2, score)
+	if score != 0.1 {
+		t.Errorf("esperado 0.1 (14 dias), got %v", score)
 	}
 }
 
@@ -394,61 +352,6 @@ func TestScoreFreshness_EmptyTimestamp(t *testing.T) {
 	}
 }
 
-// ── scoreRichness ───────────────────────────────────────────────
-
-func TestScoreRichness_CodeBlock(t *testing.T) {
-	text := strings.Repeat("palavra_muito_longa_qualquer ", 30) + "\n```go\nfunc main() {}\n```"
-	score := scoreRichness(text)
-	if score < weights.BoostTechnical {
-		t.Errorf("esperado pelo menos %v (código), got %v", weights.BoostTechnical, score)
-	}
-}
-
-func TestScoreRichness_Table(t *testing.T) {
-	// O marcador |--| é detectado como tabela
-	text := strings.Repeat("palavra_muito_longa_qualquer ", 30) + "\n|--|\nconteúdo"
-	score := scoreRichness(text)
-	if score < weights.BoostTechnical {
-		t.Errorf("esperado pelo menos %v (tabela), got %v", weights.BoostTechnical, score)
-	}
-}
-
-func TestScoreRichness_ShortText(t *testing.T) {
-	text := "texto curto"
-	score := scoreRichness(text)
-	// Apenas bônus de tamanho: 2 palavras / 500 * 0.5 = 0.002
-	if score != 0.002 {
-		t.Errorf("esperado 0.002 (apenas length bonus), got %v", score)
-	}
-}
-
-func TestScoreRichness_Empty(t *testing.T) {
-	score := scoreRichness("")
-	if score != 0 {
-		t.Errorf("esperado 0 (vazio), got %v", score)
-	}
-}
-
-func TestScoreRichness_LongWordsBonus(t *testing.T) {
-	// Texto com 22 palavras, das quais 6 têm mais de 8 caracteres
-	words := []string{
-		"implementação", "arquitetura", "escalável", "performática",
-		"utilizando", "goroutines", "assíncronas", "concorrencia",
-		"paralelismo", "distribuídos", "abstração", "encapsulamento",
-		"polimorfismo", "concorrente", "abstrair", "implementar",
-		"decomposição", "composição", "reutilização", "manutenção",
-		"testabilidade", "legibilidade",
-	}
-	text := strings.Join(words, " ")
-	score := scoreRichness(text)
-	// totalWords > 20, longWords > 5 → bonus += 1.0
-	// length bonus: 22/500 * 0.5 = 0.022
-	// total esperado: 1.0 + 0.022 = 1.022
-	if score < 1.0 {
-		t.Errorf("esperado >= 1.0 (long words bonus), got %v", score)
-	}
-}
-
 // ── scoreFragment: verifica pesos individuais ──────────────────
 
 func makeHit(texto, arquivo, secao, timestamp string, tags []string) *SearchHit {
@@ -459,8 +362,9 @@ func makeHit(texto, arquivo, secao, timestamp string, tags []string) *SearchHit 
 		}
 		tagStr += t
 	}
+	// Score negativo simula rank FTS5 (mais negativo = melhor match)
 	return &SearchHit{
-		Score: 10.0,
+		Score: -10.0,
 		Doc: db.Document{
 			Texto:     texto,
 			Arquivo:   arquivo,
@@ -479,7 +383,6 @@ func TestScoreFragment_TituloExato(t *testing.T) {
 		t.Error("match exato no titulo deveria gerar bonus de titulo")
 	}
 
-	// Sem match no titulo
 	hit2 := makeHit("texto qualquer", "nota.md", "Configuração", "", nil)
 	score2, _ := scoreFragment(hit2, []string{"instalação"}, "instalação", 0, 0)
 
@@ -500,7 +403,6 @@ func TestScoreFragment_FraseExata(t *testing.T) {
 		t.Error("frase exata no texto deveria gerar bonus de frase_exata")
 	}
 
-	// Sem frase exata
 	hit2 := makeHit(
 		"goroutines sao legais channels tambem mas separados",
 		"nota.md", "Go Lang", "",
@@ -521,7 +423,6 @@ func TestScoreFragment_CaminhoMatch(t *testing.T) {
 		t.Error("match no nome do arquivo deveria gerar bonus de caminho")
 	}
 
-	// Sem match no caminho
 	hit2 := makeHit("conteudo generico", "notas/outra-coisa.md", "Go", "", nil)
 	score2, _ := scoreFragment(hit2, []string{"golang"}, "golang", 0, 0)
 
@@ -545,75 +446,20 @@ func TestScoreFragment_Recencia(t *testing.T) {
 	}
 }
 
-func TestScoreFragment_KeywordMatchTexto(t *testing.T) {
-	hit := makeHit("usando concorrencia em go com goroutines", "nota.md", "", "", nil)
-	_, details := scoreFragment(hit, []string{"concorrencia"}, "concorrencia", 0, 0)
+func TestScoreFragment_BM25BaseEDominante(t *testing.T) {
+	// Mesmo texto, mesmo titulo, scores diferentes
+	hitBom := makeHit("golang explicado em detalhes", "nota.md", "Golang", "", nil)
+	hitBom.Score = -20.0 // BM25 forte (mais negativo = melhor)
 
-	if details["keywords"] == 0 {
-		t.Error("keyword encontrada no texto deveria gerar bonus")
+	hitFraco := makeHit("golang explicado em detalhes", "nota.md", "Golang", "", nil)
+	hitFraco.Score = -2.0 // BM25 fraco
+
+	scoreBom, _ := scoreFragment(hitBom, []string{"golang"}, "golang", 0, 0)
+	scoreFraco, _ := scoreFragment(hitFraco, []string{"golang"}, "golang", 0, 0)
+
+	if scoreBom <= scoreFraco {
+		t.Error("hit com BM25 forte (score -20) deveria ter score maior que hit com BM25 fraco (score -2)")
 	}
-}
-
-func TestScoreFragment_Popularidade(t *testing.T) {
-	hit := makeHit("texto", "nota.md", "", "", nil)
-
-	scoreSemPop, _ := scoreFragment(hit, []string{"texto"}, "texto", 0, 0)
-	scoreComPop, details := scoreFragment(hit, []string{"texto"}, "texto", 100, 0)
-
-	if details["popularidade"] == 0 {
-		t.Error("popularidade > 0 deveria gerar bonus")
-	}
-	if scoreComPop <= scoreSemPop {
-		t.Error("hit com popularidade deveria ter score maior")
-	}
-}
-
-func TestScoreFragment_AutoridadeLinks(t *testing.T) {
-	hit := makeHit("texto", "nota.md", "", "", nil)
-
-	scoreSemLink, _ := scoreFragment(hit, []string{"texto"}, "texto", 0, 0)
-	scoreComLink, details := scoreFragment(hit, []string{"texto"}, "texto", 0, 5)
-
-	if details["autoridade"] == 0 {
-		t.Error("linkCount > 0 deveria gerar bonus de autoridade")
-	}
-	if scoreComLink <= scoreSemLink {
-		t.Error("hit com backlinks deveria ter score maior")
-	}
-}
-
-func TestScoreFragment_RiquezaEstrutural(t *testing.T) {
-	textoRico := "Implementação de arquitetura escalável e performática utilizando goroutines assíncronas.\n|--|\n```go\ncode\n```"
-	textoPobre := "fazer isso e aquilo com um teste"
-
-	hitRico := makeHit(textoRico, "nota.md", "", "", nil)
-	hitPobre := makeHit(textoPobre, "nota.md", "", "", nil)
-
-	scoreRico, _ := scoreFragment(hitRico, []string{"x"}, "x", 0, 0)
-	scorePobre, _ := scoreFragment(hitPobre, []string{"x"}, "x", 0, 0)
-
-	if scoreRico <= scorePobre {
-		t.Error("nota com tabela, codigo e palavras longas deveria ter score maior")
-	}
-}
-
-func TestScoreFragment_MultiplusFatoresAcumulam(t *testing.T) {
-	hit := makeHit(
-		"aprendendo goroutines e channels em go",
-		"notas/golang-dicas.md",
-		"Golang", time.Now().Format(time.RFC3339),
-		[]string{"golang", "programacao"},
-	)
-	score, details := scoreFragment(hit, []string{"golang"}, "golang", 10, 3)
-
-	// Deve ter bonus de titulo, caminho, keywords, recencia, popularidade, autoridade
-	fatores := []string{"titulo", "frase_exata", "caminho", "keywords", "recencia", "popularidade", "autoridade"}
-	for _, f := range fatores {
-		if details[f] > 0 {
-			return // achou pelo menos um bonus — ok
-		}
-	}
-	t.Errorf("nenhum fator deu bonus — score final: %f, details: %v", score, details)
 }
 
 // ── Ordenação por score ────────────────────────────────────────

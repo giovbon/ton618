@@ -76,6 +76,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	var links []string
 
 	// Parse frontmatter
+	var metaParts []string
 	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
 		endIdx := strings.Index(text[4:], "\n---")
 		if endIdx != -1 {
@@ -94,6 +95,13 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 							}
 						}
 					}
+				}
+				// Serializa demais campos do frontmatter para indexacao FTS
+				for k, v := range fm {
+					if k == "tags" {
+						continue
+					}
+					metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
 				}
 			}
 			afterFrontmatter := endIdx + 4
@@ -235,6 +243,11 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 			Tags:       fileTags,
 			Ordem:      ordem,
 		})
+	}
+
+	// Prepend frontmatter metadata to first document for FTS indexing
+	if len(metaParts) > 0 && len(docs) > 0 {
+		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
 	}
 
 	return docs, links, fileTags

@@ -95,3 +95,29 @@ Os arquivos PDF ficam em `docs/pdfs/`. O diretorio e criado automaticamente no s
 - Busca: texto completo indexado, keywords com peso 50× no FTS5
 - Interface: PDFs aparecem no modo compacto e busca global sem #tags visiveis
 - Stopwords: listas completas do NLTK (131 pt + 179 en)
+
+### 2026-05-24 — Frontmatter indexado na busca global
+- Todo campo do frontmatter (exceto `tags`) é serializado no formato `chave: valor` e prefixado ao texto do primeiro documento FTS
+- Permite buscar por `status: draft`, `author: joao`, `category: programacao` etc. usando a busca global
+- Zero schema change: só prefixa o texto, FTS5 indexa naturalmente
+- Alterado em `internal/processor/markdown.go`: coleta campos do YAML em `metaParts` e prefixa em `docs[0].Texto`
+
+### 2026-05-24 — Rebalanceamento dos pesos de ranking
+- `scoreFragment` reescrito: BM25 base positivo, bônus relativos ao BM25 (não absolutos)
+- Removidos: `scoreKeywords` (tags já tem 50× no FTS5), `scoreRichness` (favorecia notas longas), radical match (falso positivo)
+- Popularidade e backlinks movidos do re-ranker (sinais globais, não relacionados à consulta)
+- Cap: score máximo 5× o BM25 base
+- `RankWeights` simplificado de 8 campos para 1 (só BoostFreshness)
+- Alterado em `internal/index/ranker.go` e `internal/index/search.go`
+
+### 2026-05-24 — Reestruturação de pacotes
+- `internal/search/` + `internal/semantic/` → `internal/index/` (busca textual + embeddings + ranking unificados)
+- `internal/capture/` → `internal/api/handlers_capture.go` (não precisava de pacote separado)
+- `internal/api/handlers.go` dividido em 5 arquivos:
+  - `handlers.go`: páginas + API endpoints pequenos (~170 linhas)
+  - `handlers_file.go`: CRUD de arquivos (~466 linhas)
+  - `handlers_search.go`: busca + exclusão em massa (~409 linhas)
+  - `handlers_graph.go`: mapa semântico (~434 linhas)
+  - `handlers_capture.go`: captura de URLs (~297 linhas)
+- Nenhum arquivo do pacote `api` passa de 470 linhas
+- Import paths atualizados: `ton618/internal/semantic` → `ton618/internal/index`, `ton618/internal/search` → `ton618/internal/index`, `ton618/internal/capture` removido

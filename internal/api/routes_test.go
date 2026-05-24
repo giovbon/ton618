@@ -28,7 +28,7 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 		{"GET", "/search", true},
 
 		// Arquivos
-		{"GET", "/file", false},        // sem parametro name
+		{"GET", "/file", false}, // sem parametro name
 		{"POST", "/file/save", true},
 		{"POST", "/file/delete", true},
 		{"POST", "/file/rename", true},
@@ -42,6 +42,7 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 		{"GET", "/api/graph/data", true},
 		{"POST", "/api/graph/project", true},
 		{"POST", "/api/sync", true},
+		{"POST", "/api/bulk-delete", true},
 	}
 
 	for _, rt := range routes {
@@ -87,12 +88,16 @@ type responseRecorder struct {
 }
 
 func (r *responseRecorder) Header() http.Header {
-	if r.header == nil { r.header = http.Header{} }
+	if r.header == nil {
+		r.header = http.Header{}
+	}
 	return r.header
 }
 
 func (r *responseRecorder) Write(b []byte) (int, error) {
-	if r.status == 0 { r.status = 200 }
+	if r.status == 0 {
+		r.status = 200
+	}
 	r.body = append(r.body, b...)
 	return len(b), nil
 }

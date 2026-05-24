@@ -14,7 +14,7 @@ import (
 	"ton618/internal/api"
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/semantic"
+	"ton618/internal/index"
 	internalTpl "ton618/internal/template"
 	"ton618/internal/watcher"
 )
@@ -40,7 +40,7 @@ func main() {
 	slog.Info("Banco SQLite pronto")
 
 	// 3. Embedding provider
-	embedProvider := semantic.NewProvider(
+	embedProvider := index.NewProvider(
 		cfg.EmbeddingProvider,
 		cfg.EmbeddingAPIKey,
 		cfg.EmbeddingModel,

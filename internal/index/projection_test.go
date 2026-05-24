@@ -1,4 +1,4 @@
-package semantic
+package index
 
 import (
 	"math"
@@ -54,13 +54,25 @@ func TestProject2DReduce_ManyDimensions(t *testing.T) {
 	var minX, maxX float64 = math.MaxFloat64, -math.MaxFloat64
 	var minY, maxY float64 = math.MaxFloat64, -math.MaxFloat64
 	for _, p := range result {
-		if p.X < minX { minX = p.X }
-		if p.X > maxX { maxX = p.X }
-		if p.Y < minY { minY = p.Y }
-		if p.Y > maxY { maxY = p.Y }
+		if p.X < minX {
+			minX = p.X
+		}
+		if p.X > maxX {
+			maxX = p.X
+		}
+		if p.Y < minY {
+			minY = p.Y
+		}
+		if p.Y > maxY {
+			maxY = p.Y
+		}
 	}
-	if maxX-minX < 0.001 { t.Error("pontos nao estao espalhados em X") }
-	if maxY-minY < 0.001 { t.Error("pontos nao estao espalhados em Y") }
+	if maxX-minX < 0.001 {
+		t.Error("pontos nao estao espalhados em X")
+	}
+	if maxY-minY < 0.001 {
+		t.Error("pontos nao estao espalhados em Y")
+	}
 	if maxX > 1.1 || minX < -1.1 || maxY > 1.1 || minY < -1.1 {
 		t.Errorf("fora do range [-1,1]: X[%f,%f] Y[%f,%f]", minX, maxX, minY, maxY)
 	}
@@ -89,14 +101,18 @@ func TestProject2DReduce_AllIdenticalVectors(t *testing.T) {
 		"c": {1.0, 2.0, 3.0},
 	}
 	result := Project2DReduce(vecs)
-	if len(result) != 3 { t.Fatalf("esperado 3 nós, got %d", len(result)) }
+	if len(result) != 3 {
+		t.Fatalf("esperado 3 nós, got %d", len(result))
+	}
 }
 
 func TestNormalizeVector(t *testing.T) {
 	v := []float64{3.0, 4.0}
 	normalize(v)
 	norm := v[0]*v[0] + v[1]*v[1]
-	if math.Abs(norm-1.0) > 0.00001 { t.Errorf("norma deveria ser 1, got %f", norm) }
+	if math.Abs(norm-1.0) > 0.00001 {
+		t.Errorf("norma deveria ser 1, got %f", norm)
+	}
 	if math.Abs(v[0]-0.6) > 0.00001 || math.Abs(v[1]-0.8) > 0.00001 {
 		t.Errorf("vetor normalizado incorreto: [%f,%f]", v[0], v[1])
 	}
@@ -106,18 +122,32 @@ func TestNormalizePoints(t *testing.T) {
 	pts := map[string]Point2D{"a": {10, 10}, "b": {20, 20}, "c": {15, 15}}
 	normalizePoints(pts)
 	var sumX, sumY float64
-	for _, p := range pts { sumX += p.X; sumY += p.Y }
-	if math.Abs(sumX) > 0.001 { t.Errorf("centro X nao-zero: %f", sumX) }
-	if math.Abs(sumY) > 0.001 { t.Errorf("centro Y nao-zero: %f", sumY) }
+	for _, p := range pts {
+		sumX += p.X
+		sumY += p.Y
+	}
+	if math.Abs(sumX) > 0.001 {
+		t.Errorf("centro X nao-zero: %f", sumX)
+	}
+	if math.Abs(sumY) > 0.001 {
+		t.Errorf("centro Y nao-zero: %f", sumY)
+	}
 }
 
 func TestProjectEmbeddings(t *testing.T) {
 	vecs := map[string][]float32{"id1": {1, 0, 0}, "id2": {0, 1, 0}, "id3": {0, 0, 1}}
 	pts, ids := ProjectEmbeddings(vecs)
-	if pts == nil || ids == nil { t.Fatal("ProjectEmbeddings retornou nil") }
-	if len(ids) != 3 { t.Fatalf("esperado 3 ids, got %d", len(ids)) }
+	if pts == nil || ids == nil {
+		t.Fatal("ProjectEmbeddings retornou nil")
+	}
+	if len(ids) != 3 {
+		t.Fatalf("esperado 3 ids, got %d", len(ids))
+	}
 	for i := 1; i < len(ids); i++ {
-		if ids[i] < ids[i-1] { t.Errorf("IDs nao ordenados: %v", ids); break }
+		if ids[i] < ids[i-1] {
+			t.Errorf("IDs nao ordenados: %v", ids)
+			break
+		}
 	}
 }
 
@@ -142,8 +172,12 @@ func TestClusterPoints_DoisPontos(t *testing.T) {
 		"a": {0, 0},
 		"b": {10, 10},
 	})
-	if k != 2 { t.Fatalf("2 pontos: esperado k=2, got %d", k) }
-	if m["a"] == m["b"] { t.Error("dois pontos distantes deveriam estar em clusters diferentes") }
+	if k != 2 {
+		t.Fatalf("2 pontos: esperado k=2, got %d", k)
+	}
+	if m["a"] == m["b"] {
+		t.Error("dois pontos distantes deveriam estar em clusters diferentes")
+	}
 }
 
 func TestClusterPoints_TresPontosColapsados(t *testing.T) {
@@ -152,7 +186,9 @@ func TestClusterPoints_TresPontosColapsados(t *testing.T) {
 		"b": {5, 5},
 		"c": {5, 5},
 	})
-	if k < 1 || k > 3 { t.Fatalf("k deveria estar entre 1 e 3, got %d", k) }
+	if k < 1 || k > 3 {
+		t.Fatalf("k deveria estar entre 1 e 3, got %d", k)
+	}
 	// Com 3+ pontos distintos, deve haver ao menos 2 clusters
 	_ = m
 }
@@ -165,9 +201,13 @@ func TestClusterPoints_Deterministico(t *testing.T) {
 	}
 	r1, k1 := ClusterPoints(pts)
 	r2, k2 := ClusterPoints(pts)
-	if k1 != k2 { t.Errorf("k diferente entre execucoes: %d vs %d", k1, k2) }
+	if k1 != k2 {
+		t.Errorf("k diferente entre execucoes: %d vs %d", k1, k2)
+	}
 	for id := range pts {
-		if r1[id] != r2[id] { t.Errorf("cluster divergente para %q: exec1=%d exec2=%d", id, r1[id], r2[id]) }
+		if r1[id] != r2[id] {
+			t.Errorf("cluster divergente para %q: exec1=%d exec2=%d", id, r1[id], r2[id])
+		}
 	}
 }
 
@@ -189,26 +229,40 @@ func TestClusterPoints_TresGruposBemSeparados(t *testing.T) {
 	// Verifica que elementos do mesmo grupo estao juntos
 	grupoA := result["a1"]
 	for _, id := range []string{"a2", "a3"} {
-		if result[id] != grupoA { t.Errorf("%q deveria estar no mesmo cluster que a1", id) }
+		if result[id] != grupoA {
+			t.Errorf("%q deveria estar no mesmo cluster que a1", id)
+		}
 	}
 	grupoB := result["b1"]
 	for _, id := range []string{"b2", "b3"} {
-		if result[id] != grupoB { t.Errorf("%q deveria estar no mesmo cluster que b1", id) }
+		if result[id] != grupoB {
+			t.Errorf("%q deveria estar no mesmo cluster que b1", id)
+		}
 	}
 	grupoC := result["c1"]
 	for _, id := range []string{"c2", "c3"} {
-		if result[id] != grupoC { t.Errorf("%q deveria estar no mesmo cluster que c1", id) }
+		if result[id] != grupoC {
+			t.Errorf("%q deveria estar no mesmo cluster que c1", id)
+		}
 	}
 
 	// Grupos A, B, C devem ser diferentes entre si
-	if grupoA == grupoB { t.Error("grupos A e B deveriam ser diferentes") }
-	if grupoA == grupoC { t.Error("grupos A e C deveriam ser diferentes") }
-	if grupoB == grupoC { t.Error("grupos B e C deveriam ser diferentes") }
+	if grupoA == grupoB {
+		t.Error("grupos A e B deveriam ser diferentes")
+	}
+	if grupoA == grupoC {
+		t.Error("grupos A e C deveriam ser diferentes")
+	}
+	if grupoB == grupoC {
+		t.Error("grupos B e C deveriam ser diferentes")
+	}
 }
 
 func TestDistSq(t *testing.T) {
 	d := distSq(0, 0, 3, 4)
-	if d != 25 { t.Fatalf("distSq(0,0,3,4) = %f, esperado 25", d) }
+	if d != 25 {
+		t.Fatalf("distSq(0,0,3,4) = %f, esperado 25", d)
+	}
 }
 
 func TestSilhouetteScore_Perfeito(t *testing.T) {
@@ -218,18 +272,24 @@ func TestSilhouetteScore_Perfeito(t *testing.T) {
 		{100, 100, 1}, {101, 100, 1},
 	}
 	s := silhouetteScore(pts)
-	if s < 0.9 { t.Errorf("silhouette score para clusters perfeitos deveria ser ~1, got %f", s) }
+	if s < 0.9 {
+		t.Errorf("silhouette score para clusters perfeitos deveria ser ~1, got %f", s)
+	}
 }
 
 func TestSilhouetteScore_UmCluster(t *testing.T) {
 	pts := []ClusterResult{{0, 0, 0}, {1, 0, 0}, {2, 0, 0}}
 	s := silhouetteScore(pts)
-	if s != 0 { t.Errorf("silhouette score para 1 cluster deveria ser 0, got %f", s) }
+	if s != 0 {
+		t.Errorf("silhouette score para 1 cluster deveria ser 0, got %f", s)
+	}
 }
 
 func TestSilhouetteScore_UmPonto(t *testing.T) {
 	s := silhouetteScore([]ClusterResult{{0, 0, 0}})
-	if s != 0 { t.Errorf("silhouette score para 1 ponto deveria ser 0, got %f", s) }
+	if s != 0 {
+		t.Errorf("silhouette score para 1 ponto deveria ser 0, got %f", s)
+	}
 }
 
 func TestSilhouetteScore_Sobreposto(t *testing.T) {
@@ -252,20 +312,28 @@ func TestKMeans_DoisClusters(t *testing.T) {
 	kmeans(pts, 2, 30)
 	c0 := pts[0].ClusterID
 	for _, id := range []int{1, 2} {
-		if pts[id].ClusterID != c0 { t.Errorf("ponto %d deveria estar no cluster %d", id, c0) }
+		if pts[id].ClusterID != c0 {
+			t.Errorf("ponto %d deveria estar no cluster %d", id, c0)
+		}
 	}
 	c1 := pts[3].ClusterID
 	for _, id := range []int{4, 5} {
-		if pts[id].ClusterID != c1 { t.Errorf("ponto %d deveria estar no cluster %d", id, c1) }
+		if pts[id].ClusterID != c1 {
+			t.Errorf("ponto %d deveria estar no cluster %d", id, c1)
+		}
 	}
-	if c0 == c1 { t.Error("dois grupos deveriam ser clusters diferentes") }
+	if c0 == c1 {
+		t.Error("dois grupos deveriam ser clusters diferentes")
+	}
 }
 
 func TestKMeans_KIgualAN(t *testing.T) {
 	pts := []ClusterResult{{X: 0}, {X: 1}, {X: 2}}
 	kmeans(pts, 3, 10)
 	for i, p := range pts {
-		if p.ClusterID != i { t.Errorf("ponto %d deveria ter cluster %d, got %d", i, i, p.ClusterID) }
+		if p.ClusterID != i {
+			t.Errorf("ponto %d deveria ter cluster %d, got %d", i, i, p.ClusterID)
+		}
 	}
 }
 

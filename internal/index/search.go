@@ -1,4 +1,4 @@
-package search
+package index
 
 import (
 	"context"
@@ -52,26 +52,14 @@ var stopwords = map[string]bool{
 	"e": true, "the": true, "and": true, "or": true, "of": true, "to": true, "in": true,
 }
 
+// RankWeights remains exported for potential future configurability.
+// All weights are now hardcoded in scoreFragment as relative fractions of BM25.
 type RankWeights struct {
-	BaseMultiplier     float64
-	BoostTitleExact    float64
-	BoostTitlePartial  float64
-	BoostPathContext   float64
-	BoostPhrase        float64
-	BoostFreshness     float64
-	BoostTechnical     float64
-	BoostLinkAuthority float64
+	BoostFreshness float64
 }
 
 var weights = RankWeights{
-	BaseMultiplier:     1.0,
-	BoostTitleExact:    1.0, // +10.0 per match exato
-	BoostTitlePartial:  0.4, // +4.0 per match parcial
-	BoostPathContext:   0.5, // +0.5 per term no path
-	BoostPhrase:        1.2, // +120% score quando frase exata
-	BoostFreshness:     0.5, // max bonus recencia
-	BoostTechnical:     0.5, // bonus tabela/código
-	BoostLinkAuthority: 1.5, // log2 multiplier
+	BoostFreshness: 0.5,
 }
 
 func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getLinkCount func(string) int, getPopularity func(string) int) (*SearchResults, error) {

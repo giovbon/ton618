@@ -1,4 +1,4 @@
-package semantic
+package index
 
 import (
 	"math"
@@ -76,7 +76,7 @@ func Project2DReduce(vectors map[string][]float32) map[string]Point2D {
 	for j := 0; j < d; j++ {
 		cov[j] = make([]float64, d)
 	}
-factor := 1.0 / float64(n-1)
+	factor := 1.0 / float64(n-1)
 	for j := 0; j < d; j++ {
 		for k := j; k < d; k++ {
 			var sum float64

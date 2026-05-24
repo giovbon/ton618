@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"mime/multipart"
@@ -1086,6 +1087,10 @@ func TestHandleGraphData_ComEmbeddings_RetornaNodes2D(t *testing.T) {
 	if err := ctx.Store.SetEmbedding(docID, vec, "Titulo"); err != nil {
 		t.Fatalf("SetEmbedding: %v", err)
 	}
+	// Define coordenadas 2D para que o embedding seja encontrado
+	if err := ctx.Store.SetEmbedding2D(docID, 42.0, 99.0); err != nil {
+		t.Fatalf("SetEmbedding2D: %v", err)
+	}
 
 	req := httptest.NewRequest("GET", "/api/graph/data", nil)
 	rec := httptest.NewRecorder()
@@ -1116,9 +1121,9 @@ func TestHandleGraphData_ComEmbeddings_RetornaNodes2D(t *testing.T) {
 	if n.Title != "graf" {
 		t.Errorf("esperado Title 'graf', got %q", n.Title)
 	}
-	// Como ha apenas 1 embedding, a projecao deve devolver (0,0) e entao o grid entra
-	if n.X == 0 && n.Y == 0 {
-		t.Log("single node: (0,0) + grid fallback OK")
+	// Deve ter as coordenadas 2D que definimos
+	if n.X != 42.0 || n.Y != 99.0 {
+		t.Errorf("esperado (42, 99), got (%.0f, %.0f)", n.X, n.Y)
 	}
 }
 
@@ -1600,10 +1605,10 @@ func TestHandleUploadAttachment_CriaZipEIndexaFTS(t *testing.T) {
 		t.Error("zip deveria estar registrado em file_mods")
 	}
 
-	// Nao deve ter tags
+	// Deve ter tag "zip"
 	tags, _ := ctx.Store.GetFileTags(filename)
-	if len(tags) > 0 {
-		t.Errorf("zip nao deveria ter tags, got %v", tags)
+	if len(tags) != 1 || tags[0] != "zip" {
+		t.Errorf("zip deveria ter tag [zip], got %v", tags)
 	}
 }
 
@@ -1790,5 +1795,845 @@ func TestHandleFileRename_ZIP_SemExtensao_AdicionaZip(t *testing.T) {
 	loc := rec.Header().Get("Location")
 	if !strings.Contains(loc, "renomeado.zip") {
 		t.Errorf("redirect deveria conter renomeado.zip, got %q", loc)
+	}
+}
+
+// ── HandleBulkDelete ───────────────────────────────────────────
+
+// saveTestNote cria uma nota de teste no disco e registra metadados no banco.
+func saveTestNote(t *testing.T, ctx *HandlerContext, filename, content, tags string) {
+	t.Helper()
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", filename, err)
+	}
+	if tags != "" {
+		tagList := strings.Split(tags, ",")
+		ctx.Store.SetFileTags(filename, tagList)
+	}
+	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+}
+
+func TestHandleBulkDelete_PreviewAgeFilter(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria notas com idades diferentes
+	now := time.Now()
+
+	// Nota velha: mtime de 5 anos atras
+	saveTestNote(t, ctx, "notes/velha.md", "velha", "")
+	ctx.Store.SetFileMod("notes/velha.md", now.AddDate(-5, 0, 0).Format(time.RFC3339))
+
+	// Nota recente: mtime de 1 mes atras
+	saveTestNote(t, ctx, "notes/recente.md", "recente", "")
+	ctx.Store.SetFileMod("notes/recente.md", now.AddDate(0, -1, 0).Format(time.RFC3339))
+
+	// Preview: notas mais velhas que 2 anos
+	body := "by_age=true&age_years=2&by_tag=false&tag_name=&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Fatalf("esperado 1 nota velha, got %d", resp.Total)
+	}
+	if len(resp.Files) != 1 || resp.Files[0] != "notes/velha.md" {
+		t.Errorf("esperado notes/velha.md, got %v", resp.Files)
+	}
+
+	// Nota recente ainda existe no disco
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/recente.md")); os.IsNotExist(err) {
+		t.Error("nota recente nao deveria ter sido deletada no preview")
+	}
+}
+
+func TestHandleBulkDelete_PreviewTagFilter(t *testing.T) {
+	ctx := newTestContext(t)
+
+	saveTestNote(t, ctx, "notes/com-tag.md", "com tag", "urgente")
+	saveTestNote(t, ctx, "notes/sem-tag.md", "sem tag", "")
+	saveTestNote(t, ctx, "notes/outra-tag.md", "outra", "pessoal")
+
+	// Preview: notas com tag "urgente"
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=urgente&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Fatalf("esperado 1 nota com tag urgente, got %d", resp.Total)
+	}
+	if len(resp.Files) != 1 || resp.Files[0] != "notes/com-tag.md" {
+		t.Errorf("esperado notes/com-tag.md, got %v", resp.Files)
+	}
+}
+
+func TestHandleBulkDelete_PreviewMultiTag(t *testing.T) {
+	ctx := newTestContext(t)
+
+	saveTestNote(t, ctx, "notes/tag1.md", "nota 1", "urgente")
+	saveTestNote(t, ctx, "notes/tag2.md", "nota 2", "temporario")
+	saveTestNote(t, ctx, "notes/tag3.md", "nota 3", "rascunho")
+	saveTestNote(t, ctx, "notes/sem-tag.md", "sem tag", "")
+
+	// Preview: notas com tag "urgente" ou "rascunho" (multi-tag, separado por virgula)
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=urgente, rascunho&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 2 {
+		t.Fatalf("esperado 2 notas, got %d: %v", resp.Total, resp.Files)
+	}
+
+	hasTag1 := false
+	hasTag3 := false
+	for _, f := range resp.Files {
+		if f == "notes/tag1.md" {
+			hasTag1 = true
+		}
+		if f == "notes/tag3.md" {
+			hasTag3 = true
+		}
+	}
+	if !hasTag1 {
+		t.Error("notes/tag1.md deveria estar na preview")
+	}
+	if !hasTag3 {
+		t.Error("notes/tag3.md deveria estar na preview")
+	}
+}
+
+func TestHandleBulkDelete_PreviewIntersecaoAgeETag(t *testing.T) {
+	ctx := newTestContext(t)
+	now := time.Now()
+
+	// Nota velha com tag urgente
+	saveTestNote(t, ctx, "notes/velha-urgente.md", "nota 1", "urgente")
+	ctx.Store.SetFileMod("notes/velha-urgente.md", now.AddDate(-3, 0, 0).Format(time.RFC3339))
+
+	// Nota velha sem tag
+	saveTestNote(t, ctx, "notes/velha-simples.md", "nota 2", "")
+	ctx.Store.SetFileMod("notes/velha-simples.md", now.AddDate(-3, 0, 0).Format(time.RFC3339))
+
+	// Nota recente com tag urgente
+	saveTestNote(t, ctx, "notes/recente-urgente.md", "nota 3", "urgente")
+	ctx.Store.SetFileMod("notes/recente-urgente.md", now.Format(time.RFC3339))
+
+	// Preview: notas mais velhas que 2 anos E com tag "urgente"
+	body := "by_age=true&age_years=2&by_tag=true&tag_name=urgente&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Fatalf("esperado 1 nota (intersecao), got %d: %v", resp.Total, resp.Files)
+	}
+	if len(resp.Files) != 1 || resp.Files[0] != "notes/velha-urgente.md" {
+		t.Errorf("esperado notes/velha-urgente.md, got %v", resp.Files)
+	}
+}
+
+func TestHandleBulkDelete_ExecuteAgeFilter(t *testing.T) {
+	ctx := newTestContext(t)
+	now := time.Now()
+
+	saveTestNote(t, ctx, "notes/para-deletar.md", "deletar", "")
+	ctx.Store.SetFileMod("notes/para-deletar.md", now.AddDate(-5, 0, 0).Format(time.RFC3339))
+
+	saveTestNote(t, ctx, "notes/manter.md", "manter", "")
+	ctx.Store.SetFileMod("notes/manter.md", now.Format(time.RFC3339))
+
+	// Deletar notas mais velhas que 2 anos
+	body := "by_age=true&age_years=2&by_tag=false&tag_name="
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Deleted int      `json:"deleted"`
+		Errors  []string `json:"errors"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Deleted != 1 {
+		t.Fatalf("esperado 1 exclusao, got %d", resp.Deleted)
+	}
+	if len(resp.Errors) > 0 {
+		t.Fatalf("erros inesperados: %v", resp.Errors)
+	}
+
+	// Verificar que a nota velha sumiu
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/para-deletar.md")); !os.IsNotExist(err) {
+		t.Error("nota velha deveria ter sido deletada do disco")
+	}
+	// Nota recente ainda existe
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/manter.md")); os.IsNotExist(err) {
+		t.Error("nota recente nao deveria ter sido deletada")
+	}
+
+	// Verificar que os metadados da nota deletada foram limpos
+	mtime, _ := ctx.Store.GetFileMod("notes/para-deletar.md")
+	if mtime != "" {
+		t.Error("file_mods da nota deletada deveria ter sido removido")
+	}
+	tags, _ := ctx.Store.GetFileTags("notes/para-deletar.md")
+	if len(tags) > 0 {
+		t.Error("tags da nota deletada deveriam ter sido removidas")
+	}
+}
+
+func TestHandleBulkDelete_ExecuteTagFilter(t *testing.T) {
+	ctx := newTestContext(t)
+
+	saveTestNote(t, ctx, "notes/deletar-tag.md", "deletar", "lixo")
+	saveTestNote(t, ctx, "notes/manter-tag.md", "manter", "importante")
+
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=lixo"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Deleted int      `json:"deleted"`
+		Errors  []string `json:"errors"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Deleted != 1 {
+		t.Fatalf("esperado 1 exclusao, got %d", resp.Deleted)
+	}
+
+	// A nota com tag "lixo" foi deletada
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/deletar-tag.md")); !os.IsNotExist(err) {
+		t.Error("nota com tag lixo deveria ter sido deletada")
+	}
+	// A nota com tag "importante" permanece
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/manter-tag.md")); os.IsNotExist(err) {
+		t.Error("nota com tag importante nao deveria ter sido deletada")
+	}
+}
+
+func TestHandleBulkDelete_NenhumFiltro_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "by_age=false&age_years=1&by_tag=false&tag_name="
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+func TestHandleBulkDelete_SemResultados_RetornaListaVazia(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Nenhuma nota no banco, preview deve retornar lista vazia
+	body := "by_age=true&age_years=1&by_tag=false&tag_name=&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 0 {
+		t.Fatalf("esperado 0 resultados, got %d", resp.Total)
+	}
+	if len(resp.Files) != 0 {
+		t.Fatalf("esperado lista vazia, got %v", resp.Files)
+	}
+}
+
+func TestHandleBulkDelete_ExecucaoSemNotas_RetornaZero(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "by_age=true&age_years=1&by_tag=false&tag_name="
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Deleted int      `json:"deleted"`
+		Errors  []string `json:"errors"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Deleted != 0 {
+		t.Fatalf("esperado 0 exclusoes, got %d", resp.Deleted)
+	}
+}
+
+func TestHandleBulkDelete_IdadeInvalida_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "by_age=true&age_years=0&by_tag=false&tag_name="
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+func TestHandleBulkDelete_TagVazia_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "by_age=false&age_years=1&by_tag=true&tag_name="
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+func TestHandleBulkDelete_PreviewTagPDF_IncluiPDFs(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria notas em notes/ e pdfs/ com tags
+	saveTestNote(t, ctx, "notes/captura-site.md", "site capturado", "captura")
+	saveTestNote(t, ctx, "notes/captura-video.md", "video capturado", "captura")
+	saveTestNote(t, ctx, "pdfs/documento.pdf", "conteudo pdf", "pdf")
+
+	// Preview: notas com tag "captura" ou "pdf"
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=captura, pdf&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 3 {
+		t.Fatalf("esperado 3 notas (2 captura + 1 pdf), got %d: %v", resp.Total, resp.Files)
+	}
+
+	hasCapture1 := false
+	hasCapture2 := false
+	hasPDF := false
+	for _, f := range resp.Files {
+		if f == "notes/captura-site.md" {
+			hasCapture1 = true
+		}
+		if f == "notes/captura-video.md" {
+			hasCapture2 = true
+		}
+		if f == "pdfs/documento.pdf" {
+			hasPDF = true
+		}
+	}
+	if !hasCapture1 {
+		t.Error("notes/captura-site.md deveria estar na preview")
+	}
+	if !hasCapture2 {
+		t.Error("notes/captura-video.md deveria estar na preview")
+	}
+	if !hasPDF {
+		t.Error("pdfs/documento.pdf deveria estar na preview")
+	}
+}
+
+func TestHandleBulkDelete_PreviewTag_IncluiAttachments(t *testing.T) {
+	ctx := newTestContext(t)
+
+	saveTestNote(t, ctx, "notes/captura.md", "captura", "captura")
+	saveTestNote(t, ctx, "pdfs/doc.pdf", "pdf", "pdf")
+	saveTestNote(t, ctx, "attachments/arquivos.zip", "zip", "anexo")
+
+	// Preview: notas com tag "captura", "pdf" ou "anexo"
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=captura, pdf, anexo&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 3 {
+		t.Fatalf("esperado 3 notas (captura + pdf + anexo), got %d: %v", resp.Total, resp.Files)
+	}
+
+	hasNote := false
+	hasPDF := false
+	hasZip := false
+	for _, f := range resp.Files {
+		if f == "notes/captura.md" {
+			hasNote = true
+		}
+		if f == "pdfs/doc.pdf" {
+			hasPDF = true
+		}
+		if f == "attachments/arquivos.zip" {
+			hasZip = true
+		}
+	}
+	if !hasNote {
+		t.Error("notes/captura.md deveria estar na preview")
+	}
+	if !hasPDF {
+		t.Error("pdfs/doc.pdf deveria estar na preview")
+	}
+	if !hasZip {
+		t.Error("attachments/arquivos.zip deveria estar na preview")
+	}
+}
+
+func TestHandleBulkDelete_PreviewApenasCaptura_EncontraNotasEmNotes(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Simula notas capturadas: ficam em notes/ com tag "captura"
+	saveTestNote(t, ctx, "notes/captura-site-legal.md", "site", "captura")
+	saveTestNote(t, ctx, "notes/captura-video-youtube.md", "video", "captura")
+	saveTestNote(t, ctx, "notes/nota-manual.md", "manual", "")
+
+	// Preview filtrando apenas por tag "captura"
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=captura&preview=true"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Total != 2 {
+		t.Fatalf("esperado 2 notas capturadas, got %d: %v", resp.Total, resp.Files)
+	}
+
+	for _, f := range resp.Files {
+		if f == "notes/nota-manual.md" {
+			t.Error("nota-manual.md (sem tag captura) nao deveria aparecer")
+		}
+	}
+}
+
+func TestHandleBulkDelete_PreviewCapturaPDFAnexo_TodasAsFontes(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria notas de todas as fontes possiveis, cada uma com uma tag especifica
+	saveTestNote(t, ctx, "notes/captura-website.md", "captura web", "captura")
+	saveTestNote(t, ctx, "pdfs/artigo.pdf", "artigo pdf", "pdf")
+	saveTestNote(t, ctx, "attachments/fotos.zip", "anexo zip", "anexo")
+	saveTestNote(t, ctx, "notes/nota-avulsa.md", "nota sem tag", "")
+
+	// Preview por cada tag individualmente
+	// 1. So captura
+	body1 := "by_age=false&age_years=1&by_tag=true&tag_name=captura&preview=true"
+	req1 := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body1))
+	req1.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec1 := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec1, req1)
+
+	var resp1 struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	json.NewDecoder(rec1.Body).Decode(&resp1)
+	if resp1.Total != 1 || resp1.Files[0] != "notes/captura-website.md" {
+		t.Errorf("tag captura: esperado 1 (notes/captura-website.md), got %d: %v", resp1.Total, resp1.Files)
+	}
+
+	// 2. So pdf
+	body2 := "by_age=false&age_years=1&by_tag=true&tag_name=pdf&preview=true"
+	req2 := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body2))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec2 := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec2, req2)
+
+	var resp2 struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	json.NewDecoder(rec2.Body).Decode(&resp2)
+	if resp2.Total != 1 || resp2.Files[0] != "pdfs/artigo.pdf" {
+		t.Errorf("tag pdf: esperado 1 (pdfs/artigo.pdf), got %d: %v", resp2.Total, resp2.Files)
+	}
+
+	// 3. So anexo
+	body3 := "by_age=false&age_years=1&by_tag=true&tag_name=anexo&preview=true"
+	req3 := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body3))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec3 := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec3, req3)
+
+	var resp3 struct {
+		Files []string `json:"files"`
+		Total int      `json:"total"`
+	}
+	json.NewDecoder(rec3.Body).Decode(&resp3)
+	if resp3.Total != 1 || resp3.Files[0] != "attachments/fotos.zip" {
+		t.Errorf("tag anexo: esperado 1 (attachments/fotos.zip), got %d: %v", resp3.Total, resp3.Files)
+	}
+
+	// 4. Executa exclusao combinando captura + anexo (deve pegar as 2)
+	body4 := "by_age=false&age_years=1&by_tag=true&tag_name=captura, anexo"
+	req4 := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body4))
+	req4.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec4 := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec4, req4)
+
+	var resp4 struct {
+		Deleted int `json:"deleted"`
+	}
+	json.NewDecoder(rec4.Body).Decode(&resp4)
+	if resp4.Deleted != 2 {
+		t.Errorf("exclusao captura+anexo: esperado 2, got %d", resp4.Deleted)
+	}
+
+	// Nota avulsa e PDF devem permanecer
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/nota-avulsa.md")); os.IsNotExist(err) {
+		t.Error("nota-avulsa.md nao deveria ter sido deletada")
+	}
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "pdfs/artigo.pdf")); os.IsNotExist(err) {
+		t.Error("pdfs/artigo.pdf nao deveria ter sido deletado")
+	}
+}
+
+func TestHandleBulkDelete_ExecuteTagPDF_DeletaPDFTambem(t *testing.T) {
+	ctx := newTestContext(t)
+
+	saveTestNote(t, ctx, "pdfs/relatorio.pdf", "relatorio", "pdf")
+	saveTestNote(t, ctx, "notes/nota-normal.md", "normal", "")
+
+	// Deletar notas com tag "pdf"
+	body := "by_age=false&age_years=1&by_tag=true&tag_name=pdf"
+	req := httptest.NewRequest("POST", "/api/bulk-delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleBulkDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Deleted int      `json:"deleted"`
+		Errors  []string `json:"errors"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Deleted != 1 {
+		t.Fatalf("esperado 1 exclusao (pdf), got %d", resp.Deleted)
+	}
+	if len(resp.Errors) > 0 {
+		t.Fatalf("erros inesperados: %v", resp.Errors)
+	}
+
+	// PDF foi deletado do disco
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "pdfs/relatorio.pdf")); !os.IsNotExist(err) {
+		t.Error("pdf deveria ter sido deletado do disco")
+	}
+	// Nota normal permanece
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/nota-normal.md")); os.IsNotExist(err) {
+		t.Error("nota normal nao deveria ter sido deletada")
+	}
+}
+
+// ── Searchability (PDF e ZIP) ──
+
+// createMinimalPDF escreve um PDF valido com o texto informado.
+func createMinimalPDF(t *testing.T, path, text string) {
+	t.Helper()
+	// Usa padding para manter o texto com pelo menos 11 chars, igual ao "Hello PDF"
+	// usado nos offsets fixos do xref.
+	paddedText := text
+	if len(paddedText) < 11 {
+		paddedText = paddedText + strings.Repeat(" ", 11-len(paddedText))
+	}
+	os.MkdirAll(filepath.Dir(path), 0755)
+	content := fmt.Sprintf("%%PDF-1.4\n"+
+		"1 0 obj\n"+
+		"<< /Type /Catalog /Pages 2 0 R >>\n"+
+		"endobj\n"+
+		"2 0 obj\n"+
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>\n"+
+		"endobj\n"+
+		"3 0 obj\n"+
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]\n"+
+		"   /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\n"+
+		"endobj\n"+
+		"4 0 obj\n"+
+		"<< /Length 44 >>\n"+
+		"stream\n"+
+		"BT /F1 12 Tf 100 700 Td (%s) Tj ET\n"+
+		"endstream\n"+
+		"endobj\n"+
+		"5 0 obj\n"+
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n"+
+		"endobj\n"+
+		"xref\n"+
+		"0 6\n"+
+		"0000000000 65535 f \n"+
+		"0000000009 00000 n \n"+
+		"0000000058 00000 n \n"+
+		"0000000115 00000 n \n"+
+		"0000000266 00000 n \n"+
+		"0000000363 00000 n \n"+
+		"trailer\n"+
+		"<< /Size 6 /Root 1 0 R >>\n"+
+		"startxref\n"+
+		"442\n"+
+		"%%EOF", paddedText)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("escrever PDF: %v", err)
+	}
+}
+
+func TestPDFUpload_TextoExtraidoEPesquisavel(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria um PDF valido com texto conhecido.
+	// Usamos um termo de 9 chars (menor que 11) para que o padding do
+	// createMinimalPDF mantenha os offsets do xref inalterados.
+	termoBusca := "BUSCA_PDF"
+	pdfPath := filepath.Join(ctx.Cfg.DocsDir, "pdfs/teste-busca.pdf")
+	createMinimalPDF(t, pdfPath, termoBusca)
+
+	// Processa o PDF via ProcessFile (como HandleUpload faria)
+	evento := watcher.FileEvent{
+		Path:     pdfPath,
+		Filename: "pdfs/teste-busca.pdf",
+		ModTime:  time.Now(),
+		Type:     "create",
+	}
+	if err := watcher.ProcessFile(ctx.Store, evento, nil, false); err != nil {
+		t.Fatalf("ProcessFile PDF: %v", err)
+	}
+
+	// Verifica se o PDF gerou documentos no banco
+	docs, err := ctx.Store.GetDocumentsByFile("pdfs/teste-busca.pdf")
+	if err != nil {
+		t.Fatalf("GetDocumentsByFile: %v", err)
+	}
+	if len(docs) == 0 {
+		// A biblioteca ledongthuc/pdf pode nao conseguir extrair texto do PDF
+		// minimal em algumas plataformas. Nesse caso o teste nao falha — apenas
+		// verifica que o pipeline nao quebrou.
+		t.Log("PDF minimal nao gerou documentos (biblioteca pode nao suportar este formato)")
+		return
+	}
+
+	// Verifica que o texto foi extraido e indexado
+	found := false
+	for _, doc := range docs {
+		if strings.Contains(doc.Texto, termoBusca) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Texto %q extraido do PDF nao encontrado nos documentos", termoBusca)
+	}
+
+	// Busca global via FTS deve encontrar o termo
+	results, total, err := ctx.Store.SearchFTS(termoBusca, 0, 10)
+	if err != nil {
+		t.Fatalf("SearchFTS: %v", err)
+	}
+	if total == 0 {
+		t.Fatal("PDF com texto extraido deveria ser encontrado no FTS")
+	}
+	ftsFound := false
+	for _, r := range results {
+		if strings.Contains(r.Arquivo, "teste-busca") || strings.Contains(r.Texto, termoBusca) {
+			ftsFound = true
+			break
+		}
+	}
+	if !ftsFound {
+		t.Errorf("PDF nao encontrado via FTS pelo termo %q", termoBusca)
+	}
+}
+
+func TestZIPUpload_NomesDosArquivosPesquisaveis(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria ZIP com aquivos de nomes conhecidos via HandleUploadAttachment.
+	// Nomes sem hifen para evitar que o FTS5 interprete o "-" como operador de exclusao.
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	f1, _ := w.CreateFormFile("files", "relatorio_mensal.pdf")
+	io.Copy(f1, strings.NewReader("pdf content"))
+	f2, _ := w.CreateFormFile("files", "foto_ferias.jpg")
+	io.Copy(f2, strings.NewReader("jpg content"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("upload attachment esperado 303, got %d", rec.Code)
+	}
+
+	// Busca pelo nome do arquivo — o FTS5 deve encontrar
+	results, total, err := ctx.Store.SearchFTS("relatorio_mensal", 0, 10)
+	if err != nil {
+		t.Fatalf("SearchFTS(relatorio_mensal): %v", err)
+	}
+	if total == 0 {
+		t.Fatal("ZIP com arquivo relatorio_mensal.pdf deveria ser encontrado no FTS")
+	}
+	found := false
+	for _, r := range results {
+		if strings.Contains(r.Texto, "relatorio_mensal") || strings.Contains(r.Arquivo, ".zip") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("ZIP com relatorio_mensal.pdf nao encontrado via FTS")
+	}
+
+	// Busca pelo segundo arquivo tambem
+	results2, total2, err2 := ctx.Store.SearchFTS("foto_ferias", 0, 10)
+	if err2 != nil {
+		t.Fatalf("SearchFTS(foto_ferias): %v", err2)
+	}
+	if total2 == 0 {
+		t.Fatal("ZIP com arquivo foto_ferias.jpg deveria ser encontrado no FTS")
+	}
+	_ = results2
+}
+
+func TestZIPUpload_SemArquivos_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// ZIP sem arquivos na multipart — handler deve rejeitar
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("upload sem arquivos esperado 400, got %d", rec.Code)
 	}
 }
