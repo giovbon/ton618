@@ -2637,3 +2637,188 @@ func TestZIPUpload_SemArquivos_Retorna400(t *testing.T) {
 		t.Fatalf("upload sem arquivos esperado 400, got %d", rec.Code)
 	}
 }
+
+// ── HandleToggleEmbed ──────────────────────────────────────────
+
+func TestHandleToggleEmbed_AtivaEmbedEmMarkdown(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria arquivo markdown
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/teste.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("# Teste\nconteudo"), 0644)
+
+	// Indexa o arquivo primeiro
+	ctx.Store.SetFileMod("notes/teste.md", time.Now().Format(time.RFC3339))
+	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+		Path:     fullPath,
+		Filename: "notes/teste.md",
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}, ctx.Embed, false)
+
+	// Executa toggle embed
+	body := "filename=notes/teste.md"
+	req := httptest.NewRequest("POST", "/api/toggle-embed", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp["ok"] != true {
+		t.Fatal("resposta ok deveria ser true")
+	}
+	if resp["embedded"] != true {
+		t.Fatal("embedded deveria ser true apos ativar")
+	}
+
+	// Verifica que a tag "embed" foi adicionada
+	tags, _ := ctx.Store.GetFileTags("notes/teste.md")
+	hasEmbed := false
+	for _, tag := range tags {
+		if tag == "embed" {
+			hasEmbed = true
+			break
+		}
+	}
+	if !hasEmbed {
+		t.Fatal("tag 'embed' deveria estar presente apos toggle")
+	}
+}
+
+func TestHandleToggleEmbed_DesativaEmbedEmMarkdown(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria arquivo markdown
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/desativar.md")
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("# Teste\nconteudo"), 0644)
+
+	// Adiciona tag "embed" previamente
+	ctx.Store.AddTagToFile("notes/desativar.md", "embed")
+
+	// Executa toggle embed (deve desativar)
+	body := "filename=notes/desativar.md"
+	req := httptest.NewRequest("POST", "/api/toggle-embed", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp["ok"] != true {
+		t.Fatal("resposta ok deveria ser true")
+	}
+	if resp["embedded"] != false {
+		t.Fatal("embedded deveria ser false apos desativar")
+	}
+
+	// Verifica que a tag "embed" foi removida
+	tags, _ := ctx.Store.GetFileTags("notes/desativar.md")
+	for _, tag := range tags {
+		if tag == "embed" {
+			t.Fatal("tag 'embed' nao deveria estar presente apos desativar")
+		}
+	}
+}
+
+func TestHandleToggleEmbed_AtivaEmbedEmPDF(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria arquivo PDF
+	pdfDir := filepath.Join(ctx.Cfg.DocsDir, "pdfs")
+	os.MkdirAll(pdfDir, 0755)
+	fullPath := filepath.Join(pdfDir, "documento.pdf")
+	os.WriteFile(fullPath, []byte("%PDF-1.4 fake"), 0644)
+
+	// Executa toggle embed
+	body := "filename=pdfs/documento.pdf"
+	req := httptest.NewRequest("POST", "/api/toggle-embed", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp["ok"] != true {
+		t.Fatal("resposta ok deveria ser true para PDF")
+	}
+	if resp["embedded"] != true {
+		t.Fatal("embedded deveria ser true apos ativar em PDF")
+	}
+
+	// Verifica a tag
+	tags, _ := ctx.Store.GetFileTags("pdfs/documento.pdf")
+	hasEmbed := false
+	for _, tag := range tags {
+		if tag == "embed" {
+			hasEmbed = true
+			break
+		}
+	}
+	if !hasEmbed {
+		t.Fatal("PDF deveria ter tag 'embed' apos toggle")
+	}
+}
+
+func TestHandleToggleEmbed_ArquivoInexistente_Retorna404(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "filename=notes/nao-existe.md"
+	req := httptest.NewRequest("POST", "/api/toggle-embed", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("esperado 404, got %d", rec.Code)
+	}
+}
+
+func TestHandleToggleEmbed_MetodoInvalido_Retorna405(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("GET", "/api/toggle-embed", nil)
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("esperado 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleToggleEmbed_FilenameObrigatorio_Retorna400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	body := "filename="
+	req := httptest.NewRequest("POST", "/api/toggle-embed", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	ctx.HandleToggleEmbed(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}

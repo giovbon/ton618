@@ -68,6 +68,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
 	mux.HandleFunc("POST /api/bulk-delete", ctx.HandleBulkDelete)
+	mux.HandleFunc("POST /api/toggle-embed", ctx.HandleToggleEmbed)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))

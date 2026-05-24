@@ -467,3 +467,82 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	// Redireciona para a pagina inicial (modo compacto)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
+
+// ── Toggle Embed ──
+
+// HandleToggleEmbed adiciona ou remove a tag "embed" de um arquivo e
+// aciona/reprocessa o embedding. Funciona para qualquer tipo de arquivo
+// (markdown, PDF, etc.).
+func (ctx *HandlerContext) HandleToggleEmbed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	filename := r.FormValue("filename")
+	if filename == "" {
+		http.Error(w, "filename required", http.StatusBadRequest)
+		return
+	}
+
+	// Verifica se o arquivo existe em qualquer subdiretorio monitorado
+	basename := filepath.Base(filename)
+	allSubdirs := append([]string{"notes"}, watcher.MonitoredSubDirs...)
+	var fullPath string
+	found := false
+	for _, sd := range allSubdirs {
+		testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+		if _, err := os.Stat(testPath); err == nil {
+			filename = sd + "/" + basename
+			fullPath = testPath
+			found = true
+			break
+		}
+	}
+	if !found {
+		// Fallback: tenta o filename como veio (ja normalizado)
+		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	// Busca tags atuais do arquivo
+	currentTags, err := ctx.Store.GetFileTags(filename)
+	if err != nil {
+		currentTags = nil
+	}
+
+	// Verifica se ja tem a tag "embed"
+	hasEmbed := false
+	for _, t := range currentTags {
+		if t == "embed" {
+			hasEmbed = true
+			break
+		}
+	}
+
+	if hasEmbed {
+		// Remove a tag "embed" e deleta os embeddings
+		ctx.Store.RemoveTagFromFile(filename, "embed")
+		ctx.Store.DeleteEmbeddingsByFile(filename)
+		slog.Info("Embedding desativado", "file", filename)
+	} else {
+		// Adiciona a tag "embed" e reprocessa o arquivo com embedding forçado
+		ctx.Store.AddTagToFile(filename, "embed")
+		info, err := os.Stat(fullPath)
+		if err == nil {
+			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+				Path:     fullPath,
+				Filename: filename,
+				ModTime:  info.ModTime(),
+				Type:     "create",
+			}, ctx.Embed, true) // embedAll=true para forçar embedding
+		}
+		slog.Info("Embedding ativado", "file", filename)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true, "embedded": !hasEmbed})
+}

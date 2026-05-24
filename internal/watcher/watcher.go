@@ -96,6 +96,12 @@ func stopEmbedWorkers() {
 	embedOnce = sync.Once{} // permite reiniciar se necessário
 }
 
+// drainEmbedQueue aguarda a fila de embedding esvaziar sem fechar o canal.
+// Usado em testes para garantir que embeddings assincronos foram processados.
+func drainEmbedQueue() {
+	embedWg.Wait()
+}
+
 // processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
 // entre o processamento direto (HandleFileSave) e o watcher fsnotify.
 var processMu sync.Mutex
@@ -404,6 +410,9 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 			Tags:       nil,
 		}}
 	}
+	// Busca tags do arquivo no banco (gerenciadas via toggle-embed na UI)
+	existingFileTags, _ := store.GetFileTags(filename)
+
 	for _, doc := range docs {
 		dbDoc := db.Document{
 			ID:         doc.ID,
@@ -428,9 +437,13 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 		}
 
 		// Generate embedding via worker pool (assíncrono) se o provider estiver configurado.
-		// PDFs: apenas se o nome do arquivo contiver "embed".
-		// Markdown: segue a regra shouldEmbed (tag "embed" no frontmatter ou EMBEDDING_ALL=true).
-		if embed != nil && ((doc.Tipo == "pdf" && strings.Contains(strings.ToLower(doc.Arquivo), "embed")) || (doc.Tipo == "markdown" && shouldEmbed(doc.Tags, embedAll))) {
+		// Para TODOS os tipos de documento: verifica se deve gerar embedding.
+		// As fontes possiveis da tag "embed" sao:
+		// 1. Frontmatter do markdown (doc.Tags)
+		// 2. File-level tags no banco (toggle-embed na UI)
+		// 3. EMBEDDING_ALL=true
+		allTags := append(doc.Tags, existingFileTags...)
+		if embed != nil && shouldEmbed(allTags, embedAll) {
 			textToEmbed := doc.Secao + " " + doc.Texto
 			textToEmbed = strings.TrimSpace(textToEmbed)
 			if textToEmbed != "" && len(textToEmbed) > 10 {

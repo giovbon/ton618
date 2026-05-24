@@ -413,14 +413,12 @@
                     folder +
                     "</span>";
             html += "</a>";
-            // Embedding indicator
-            if (n.embedded) {
-                html +=
-                    '<span class="shrink-0 text-[10px] text-emerald-600/70 font-bold" title="Nota embedada">✦</span>';
-            } else {
-                html +=
-                    '<span class="shrink-0 text-[10px] text-zinc-700/50" title="Sem embedding">○</span>';
-            }
+            // Embedding indicator + toggle button
+            var embedIcon = n.embedded ? "✦" : "○";
+            var embedColor = n.embedded ? "text-emerald-400" : "text-zinc-600";
+            var embedTitle = n.embedded ? "Embedado - Clique para desativar" : "Nao embedado - Clique para ativar";
+            html +=
+                '<button onclick="toggleEmbed(\'' + safeName + '\')" class="shrink-0 text-[11px] ' + embedColor + ' hover:text-sky-400 transition-colors px-1 py-0.5 rounded-md hover:bg-zinc-900/60" title="' + embedTitle + '">' + embedIcon + "</button>";
             if (tags.length) {
                 html += '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {
@@ -505,6 +503,29 @@
             hideTagAutocomplete();
         }
     });
+
+    function toggleEmbed(filename) {
+        var fd = new FormData();
+        fd.append("filename", filename);
+        fetch("/api/toggle-embed", { method: "POST", body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && data.ok) {
+                    // Atualiza o estado local sem recarregar tudo
+                    allNotes = allNotes.map(function (n) {
+                        if (n.arquivo === filename) {
+                            n.embedded = data.embedded;
+                        }
+                        return n;
+                    });
+                    var filter = document.getElementById("search-input").value;
+                    onSearchInput(filter);
+                }
+            })
+            .catch(function (err) {
+                console.error("Erro ao toggle embed:", err);
+            });
+    }
 
     function deleteNote(filename) {
         if (!confirm('Excluir "' + filename + '"?')) return;
