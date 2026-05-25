@@ -281,7 +281,11 @@ source: %s
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, true); err != nil {
+	// embedAll=false: NÃO força embedding automático em capturas.
+	// O embedding só acontece se a nota tiver a tag "embed" no frontmatter
+	// ou se EMBEDDING_ALL=true estiver configurado.
+	embedAll := ctx.Cfg.EmbeddingAll
+	if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, embedAll); err != nil {
 		slog.Error("processar captura", "error", err)
 	}
 
