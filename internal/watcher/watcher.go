@@ -377,7 +377,39 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 
 	// Anexos (ZIPs): nao deleta docs/FTS — foram criados pelo upload handler
 	if tipo == "attachment" {
+		// Verifica se o arquivo ja estava registrado (existia file_mod).
+		// Usamos isso para detectar perda de dados por race condition:
+		// se file_mod existe mas docs nao, algo deletou os docs e precisamos
+		// recriar o registro básico.
+		existingMod, _ := store.GetFileMod(filename)
+
 		store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
+
+		// Recovery: se o arquivo ja estava registrado mas perdeu os documentos
+		// (ex: race condition no pollAll que deletou docs mas nao o zip fisico)
+		if existingMod != "" {
+			existingDocs, _ := store.GetDocumentsByFile(filename)
+			if len(existingDocs) == 0 {
+				basename := filepath.Base(filename)
+				if strings.HasSuffix(strings.ToLower(basename), ".zip") {
+					docID := processor.HashFunc("att-" + basename)
+					doc := db.Document{
+						ID:        docID,
+						Tipo:      "attachment",
+						Arquivo:   filename,
+						Secao:     "\U0001f4e6 " + basename,
+						Texto:     "Anexo ZIP: " + basename,
+						Timestamp: ev.ModTime.UTC().Format(time.RFC3339),
+						CreatedAt: ev.ModTime.UTC().Format(time.RFC3339),
+						Hash:      processor.CalculateHash("att", basename, nil),
+					}
+					store.InsertDocument(doc)
+					store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "zip")
+					store.SetFileTags(filename, []string{"zip"})
+					slog.Info("Documento de anexo recriado pelo watcher", "file", filename)
+				}
+			}
+		}
 		return nil
 	}
 
@@ -466,9 +498,23 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 		store.AddLink(filename, link)
 	}
 
-	// Store tags
-	if len(fileTags) > 0 {
-		store.SetFileTags(filename, fileTags)
+	// Store tags: mescla as tags do frontmatter/hashtags com as tags
+	// existentes no banco (ex: "embed" adicionada via toggle-embed na UI).
+	mergedTags := fileTags
+	for _, et := range existingFileTags {
+		found := false
+		for _, ft := range fileTags {
+			if ft == et {
+				found = true
+				break
+			}
+		}
+		if !found {
+			mergedTags = append(mergedTags, et)
+		}
+	}
+	if len(mergedTags) > 0 {
+		store.SetFileTags(filename, mergedTags)
 	}
 
 	// Track file mod
@@ -666,6 +712,13 @@ func (w *Watcher) pollAll() {
 	dbFiles, _ := w.store.GetAllFileMods()
 	for filename := range dbFiles {
 		if !diskFiles[filename] {
+			// Pula arquivos processados recentemente pelo HTTP handler
+			// (ex: upload de ZIP onde o pollAll escaneou antes do arquivo
+			// terminar de ser escrito, mas o registro no DB já foi feito).
+			if isRecentlyProcessed(filename) {
+				slog.Debug("PollAll: pulando delete de arquivo recentemente processado", "file", filename)
+				continue
+			}
 			fullPath := filepath.Join(w.cfg.DocsDir, filename)
 			slog.Info("Arquivo deletado (detectado no poll)", "file", filename)
 			w.events <- FileEvent{

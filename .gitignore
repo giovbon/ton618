@@ -14,6 +14,7 @@ docs/
 state/
 *.bleve/
 
+node_modules/
 .env
 .env.local
 .env.prod

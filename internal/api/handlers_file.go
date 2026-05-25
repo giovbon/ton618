@@ -250,7 +250,7 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		found := false
 		for _, sd := range subdirs {
 			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-			if err := os.Remove(testPath); err == nil {
+			if _, err := os.Stat(testPath); err == nil {
 				filename = sd + "/" + basename
 				fullPath = testPath
 				found = true
@@ -264,17 +264,8 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	} else if ext == ".zip" {
 		// ZIP attachments: stored in attachments/
 		basename := filepath.Base(raw)
-		testPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
-		if err := os.Remove(testPath); err == nil {
-			filename = "attachments/" + basename
-			fullPath = testPath
-		} else if os.IsNotExist(err) {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		filename = "attachments/" + basename
+		fullPath = filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
 	} else {
 		filename = sanitizeFilename(raw)
 		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
@@ -450,6 +441,15 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	docID := processor.HashFunc("att-" + zipName)
 	fileListStr := listText.String()
 
+	// Marca como recentemente processado ANTES de registrar no DB,
+	// para evitar que o watcher (fsnotify ou pollAll) interfira.
+	watcher.MarkRecentlyProcessed(filename)
+
+	// Limpa registros anteriores (segurança, caso haja colisão de nome)
+	ctx.Store.DeleteDocumentsByFile(filename)
+	ctx.Store.DeleteFTSByFile(filename)
+	ctx.Store.DeleteEmbeddingsByFile(filename)
+
 	doc := db.Document{
 		ID:        docID,
 		Tipo:      "attachment",
@@ -459,12 +459,14 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 		Tags:      "",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		Hash:      processor.CalculateHash("att", zipName, nil),
+		Hash:      processor.CalculateHash("att", fileListStr, nil),
 	}
 	ctx.Store.InsertDocument(doc)
 	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 	ctx.Store.SetFileTags(filename, []string{"zip"})
 	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	slog.Info("Anexo ZIP criado", "file", filename, "arquivos", len(files), "tamanho", filepath.Base(zipPath))
 
 	// Redireciona pra lista compacta (mesmo comportamento do upload de PDF)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -519,6 +521,9 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	defer dst.Close()
 
 	io.Copy(dst, file)
+
+	// Marca como recentemente processado para evitar race com o watcher
+	watcher.MarkRecentlyProcessed(filename)
 
 	// Process the file (index, embed)
 	info, _ := os.Stat(fullPath)

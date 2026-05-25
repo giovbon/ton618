@@ -1707,7 +1707,7 @@ func TestHandleFileDelete_ZIP_RemoveArquivoEDocs(t *testing.T) {
 	}
 }
 
-func TestHandleFileDelete_ZIP_Inexistente_Retorna404(t *testing.T) {
+func TestHandleFileDelete_ZIP_Inexistente_Retorna200(t *testing.T) {
 	ctx := newTestContext(t)
 	body := "filename=attachments/fantasma.zip"
 	req := httptest.NewRequest("POST", "/file/delete", strings.NewReader(body))
@@ -1715,8 +1715,9 @@ func TestHandleFileDelete_ZIP_Inexistente_Retorna404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx.HandleFileDelete(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("esperado 404 para ZIP inexistente, got %d", rec.Code)
+	// Deve retornar 200 (idempotente, consistente com markdown)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200 para ZIP inexistente, got %d", rec.Code)
 	}
 }
 
@@ -2820,5 +2821,265 @@ func TestHandleToggleEmbed_FilenameObrigatorio_Retorna400(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("esperado 400, got %d", rec.Code)
+	}
+}
+
+// ── HandleUploadAttachment: visibilidade no /api/notes ─────────
+
+func TestHandleUploadAttachment_ZipApareceNoListagemDeNotas(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Faz upload de um ZIP
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, _ := w.CreateFormFile("files", "lista-notas.txt")
+	io.Copy(part, strings.NewReader("nota 1\nnota 2\n"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("upload falhou: %d", rec.Code)
+	}
+
+	// Busca a lista de notas (modo compacto)
+	req2 := httptest.NewRequest("GET", "/api/notes", nil)
+	rec2 := httptest.NewRecorder()
+	ctx.HandleGetAllNotes(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec2.Code)
+	}
+
+	var resp struct {
+		Notes []struct {
+			Arquivo  string   `json:"arquivo"`
+			Tags     []string `json:"tags"`
+			Mtime    string   `json:"mtime"`
+			Embedded bool     `json:"embedded"`
+		} `json:"notes"`
+	}
+	if err := json.NewDecoder(rec2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Deve ter pelo menos um ZIP na lista
+	foundZip := false
+	for _, n := range resp.Notes {
+		if strings.HasPrefix(n.Arquivo, "attachments/") && strings.HasSuffix(n.Arquivo, ".zip") {
+			foundZip = true
+			// Deve ter a tag "zip"
+			hasZipTag := false
+			for _, t := range n.Tags {
+				if t == "zip" {
+					hasZipTag = true
+					break
+				}
+			}
+			if !hasZipTag {
+				t.Errorf("ZIP %s deveria ter tag 'zip', got %v", n.Arquivo, n.Tags)
+			}
+			break
+		}
+	}
+	if !foundZip {
+		t.Error("ZIP enviado nao apareceu na listagem /api/notes")
+	}
+}
+
+// ── HandleFile: download de ZIP ────────────────────────────────
+
+func TestHandleFile_DownloadZipAttachment(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria ZIP real no disco
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	zipContent := []byte("fake-zip-content")
+	zipPath := filepath.Join(attachDir, "download-test.zip")
+	os.WriteFile(zipPath, zipContent, 0644)
+
+	// Acessa via /file
+	req := httptest.NewRequest("GET", "/file?name=attachments/download-test.zip", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFile(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	// Deve ter Content-Disposition: attachment
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") {
+		t.Errorf("ZIP deveria ser servido como attachment, got Content-Disposition: %q", cd)
+	}
+
+	// Deve ter Content-Type: application/zip
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/zip") {
+		t.Errorf("Content-Type deveria ser application/zip, got %q", ct)
+	}
+
+	// Conteudo deve ser igual ao arquivo
+	body := rec.Body.Bytes()
+	if string(body) != string(zipContent) {
+		t.Errorf("conteudo do ZIP diferente: got %d bytes, expected %d bytes", len(body), len(zipContent))
+	}
+}
+
+// ── HandleFileDownload: ZIP como download ──────────────────────
+
+func TestHandleFileDownload_ZipAttachment(t *testing.T) {
+	ctx := newTestContext(t)
+
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	zipContent := []byte("fake-download-zip")
+	zipPath := filepath.Join(attachDir, "download-test.zip")
+	os.WriteFile(zipPath, zipContent, 0644)
+
+	req := httptest.NewRequest("GET", "/file/download?name=attachments/download-test.zip", nil)
+	rec := httptest.NewRecorder()
+	ctx.HandleFileDownload(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") {
+		t.Errorf("Content-Disposition deveria conter 'attachment', got %q", cd)
+	}
+
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/zip") {
+		t.Errorf("Content-Type deveria ser application/zip, got %q", ct)
+	}
+
+	body := rec.Body.Bytes()
+	if string(body) != string(zipContent) {
+		t.Errorf("conteudo diferente: got %d bytes", len(body))
+	}
+}
+
+// ── HandleUploadAttachment: recovery após race ─────────────────
+
+func TestHandleUploadAttachment_MantemDadosAposProcessFile(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Simula o fluxo completo: upload + watcher processando o arquivo
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, _ := w.CreateFormFile("files", "race-test.txt")
+	io.Copy(part, strings.NewReader("conteudo para teste de race"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload-attachment", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	ctx.HandleUploadAttachment(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("upload falhou: %d", rec.Code)
+	}
+
+	// Encontra o ZIP criado
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	entries, _ := os.ReadDir(attachDir)
+	var zipFile string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".zip") {
+			zipFile = e.Name()
+			break
+		}
+	}
+	if zipFile == "" {
+		t.Fatal("nenhum zip encontrado")
+	}
+
+	filename := "attachments/" + zipFile
+	fullPath := filepath.Join(attachDir, zipFile)
+
+	// Simula o watcher processando o arquivo (como fsnotify faria)
+	// O processFileLocked para attachment NAO deve deletar os docs
+	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+		Path:     fullPath,
+		Filename: filename,
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}, nil, false)
+
+	// Documento deve continuar existindo
+	docs, _ := ctx.Store.GetDocumentsByFile(filename)
+	if len(docs) == 0 {
+		t.Fatal("documento foi perdido apos ProcessFile do watcher")
+	}
+
+	// Tags devem continuar existindo
+	tags, _ := ctx.Store.GetFileTags(filename)
+	hasZip := false
+	for _, t := range tags {
+		if t == "zip" {
+			hasZip = true
+			break
+		}
+	}
+	if !hasZip {
+		t.Errorf("tag 'zip' foi perdida apos ProcessFile, got %v", tags)
+	}
+
+	// file_mods deve existir
+	mod, _ := ctx.Store.GetFileMod(filename)
+	if mod == "" {
+		t.Error("file_mod foi perdido apos ProcessFile")
+	}
+}
+
+// ── HandleFileDelete (ZIP) com nome simples ───────────────────
+
+func TestHandleFileDelete_ZIP_NomeSimples_SemPrefixoAttachments(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Cria ZIP
+	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
+	os.MkdirAll(attachDir, 0755)
+	zipName := "simple.zip"
+	zipPath := filepath.Join(attachDir, zipName)
+	os.WriteFile(zipPath, []byte("zip"), 0644)
+
+	filename := "attachments/" + zipName
+	docID := "att-simple"
+	ctx.Store.InsertDocument(db.Document{
+		ID:      docID,
+		Tipo:    "attachment",
+		Arquivo: filename,
+		Secao:   "\U0001f4e6 " + zipName,
+		Texto:   "Arquivos: simple.txt",
+	})
+	ctx.Store.IndexFTS(docID, "attachment", filename, "\U0001f4e6 "+zipName, "Arquivos: simple.txt", "")
+	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	// Deleta passando apenas o nome base (sem attachments/)
+	body := "filename=" + zipName
+	req := httptest.NewRequest("POST", "/file/delete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+
+	// Arquivo deve ter sido removido
+	if _, err := os.Stat(zipPath); !os.IsNotExist(err) {
+		t.Error("arquivo zip deveria ter sido removido")
+	}
+
+	// Documento removido
+	if c := ctx.Store.GetDocumentCount(); c != 0 {
+		t.Errorf("documentos deveriam ser 0, got %d", c)
 	}
 }

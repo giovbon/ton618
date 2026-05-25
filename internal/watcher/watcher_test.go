@@ -384,8 +384,8 @@ func TestProcessFile_Embed_SemTagEmbed_NaoGeraTag(t *testing.T) {
 	}
 
 	tags, _ := store.GetFileTags("pdfs/confidencial.pdf")
-	for _, t := range tags {
-		if t == "embed" {
+	for _, tg := range tags {
+		if tg == "embed" {
 			t.Error("PDF sem tag 'embed' nao deveria ter a tag apos processamento")
 		}
 	}
@@ -446,8 +446,8 @@ Conteudo qualquer.`
 	}
 
 	tags, _ := store.GetFileTags("notes/rascunho.md")
-	for _, t := range tags {
-		if t == "embed" {
+	for _, tg := range tags {
+		if tg == "embed" {
 			t.Error("markdown sem tag 'embed' no frontmatter nao deveria ter a tag")
 		}
 	}

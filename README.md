@@ -1,3 +1,5 @@
+repomix --compress --ignore "**/*_test.go"
+
 # 🌌 TON-618 v2 — Motor de Busca + Mapa Semântico Personal Knowledge Management
 
 **TON-618 v2** é um motor de busca pessoal (PKM) que indexa arquivos Markdown, combina busca textual **FTS5** com **embeddings semânticos**, e oferece um **mapa semântico interativo** com projeção PCA + diagrama de Voronoi. Tudo com um frontend **HTMX + Tailwind CDN** — sem dependências npm e com inicialização em **< 100ms**.
