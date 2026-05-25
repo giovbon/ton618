@@ -168,15 +168,39 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// 4. Clustering (amostra max 500 pontos para performance)
+	// 4. Clustering no espaço original (high-D) em vez de 2D
+	//    Carrega vetores originais para agrupar por similaridade semântica real.
+	//    Fallback para clustering 2D se vetores não estiverem disponíveis.
 	var clusterMap map[string]int
 	var clusterCount int
 	{
-		pts := make(map[string]index.Point2D)
-		for arquivo, n := range fileNodes {
-			pts[arquivo] = index.Point2D{X: n.X, Y: n.Y}
+		highDVecs := make(map[string][]float32)
+		for arquivo := range fileNodes {
+			docs, err := ctx.Store.GetDocumentsByFile(arquivo)
+			if err != nil || len(docs) == 0 {
+				continue
+			}
+			nv, err := ctx.Store.GetEmbedding(docs[0].ID)
+			if err == nil && nv != nil && len(nv.Vector) > 0 {
+				highDVecs[arquivo] = nv.Vector
+			}
 		}
-		clusterMap, clusterCount = index.ClusterPoints(pts)
+
+		if len(highDVecs) >= 3 {
+			// Cluster no espaço high-D (768D) — agrupa por assunto real
+			clusterMap, clusterCount = index.ClusterHighD(highDVecs)
+			slog.Debug("grafo: cluster high-D", "notas", len(highDVecs), "clusters", clusterCount)
+		}
+
+		// Fallback: se high-D falhou ou deu poucos pontos, usa 2D
+		if clusterCount < 2 {
+			pts := make(map[string]index.Point2D)
+			for arquivo, n := range fileNodes {
+				pts[arquivo] = index.Point2D{X: n.X, Y: n.Y}
+			}
+			clusterMap, clusterCount = index.ClusterPoints(pts)
+			slog.Debug("grafo: fallback cluster 2D", "notas", len(pts), "clusters", clusterCount)
+		}
 	}
 
 	var nodes []node
@@ -236,27 +260,32 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	embeddings, _ := ctx.Store.GetAllEmbeddings()
+	allFileEmbs, err := ctx.Store.GetAllFileEmbeddings()
+	if err != nil {
+		http.Error(w, "erro ao carregar embeddings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	vecs := make(map[string][]float32)
 	fileToDoc := make(map[string]string)
-	for docID, nv := range embeddings {
-		doc, _ := ctx.Store.GetDocument(docID)
-		if doc == nil || doc.Arquivo == "" || len(nv.Vector) == 0 {
+	for _, fe := range allFileEmbs {
+		if len(fe.Vector) == 0 {
 			continue
 		}
-		if _, ok := fileToDoc[doc.Arquivo]; ok {
-			continue
-		}
-		fileToDoc[doc.Arquivo] = docID
-		vecs[doc.Arquivo] = nv.Vector
+		fileToDoc[fe.Arquivo] = fe.DocID
+		vecs[fe.Arquivo] = fe.Vector
 	}
 	if len(vecs) < 2 {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"ok":true,"nodes":%d}`, len(vecs))
 		return
 	}
-	projected := index.Project2DReduce(vecs)
-	index.ScalePoints(projected, 500)
+
+	// Usa t-SNE em vez de PCA — preserva vizinhanças semânticas muito melhor
+	// e agrupa notas similares naturalmente no espaço 2D.
+	slog.Info("Reprojetando mapa semântico com t-SNE", "notas", len(vecs))
+	tsne := index.DefaultTSNE()
+	projected := tsne.Project(vecs)
+
 	count := 0
 	for arquivo, pt := range projected {
 		if docID, ok := fileToDoc[arquivo]; ok {
@@ -265,8 +294,9 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 			}
 		}
 	}
+	slog.Info("Projeção t-SNE concluída", "projetadas", count)
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true,"nodes":%d,"projected":%d}`, len(vecs), count)
+	fmt.Fprintf(w, `{"ok":true,"nodes":%d,"projected":%d,"method":"tsne"}`, len(vecs), count)
 }
 
 func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Request) {

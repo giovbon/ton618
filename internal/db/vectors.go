@@ -262,3 +262,51 @@ func (s *Store) GetEmbeddingsByDocIDs(docIDs []string) (map[string]NoteVector, e
 	}
 	return result, rows.Err()
 }
+
+// FileEmbedding holds one embedding per file, with full vector and 2D projection.
+type FileEmbedding struct {
+	DocID   string
+	Arquivo string
+	Title   string
+	Vector  []float32
+	X, Y    float64
+}
+
+// GetAllFileEmbeddings returns all embeddings, one per file (deduplicated),
+// with full vector data and file path. Única query com JOIN.
+// Útil para t-SNE reprojection total e clustering high-D.
+func (s *Store) GetAllFileEmbeddings() ([]FileEmbedding, error) {
+	rows, err := s.DB.Query(`
+		SELECT e.doc_id, COALESCE(d.arquivo, ''), e.title, e.vector, e.x, e.y
+		FROM embeddings e
+		LEFT JOIN documents d ON d.id = e.doc_id
+		WHERE e.vector IS NOT NULL
+		ORDER BY d.arquivo, e.doc_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []FileEmbedding
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var fe FileEmbedding
+		var data []byte
+		if err := rows.Scan(&fe.DocID, &fe.Arquivo, &fe.Title, &data, &fe.X, &fe.Y); err != nil {
+			continue
+		}
+		// Deduplica por arquivo: pega o primeiro doc_id de cada arquivo
+		key := fe.Arquivo
+		if key == "" {
+			key = fe.DocID
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		fe.Vector = DecodeVector(data)
+		results = append(results, fe)
+	}
+	return results, rows.Err()
+}

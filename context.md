@@ -121,3 +121,11 @@ Os arquivos PDF ficam em `docs/pdfs/`. O diretorio e criado automaticamente no s
   - `handlers_capture.go`: captura de URLs (~297 linhas)
 - Nenhum arquivo do pacote `api` passa de 470 linhas
 - Import paths atualizados: `ton618/internal/semantic` → `ton618/internal/index`, `ton618/internal/search` → `ton618/internal/index`, `ton618/internal/capture` removido
+
+### 2026-05-25 — Cluster high-D + t-SNE total + heatmap (substitui Voronoi)
+- **Problema:** PCA + Voronoi nos centroides não separava notas por assunto. Voronoi criava células artificiais sem significado semântico.
+- **Clustering high-D (768D):** `index.ClusterHighD()` faz k-means diretamente nos vetores de embedding originais, não nas coordenadas 2D projetadas. Agrupa por similaridade semântica real.
+- **t-SNE total no startup:** `QueueFullReproject()` força t-SNE em TODAS as embeddings após indexação inicial, e sempre que o endpoint `/api/graph/project` é chamado (em vez de PCA).
+- **Heatmap de densidade:** Substitui o Voronoi por acúmulo de gradientes radiais gaussianos — mostra concentrações naturais de notas sem fronteiras artificiais.
+- **`GetAllFileEmbeddings()`:** Nova query com JOIN que carrega embeddings + arquivo em 1 consulta (não N+1).
+- D3.js removido do mapa (não é mais necessário).

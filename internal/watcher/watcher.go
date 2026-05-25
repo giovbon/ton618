@@ -182,9 +182,10 @@ type Watcher struct {
 
 	// reprojectNeeded é setado quando novas embeddings precisam ser projetadas
 	// com t-SNE (o PCA é usado como fallback instantâneo até o t-SNE ficar pronto).
-	reprojectMu      sync.Mutex
-	reprojectNeeded  bool
-	reprojectRunning bool
+	reprojectMu          sync.Mutex
+	reprojectNeeded      bool
+	fullReprojectNeeded  bool // força reprojeção de TODAS as embeddings, não só novas
+	reprojectRunning     bool
 }
 
 // NewWatcher creates a new watcher instance.
@@ -236,6 +237,16 @@ func (w *Watcher) QueueReproject() {
 	w.reprojectMu.Unlock()
 }
 
+// QueueFullReproject força a reprojeção t-SNE de TODAS as embeddings existentes,
+// não apenas das novas. Útil depois de uma carga inicial ou quando o provedor
+// de embedding muda.
+func (w *Watcher) QueueFullReproject() {
+	w.reprojectMu.Lock()
+	w.fullReprojectNeeded = true
+	w.reprojectNeeded = true
+	w.reprojectMu.Unlock()
+}
+
 // reprojectLoop roda em background e reprojeta embeddings com t-SNE quando necessário.
 // Verifica tanto o flag explícito (QueueReproject) quanto o flag automático
 // setado pelo worker pool quando um embedding é armazenado.
@@ -252,8 +263,10 @@ func (w *Watcher) reprojectLoop(ctx context.Context) {
 			// Verifica flags explícito e automático
 			w.reprojectMu.Lock()
 			needed := (w.reprojectNeeded || reprojectPending) && !w.reprojectRunning
+			isFull := w.fullReprojectNeeded
 			if needed {
 				w.reprojectNeeded = false
+				w.fullReprojectNeeded = false
 				reprojectPendingMu.Lock()
 				reprojectPending = false
 				reprojectPendingMu.Unlock()
@@ -261,16 +274,17 @@ func (w *Watcher) reprojectLoop(ctx context.Context) {
 			w.reprojectMu.Unlock()
 
 			if needed {
-				w.runReprojection()
+				w.runReprojection(isFull)
 			}
 		}
 	}
 }
 
-func (w *Watcher) runReprojection() {
+func (w *Watcher) runReprojection(full bool) {
 	w.reprojectMu.Lock()
 	w.reprojectRunning = true
 	w.reprojectNeeded = false
+	w.fullReprojectNeeded = false
 	w.reprojectMu.Unlock()
 
 	defer func() {
@@ -279,36 +293,49 @@ func (w *Watcher) runReprojection() {
 		w.reprojectMu.Unlock()
 	}()
 
-	// Carrega apenas embeddings que AINDA não têm projeção 2D e têm vetor
-	// (limitado a 2000 para evitar OOM com muitas notas)
 	const maxReproject = 2000
-	unprojected, err := w.store.GetEmbeddings2DWithVectors(maxReproject)
-	if err != nil || len(unprojected) < 2 {
-		return
-	}
 
-	// Coleta vetores mapeando por arquivo (um por arquivo)
-	vecs := make(map[string][]float32)
-	fileSeen := make(map[string]bool)
-	for docID, nv := range unprojected {
-		if len(nv.Vector) == 0 {
-			continue
+	var vecs map[string][]float32
+
+	if full {
+		// Reprojeção completa de TODAS as embeddings com t-SNE
+		allEmbeddings, err := w.store.GetAllFileEmbeddings()
+		if err != nil || len(allEmbeddings) < 2 {
+			return
 		}
-		doc, _ := w.store.GetDocument(docID)
-		if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] {
-			continue
+		vecs = make(map[string][]float32, len(allEmbeddings))
+		for _, fe := range allEmbeddings {
+			if len(fe.Vector) == 0 {
+				continue
+			}
+			vecs[fe.Arquivo] = fe.Vector
 		}
-		fileSeen[doc.Arquivo] = true
-		vecs[doc.Arquivo] = nv.Vector
+		slog.Info("Reprojetando TODAS as embeddings com t-SNE", "total", len(vecs))
+	} else {
+		// Apenas embeddings que AINDA não têm projeção 2D (incremental)
+		unprojected, err := w.store.GetEmbeddings2DWithVectors(maxReproject)
+		if err != nil || len(unprojected) < 2 {
+			return
+		}
+		vecs = make(map[string][]float32)
+		fileSeen := make(map[string]bool)
+		for docID, nv := range unprojected {
+			if len(nv.Vector) == 0 {
+				continue
+			}
+			doc, _ := w.store.GetDocument(docID)
+			if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] {
+				continue
+			}
+			fileSeen[doc.Arquivo] = true
+			vecs[doc.Arquivo] = nv.Vector
+		}
+		if len(vecs) < 2 {
+			return
+		}
+		slog.Info("Reprojetando embeddings não-projetados com t-SNE", "total", len(vecs), "max", maxReproject)
 	}
 
-	if len(vecs) < 2 {
-		return
-	}
-
-	slog.Info("Reprojetando embeddings não-projetados com t-SNE", "total", len(vecs), "max", maxReproject)
-
-	// t-SNE (limitado aos não-projetados — rápido e incremental)
 	tsne := index.DefaultTSNE()
 	projected := tsne.Project(vecs)
 
@@ -320,7 +347,11 @@ func (w *Watcher) runReprojection() {
 		}
 	}
 
-	slog.Info("Reprojecao t-SNE incremental concluida", "projetados", len(vecs))
+	if full {
+		slog.Info("Reprojecao t-SNE completa concluida", "projetados", len(vecs))
+	} else {
+		slog.Info("Reprojecao t-SNE incremental concluida", "projetados", len(vecs))
+	}
 }
 
 func (w *Watcher) Events() <-chan FileEvent {

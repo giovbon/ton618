@@ -121,6 +121,12 @@ func main() {
 	w.PollAll()
 	slog.Info("Indexação inicial concluída")
 
+	// Agenda reprojeção t-SNE completa para separar notas por similaridade semântica
+	if embedProvider != nil {
+		slog.Info("Agendando reprojeção t-SNE completa (em background)...")
+		w.QueueFullReproject()
+	}
+
 	// 6. API context
 	apiCtx := api.NewHandlerContext(cfg, store, w, embedProvider)
 	apiCtx.SetTemplates(tpl)

@@ -509,3 +509,218 @@ func ProjectEmbeddings(vecs map[string][]float32) (map[string]Point2D, []string)
 	sort.Strings(ids)
 	return result, ids
 }
+
+// ── High-Dimensional Clustering ──
+
+// ClusterHighD performs k-means clustering directly on the original embedding
+// vectors (e.g. 768D), not on 2D projections. This preserves semantic
+// relationships that get lost in PCA/t-SNE dimensionality reduction.
+// Returns cluster assignment per file ID and the optimal number of clusters found.
+func ClusterHighD(vectors map[string][]float32) (map[string]int, int) {
+	n := len(vectors)
+	if n == 0 {
+		return nil, 0
+	}
+	if n <= 2 {
+		result := make(map[string]int)
+		i := 0
+		for id := range vectors {
+			result[id] = i
+			i++
+		}
+		return result, n
+	}
+
+	// Deterministic ordering
+	ids := make([]string, 0, n)
+	for id := range vectors {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	d := len(vectors[ids[0]])
+	points := make([][]float64, n)
+	for i, id := range ids {
+		vec := vectors[id]
+		row := make([]float64, d)
+		for j, v := range vec {
+			row[j] = float64(v)
+		}
+		points[i] = row
+	}
+
+	// Determine maxK (between 2 and min(10, n))
+	maxK := int(3.0 + 0.5*float64(n)/5.0)
+	if maxK > 10 {
+		maxK = 10
+	}
+	if maxK > n {
+		maxK = n
+	}
+	if maxK < 2 {
+		maxK = 2
+	}
+
+	rng := rand.New(rand.NewSource(42))
+	bestK := 2
+	bestScore := -1.0
+
+	for k := 2; k <= maxK; k++ {
+		assignments := kmeansHighD(points, k, 20, rng)
+		score := silhouetteScoreHighD(points, assignments)
+		if score > bestScore {
+			bestScore = score
+			bestK = k
+		}
+	}
+
+	// Final run with best K
+	finalAssign := kmeansHighD(points, bestK, 30, rng)
+
+	result := make(map[string]int, n)
+	for i, id := range ids {
+		result[id] = finalAssign[i]
+	}
+	return result, bestK
+}
+
+func kmeansHighD(data [][]float64, k, iterations int, rng *rand.Rand) []int {
+	n := len(data)
+	if n <= k {
+		assign := make([]int, n)
+		for i := range assign {
+			assign[i] = i % k
+		}
+		return assign
+	}
+
+	// k-means++ initialization
+	centroids := make([][]float64, k)
+	centroids[0] = make([]float64, len(data[0]))
+	copy(centroids[0], data[rng.Intn(n)])
+
+	for c := 1; c < k; c++ {
+		dists := make([]float64, n)
+		var totalDist float64
+		for i, row := range data {
+			minD := math.MaxFloat64
+			for j := 0; j < c; j++ {
+				d := euclideanDistSq(row, centroids[j])
+				if d < minD {
+					minD = d
+				}
+			}
+			dists[i] = minD
+			totalDist += minD
+		}
+		threshold := rng.Float64() * totalDist
+		var cumulative float64
+		for i, d := range dists {
+			cumulative += d
+			if cumulative >= threshold {
+				centroids[c] = make([]float64, len(data[0]))
+				copy(centroids[c], data[i])
+				break
+			}
+		}
+	}
+
+	assign := make([]int, n)
+	for iter := 0; iter < iterations; iter++ {
+		changed := false
+		for i, row := range data {
+			minD := math.MaxFloat64
+			best := 0
+			for c := 0; c < k; c++ {
+				d := euclideanDistSq(row, centroids[c])
+				if d < minD {
+					minD = d
+					best = c
+				}
+			}
+			if assign[i] != best {
+				assign[i] = best
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+		// Recompute centroids
+		sums := make([][]float64, k)
+		counts := make([]int, k)
+		for i := range sums {
+			sums[i] = make([]float64, len(data[0]))
+		}
+		for i, row := range data {
+			c := assign[i]
+			for j, v := range row {
+				sums[c][j] += v
+			}
+			counts[c]++
+		}
+		for c := 0; c < k; c++ {
+			if counts[c] > 0 {
+				for j := range sums[c] {
+					centroids[c][j] = sums[c][j] / float64(counts[c])
+				}
+			}
+		}
+	}
+	return assign
+}
+
+func silhouetteScoreHighD(data [][]float64, assign []int) float64 {
+	n := len(data)
+	if n <= 1 {
+		return 0
+	}
+
+	clusters := make(map[int][]int)
+	for i, c := range assign {
+		clusters[c] = append(clusters[c], i)
+	}
+	if len(clusters) <= 1 {
+		return 0
+	}
+
+	totalScore := 0.0
+	for i, row := range data {
+		a := 0.0
+		members := clusters[assign[i]]
+		if len(members) > 1 {
+			for _, j := range members {
+				if i != j {
+					a += math.Sqrt(euclideanDistSq(row, data[j]))
+				}
+			}
+			a /= float64(len(members) - 1)
+		}
+
+		b := math.MaxFloat64
+		for cid, members := range clusters {
+			if cid == assign[i] {
+				continue
+			}
+			var dist float64
+			for _, j := range members {
+				dist += math.Sqrt(euclideanDistSq(row, data[j]))
+			}
+			dist /= float64(len(members))
+			if dist < b {
+				b = dist
+			}
+		}
+		if b == math.MaxFloat64 {
+			b = 0
+		}
+		maxAB := a
+		if b > maxAB {
+			maxAB = b
+		}
+		if maxAB > 0 {
+			totalScore += (b - a) / maxAB
+		}
+	}
+	return totalScore / float64(n)
+}
