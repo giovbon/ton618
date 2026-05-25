@@ -232,11 +232,55 @@
         border-radius: 8px;
         padding: 1em;
         margin: 0.8em 0;
+        position: relative;
     }
     .ProseMirror pre code {
         background: none;
         padding: 0;
         color: #a1a1aa;
+    }
+    /* Syntax highlighting – tema escuro lowlight/highlight.js */
+    .ProseMirror pre code .hljs-keyword,
+    .ProseMirror pre code .hljs-built_in,
+    .ProseMirror pre code .hljs-type { color: #c792ea; }
+    .ProseMirror pre code .hljs-string,
+    .ProseMirror pre code .hljs-addition { color: #c3e88d; }
+    .ProseMirror pre code .hljs-number,
+    .ProseMirror pre code .hljs-literal { color: #f78c6c; }
+    .ProseMirror pre code .hljs-comment,
+    .ProseMirror pre code .hljs-quote { color: #546e7a; font-style: italic; }
+    .ProseMirror pre code .hljs-function,
+    .ProseMirror pre code .hljs-title { color: #82aaff; }
+    .ProseMirror pre code .hljs-params { color: #eeffff; }
+    .ProseMirror pre code .hljs-attr,
+    .ProseMirror pre code .hljs-attribute { color: #f07178; }
+    .ProseMirror pre code .hljs-selector-tag,
+    .ProseMirror pre code .hljs-selector-class { color: #ffcb6b; }
+    .ProseMirror pre code .hljs-regexp,
+    .ProseMirror pre code .hljs-symbol { color: #f07178; }
+    .ProseMirror pre code .hljs-variable,
+    .ProseMirror pre code .hljs-template-variable { color: #f07178; }
+    .ProseMirror pre code .hljs-tag { color: #f07178; }
+    .ProseMirror pre code .hljs-name { color: #f07178; }
+    .ProseMirror pre code .hljs-meta { color: #89ddff; }
+    .ProseMirror pre code .hljs-deletion { color: #ff5370; }
+    .ProseMirror pre code .hljs-section { color: #82aaff; font-weight: bold; }
+    .ProseMirror pre code .hljs-link { color: #c3e88d; text-decoration: underline; }
+    .ProseMirror pre code .hljs-emphasis { font-style: italic; }
+    .ProseMirror pre code .hljs-strong { font-weight: bold; }
+    .ProseMirror pre code .hljs-formula { color: #eeffff; }
+    /* Mostra linguagem detectada como pseudo-elemento no canto do bloco */
+    .ProseMirror pre[data-language]::before {
+        content: attr(data-language);
+        position: absolute;
+        top: 6px;
+        right: 10px;
+        font-size: 10px;
+        font-family: monospace;
+        color: #52525b;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        pointer-events: none;
     }
     .ProseMirror a {
         color: #38bdf8 !important;
@@ -333,6 +377,7 @@
         var frontmatterText = "";
         var frontmatterVisible = false;
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var autoDetectTimer = null;
 
         // ── Parse frontmatter do raw content ──
         var bodyContent = raw;
@@ -343,16 +388,23 @@
         }
 
         // ── Slash commands ──
+        var slashFilterText = "";
+
         function makeSlashAction(cmd, attrs) {
             return function () {
                 hideSlashMenu();
                 if (slashPos !== null && editor) {
+                    var $to = editor.state.selection.$from;
                     editor
                         .chain()
                         .focus()
-                        .deleteRange({ from: slashPos, to: slashPos + 1 })
+                        .deleteRange({
+                            from: slashPos,
+                            to: $to.pos,
+                        })
                         .run();
                     slashPos = null;
+                    slashFilterText = "";
                 }
                 exec(cmd, attrs);
             };
@@ -438,6 +490,28 @@
                 icon: "\u2014",
                 label: "Linha horizontal",
                 action: makeSlashAction("horizontalRule"),
+            },
+            {
+                id: "organize",
+                icon: "\u2630",
+                label: "Organizar titulos",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        var $to = editor.state.selection.$from;
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({
+                                from: slashPos,
+                                to: $to.pos,
+                            })
+                            .run();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    organizeHeadings();
+                },
             },
         ];
 
@@ -552,12 +626,92 @@
             }
         }
 
+        // ── Auto-detecção de linguagem em code blocks ──
+        function autoDetectCodeLanguage() {
+            if (!editor || editor.isDestroyed) return;
+            var doc = editor.state.doc;
+            var found = false;
+            doc.descendants(function (node, pos) {
+                if (found) return;
+                if (node.type.name === "codeBlock") {
+                    var lang = node.attrs.language;
+                    if (lang && lang !== "auto") return;
+                    var codeText = node.textContent;
+                    if (!codeText || codeText.length < 5) return;
+                    try {
+                        var result = T.lowlight.highlightAuto(codeText);
+                        if (result && result.language) {
+                            // Aplica sem mover o cursor do usuário
+                            var tr = editor.state.tr;
+                            tr.setNodeMarkup(pos, null, {
+                                language: result.language,
+                            });
+                            editor.view.dispatch(tr);
+                            found = true;
+                        }
+                    } catch (e) {
+                        // Silencia erros de detecção
+                    }
+                }
+            });
+        }
+
+        // ── Organizar títulos (corrige hierarquia bagunçada de colagens de IA) ──
+        function organizeHeadings() {
+            if (!editor || editor.isDestroyed) return;
+            var headings = [];
+            var doc = editor.state.doc;
+            doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") {
+                    headings.push({
+                        pos: pos,
+                        level: node.attrs.level,
+                        newLevel: node.attrs.level,
+                    });
+                }
+            });
+            if (headings.length < 2) return;
+            var baseLevel = headings[0].level;
+            var tr = editor.state.tr;
+            var modified = false;
+            for (var i = 0; i < headings.length; i++) {
+                var h = headings[i];
+                if (i > 0) {
+                    var prev = headings[i - 1];
+                    var origLevel = h.level;
+                    if (origLevel <= baseLevel) {
+                        // Mesmo nível ou acima → nova seção no nível base
+                        h.newLevel = baseLevel;
+                    } else {
+                        // Sub-título: calcula profundidade relativa ao base
+                        var depth = origLevel - baseLevel;
+                        var suggested = baseLevel + depth;
+                        // Evita saltos (ex: h2 → h4 vira h2 → h3)
+                        if (suggested > prev.newLevel + 1) {
+                            suggested = prev.newLevel + 1;
+                        }
+                        h.newLevel = Math.min(suggested, 6);
+                    }
+                    if (h.newLevel !== h.level) {
+                        tr.setNodeMarkup(h.pos, null, {
+                            level: h.newLevel,
+                        });
+                        modified = true;
+                    }
+                }
+            }
+            if (modified) {
+                editor.view.dispatch(tr);
+            }
+        }
+
         // ── Editor ──
         editor = new T.Editor({
             element: el,
             extensions: [
                 T.StarterKit.configure({
                     heading: { levels: [1, 2, 3, 4, 5, 6] },
+                    codeBlock: false,
                 }),
                 T.Placeholder.configure({
                     placeholder: "Pressione / para comandos...",
@@ -573,6 +727,10 @@
                 T.ImageExt,
                 T.Link,
                 T.Markdown,
+                T.CodeBlockLowlightExt.configure({
+                    lowlight: T.lowlight,
+                    defaultLanguage: null,
+                }),
             ],
             content: bodyContent || "<p></p>",
             onSelectionUpdate: function () {
@@ -583,6 +741,9 @@
                 setStatus("dirty");
                 if (saveTimer) clearTimeout(saveTimer);
                 saveTimer = setTimeout(doSave, 2000);
+                // Auto-detecção de linguagem em code blocks (debounced)
+                if (autoDetectTimer) clearTimeout(autoDetectTimer);
+                autoDetectTimer = setTimeout(autoDetectCodeLanguage, 1500);
                 // Update wikilink filter if menu is visible
                 if (wikiVisible) {
                     var $from = editor.state.selection.$from;
@@ -598,6 +759,30 @@
                         hideWikiMenu();
                     }
                 }
+                // Filtragem do slash menu enquanto digita
+                if (!slashEl.classList.contains("hidden") && slashPos !== null) {
+                    var $sel = editor.state.selection.$from;
+                    if ($sel.pos <= slashPos) {
+                        // Cursor antes ou no slash → fecha menu
+                        hideSlashMenu();
+                        slashPos = null;
+                        slashFilterText = "";
+                    } else {
+                        var typed = editor.state.doc.textBetween(
+                            slashPos,
+                            $sel.pos,
+                        );
+                        if (!typed.startsWith("/")) {
+                            // Barra foi apagada → fecha menu
+                            hideSlashMenu();
+                            slashPos = null;
+                            slashFilterText = "";
+                        } else {
+                            slashFilterText = typed.slice(1);
+                            renderSlashItems(slashFilterText);
+                        }
+                    }
+                }
             },
             editorProps: {
                 attributes: { spellcheck: "false" },
@@ -606,7 +791,7 @@
                         event.key === "Backspace" &&
                         !slashEl.classList.contains("hidden")
                     ) {
-                        hideSlashMenu();
+                        // Deixa o onUpdate refiltrar; se o texto acabar, o menu some
                         return false;
                     }
                     if (event.key === "/" && !event.ctrlKey && !event.metaKey) {
@@ -691,6 +876,8 @@
                     if (event.key === "Escape") {
                         hideSlashMenu();
                         hideBubble();
+                        slashPos = null;
+                        slashFilterText = "";
                     }
                     return false;
                 },
@@ -701,6 +888,10 @@
                 if (fmArea && frontmatterText) {
                     fmArea.value = frontmatterText;
                 }
+                // Auto-detectar linguagem em code blocks existentes
+                setTimeout(function () {
+                    autoDetectCodeLanguage();
+                }, 500);
                 // Convert existing [[wikilinks]] to clickable links in the content
                 setTimeout(function () {
                     if (!editor) return;
@@ -709,15 +900,33 @@
                     html = html.replace(
                         /\[\[([^\]]+)\]\]/g,
                         function (match, name) {
-                            var noteName = name.trim();
-                            if (!noteName.endsWith(".md")) noteName += ".md";
-                            return (
-                                '<a href="/editor?file=notes/' +
-                                encodeURIComponent(noteName) +
-                                '" class="wikish-link">' +
-                                name.trim() +
-                                "</a>"
-                            );
+                            var target = name.trim();
+                            var ext = target.includes(".")
+                                ? target.split(".").pop().toLowerCase()
+                                : "";
+                            var isMd =
+                                ext === "" || ext === "md" || ext === "markdown";
+                            if (isMd) {
+                                var noteName = target;
+                                if (!noteName.endsWith(".md"))
+                                    noteName += ".md";
+                                return (
+                                    '<a href="/editor?file=notes/' +
+                                    encodeURIComponent(noteName) +
+                                    '" class="wikish-link">' +
+                                    target +
+                                    "</a>"
+                                );
+                            } else {
+                                // Arquivo não-markdown → link de download
+                                return (
+                                    '<a href="/file/download?name=attachments/' +
+                                    encodeURIComponent(target) +
+                                    '" class="wikish-link" download>' +
+                                    target +
+                                    "</a>"
+                                );
+                            }
                         },
                     );
                     if (html !== editor.getHTML()) {
@@ -814,13 +1023,27 @@
             });
             slashItems.innerHTML = "";
             items.forEach(function (cmd, i) {
+                var labelHtml = cmd.label;
+                if (f) {
+                    var idx = cmd.label.toLowerCase().indexOf(f);
+                    if (idx !== -1) {
+                        var before = htmlEscape(cmd.label.substring(0, idx));
+                        var match = htmlEscape(
+                            cmd.label.substring(idx, idx + f.length),
+                        );
+                        var after = htmlEscape(
+                            cmd.label.substring(idx + f.length),
+                        );
+                        labelHtml = before + "<strong>" + match + "</strong>" + after;
+                    }
+                }
                 var btn = document.createElement("button");
                 btn.className = "slash-item";
                 btn.innerHTML =
                     '<span class="icon">' +
                     cmd.icon +
                     '</span><span class="label">' +
-                    cmd.label +
+                    labelHtml +
                     "</span>";
                 btn.onclick = cmd.action;
                 btn.dataset.index = i;
@@ -1039,6 +1262,11 @@
                 /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
                 "[[$1]]",
             );
+            // Também converte links de download de volta pra [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
+                "[[$1]]",
+            );
             var fd = new FormData();
             fd.append("filename", filenameInput.value);
             fd.append("content", finalContent);
@@ -1093,6 +1321,11 @@
             // Convert editor links to [[wikilink]] for storage
             finalContent = finalContent.replace(
                 /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                "[[$1]]",
+            );
+            // Também converte links de download de volta pra [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
                 "[[$1]]",
             );
 

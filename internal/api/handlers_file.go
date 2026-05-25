@@ -103,6 +103,68 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, fullPath)
 }
 
+// HandleFileDownload serve qualquer arquivo do docs/ como download.
+// Ex: /file/download?name=attachments/abc.zip → baixa docs/attachments/abc.zip
+// Ex: /file/download?name=pdfs/doc.pdf → baixa docs/pdfs/doc.pdf
+// Segurança: só permite arquivos dentro de docs/, resolve path traversal via filepath.Base.
+func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query().Get("name")
+	if raw == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+
+	// Segurança: só permite subdiretórios conhecidos, previne path traversal
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "docs/", "voice/"}
+	hasPrefix := false
+	for _, p := range allowedPrefixes {
+		if strings.HasPrefix(raw, p) {
+			hasPrefix = true
+			break
+		}
+	}
+	if !hasPrefix {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve path traversal
+	cleaned := filepath.Clean(raw)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, cleaned)
+
+	// Verifica se o arquivo existe
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	basename := filepath.Base(cleaned)
+	ext := strings.ToLower(filepath.Ext(basename))
+
+	// PDFs: inline; outros: attachment (download)
+	if ext == ".pdf" {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
+	} else {
+		// Detecta content-type pelo nome
+		ct := "application/octet-stream"
+		switch ext {
+		case ".zip":
+			ct = "application/zip"
+		case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+			ct = "image/" + strings.TrimPrefix(ext, ".")
+		case ".mp3", ".wav", ".ogg":
+			ct = "audio/" + strings.TrimPrefix(ext, ".")
+		case ".mp4", ".webm":
+			ct = "video/" + strings.TrimPrefix(ext, ".")
+		}
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
+		w.Header().Set("Content-Type", ct)
+	}
+
+	http.ServeFile(w, r, fullPath)
+}
+
 func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

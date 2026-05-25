@@ -17,6 +17,34 @@ import Mention from "@tiptap/extension-mention";
 import Suggestion from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { marked } from "marked";
+import CodeBlockLowlightExt from "@tiptap/extension-code-block-lowlight";
+import { createLowlight, common } from "lowlight";
+
+const lowlight = createLowlight(common);
+
+// Extensão customizada que adiciona data-language no <pre> para exibir o label
+const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "pre",
+      {
+        ...HTMLAttributes,
+        ...(node.attrs.language
+          ? { "data-language": node.attrs.language }
+          : {}),
+      },
+      [
+        "code",
+        {
+          class: node.attrs.language
+            ? `language-${node.attrs.language}`
+            : null,
+        },
+        0,
+      ],
+    ];
+  },
+});
 
 // Expõe no window para uso no editor.html
 window.TipTapEditor = {
@@ -39,4 +67,6 @@ window.TipTapEditor = {
   Suggestion,
   Markdown,
   marked,
+  CodeBlockLowlightExt: CodeBlockLangLabel,
+  lowlight,
 };

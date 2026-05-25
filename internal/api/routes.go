@@ -51,6 +51,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 
 	// Arquivos
 	mux.HandleFunc("GET /file", ctx.HandleFile)
+	mux.HandleFunc("GET /file/download", ctx.HandleFileDownload)
 	mux.HandleFunc("POST /file/save", ctx.HandleFileSave)
 	mux.HandleFunc("POST /file/delete", ctx.HandleFileDelete)
 	mux.HandleFunc("POST /file/rename", ctx.HandleFileRename)
