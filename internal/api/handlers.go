@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,12 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	filename := r.URL.Query().Get("file")
 	if filename == "" {
 		filename = "notes/novo.md"
+	}
+
+	// Se for .zip, redireciona para download em vez de abrir o editor
+	if strings.HasSuffix(strings.ToLower(filename), ".zip") {
+		http.Redirect(w, r, "/file/download?name="+url.QueryEscape(filename), http.StatusFound)
+		return
 	}
 
 	// Normaliza o filename: garante prefixo notes/ e extensao .md

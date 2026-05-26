@@ -190,21 +190,31 @@
             nodes.forEach(function (n) {
                 var sx = n.x * scale + tx;
                 var sy = n.y * scale + ty;
-                if (sx < -heatRadius || sx > r.width + heatRadius ||
-                    sy < -heatRadius || sy > r.height + heatRadius) {
+                if (
+                    sx < -heatRadius ||
+                    sx > r.width + heatRadius ||
+                    sy < -heatRadius ||
+                    sy > r.height + heatRadius
+                ) {
                     return; // skip offscreen
                 }
                 var grad = heatCtx.createRadialGradient(
-                    sx, sy, 0,
-                    sx, sy, heatRadius
+                    sx,
+                    sy,
+                    0,
+                    sx,
+                    sy,
+                    heatRadius,
                 );
                 grad.addColorStop(0, "rgba(56,189,248,0.10)");
                 grad.addColorStop(0.4, "rgba(56,189,248,0.04)");
                 grad.addColorStop(1, "rgba(56,189,248,0)");
                 heatCtx.fillStyle = grad;
                 heatCtx.fillRect(
-                    sx - heatRadius, sy - heatRadius,
-                    heatRadius * 2, heatRadius * 2
+                    sx - heatRadius,
+                    sy - heatRadius,
+                    heatRadius * 2,
+                    heatRadius * 2,
                 );
             });
         }
@@ -443,6 +453,11 @@
             if (!n) return;
             if (n.id && n.id.indexOf("pdfs/") === 0)
                 window.open("/file?name=" + encodeURIComponent(n.id), "_blank");
+            else if (n.id && n.id.indexOf(".zip") > 0)
+                window.open(
+                    "/file/download?name=" + encodeURIComponent(n.id),
+                    "_blank",
+                );
             else
                 window.location.href =
                     "/editor?file=" + encodeURIComponent(n.id);
