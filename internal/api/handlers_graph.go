@@ -203,8 +203,19 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Itera em ordem deterministica (sorted keys) para que o grid fallback
+	// produza as mesmas posicoes independente da ordem aleatoria do map.
+	// Go maps tem iteracao randomizada — sem sort, a posicao das notas
+	// sem embedding (X=0,Y=0) muda a cada carregamento.
+	fileKeys := make([]string, 0, len(fileNodes))
+	for k := range fileNodes {
+		fileKeys = append(fileKeys, k)
+	}
+	sort.Strings(fileKeys)
+
 	var nodes []node
-	for _, n := range fileNodes {
+	for _, key := range fileKeys {
+		n := fileNodes[key]
 		clusterID := 0
 		if c, ok := clusterMap[n.ID]; ok {
 			clusterID = c

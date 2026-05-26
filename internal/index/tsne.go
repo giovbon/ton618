@@ -3,6 +3,7 @@ package index
 import (
 	"math"
 	"math/rand"
+	"sort"
 )
 
 // TSNE implements t-SNE dimensionality reduction with adaptive perplexity.
@@ -38,10 +39,14 @@ func (tsne TSNE) Project(vectors map[string][]float32) map[string]Point2D {
 	}
 
 	keys := make([]string, 0, n)
-	data := make([][]float64, n)
-	i := 0
-	for k, v := range vectors {
+	for k := range vectors {
 		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	data := make([][]float64, n)
+	for i, k := range keys {
+		v := vectors[k]
 		row := make([]float64, len(v))
 		for j, x := range v {
 			row[j] = float64(x)
