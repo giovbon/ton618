@@ -83,10 +83,7 @@
         <div class="py-1 overflow-y-auto" id="wikilink-items"></div>
     </div>
 
-    <div
-        id="editor-wrapper"
-        class=""
-    >
+    <div id="editor-wrapper" class="">
         <div id="editor-content" class="px-1 py-2 min-h-[500px]"></div>
     </div>
 
@@ -242,33 +239,74 @@
     /* Syntax highlighting – tema escuro lowlight/highlight.js */
     .ProseMirror pre code .hljs-keyword,
     .ProseMirror pre code .hljs-built_in,
-    .ProseMirror pre code .hljs-type { color: #c792ea; }
+    .ProseMirror pre code .hljs-type {
+        color: #c792ea;
+    }
     .ProseMirror pre code .hljs-string,
-    .ProseMirror pre code .hljs-addition { color: #c3e88d; }
+    .ProseMirror pre code .hljs-addition {
+        color: #c3e88d;
+    }
     .ProseMirror pre code .hljs-number,
-    .ProseMirror pre code .hljs-literal { color: #f78c6c; }
+    .ProseMirror pre code .hljs-literal {
+        color: #f78c6c;
+    }
     .ProseMirror pre code .hljs-comment,
-    .ProseMirror pre code .hljs-quote { color: #546e7a; font-style: italic; }
+    .ProseMirror pre code .hljs-quote {
+        color: #546e7a;
+        font-style: italic;
+    }
     .ProseMirror pre code .hljs-function,
-    .ProseMirror pre code .hljs-title { color: #82aaff; }
-    .ProseMirror pre code .hljs-params { color: #eeffff; }
+    .ProseMirror pre code .hljs-title {
+        color: #82aaff;
+    }
+    .ProseMirror pre code .hljs-params {
+        color: #eeffff;
+    }
     .ProseMirror pre code .hljs-attr,
-    .ProseMirror pre code .hljs-attribute { color: #f07178; }
+    .ProseMirror pre code .hljs-attribute {
+        color: #f07178;
+    }
     .ProseMirror pre code .hljs-selector-tag,
-    .ProseMirror pre code .hljs-selector-class { color: #ffcb6b; }
+    .ProseMirror pre code .hljs-selector-class {
+        color: #ffcb6b;
+    }
     .ProseMirror pre code .hljs-regexp,
-    .ProseMirror pre code .hljs-symbol { color: #f07178; }
+    .ProseMirror pre code .hljs-symbol {
+        color: #f07178;
+    }
     .ProseMirror pre code .hljs-variable,
-    .ProseMirror pre code .hljs-template-variable { color: #f07178; }
-    .ProseMirror pre code .hljs-tag { color: #f07178; }
-    .ProseMirror pre code .hljs-name { color: #f07178; }
-    .ProseMirror pre code .hljs-meta { color: #89ddff; }
-    .ProseMirror pre code .hljs-deletion { color: #ff5370; }
-    .ProseMirror pre code .hljs-section { color: #82aaff; font-weight: bold; }
-    .ProseMirror pre code .hljs-link { color: #c3e88d; text-decoration: underline; }
-    .ProseMirror pre code .hljs-emphasis { font-style: italic; }
-    .ProseMirror pre code .hljs-strong { font-weight: bold; }
-    .ProseMirror pre code .hljs-formula { color: #eeffff; }
+    .ProseMirror pre code .hljs-template-variable {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-tag {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-name {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-meta {
+        color: #89ddff;
+    }
+    .ProseMirror pre code .hljs-deletion {
+        color: #ff5370;
+    }
+    .ProseMirror pre code .hljs-section {
+        color: #82aaff;
+        font-weight: bold;
+    }
+    .ProseMirror pre code .hljs-link {
+        color: #c3e88d;
+        text-decoration: underline;
+    }
+    .ProseMirror pre code .hljs-emphasis {
+        font-style: italic;
+    }
+    .ProseMirror pre code .hljs-strong {
+        font-weight: bold;
+    }
+    .ProseMirror pre code .hljs-formula {
+        color: #eeffff;
+    }
     /* Mostra linguagem detectada como pseudo-elemento no canto do bloco */
     .ProseMirror pre[data-language]::before {
         content: attr(data-language);
@@ -760,7 +798,10 @@
                     }
                 }
                 // Filtragem do slash menu enquanto digita
-                if (!slashEl.classList.contains("hidden") && slashPos !== null) {
+                if (
+                    !slashEl.classList.contains("hidden") &&
+                    slashPos !== null
+                ) {
                     var $sel = editor.state.selection.$from;
                     if ($sel.pos <= slashPos) {
                         // Cursor antes ou no slash → fecha menu
@@ -905,7 +946,9 @@
                                 ? target.split(".").pop().toLowerCase()
                                 : "";
                             var isMd =
-                                ext === "" || ext === "md" || ext === "markdown";
+                                ext === "" ||
+                                ext === "md" ||
+                                ext === "markdown";
                             if (isMd) {
                                 var noteName = target;
                                 if (!noteName.endsWith(".md"))
@@ -1034,7 +1077,8 @@
                         var after = htmlEscape(
                             cmd.label.substring(idx + f.length),
                         );
-                        labelHtml = before + "<strong>" + match + "</strong>" + after;
+                        labelHtml =
+                            before + "<strong>" + match + "</strong>" + after;
                     }
                 }
                 var btn = document.createElement("button");
@@ -1367,19 +1411,15 @@
             if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
             var fd = new FormData();
             fd.append("filename", filename);
+            // O servidor ja deleta o arquivo e faz um redirect 303.
+            // O fetch segue o redirect automaticamente (recebe HTML).
+            // Nao tentamos parsear JSON — apenas redirecionamos para a home.
             fetch("/file/delete", { method: "POST", body: fd })
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data && data.ok) {
-                        window.location.href = "/";
-                    } else {
-                        alert("Erro ao excluir nota.");
-                    }
+                .then(function () {
+                    window.location.href = "/";
                 })
                 .catch(function () {
-                    alert("Erro ao excluir nota.");
+                    window.location.href = "/";
                 });
         }
 
