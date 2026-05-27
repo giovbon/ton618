@@ -54,7 +54,14 @@ func (s *Store) SetEmbedding(docID string, vector []float32, title string) error
 }
 
 // SetEmbedding2D updates the 2D projection coordinates for a document embedding.
+// Ignora valores NaN/Inf para nao poluir o banco.
 func (s *Store) SetEmbedding2D(docID string, x, y float64) error {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		x = 0
+	}
+	if math.IsNaN(y) || math.IsInf(y, 0) {
+		y = 0
+	}
 	_, err := s.DB.Exec(
 		"UPDATE embeddings SET x = ?, y = ? WHERE doc_id = ?",
 		x, y, docID,
@@ -147,12 +154,15 @@ func (s *Store) GetEmbeddingCount() int {
 
 // GetEmbeddings2DForGraph returns embeddings with 2D coords joined with document info,
 // without loading the full vector BLOB. Limited and randomized for graph display.
+// Exclui coordenadas NaN/Inf (que indicam projecao falha).
 func (s *Store) GetEmbeddings2DForGraph(limit int) ([]Embedding2D, error) {
 	rows, err := s.DB.Query(`
 		SELECT e.doc_id, e.title, e.x, e.y, COALESCE(d.arquivo, '')
 		FROM embeddings e
 		LEFT JOIN documents d ON d.id = e.doc_id
-		WHERE e.x != 0 OR e.y != 0
+		WHERE (e.x != 0 OR e.y != 0)
+		  AND e.x IS NOT NULL AND e.y IS NOT NULL
+		  AND ABS(e.x) < 1e100 AND ABS(e.y) < 1e100
 		ORDER BY RANDOM()
 		LIMIT ?
 	`, limit)

@@ -156,6 +156,20 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 				} else {
 					projected = index.DefaultTSNE().Project(unprojVecs)
 				}
+
+				// Sanity check: se t-SNE produziu NaN ou todos em (0,0), usa PCA
+				hasValid := false
+				for _, pt := range projected {
+					if !math.IsNaN(pt.X) && !math.IsNaN(pt.Y) && (pt.X != 0 || pt.Y != 0) {
+						hasValid = true
+						break
+					}
+				}
+				if !hasValid && len(unprojVecs) >= 2 {
+					slog.Warn("grafo: t-SNE produziu coordenadas invalidas, fallback PCA", "total", len(unprojVecs))
+					projected = index.Project2DReduce(unprojVecs)
+					index.ScalePoints(projected, 500)
+				}
 				for arquivo, pt := range projected {
 					if docID, ok := unprojDocID[arquivo]; ok {
 						ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y)
@@ -292,6 +306,13 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		if c, ok := clusterMap[n.ID]; ok {
 			clusterID = c
 		}
+
+		// Trata NaN/Inf como zero (projecao falhou) — ativa grid fallback
+		if math.IsNaN(n.X) || math.IsInf(n.X, 0) || math.IsNaN(n.Y) || math.IsInf(n.Y, 0) {
+			n.X = 0
+			n.Y = 0
+		}
+
 		if n.X == 0 && n.Y == 0 {
 			idx := len(nodes)
 			cols := math.Ceil(math.Sqrt(float64(len(fileNodes))))
@@ -328,6 +349,20 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		"clusters": clusterCount,
 	}
 	json.NewEncoder(w).Encode(result)
+
+	// Log para debug: amostra das coordenadas devolvidas
+	if len(nodes) > 0 {
+		var minX, maxX, minY, maxY float64 = math.MaxFloat64, -math.MaxFloat64, math.MaxFloat64, -math.MaxFloat64
+		for _, n := range nodes {
+			if n.X < minX { minX = n.X }
+			if n.X > maxX { maxX = n.X }
+			if n.Y < minY { minY = n.Y }
+			if n.Y > maxY { maxY = n.Y }
+		}
+		slog.Debug("grafo: coordenadas", "nos", len(nodes), "clusters", clusterCount,
+			"x", fmt.Sprintf("[%.1f, %.1f]", minX, maxX),
+			"y", fmt.Sprintf("[%.1f, %.1f]", minY, maxY))
+	}
 }
 
 func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Request) {
