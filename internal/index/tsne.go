@@ -73,10 +73,27 @@ func (tsne TSNE) Project(vectors map[string][]float32) map[string]Point2D {
 	// 1. High-dimensional affinities P
 	P := computeAffinities(data, tsne.Perplexity)
 
-	// 2. Initialize Y randomly near origin
+	// 2. Initialize Y with PCA warm start (melhor que aleatorio)
+	//    PCA da uma separacao linear inicial que o t-SNE refina,
+	//    resultando em clusters mais definidos.
 	Y := make([]float64, 2*n)
-	for i := 0; i < 2*n; i++ {
-		Y[i] = rng.Float64()*1e-4 - 5e-5
+	hasPCA := false
+	if n >= 3 {
+		pcaMap := Project2DReduce(vectors)
+		if pcaMap != nil {
+			for i, k := range keys {
+				if pt, ok := pcaMap[k]; ok {
+					Y[2*i] = pt.X * 100
+					Y[2*i+1] = pt.Y * 100
+				}
+			}
+			hasPCA = true
+		}
+	}
+	if !hasPCA {
+		for i := 0; i < 2*n; i++ {
+			Y[i] = rng.Float64()*1e-4 - 5e-5
+		}
 	}
 
 	// 3. Gradient descent

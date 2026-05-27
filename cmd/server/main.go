@@ -121,11 +121,11 @@ func main() {
 	w.PollAll()
 	slog.Info("Indexação inicial concluída")
 
-	// Agenda reprojeção t-SNE completa para separar notas por similaridade semântica
-	if embedProvider != nil {
-		slog.Info("Agendando reprojeção t-SNE completa (em background)...")
-		w.QueueFullReproject()
-	}
+	// Nao agenda reprojecao em background.
+	// A projecao das embeddings e feita exclusivamente pelo
+	// HandleGraphData quando o usuario abre o mapa semantico.
+	// Isso garante que coordenadas existentes NUNCA sejam alteradas
+	// por processos em segundo plano.
 
 	// 6. API context
 	apiCtx := api.NewHandlerContext(cfg, store, w, embedProvider)

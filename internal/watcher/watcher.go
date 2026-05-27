@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -41,12 +40,6 @@ var (
 	embedStartMu sync.Mutex
 )
 
-// reprojectPending é um flag package-level que o worker de embedding seta
-// quando um novo embedding é armazenado. O reprojectLoop verifica este flag
-// a cada tick e aciona a reprojeção se necessário.
-var reprojectPending bool
-var reprojectPendingMu sync.Mutex
-
 // startEmbedWorkers inicializa o worker pool (lazy, chamado na primeira vez).
 func startEmbedWorkers(ctx context.Context) {
 	embedOnce.Do(func() {
@@ -81,10 +74,6 @@ func embedWorker(ctx context.Context, id int) {
 				slog.Error("store embedding (worker)", "worker", id, "doc", job.docID, "error", err)
 			} else {
 				slog.Info("embedding armazenado (worker)", "worker", id, "doc", job.docID, "arquivo", job.title)
-				// Sinaliza que novas embeddings precisam de projeção 2D
-				reprojectPendingMu.Lock()
-				reprojectPending = true
-				reprojectPendingMu.Unlock()
 			}
 		}
 	}
@@ -180,13 +169,6 @@ type Watcher struct {
 	watcher  *fsnotify.Watcher
 	events   chan FileEvent
 	wg       sync.WaitGroup
-
-	// reprojectNeeded é setado quando novas embeddings precisam ser projetadas
-	// com t-SNE (o PCA é usado como fallback instantâneo até o t-SNE ficar pronto).
-	reprojectMu         sync.Mutex
-	reprojectNeeded     bool
-	fullReprojectNeeded bool // força reprojeção de TODAS as embeddings, não só novas
-	reprojectRunning    bool
 }
 
 // NewWatcher creates a new watcher instance.
@@ -223,185 +205,10 @@ func (w *Watcher) Start(ctx context.Context) {
 	// Inicia worker pool de embeddings (chamadas de rede concorrentes)
 	startEmbedWorkers(ctx)
 
-	w.wg.Add(3)
+	w.wg.Add(2)
 	go w.fsnotifyLoop(ctx)
 	go w.pollLoop(ctx)
-	go w.reprojectLoop(ctx)
 	slog.Info("Watcher fsnotify iniciado")
-}
-
-// QueueReproject marca que as embeddings precisam ser reprojetadas com t-SNE.
-// O PCA continua sendo usado como fallback instantâneo até o t-SNE ficar pronto.
-func (w *Watcher) QueueReproject() {
-	w.reprojectMu.Lock()
-	w.reprojectNeeded = true
-	w.reprojectMu.Unlock()
-}
-
-// QueueFullReproject força a reprojeção t-SNE de TODAS as embeddings existentes,
-// não apenas das novas. Útil depois de uma carga inicial ou quando o provedor
-// de embedding muda.
-func (w *Watcher) QueueFullReproject() {
-	w.reprojectMu.Lock()
-	w.fullReprojectNeeded = true
-	w.reprojectNeeded = true
-	w.reprojectMu.Unlock()
-}
-
-// reprojectLoop roda em background e reprojeta embeddings com t-SNE quando necessário.
-// Verifica tanto o flag explícito (QueueReproject) quanto o flag automático
-// setado pelo worker pool quando um embedding é armazenado.
-func (w *Watcher) reprojectLoop(ctx context.Context) {
-	defer w.wg.Done()
-	ticker := time.NewTicker(5 * time.Second) // mais responsivo
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Verifica flags explícito e automático
-			w.reprojectMu.Lock()
-			needed := (w.reprojectNeeded || reprojectPending) && !w.reprojectRunning
-			isFull := w.fullReprojectNeeded
-			if needed {
-				w.reprojectNeeded = false
-				w.fullReprojectNeeded = false
-				reprojectPendingMu.Lock()
-				reprojectPending = false
-				reprojectPendingMu.Unlock()
-			}
-			w.reprojectMu.Unlock()
-
-			if needed {
-				w.runReprojection(isFull)
-			}
-		}
-	}
-}
-
-func (w *Watcher) runReprojection(full bool) {
-	w.reprojectMu.Lock()
-	w.reprojectRunning = true
-	w.reprojectNeeded = false
-	w.fullReprojectNeeded = false
-	w.reprojectMu.Unlock()
-
-	defer func() {
-		w.reprojectMu.Lock()
-		w.reprojectRunning = false
-		w.reprojectMu.Unlock()
-	}()
-
-	const maxReproject = 2000
-
-	var vecs map[string][]float32
-
-	if full {
-		// Reprojeção completa de TODAS as embeddings com t-SNE.
-		// Só roda na inicialização (QueueFullReproject).
-		allEmbeddings, err := w.store.GetAllFileEmbeddings()
-		if err != nil || len(allEmbeddings) < 2 {
-			return
-		}
-		vecs = make(map[string][]float32, len(allEmbeddings))
-		for _, fe := range allEmbeddings {
-			if len(fe.Vector) == 0 {
-				continue
-			}
-			vecs[fe.Arquivo] = fe.Vector
-		}
-		slog.Info("Reprojetando TODAS as embeddings com t-SNE", "total", len(vecs))
-
-		tsne := index.DefaultTSNE()
-		projected := tsne.Project(vecs)
-		for arquivo, pt := range projected {
-			docs, _ := w.store.GetDocumentsByFile(arquivo)
-			if len(docs) > 0 {
-				w.store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
-			}
-		}
-		slog.Info("Reprojecao t-SNE completa concluida", "projetados", len(vecs))
-	} else {
-		// Incremental: projeta só embeddings SEM coordenadas 2D.
-		// Usa nearest-neighbor (similaridade de cosseno) para colocar
-		// novas notas perto das existentes — NAO mexe nas posicoes atuais.
-		unprojected, err := w.store.GetEmbeddings2DWithVectors(maxReproject)
-		if err != nil || len(unprojected) == 0 {
-			return
-		}
-
-		// Carrega embeddings existentes (com coordenadas)
-		existingEmbeds, err := w.store.GetAllFileEmbeddings()
-		if err != nil || len(existingEmbeds) == 0 {
-			return
-		}
-
-		// Indexa existentes por arquivo
-		existingVecs := make(map[string][]float32)
-		existingPos := make(map[string]index.Point2D)
-		for _, fe := range existingEmbeds {
-			if len(fe.Vector) == 0 || (fe.X == 0 && fe.Y == 0) {
-				continue
-			}
-			existingVecs[fe.Arquivo] = fe.Vector
-			existingPos[fe.Arquivo] = index.Point2D{X: fe.X, Y: fe.Y}
-		}
-
-		if len(existingPos) == 0 {
-			return
-		}
-
-		placed := 0
-		for docID, nv := range unprojected {
-			if len(nv.Vector) == 0 {
-				continue
-			}
-			doc, _ := w.store.GetDocument(docID)
-			if doc == nil || doc.Arquivo == "" {
-				continue
-			}
-
-			// Top-3 vizinhos por similaridade de cosseno
-			type neighbor struct {
-				arq string
-				sim float64
-			}
-			var sims []neighbor
-			for exFile, exVec := range existingVecs {
-				s := index.CosineSimilarity(nv.Vector, exVec)
-				sims = append(sims, neighbor{exFile, s})
-			}
-			if len(sims) == 0 {
-				continue
-			}
-			sort.Slice(sims, func(i, j int) bool { return sims[i].sim > sims[j].sim })
-
-			nn := 3
-			if len(sims) < nn {
-				nn = len(sims)
-			}
-
-			var cx, cy, totalW float64
-			for i := 0; i < nn; i++ {
-				if pt, ok := existingPos[sims[i].arq]; ok {
-					cx += pt.X * sims[i].sim
-					cy += pt.Y * sims[i].sim
-					totalW += sims[i].sim
-				}
-			}
-			if totalW == 0 {
-				continue
-			}
-			px := cx/totalW + (float64(placed%7)-3)*5
-			py := cy/totalW + (float64(placed%13)-6)*5
-
-			w.store.SetEmbedding2D(docID, px, py)
-			placed++
-		}
-		slog.Info("Reprojecao incremental (nearest-neighbor) concluida", "projetadas", placed)
-	}
 }
 
 func (w *Watcher) Events() <-chan FileEvent {
@@ -764,6 +571,16 @@ func (w *Watcher) pollAll() {
 			if !ok {
 				return nil
 			}
+
+			// SO processa se o mtime mudou desde a ultima indexacao
+			if existingMod, err := w.store.GetFileMod(relPath); err == nil && existingMod != "" {
+				if existingMod == info.ModTime().Format(time.RFC3339) {
+					// Mtime igual — arquivo nao mudou, pula
+					diskFiles[relPath] = true
+					return nil
+				}
+			}
+
 			diskFiles[relPath] = true
 			batchEvents = append(batchEvents, FileEvent{
 				Path:     path,

@@ -44,6 +44,54 @@ func tagColor(tag string) string {
 	return fmt.Sprintf("hsl(%d, 60%%, 55%%)", h)
 }
 
+// makeGraphNode constroi um no do grafo a partir dos metadados da nota.
+func (ctx *HandlerContext) makeGraphNode(arquivo string, x, y float64, noteType string, fileTags []string, pop int) node {
+	parts := strings.Split(arquivo, "/")
+	baseName := parts[len(parts)-1]
+	baseName = strings.TrimSuffix(baseName, ".md")
+	baseName = strings.TrimSuffix(baseName, ".pdf")
+
+	if noteType == "" {
+		noteType = "note"
+	}
+	if fileTags == nil {
+		fileTags = []string{}
+	}
+	for _, tag := range fileTags {
+		switch strings.ToLower(strings.TrimSpace(tag)) {
+		case "youtube", "video":
+			noteType = "video"
+		case "artigo", "article", "captura":
+			if noteType != "video" {
+				noteType = "article"
+			}
+		}
+	}
+
+	radius := 6.0 + math.Log2(float64(pop)+1)*2.0
+	if radius > 20 {
+		radius = 20
+	}
+	color := "#38bdf8"
+	if len(fileTags) > 0 {
+		color = tagColor(fileTags[0])
+	} else if noteType == "pdf" {
+		color = "#f59e0b"
+	}
+
+	return node{
+		ID:         arquivo,
+		Title:      baseName,
+		X:          x,
+		Y:          y,
+		NoteType:   noteType,
+		Tags:       fileTags,
+		Popularity: pop,
+		Radius:     radius,
+		Color:      color,
+	}
+}
+
 func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Request) {
 	limit := 500
 	if l := r.URL.Query().Get("limit"); l != "" {
@@ -56,53 +104,6 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 
 	fileNodes := make(map[string]node)
 	fileSeen := make(map[string]bool)
-
-	buildNode := func(arquivo string, x, y float64, noteType string, fileTags []string, pop int) node {
-		parts := strings.Split(arquivo, "/")
-		baseName := parts[len(parts)-1]
-		baseName = strings.TrimSuffix(baseName, ".md")
-		baseName = strings.TrimSuffix(baseName, ".pdf")
-
-		if noteType == "" {
-			noteType = "note"
-		}
-		if fileTags == nil {
-			fileTags = []string{}
-		}
-		for _, tag := range fileTags {
-			switch strings.ToLower(strings.TrimSpace(tag)) {
-			case "youtube", "video":
-				noteType = "video"
-			case "artigo", "article", "captura":
-				if noteType != "video" {
-					noteType = "article"
-				}
-			}
-		}
-
-		radius := 6.0 + math.Log2(float64(pop)+1)*2.0
-		if radius > 20 {
-			radius = 20
-		}
-		color := "#38bdf8"
-		if len(fileTags) > 0 {
-			color = tagColor(fileTags[0])
-		} else if noteType == "pdf" {
-			color = "#f59e0b"
-		}
-
-		return node{
-			ID:         arquivo,
-			Title:      baseName,
-			X:          x,
-			Y:          y,
-			NoteType:   noteType,
-			Tags:       fileTags,
-			Popularity: pop,
-			Radius:     radius,
-			Color:      color,
-		}
-	}
 
 	// ── 1. Carrega embeddings ja projetadas (2D) — rapido, sem BLOBs ──
 	emb2D, err := ctx.Store.GetEmbeddings2DForGraph(limit)
@@ -120,7 +121,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		if strings.HasPrefix(e.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(e.Arquivo), ".pdf") {
 			noteType = "pdf"
 		}
-		fileNodes[e.Arquivo] = buildNode(e.Arquivo, e.X, e.Y, noteType, fileTags, pop)
+		fileNodes[e.Arquivo] = ctx.makeGraphNode(e.Arquivo, e.X, e.Y, noteType, fileTags, pop)
 	}
 
 	// ── 2. Projeta embeddings que AINDA NAO tem coordenadas ──
@@ -136,10 +137,16 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		unprojDocID := make(map[string]string)   // arquivo -> docID
 		for docID, nv := range needProjection {
 			doc, _ := ctx.Store.GetDocument(docID)
-			if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] || len(nv.Vector) == 0 {
+			if doc == nil || doc.Arquivo == "" || len(nv.Vector) == 0 {
 				continue
 			}
 			if _, ok := unprojDocID[doc.Arquivo]; ok {
+				// Ja temos este arquivo na fila de projecao — pula duplicata
+				continue
+			}
+			if fileSeen[doc.Arquivo] {
+				// Este ARQUIVO ja tem um embedding COM coordenadas.
+				// Pula este embedding orfao — ele nao precisa ser projetado.
 				continue
 			}
 			unprojVecs[doc.Arquivo] = nv.Vector
@@ -184,7 +191,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 					if strings.HasPrefix(arquivo, "attachments/") {
 						noteType = "attachment"
 					}
-					fileNodes[arquivo] = buildNode(arquivo, pt.X, pt.Y, noteType, fileTags, pop)
+					fileNodes[arquivo] = ctx.makeGraphNode(arquivo, pt.X, pt.Y, noteType, fileTags, pop)
 				}
 			} else {
 				// ── Ja existem embeddings projetadas: coloca novas por similaridade ──
@@ -255,7 +262,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 						if strings.HasPrefix(arquivo, "attachments/") {
 							noteType = "attachment"
 						}
-						fileNodes[arquivo] = buildNode(arquivo, px, py, noteType, fileTags, pop)
+						fileNodes[arquivo] = ctx.makeGraphNode(arquivo, px, py, noteType, fileTags, pop)
 					}
 				}
 			}
@@ -354,10 +361,18 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 	if len(nodes) > 0 {
 		var minX, maxX, minY, maxY float64 = math.MaxFloat64, -math.MaxFloat64, math.MaxFloat64, -math.MaxFloat64
 		for _, n := range nodes {
-			if n.X < minX { minX = n.X }
-			if n.X > maxX { maxX = n.X }
-			if n.Y < minY { minY = n.Y }
-			if n.Y > maxY { maxY = n.Y }
+			if n.X < minX {
+				minX = n.X
+			}
+			if n.X > maxX {
+				maxX = n.X
+			}
+			if n.Y < minY {
+				minY = n.Y
+			}
+			if n.Y > maxY {
+				maxY = n.Y
+			}
 		}
 		slog.Debug("grafo: coordenadas", "nos", len(nodes), "clusters", clusterCount,
 			"x", fmt.Sprintf("[%.1f, %.1f]", minX, maxX),
@@ -446,32 +461,13 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 	var results []nearest
 
 	// 1. Carrega pool de candidatos com coordenadas 2D (leve, sem BLOBs).
-	//    Sem limite fixo — coordenadas 2D são apenas 2 float64 por embedding.
-	//    O SQLite lida bem com 20K+ registros só com x,y.
-	candidates, err := ctx.Store.GetEmbeddings2DForGraph(10000)
+	const maxCandidates = 10000
+	candidates, err := ctx.Store.GetEmbeddings2DForGraph(maxCandidates)
 	if err != nil {
 		slog.Error("graph query: candidates", "error", err)
 	}
 
-	// 2. Filtragem geométrica em 2D: ordena candidatos por distância Euclidiana
-	//    aproximada a partir da origem (centro do gráfico). Isso evita carregar
-	//    BLOBs de vetores para notas que estão longe no espaço semântico.
-	//    Usamos apenas os topN candidatos mais próximos do centro para a busca
-	//    exata por similaridade de cosseno.
-	const topN = 500
-	if len(candidates) > topN {
-		// Ordena por distância ao centro (0,0) — notas perto do centro
-		// tendem a ser semanticamente médias/relevantes. Notas nos extremos
-		// são especializadas e menos propensas a matches genéricos.
-		sort.Slice(candidates, func(i, j int) bool {
-			di := candidates[i].X*candidates[i].X + candidates[i].Y*candidates[i].Y
-			dj := candidates[j].X*candidates[j].X + candidates[j].Y*candidates[j].Y
-			return di < dj
-		})
-		candidates = candidates[:topN]
-	}
-
-	// 3. Carrega vetores em lote (1 query, não N queries individuais)
+	// 2. Carrega vetores em lote (1 query, não N queries individuais)
 	docIDs := make([]string, len(candidates))
 	for i, e := range candidates {
 		docIDs[i] = e.DocID
@@ -481,14 +477,14 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 		slog.Error("graph query: batch load", "error", err)
 	}
 
-	// 4. Calcula similaridade de cosseno exata
+	// 3. Calcula similaridade de cosseno exata para TODOS os candidatos
 	for _, e := range candidates {
 		nv, ok := vecMap[e.DocID]
 		if !ok || len(nv.Vector) == 0 {
 			continue
 		}
 		sim := index.CosineSimilarity(queryVec, nv.Vector)
-		if sim < 0.7 {
+		if sim < 0.5 {
 			continue
 		}
 		title := e.Title
@@ -512,21 +508,25 @@ func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Reque
 	if len(results) > 20 {
 		results = results[:20]
 	}
+
 	var qx, qy, totalWeight float64
-	n := 5
-	if len(results) < n {
-		n = len(results)
+	if len(results) > 0 {
+		n := 5
+		if len(results) < n {
+			n = len(results)
+		}
+		for i := 0; i < n; i++ {
+			weight := results[i].Similarity
+			qx += results[i].X * weight
+			qy += results[i].Y * weight
+			totalWeight += weight
+		}
+		if totalWeight > 0 {
+			qx /= totalWeight
+			qy /= totalWeight
+		}
 	}
-	for i := 0; i < n; i++ {
-		weight := results[i].Similarity
-		qx += results[i].X * weight
-		qy += results[i].Y * weight
-		totalWeight += weight
-	}
-	if totalWeight > 0 {
-		qx /= totalWeight
-		qy /= totalWeight
-	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"query_x": qx, "query_y": qy, "query_text": body.Query, "nearest": results,

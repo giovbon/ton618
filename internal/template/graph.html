@@ -158,7 +158,6 @@
             dim = resizeCanvas();
             W = dim[0];
             H = dim[1];
-            markHeatmapDirty();
             render();
         });
 
@@ -166,62 +165,6 @@
         var tooltip = document.createElement("div");
         tooltip.className = "graph-tooltip";
         document.body.appendChild(tooltip);
-
-        // ── Heatmap de densidade (substitui o antigo Voronoi) ──
-        // Cria um canvas offscreen para acumular densidade gaussiana.
-        // Cada nota contribui com um gradiente radial; regiões com muitas notas
-        // ficam mais brilhantes, revelando concentrações semânticas naturais.
-        var heatmapCanvas = document.createElement("canvas");
-        var heatCtx = heatmapCanvas.getContext("2d");
-        var heatRadius = 60;
-        var heatmapDirty = true;
-
-        function buildHeatmap() {
-            if (!heatmapDirty) return;
-            heatmapDirty = false;
-
-            var r = canvas.parentElement.getBoundingClientRect();
-            heatmapCanvas.width = r.width;
-            heatmapCanvas.height = r.height;
-            heatCtx.clearRect(0, 0, r.width, r.height);
-
-            // Acumula gradientes de cada nó no espaço de tela
-            var pr = window.devicePixelRatio || 1;
-            nodes.forEach(function (n) {
-                var sx = n.x * scale + tx;
-                var sy = n.y * scale + ty;
-                if (
-                    sx < -heatRadius ||
-                    sx > r.width + heatRadius ||
-                    sy < -heatRadius ||
-                    sy > r.height + heatRadius
-                ) {
-                    return; // skip offscreen
-                }
-                var grad = heatCtx.createRadialGradient(
-                    sx,
-                    sy,
-                    0,
-                    sx,
-                    sy,
-                    heatRadius,
-                );
-                grad.addColorStop(0, "rgba(56,189,248,0.10)");
-                grad.addColorStop(0.4, "rgba(56,189,248,0.04)");
-                grad.addColorStop(1, "rgba(56,189,248,0)");
-                heatCtx.fillStyle = grad;
-                heatCtx.fillRect(
-                    sx - heatRadius,
-                    sy - heatRadius,
-                    heatRadius * 2,
-                    heatRadius * 2,
-                );
-            });
-        }
-
-        function markHeatmapDirty() {
-            heatmapDirty = true;
-        }
 
         // ── View state ──
         var tx = W / 2,
@@ -250,14 +193,6 @@
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.fillStyle = "#09090b";
             ctx.fillRect(0, 0, W, H);
-            ctx.save();
-            // Heatmap de densidade — desenha ANTES do translate/scale,
-            // pois buildHeatmap() já computa as coordenadas de tela manualmente
-            buildHeatmap();
-            ctx.save();
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            ctx.drawImage(heatmapCanvas, 0, 0);
-            ctx.restore();
 
             ctx.translate(tx, ty);
             ctx.scale(scale, scale);
@@ -280,7 +215,6 @@
             ctx.globalAlpha = 1;
 
             // Nodes
-            var showLabels = scale >= 0.5;
             nodes.forEach(function (n) {
                 var r = n.radius || 7,
                     px = n.x,
@@ -313,32 +247,39 @@
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
 
-                // Label: só aparece com zoom (scale >= 0.5), exceto notas destacadas pela busca
-                if (showLabels || n._highlighted) {
+                // Label: so aparece com zoom suficiente (scale >= 0.7),
+                // exceto notas destacadas pela busca
+                if (scale >= 0.7 || n._highlighted) {
                     ctx.fillStyle = n._highlighted ? "#38bdf8" : "#71717a";
                     ctx.font =
                         "500 " + 10 / scale + "px Inter,system-ui,sans-serif";
-                    ctx.fillText(
+
+                    // Trunca titulos longos: max 25 chars senao vira "..."
+                    var label =
                         n.title ||
-                            n.id
-                                .split("/")
-                                .pop()
-                                .replace(/\.(md|pdf)$/i, "") ||
-                            "?",
-                        px,
-                        py + r + 14 / scale,
-                    );
+                        n.id
+                            .split("/")
+                            .pop()
+                            .replace(/\.(md|pdf)$/i, "") ||
+                        "?";
+                    if (label.length > 25) {
+                        label = label.slice(0, 22) + "...";
+                    }
+
+                    ctx.fillText(label, px, py + r + 14 / scale);
                 }
             });
 
             // ── Query point (if set) ──
             if (queryPoint) {
-                ctx.strokeStyle = "#38bdf8";
-                ctx.globalAlpha = 0.3;
-                ctx.lineWidth = 1 / scale;
-                ctx.setLineDash([4 / scale, 4 / scale]);
                 var qn = queryPoint.nearest || [];
-                qn.forEach(function (nr) {
+                // Linhas apenas para os 3 mais proximos
+                var top3 = qn.slice(0, 3);
+                ctx.strokeStyle = "#38bdf8";
+                ctx.globalAlpha = 0.35;
+                ctx.lineWidth = 1.2 / scale;
+                ctx.setLineDash([4 / scale, 4 / scale]);
+                top3.forEach(function (nr) {
                     ctx.beginPath();
                     ctx.moveTo(queryPoint.x, queryPoint.y);
                     ctx.lineTo(nr.x, nr.y);
@@ -477,7 +418,6 @@
                 tx = mx - (mx - tx) * f;
                 ty = my - (my - ty) * f;
                 scale = ns;
-                markHeatmapDirty();
                 render();
             },
             { passive: false },
@@ -499,7 +439,6 @@
             ty += e.clientY - dy;
             dx = e.clientX;
             dy = e.clientY;
-            markHeatmapDirty();
             render();
         });
         window.addEventListener("mouseup", function () {
@@ -531,7 +470,6 @@
                     ty += e.touches[0].clientY - dy;
                     dx = e.touches[0].clientX;
                     dy = e.touches[0].clientY;
-                    markHeatmapDirty();
                     render();
                 } else if (e.touches.length === 2 && t0) {
                     var t1 = {
@@ -554,7 +492,6 @@
                         tx = sx - (sx - tx) * f;
                         ty = sy - (sy - ty) * f;
                         scale = Math.max(0.05, Math.min(20, scale * f));
-                        markHeatmapDirty();
                         render();
                     }
                     t0 = [t1, t2];
@@ -650,10 +587,14 @@
                     text: data.query_text || q,
                     nearest: data.nearest,
                 };
-                nodes.forEach(function (n) {
-                    n._highlighted = data.nearest.some(function (nr) {
-                        return nr.arquivo === n.id;
+                // Destaca apenas os 3 mais proximos
+                var top3Ids = (data.nearest || [])
+                    .slice(0, 3)
+                    .map(function (nr) {
+                        return nr.arquivo;
                     });
+                nodes.forEach(function (n) {
+                    n._highlighted = top3Ids.indexOf(n.id) !== -1;
                 });
                 if (animationFrame) cancelAnimationFrame(animationFrame);
                 function animatePulse() {
