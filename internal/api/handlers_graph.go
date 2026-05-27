@@ -52,55 +52,38 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// 1. Carrega embeddings ja projetadas (2D) — rápido, sem BLOBs
-	emb2D, err := ctx.Store.GetEmbeddings2DForGraph(limit)
-	if err != nil {
-		slog.Error("graph 2d query", "error", err)
-	}
-
 	links, _ := ctx.Store.GetAllLinks()
 
 	fileNodes := make(map[string]node)
 	fileSeen := make(map[string]bool)
 
-	// 2. Processa embeddings 2D existentes
-	for _, e := range emb2D {
-		if e.Arquivo == "" || fileSeen[e.Arquivo] {
-			continue
-		}
-		fileSeen[e.Arquivo] = true
-
-		parts := strings.Split(e.Arquivo, "/")
+	buildNode := func(arquivo string, x, y float64, noteType string, fileTags []string, pop int) node {
+		parts := strings.Split(arquivo, "/")
 		baseName := parts[len(parts)-1]
 		baseName = strings.TrimSuffix(baseName, ".md")
 		baseName = strings.TrimSuffix(baseName, ".pdf")
 
-		noteType := "note"
-		if strings.HasPrefix(e.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(e.Arquivo), ".pdf") {
-			noteType = "pdf"
+		if noteType == "" {
+			noteType = "note"
 		}
-
-		fileTags := []string{}
-		if t, err := ctx.Store.GetFileTags(e.Arquivo); err == nil {
-			fileTags = t
-			for _, tag := range fileTags {
-				switch strings.ToLower(strings.TrimSpace(tag)) {
-				case "youtube", "video":
-					noteType = "video"
-				case "artigo", "article", "captura":
-					if noteType != "video" {
-						noteType = "article"
-					}
+		if fileTags == nil {
+			fileTags = []string{}
+		}
+		for _, tag := range fileTags {
+			switch strings.ToLower(strings.TrimSpace(tag)) {
+			case "youtube", "video":
+				noteType = "video"
+			case "artigo", "article", "captura":
+				if noteType != "video" {
+					noteType = "article"
 				}
 			}
 		}
 
-		pop := ctx.Store.GetPopularity(e.Arquivo)
 		radius := 6.0 + math.Log2(float64(pop)+1)*2.0
 		if radius > 20 {
 			radius = 20
 		}
-
 		color := "#38bdf8"
 		if len(fileTags) > 0 {
 			color = tagColor(fileTags[0])
@@ -108,11 +91,11 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			color = "#f59e0b"
 		}
 
-		fileNodes[e.Arquivo] = node{
-			ID:         e.Arquivo,
+		return node{
+			ID:         arquivo,
 			Title:      baseName,
-			X:          e.X,
-			Y:          e.Y,
+			X:          x,
+			Y:          y,
 			NoteType:   noteType,
 			Tags:       fileTags,
 			Popularity: pop,
@@ -121,101 +104,151 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// 3. Se ha poucos nos com coordenadas 2D validas, projeta as que faltam.
-	//    Usa t-SNE em vez de PCA — PCA eh linear e nao preserva vizinhancas
-	//    semanticas, causando agrupamento aleatorio no mapa.
-	if len(fileNodes) < limit/2 {
-		vecsForProjection, err := ctx.Store.GetEmbeddings2DWithVectors(limit)
-		if err == nil && len(vecsForProjection) > 0 {
-			vecs := make(map[string][]float32)
-			fileToDocID := make(map[string]string) // arquivo -> docID
-			for docID, nv := range vecsForProjection {
-				doc, _ := ctx.Store.GetDocument(docID)
-				if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] || len(nv.Vector) == 0 {
-					continue
-				}
-				if _, ok := fileToDocID[doc.Arquivo]; ok {
-					continue
-				}
-				vecs[doc.Arquivo] = nv.Vector
-				fileToDocID[doc.Arquivo] = docID
+	// ── 1. Carrega embeddings ja projetadas (2D) — rapido, sem BLOBs ──
+	emb2D, err := ctx.Store.GetEmbeddings2DForGraph(limit)
+	if err != nil {
+		slog.Error("graph 2d query", "error", err)
+	}
+	for _, e := range emb2D {
+		if e.Arquivo == "" || fileSeen[e.Arquivo] {
+			continue
+		}
+		fileSeen[e.Arquivo] = true
+		fileTags, _ := ctx.Store.GetFileTags(e.Arquivo)
+		pop := ctx.Store.GetPopularity(e.Arquivo)
+		noteType := "note"
+		if strings.HasPrefix(e.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(e.Arquivo), ".pdf") {
+			noteType = "pdf"
+		}
+		fileNodes[e.Arquivo] = buildNode(e.Arquivo, e.X, e.Y, noteType, fileTags, pop)
+	}
+
+	// ── 2. Projeta embeddings que AINDA NAO tem coordenadas ──
+	//    Estrategia ESTAVEL: cada embedding e projetado UMA UNICA VEZ.
+	//    * Se existem embeddings ja projetadas: novas sao colocadas por
+	//      similaridade de cosseno (vizinho mais proximo) — posicoes fixas.
+	//    * Se nenhuma tem coordenadas (primeira vez): t-SNE global.
+	//    * NUNCA reprojeta embeddings existentes automaticamente.
+	needProjection, err := ctx.Store.GetEmbeddings2DWithVectors(limit)
+	if err == nil && len(needProjection) > 0 {
+		// Monta mapa de embeddings NAO projetados
+		unprojVecs := make(map[string][]float32) // arquivo -> vector
+		unprojDocID := make(map[string]string)   // arquivo -> docID
+		for docID, nv := range needProjection {
+			doc, _ := ctx.Store.GetDocument(docID)
+			if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] || len(nv.Vector) == 0 {
+				continue
 			}
+			if _, ok := unprojDocID[doc.Arquivo]; ok {
+				continue
+			}
+			unprojVecs[doc.Arquivo] = nv.Vector
+			unprojDocID[doc.Arquivo] = docID
+		}
 
-			if len(vecs) > 1 {
-				// t-SNE: preserva vizinhancas semanticas (PCA nao)
-				// QuickTSNE para <=150 pts (~1s); DefaultTSNE para mais
+		if len(unprojVecs) > 0 {
+			if len(fileNodes) == 0 {
+				// ── Primeira vez: t-SNE global em TODAS as embeddings ──
+				slog.Info("grafo: primeira projecao — t-SNE em todas as embeddings", "total", len(unprojVecs))
 				var projected map[string]index.Point2D
-				if len(vecs) <= 150 {
-					projected = index.QuickTSNE().Project(vecs)
-					slog.Debug("grafo: QuickTSNE", "notas", len(vecs))
+				if len(unprojVecs) <= 150 {
+					projected = index.QuickTSNE().Project(unprojVecs)
 				} else {
-					projected = index.DefaultTSNE().Project(vecs)
-					slog.Debug("grafo: t-SNE full", "notas", len(vecs))
+					projected = index.DefaultTSNE().Project(unprojVecs)
 				}
-
 				for arquivo, pt := range projected {
-					if docID, ok := fileToDocID[arquivo]; ok {
+					if docID, ok := unprojDocID[arquivo]; ok {
 						ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y)
 					}
-					if !fileSeen[arquivo] {
-						fileSeen[arquivo] = true
-						parts := strings.Split(arquivo, "/")
-						baseName := parts[len(parts)-1]
-						baseName = strings.TrimSuffix(baseName, ".md")
-						baseName = strings.TrimSuffix(baseName, ".pdf")
+					fileSeen[arquivo] = true
+					fileTags, _ := ctx.Store.GetFileTags(arquivo)
+					pop := ctx.Store.GetPopularity(arquivo)
+					noteType := "note"
+					if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") {
+						noteType = "pdf"
+					}
+					if strings.HasPrefix(arquivo, "attachments/") {
+						noteType = "attachment"
+					}
+					fileNodes[arquivo] = buildNode(arquivo, pt.X, pt.Y, noteType, fileTags, pop)
+				}
+			} else {
+				// ── Ja existem embeddings projetadas: coloca novas por similaridade ──
+				//    Carrega embeddings existentes (com vetor + posicao 2D)
+				slog.Info("grafo: posicionando novas notas por similaridade", "novas", len(unprojVecs), "existentes", len(fileNodes))
 
+				existingEmbeds, err := ctx.Store.GetAllFileEmbeddings()
+				if err == nil && len(existingEmbeds) > 0 {
+					// Indexa embeddings existentes por arquivo
+					existingByFile := make(map[string]index.Point2D)
+					existingVecsByFile := make(map[string][]float32)
+					for _, fe := range existingEmbeds {
+						if fe.Arquivo == "" || fileNodes[fe.Arquivo].ID == "" {
+							continue
+						}
+						n := fileNodes[fe.Arquivo]
+						existingByFile[fe.Arquivo] = index.Point2D{X: n.X, Y: n.Y}
+						existingVecsByFile[fe.Arquivo] = fe.Vector
+					}
+
+					for arquivo, newVec := range unprojVecs {
+						// Encontra top-3 vizinhos por similaridade de cosseno
+						type viz struct {
+							arq string
+							sim float64
+						}
+						var sims []viz
+						for exFile, exVec := range existingVecsByFile {
+							s := index.CosineSimilarity(newVec, exVec)
+							sims = append(sims, viz{exFile, s})
+						}
+						sort.Slice(sims, func(i, j int) bool { return sims[i].sim > sims[j].sim })
+
+						nn := 3
+						if len(sims) < nn {
+							nn = len(sims)
+						}
+
+						var cx, cy, totalWeight float64
+						for i := 0; i < nn; i++ {
+							w := sims[i].sim
+							if pt, ok := existingByFile[sims[i].arq]; ok {
+								cx += pt.X * w
+								cy += pt.Y * w
+								totalWeight += w
+							}
+						}
+						if totalWeight == 0 {
+							continue
+						}
+						px := cx / totalWeight
+						py := cy / totalWeight
+
+						// Adiciona pequeno jitter para nao sobrepor
+						px += (float64(len(fileNodes)%7) - 3) * 5
+						py += (float64(len(fileNodes)%13) - 6) * 5
+
+						if docID, ok := unprojDocID[arquivo]; ok {
+							ctx.Store.SetEmbedding2D(docID, px, py)
+						}
+						fileSeen[arquivo] = true
+						fileTags, _ := ctx.Store.GetFileTags(arquivo)
+						pop := ctx.Store.GetPopularity(arquivo)
 						noteType := "note"
 						if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") {
 							noteType = "pdf"
 						}
-						fileTags := []string{}
-						if t, err := ctx.Store.GetFileTags(arquivo); err == nil {
-							fileTags = t
-							for _, tag := range fileTags {
-								switch strings.ToLower(strings.TrimSpace(tag)) {
-								case "youtube", "video":
-									noteType = "video"
-								case "artigo", "article", "captura":
-									if noteType != "video" {
-										noteType = "article"
-									}
-								}
-							}
+						if strings.HasPrefix(arquivo, "attachments/") {
+							noteType = "attachment"
 						}
-						pop := ctx.Store.GetPopularity(arquivo)
-						radius := 6.0 + math.Log2(float64(pop)+1)*2.0
-						if radius > 20 {
-							radius = 20
-						}
-						color := "#38bdf8"
-						if len(fileTags) > 0 {
-							color = tagColor(fileTags[0])
-						} else if noteType == "pdf" {
-							color = "#f59e0b"
-						}
-
-						fileNodes[arquivo] = node{
-							ID:         arquivo,
-							Title:      baseName,
-							X:          pt.X,
-							Y:          pt.Y,
-							NoteType:   noteType,
-							Tags:       fileTags,
-							Popularity: pop,
-							Radius:     radius,
-							Color:      color,
-						}
+						fileNodes[arquivo] = buildNode(arquivo, px, py, noteType, fileTags, pop)
 					}
 				}
-				// Background: DefaultTSNE com mais iteracoes melhora ainda mais
-				ctx.Watcher.QueueReproject()
 			}
 		}
 	}
 
-	// 4. Clustering no espaço original (high-D) em vez de 2D
-	//    Carrega vetores originais para agrupar por similaridade semântica real.
-	//    Fallback para clustering 2D se vetores não estiverem disponíveis.
+	// ── 3. Clustering no espaco high-D (preserva semantica real) ──
 	var clusterMap map[string]int
 	var clusterCount int
 	{
@@ -232,12 +265,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 
 		if len(highDVecs) >= 3 {
-			// Cluster no espaço high-D (768D) — agrupa por assunto real
 			clusterMap, clusterCount = index.ClusterHighD(highDVecs)
 			slog.Debug("grafo: cluster high-D", "notas", len(highDVecs), "clusters", clusterCount)
 		}
-
-		// Fallback: se high-D falhou ou deu poucos pontos, usa 2D
 		if clusterCount < 2 {
 			pts := make(map[string]index.Point2D)
 			for arquivo, n := range fileNodes {
@@ -248,10 +278,7 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Itera em ordem deterministica (sorted keys) para que o grid fallback
-	// produza as mesmas posicoes independente da ordem aleatoria do map.
-	// Go maps tem iteracao randomizada — sem sort, a posicao das notas
-	// sem embedding (X=0,Y=0) muda a cada carregamento.
+	// ── 4. Monta resposta (ordenado deterministicamente) ──
 	fileKeys := make([]string, 0, len(fileNodes))
 	for k := range fileNodes {
 		fileKeys = append(fileKeys, k)
@@ -265,7 +292,6 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		if c, ok := clusterMap[n.ID]; ok {
 			clusterID = c
 		}
-
 		if n.X == 0 && n.Y == 0 {
 			idx := len(nodes)
 			cols := math.Ceil(math.Sqrt(float64(len(fileNodes))))
@@ -275,18 +301,11 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			n.X = float64(int(idx)%int(cols))*120 + 60
 			n.Y = float64(int(idx)/int(cols))*120 + 60
 		}
-
 		nodes = append(nodes, node{
-			ID:         n.ID,
-			Title:      n.Title,
-			X:          n.X,
-			Y:          n.Y,
-			ClusterID:  clusterID,
-			NoteType:   n.NoteType,
-			Tags:       n.Tags,
-			Popularity: n.Popularity,
-			Radius:     n.Radius,
-			Color:      n.Color,
+			ID: n.ID, Title: n.Title, X: n.X, Y: n.Y,
+			ClusterID: clusterID, NoteType: n.NoteType,
+			Tags: n.Tags, Popularity: n.Popularity,
+			Radius: n.Radius, Color: n.Color,
 		})
 	}
 
@@ -323,36 +342,36 @@ func (ctx *HandlerContext) HandleGraphProject(w http.ResponseWriter, r *http.Req
 	}
 	vecs := make(map[string][]float32)
 	fileToDoc := make(map[string]string)
+	unprojected := 0
 	for _, fe := range allFileEmbs {
 		if len(fe.Vector) == 0 {
 			continue
 		}
 		fileToDoc[fe.Arquivo] = fe.DocID
-		vecs[fe.Arquivo] = fe.Vector
-	}
-	if len(vecs) < 2 {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"ok":true,"nodes":%d}`, len(vecs))
-		return
-	}
-
-	// Usa t-SNE em vez de PCA — preserva vizinhanças semânticas muito melhor
-	// e agrupa notas similares naturalmente no espaço 2D.
-	slog.Info("Reprojetando mapa semântico com t-SNE", "notas", len(vecs))
-	tsne := index.DefaultTSNE()
-	projected := tsne.Project(vecs)
-
-	count := 0
-	for arquivo, pt := range projected {
-		if docID, ok := fileToDoc[arquivo]; ok {
-			if err := ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y); err == nil {
-				count++
-			}
+		// Só projeta embeddings SEM coordenadas 2D para nao mexer nas existentes
+		if fe.X == 0 && fe.Y == 0 {
+			vecs[fe.Arquivo] = fe.Vector
+			unprojected++
 		}
 	}
-	slog.Info("Projeção t-SNE concluída", "projetadas", count)
+	if len(vecs) > 0 {
+		slog.Info("Reprojetando embeddings sem coordenadas com t-SNE", "novas", unprojected, "total_existentes", len(allFileEmbs)-unprojected)
+		tsne := index.DefaultTSNE()
+		projected := tsne.Project(vecs)
+
+		count := 0
+		for arquivo, pt := range projected {
+			if docID, ok := fileToDoc[arquivo]; ok {
+				if err := ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y); err == nil {
+					count++
+				}
+			}
+		}
+		slog.Info("Projecao t-SNE concluida", "projetadas", count)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true,"nodes":%d,"projected":%d,"method":"tsne"}`, len(vecs), count)
+	fmt.Fprintf(w, `{"ok":true,"total":%d,"projected":%d}`,
+		len(vecs), unprojected)
 }
 
 func (ctx *HandlerContext) HandleGraphQuery(w http.ResponseWriter, r *http.Request) {

@@ -5,14 +5,15 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/processor"
 	"ton618/internal/index"
+	"ton618/internal/processor"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -182,10 +183,10 @@ type Watcher struct {
 
 	// reprojectNeeded é setado quando novas embeddings precisam ser projetadas
 	// com t-SNE (o PCA é usado como fallback instantâneo até o t-SNE ficar pronto).
-	reprojectMu          sync.Mutex
-	reprojectNeeded      bool
-	fullReprojectNeeded  bool // força reprojeção de TODAS as embeddings, não só novas
-	reprojectRunning     bool
+	reprojectMu         sync.Mutex
+	reprojectNeeded     bool
+	fullReprojectNeeded bool // força reprojeção de TODAS as embeddings, não só novas
+	reprojectRunning    bool
 }
 
 // NewWatcher creates a new watcher instance.
@@ -298,7 +299,8 @@ func (w *Watcher) runReprojection(full bool) {
 	var vecs map[string][]float32
 
 	if full {
-		// Reprojeção completa de TODAS as embeddings com t-SNE
+		// Reprojeção completa de TODAS as embeddings com t-SNE.
+		// Só roda na inicialização (QueueFullReproject).
 		allEmbeddings, err := w.store.GetAllFileEmbeddings()
 		if err != nil || len(allEmbeddings) < 2 {
 			return
@@ -311,46 +313,94 @@ func (w *Watcher) runReprojection(full bool) {
 			vecs[fe.Arquivo] = fe.Vector
 		}
 		slog.Info("Reprojetando TODAS as embeddings com t-SNE", "total", len(vecs))
+
+		tsne := index.DefaultTSNE()
+		projected := tsne.Project(vecs)
+		for arquivo, pt := range projected {
+			docs, _ := w.store.GetDocumentsByFile(arquivo)
+			if len(docs) > 0 {
+				w.store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
+			}
+		}
+		slog.Info("Reprojecao t-SNE completa concluida", "projetados", len(vecs))
 	} else {
-		// Apenas embeddings que AINDA não têm projeção 2D (incremental)
+		// Incremental: projeta só embeddings SEM coordenadas 2D.
+		// Usa nearest-neighbor (similaridade de cosseno) para colocar
+		// novas notas perto das existentes — NAO mexe nas posicoes atuais.
 		unprojected, err := w.store.GetEmbeddings2DWithVectors(maxReproject)
-		if err != nil || len(unprojected) < 2 {
+		if err != nil || len(unprojected) == 0 {
 			return
 		}
-		vecs = make(map[string][]float32)
-		fileSeen := make(map[string]bool)
+
+		// Carrega embeddings existentes (com coordenadas)
+		existingEmbeds, err := w.store.GetAllFileEmbeddings()
+		if err != nil || len(existingEmbeds) == 0 {
+			return
+		}
+
+		// Indexa existentes por arquivo
+		existingVecs := make(map[string][]float32)
+		existingPos := make(map[string]index.Point2D)
+		for _, fe := range existingEmbeds {
+			if len(fe.Vector) == 0 || (fe.X == 0 && fe.Y == 0) {
+				continue
+			}
+			existingVecs[fe.Arquivo] = fe.Vector
+			existingPos[fe.Arquivo] = index.Point2D{X: fe.X, Y: fe.Y}
+		}
+
+		if len(existingPos) == 0 {
+			return
+		}
+
+		placed := 0
 		for docID, nv := range unprojected {
 			if len(nv.Vector) == 0 {
 				continue
 			}
 			doc, _ := w.store.GetDocument(docID)
-			if doc == nil || doc.Arquivo == "" || fileSeen[doc.Arquivo] {
+			if doc == nil || doc.Arquivo == "" {
 				continue
 			}
-			fileSeen[doc.Arquivo] = true
-			vecs[doc.Arquivo] = nv.Vector
-		}
-		if len(vecs) < 2 {
-			return
-		}
-		slog.Info("Reprojetando embeddings não-projetados com t-SNE", "total", len(vecs), "max", maxReproject)
-	}
 
-	tsne := index.DefaultTSNE()
-	projected := tsne.Project(vecs)
+			// Top-3 vizinhos por similaridade de cosseno
+			type neighbor struct {
+				arq string
+				sim float64
+			}
+			var sims []neighbor
+			for exFile, exVec := range existingVecs {
+				s := index.CosineSimilarity(nv.Vector, exVec)
+				sims = append(sims, neighbor{exFile, s})
+			}
+			if len(sims) == 0 {
+				continue
+			}
+			sort.Slice(sims, func(i, j int) bool { return sims[i].sim > sims[j].sim })
 
-	// Armazena coordenadas no banco
-	for arquivo, pt := range projected {
-		docs, _ := w.store.GetDocumentsByFile(arquivo)
-		if len(docs) > 0 {
-			w.store.SetEmbedding2D(docs[0].ID, pt.X, pt.Y)
+			nn := 3
+			if len(sims) < nn {
+				nn = len(sims)
+			}
+
+			var cx, cy, totalW float64
+			for i := 0; i < nn; i++ {
+				if pt, ok := existingPos[sims[i].arq]; ok {
+					cx += pt.X * sims[i].sim
+					cy += pt.Y * sims[i].sim
+					totalW += sims[i].sim
+				}
+			}
+			if totalW == 0 {
+				continue
+			}
+			px := cx/totalW + (float64(placed%7)-3)*5
+			py := cy/totalW + (float64(placed%13)-6)*5
+
+			w.store.SetEmbedding2D(docID, px, py)
+			placed++
 		}
-	}
-
-	if full {
-		slog.Info("Reprojecao t-SNE completa concluida", "projetados", len(vecs))
-	} else {
-		slog.Info("Reprojecao t-SNE incremental concluida", "projetados", len(vecs))
+		slog.Info("Reprojecao incremental (nearest-neighbor) concluida", "projetadas", placed)
 	}
 }
 
