@@ -27,6 +27,19 @@ func DefaultTSNE() TSNE {
 	}
 }
 
+// QuickTSNE returns a faster t-SNE config for first-load projection.
+// Fewer iterations and higher learning rate — completes in ~1s for <=100 pts
+// while still preserving semantic neighborhoods.
+func QuickTSNE() TSNE {
+	return TSNE{
+		Perplexity: 15,
+		MaxIter:    350,
+		Eta:        500,
+		Exaggerate: 60,
+		Seed:       42,
+	}
+}
+
 // Project runs t-SNE on high-dimensional vectors, returning 2D coordinates.
 func (tsne TSNE) Project(vectors map[string][]float32) map[string]Point2D {
 	n := len(vectors)
@@ -167,11 +180,18 @@ func (tsne TSNE) Project(vectors map[string][]float32) map[string]Point2D {
 func computeAffinities(data [][]float64, perp float64) []float64 {
 	n := len(data)
 
-	if perp > float64(n-1)/3.0 {
-		perp = float64(n-1) / 3.0
+	// Range de perplexidade aceitavel: [2, (n-1)/2].
+	// Abaixo de 2 o t-SNE foca em 1-2 vizinhos e nao encontra clusters.
+	// Acima de (n-1)/2 a visao eh excessivamente global (tudo no mesmo cluster).
+	maxPerp := float64(n-1) / 2.0
+	if maxPerp < 2 {
+		maxPerp = 2
 	}
-	if perp < 1 {
-		perp = 1
+	if perp > maxPerp {
+		perp = maxPerp
+	}
+	if perp < 2 {
+		perp = 2
 	}
 
 	// Pairwise squared distances

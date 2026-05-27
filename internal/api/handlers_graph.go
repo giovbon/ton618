@@ -121,7 +121,9 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// 3. Se ha poucos nos, projeta embeddings sem 2D via PCA e agenda t-SNE
+	// 3. Se ha poucos nos com coordenadas 2D validas, projeta as que faltam.
+	//    Usa t-SNE em vez de PCA — PCA eh linear e nao preserva vizinhancas
+	//    semanticas, causando agrupamento aleatorio no mapa.
 	if len(fileNodes) < limit/2 {
 		vecsForProjection, err := ctx.Store.GetEmbeddings2DWithVectors(limit)
 		if err == nil && len(vecsForProjection) > 0 {
@@ -140,8 +142,17 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 			}
 
 			if len(vecs) > 1 {
-				projected := index.Project2DReduce(vecs)
-				index.ScalePoints(projected, 500)
+				// t-SNE: preserva vizinhancas semanticas (PCA nao)
+				// QuickTSNE para <=150 pts (~1s); DefaultTSNE para mais
+				var projected map[string]index.Point2D
+				if len(vecs) <= 150 {
+					projected = index.QuickTSNE().Project(vecs)
+					slog.Debug("grafo: QuickTSNE", "notas", len(vecs))
+				} else {
+					projected = index.DefaultTSNE().Project(vecs)
+					slog.Debug("grafo: t-SNE full", "notas", len(vecs))
+				}
+
 				for arquivo, pt := range projected {
 					if docID, ok := fileToDocID[arquivo]; ok {
 						ctx.Store.SetEmbedding2D(docID, pt.X, pt.Y)
@@ -152,17 +163,51 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 						baseName := parts[len(parts)-1]
 						baseName = strings.TrimSuffix(baseName, ".md")
 						baseName = strings.TrimSuffix(baseName, ".pdf")
+
+						noteType := "note"
+						if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") {
+							noteType = "pdf"
+						}
+						fileTags := []string{}
+						if t, err := ctx.Store.GetFileTags(arquivo); err == nil {
+							fileTags = t
+							for _, tag := range fileTags {
+								switch strings.ToLower(strings.TrimSpace(tag)) {
+								case "youtube", "video":
+									noteType = "video"
+								case "artigo", "article", "captura":
+									if noteType != "video" {
+										noteType = "article"
+									}
+								}
+							}
+						}
+						pop := ctx.Store.GetPopularity(arquivo)
+						radius := 6.0 + math.Log2(float64(pop)+1)*2.0
+						if radius > 20 {
+							radius = 20
+						}
+						color := "#38bdf8"
+						if len(fileTags) > 0 {
+							color = tagColor(fileTags[0])
+						} else if noteType == "pdf" {
+							color = "#f59e0b"
+						}
+
 						fileNodes[arquivo] = node{
-							ID:       arquivo,
-							Title:    baseName,
-							X:        pt.X,
-							Y:        pt.Y,
-							NoteType: "note",
-							Radius:   6,
-							Color:    "#38bdf8",
+							ID:         arquivo,
+							Title:      baseName,
+							X:          pt.X,
+							Y:          pt.Y,
+							NoteType:   noteType,
+							Tags:       fileTags,
+							Popularity: pop,
+							Radius:     radius,
+							Color:      color,
 						}
 					}
 				}
+				// Background: DefaultTSNE com mais iteracoes melhora ainda mais
 				ctx.Watcher.QueueReproject()
 			}
 		}
