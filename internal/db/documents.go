@@ -193,3 +193,14 @@ func (s *Store) GetDistinctFiles() ([]string, error) {
 	}
 	return files, rows.Err()
 }
+
+// SearchDocumentText returns the count of documents whose texto column contains the given substring.
+// Usado para verificar se uma imagem ainda é referenciada por alguma nota.
+func (s *Store) SearchDocumentText(substring string) (int, error) {
+	var count int
+	err := s.DB.QueryRow(
+		"SELECT COUNT(*) FROM documents WHERE texto LIKE ?",
+		"%"+substring+"%",
+	).Scan(&count)
+	return count, err
+}

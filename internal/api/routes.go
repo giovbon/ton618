@@ -56,6 +56,9 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /file/delete", ctx.HandleFileDelete)
 	mux.HandleFunc("POST /file/rename", ctx.HandleFileRename)
 	mux.HandleFunc("POST /upload", ctx.HandleUpload)
+	mux.HandleFunc("POST /api/upload-image", ctx.HandleUploadImage)
+	mux.HandleFunc("POST /api/cleanup-images", ctx.HandleCleanupImages)
+	mux.HandleFunc("POST /api/merge-notes", ctx.HandleMergeNotes)
 
 	// API
 	mux.Handle("POST /api/capture", embedLimiter.Middleware(http.HandlerFunc(ctx.HandleCapture)))
@@ -69,6 +72,9 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
 	mux.HandleFunc("POST /api/bulk-delete", ctx.HandleBulkDelete)
+	mux.HandleFunc("POST /api/bulk-archive", ctx.HandleBulkArchive)
+	mux.HandleFunc("GET /api/archives", ctx.HandleListArchives)
+	mux.HandleFunc("POST /api/archive/restore", ctx.HandleRestoreArchive)
 	mux.HandleFunc("POST /api/toggle-embed", ctx.HandleToggleEmbed)
 
 	// Static files

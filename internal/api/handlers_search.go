@@ -1,8 +1,11 @@
 package api
 
 import (
+	"archive/zip"
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +20,7 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/index"
+	"ton618/internal/watcher"
 )
 
 // buildContextSnippet gera um trecho do texto com contexto ao redor de termos encontrados.
@@ -278,7 +282,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 }
 
 // ── Bulk Delete (Config → Exclusão) ──
-
+// Aceita tanto filtros (by_age, by_tag) quanto lista explícita (files[]).
 func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Request) {
 	byAge := r.FormValue("by_age") == "true"
 	byTag := r.FormValue("by_tag") == "true"
@@ -286,13 +290,27 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 	tagNamesRaw := strings.TrimSpace(r.FormValue("tag_name"))
 	isPreview := r.FormValue("preview") == "true"
 
-	if !byAge && !byTag {
-		http.Error(w, "pelo menos um filtro deve estar ativo", http.StatusBadRequest)
-		return
-	}
+	// Suporta lista explícita de arquivos (enviada pelo frontend com checkboxes)
+	explicitFiles := r.Form["files"]
 
 	filesToDelete := make(map[string]bool)
 	firstFilter := true
+
+	// Se recebeu lista explícita, usa ela diretamente
+	if len(explicitFiles) > 0 {
+		for _, f := range explicitFiles {
+			f = strings.TrimSpace(f)
+			if f != "" {
+				filesToDelete[f] = true
+			}
+		}
+		firstFilter = false
+	}
+
+	if len(explicitFiles) == 0 && !byAge && !byTag {
+		http.Error(w, "pelo menos um filtro ou lista de arquivos deve estar ativo", http.StatusBadRequest)
+		return
+	}
 
 	// Filter 1: by age
 	if byAge {
@@ -405,5 +423,412 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"deleted": deleted,
 		"errors":  errors,
+	})
+}
+
+// ── Bulk Archive (Config → Arquivamento) ──
+// HandleBulkArchive recebe uma lista de arquivos selecionados, cria um ZIP
+// em docs/archives/ e remove os arquivos originais + indices do DB.
+func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	files := r.Form["files"]
+	if len(files) == 0 {
+		http.Error(w, "nenhum arquivo selecionado", http.StatusBadRequest)
+		return
+	}
+
+	// Gera nome unico para o archive
+	randBytes := make([]byte, 4)
+	rand.Read(randBytes)
+	ts := time.Now().Format("2006-01-02_150405")
+	archiveName := fmt.Sprintf("archive-%s-%x.zip", ts, randBytes)
+
+	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
+	os.MkdirAll(archiveDir, 0755)
+	archivePath := filepath.Join(archiveDir, archiveName)
+
+	// Cria o ZIP com os arquivos selecionados
+	zipFile, err := os.Create(archivePath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("erro ao criar archive: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer zipFile.Close()
+
+	zw := zip.NewWriter(zipFile)
+	var archivedFiles []string
+	var archiveErrors []string
+
+	for _, arquivo := range files {
+		arquivo = strings.TrimSpace(arquivo)
+		if arquivo == "" {
+			continue
+		}
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+
+		// Le o conteudo do arquivo
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: nao encontrado", arquivo))
+			} else {
+				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: %v", arquivo, err))
+			}
+			continue
+		}
+
+		// Adiciona ao ZIP preservando o caminho relativo (ex: notes/foo.md, pdfs/bar.pdf)
+		f, err := zw.Create(arquivo)
+		if err != nil {
+			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro no zip: %v", arquivo, err))
+			continue
+		}
+		if _, err := f.Write(content); err != nil {
+			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao escrever: %v", arquivo, err))
+			continue
+		}
+
+		// Remove do DB e do filesystem
+		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao remover: %v", arquivo, err))
+		}
+
+		ctx.Store.DeleteEmbeddingsByFile(arquivo)
+		ctx.Store.DeleteDocumentsByFile(arquivo)
+		ctx.Store.DeleteFTSByFile(arquivo)
+		ctx.Store.DeleteFileMod(arquivo)
+		ctx.Store.ResetPopularity(arquivo)
+		ctx.Store.SetFileTags(arquivo, nil)
+
+		archivedFiles = append(archivedFiles, arquivo)
+	}
+
+	zw.Close()
+
+	// Registra o archive no file_mods (para aparecer na busca compacta)
+	// mas NÃO cria documento FTS — archives não têm conteúdo pesquisável.
+	ctx.Store.SetFileMod("archives/"+archiveName, time.Now().Format(time.RFC3339))
+	ctx.Store.SetFileTags("archives/"+archiveName, []string{"arquivo"})
+
+	slog.Info("Archive criado", "archive", archiveName, "arquivos", len(archivedFiles))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":       true,
+		"archive":  archiveName,
+		"archived": len(archivedFiles),
+		"errors":   archiveErrors,
+	})
+}
+
+// ── List Archives ──
+// HandleListArchives retorna a lista de archives disponiveis (arquivos ZIP em docs/archives/).
+func (ctx *HandlerContext) HandleListArchives(w http.ResponseWriter, r *http.Request) {
+	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		// Directory might not exist yet
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"archives": []map[string]string{},
+		})
+		return
+	}
+
+	type archiveInfo struct {
+		Name      string `json:"name"`
+		Size      int64  `json:"size"`
+		Modified  string `json:"modified"`
+		FileCount int    `json:"file_count"`
+	}
+
+	var archives []archiveInfo
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Conta quantos arquivos estao no ZIP (le o index do ZIP)
+		zipPath := filepath.Join(archiveDir, entry.Name())
+		fc := countFilesInZip(zipPath)
+
+		archives = append(archives, archiveInfo{
+			Name:      entry.Name(),
+			Size:      info.Size(),
+			Modified:  info.ModTime().Format(time.RFC3339),
+			FileCount: fc,
+		})
+	}
+
+	// Ordena do mais recente para o mais antigo
+	sort.Slice(archives, func(i, j int) bool {
+		return archives[i].Modified > archives[j].Modified
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"archives": archives,
+	})
+}
+
+func countFilesInZip(zipPath string) int {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return 0
+	}
+	defer r.Close()
+	return len(r.File)
+}
+
+// ── Restore Archive ──
+// HandleRestoreArchive extrai um ZIP de archives/ de volta para os diretorios originais
+// e reindexa todos os arquivos restaurados.
+func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	archiveName := strings.TrimSpace(r.FormValue("archive"))
+	if archiveName == "" {
+		http.Error(w, "archive name required", http.StatusBadRequest)
+		return
+	}
+
+	// Seguranca: impede path traversal
+	if strings.Contains(archiveName, "..") || strings.Contains(archiveName, "/") {
+		http.Error(w, "invalid archive name", http.StatusBadRequest)
+		return
+	}
+
+	archivePath := filepath.Join(ctx.Cfg.DocsDir, "archives", archiveName)
+
+	// Abre o ZIP
+	rZip, err := zip.OpenReader(archivePath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("erro ao abrir archive: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rZip.Close()
+
+	var restoredFiles []string
+	var restoreErrors []string
+
+	for _, f := range rZip.File {
+		// Seguranca: impede path traversal dentro do ZIP
+		if strings.Contains(f.Name, "..") {
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: caminho invalido", f.Name))
+			continue
+		}
+
+		// O caminho dentro do ZIP ja e relativo (ex: notes/foo.md, pdfs/bar.pdf)
+		targetPath := filepath.Join(ctx.Cfg.DocsDir, f.Name)
+
+		// Garante que o diretorio de destino existe
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar diretorio: %v", f.Name, err))
+			continue
+		}
+
+		// Extrai o arquivo
+		rc, err := f.Open()
+		if err != nil {
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao abrir no zip: %v", f.Name, err))
+			continue
+		}
+
+		outFile, err := os.Create(targetPath)
+		if err != nil {
+			rc.Close()
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar: %v", f.Name, err))
+			continue
+		}
+
+		if _, err := io.Copy(outFile, rc); err != nil {
+			outFile.Close()
+			rc.Close()
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao extrair: %v", f.Name, err))
+			continue
+		}
+		outFile.Close()
+		rc.Close()
+
+		restoredFiles = append(restoredFiles, f.Name)
+	}
+
+	// Reindexa todos os arquivos restaurados
+	for _, arquivo := range restoredFiles {
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+
+		ev := watcher.FileEvent{
+			Path:     fullPath,
+			Filename: arquivo,
+			ModTime:  info.ModTime(),
+			Type:     "create",
+		}
+		if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, ctx.Cfg.EmbeddingAll); err != nil {
+			slog.Error("reindex archive file", "arquivo", arquivo, "error", err)
+		}
+	}
+
+	// Remove o arquivo ZIP do archive (ja foi restaurado)
+	ctx.Store.DeleteDocumentsByFile("archives/" + archiveName)
+	ctx.Store.DeleteFTSByFile("archives/" + archiveName)
+	ctx.Store.DeleteFileMod("archives/" + archiveName)
+	ctx.Store.SetFileTags("archives/"+archiveName, nil)
+	os.Remove(archivePath)
+
+	slog.Info("Archive restaurado", "archive", archiveName, "arquivos", len(restoredFiles))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":       true,
+		"restored": len(restoredFiles),
+		"files":    restoredFiles,
+		"errors":   restoreErrors,
+	})
+}
+
+// ── Merge Notes ──
+// HandleMergeNotes recebe uma lista de notas, mescla o conteúdo em uma nova
+// nota e exclui as originais. A ordem da lista define a ordem do conteúdo final.
+func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	files := r.Form["files"]
+	if len(files) < 2 {
+		http.Error(w, "pelo menos 2 notas sao necessarias", http.StatusBadRequest)
+		return
+	}
+
+	// Lê o conteúdo e tags de cada nota
+	var contents []string
+	var mergedTags []string
+	var allErrors []string
+	fmRegex := regexp.MustCompile(`(?s)^---\n.*?\n---\n?`)
+
+	for _, arquivo := range files {
+		arquivo = strings.TrimSpace(arquivo)
+		if arquivo == "" {
+			continue
+		}
+		if !strings.HasPrefix(arquivo, "notes/") {
+			allErrors = append(allErrors, fmt.Sprintf("%s: nao e uma nota valida", arquivo))
+			continue
+		}
+
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao ler: %v", arquivo, err))
+			continue
+		}
+		// Remove o frontmatter de cada nota (apenas o conteúdo)
+		body := fmRegex.ReplaceAllString(string(data), "")
+		body = strings.TrimSpace(body)
+		if body != "" {
+			contents = append(contents, body)
+		}
+
+		// Pega as tags da primeira nota
+		if len(mergedTags) == 0 {
+			tags, _ := ctx.Store.GetFileTags(arquivo)
+			mergedTags = tags
+		}
+	}
+
+	if len(contents) < 2 {
+		http.Error(w, "nao foi possivel ler notas suficientes", http.StatusBadRequest)
+		return
+	}
+
+	// Concatena os conteúdos com separador (quebra de linha + --- + quebra de linha)
+	mergedContent := strings.Join(contents, "\n\n---\n\n")
+
+	// Gera nome para a nova nota
+	ts := time.Now().UnixMilli()
+	newName := fmt.Sprintf("notes/mesclado-%d.md", ts)
+	newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+
+	// Garante que o diretório existe
+	os.MkdirAll(filepath.Dir(newPath), 0755)
+
+	// Escreve o arquivo mesclado
+	if err := os.WriteFile(newPath, []byte(mergedContent), 0644); err != nil {
+		http.Error(w, fmt.Sprintf("erro ao criar nota mesclada: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Processa a nova nota
+	watcher.MarkRecentlyProcessed(newName)
+	info, _ := os.Stat(newPath)
+	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+		Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
+	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+
+	// Aplica as tags da primeira nota à nova nota
+	if len(mergedTags) > 0 {
+		ctx.Store.SetFileTags(newName, mergedTags)
+	}
+
+	// Deleta as notas originais
+	var deleted int
+	for _, arquivo := range files {
+		arquivo = strings.TrimSpace(arquivo)
+		if arquivo == "" {
+			continue
+		}
+		if arquivo == newName {
+			continue
+		}
+
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao excluir: %v", arquivo, err))
+			continue
+		}
+
+		ctx.Store.DeleteDocumentsByFile(arquivo)
+		ctx.Store.DeleteFTSByFile(arquivo)
+		ctx.Store.DeleteEmbeddingsByFile(arquivo)
+		ctx.Store.DeleteFileMod(arquivo)
+		ctx.Store.ResetPopularity(arquivo)
+		ctx.Store.SetFileTags(arquivo, nil)
+		deleted++
+	}
+
+	slog.Info("Notas mescladas", "nova", newName, "originais", deleted)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":       true,
+		"filename": newName,
+		"deleted":  deleted,
+		"errors":   allErrors,
 	})
 }

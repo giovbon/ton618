@@ -1,6 +1,6 @@
 # TON-618 v2 — Contexto do Projeto
 
-**Ultima atualizacao:** 2026-05-11
+**Ultima atualizacao:** 2026-05-28
 
 > ⚠️ **INSTRUCAO AO AGENTE:** Sempre que realizar qualquer alteracao no projeto, ADICIONE UMA ENTRADA no final da secao `## HISTORICO DE ALTERACOES` abaixo.
 
@@ -27,31 +27,29 @@ Salvo em docs/pdfs/nome-do-arquivo.pdf
        ▼
 ProcessFile → ProcessPDF()
        │
-       ├── 1. Extrai texto de TODAS as paginas
-       ├── 2. Cria documento FTS5 com o texto COMPLETO
-       ├── 3. Gera embedding do texto COMPLETO (sempre, independente de tags)
-       ├── 4. Extrai top 30 keywords para boost de relevancia na busca
-       └── 5. Redireciona para pagina inicial (modo compacto)
+       ├── 1. Cria registro mínimo no FTS5 (apenas título, SEM texto extraído)
+       ├── 2. Redireciona para pagina inicial (modo compacto)
+       └── NOTA: Não extrai mais o texto completo do PDF
 ```
 
 ### Processamento (internal/processor/pdf.go)
 
 | Etapa | Detalhes |
 |---|---|
-| **Biblioteca** | `github.com/ledongthuc/pdf` — puro Go, sem CGO |
-| **Extracao de texto** | Todas as paginas, texto puro (plain text) |
-| **Keywords** | Top 30 termos mais frequentes apos remover stopwords (NLTK pt + en, ~310 palavras) |
-| **Armazenamento** | `doc.Texto` = texto completo \| `doc.Tags` = 30 keywords (para peso no FTS5) |
+| **Extracao de texto** | ❌ **DESATIVADA** — não extrai mais o texto do PDF |
+| **Armazenamento** | `doc.Texto` = `""` (vazio) — apenas título/nome indexado no FTS5 |
+| **Tags** | `["pdf"]` — identificador de tipo |
 
-### Embedding
+### Comportamento atual
 
-Diferente das notas markdown (que seguem a tag `embed` ou a flag `EMBEDDING_ALL`), **PDFs sao SEMPRE embedados** automaticamente, desde que haja um provider de embedding configurado.
+Desde 2026-05-28, **PDFs não têm mais o texto completo extraído** para evitar poluir a busca global com conteúdo de livros inteiros. O que muda:
 
-O embedding usa o texto completo do PDF (`secao + texto`), nao apenas as keywords.
+- **Busca compacta**: PDF continua aparecendo normalmente (por nome de arquivo)
+- **Busca global**: PDF pode ser encontrado pelo **título** e **nome do arquivo** (colunas `secao` e `arquivo` com peso 10× e 20× no FTS5)
+- **Embedding**: não é gerado embedding (texto vazio)
+- **Mapa semântico**: PDF continua aparecendo como nó normal com ícone 📕
 
-### Busca (FTS5)
-
-O texto completo do PDF e indexado no FTS5, tornando-o buscavel pela busca global. As 30 keywords ficam na coluna `tags` do indice FTS5 com **peso 50×**, dando um boost de relevancia quando o termo pesquisado esta entre as palavras mais frequentes do PDF.
+> ⚠️ Se precisar do texto completo indexado para um PDF específico, use o toggle de embedding na interface ou converta o PDF para markdown manualmente.
 
 ### Mapa Semantico
 
@@ -129,3 +127,24 @@ Os arquivos PDF ficam em `docs/pdfs/`. O diretorio e criado automaticamente no s
 - **Heatmap de densidade:** Substitui o Voronoi por acúmulo de gradientes radiais gaussianos — mostra concentrações naturais de notas sem fronteiras artificiais.
 - **`GetAllFileEmbeddings()`:** Nova query com JOIN que carrega embeddings + arquivo em 1 consulta (não N+1).
 - D3.js removido do mapa (não é mais necessário).
+
+### 2026-05-28 — Arquivamento de notas (substitui exclusão em massa)
+- **Nova funcionalidade:** Notas podem ser arquivadas em ZIP e restauradas depois
+- **Aba "Arquivamento"** substitui "Exclusão" como tab principal: preview com checkboxes, selecionar/desselecionar todos, "Arquivar Selecionadas" (zipa e move para `docs/archives/`) e "Excluir Selecionadas" (permanente)
+- **Aba "Restaurar"** lista archives disponíveis com botão "Restaurar" que extrai o ZIP de volta para os diretórios originais e reindexa
+- **Endpoint `POST /api/bulk-archive`:** recebe lista de arquivos, cria ZIP em `docs/archives/`, remove do DB e filesystem
+- **Endpoint `GET /api/archives`:** lista archives com metadados (arquivos, tamanho, data)
+- **Endpoint `POST /api/archive/restore`:** extrai ZIP, reindexa via watcher, remove o archive
+- **`HandleBulkDelete`** atualizado para aceitar `files[]` explícito (seleção via checkbox)
+- Diretório `archives/` adicionado ao `config.EnsureDirs()` e `watcher.MonitoredSubDirs`
+- Archives são indexados no FTS5 (pesquisáveis) com lista de arquivos que contêm
+- Interface: checkboxes, contador de seleção, botões com número de itens selecionados
+
+### 2026-05-28 — PDFs: desativada extração de texto completo
+- `ProcessPDF` (`internal/processor/pdf.go`) modificado: **não extrai mais o texto completo** do PDF
+- Agora cria apenas um documento stub com `Texto: ""` — o PDF é pesquisável apenas por título (coluna `secao`) e nome de arquivo (coluna `arquivo`)
+- Motivo: livros grandes em PDF poluíam a busca global com conteúdo irrelevante
+- Documento stub mantém o PDF visível na busca compacta e no mapa semântico
+- Dependência `github.com/ledongthuc/pdf` removida do código (ainda em `go.mod`/`go.sum`)
+- Testes atualizados em `internal/processor/pdf_test.go` para refletir novo comportamento
+- `context.md` atualizado com a nova documentação

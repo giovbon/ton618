@@ -109,6 +109,7 @@
     </div>
 
     <textarea id="content-output" class="hidden">{{.Content}}</textarea>
+    <input id="editor-image-input" type="file" accept="image/*" class="hidden" />
 </div>
 
 <style>
@@ -530,6 +531,25 @@
                 action: makeSlashAction("horizontalRule"),
             },
             {
+                id: "image",
+                icon: "\uD83D\uDDBC",
+                label: "Imagem",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        var $to = editor.state.selection.$from;
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({ from: slashPos, to: $to.pos })
+                            .run();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    document.getElementById("editor-image-input").click();
+                },
+            },
+            {
                 id: "organize",
                 icon: "\u2630",
                 label: "Organizar titulos",
@@ -827,6 +847,20 @@
             },
             editorProps: {
                 attributes: { spellcheck: "false" },
+                handlePaste: function (view, event) {
+                    var items = event.clipboardData && event.clipboardData.items;
+                    if (!items) return false;
+                    for (var i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf("image") === 0) {
+                            event.preventDefault();
+                            var file = items[i].getAsFile();
+                            if (!file) return true;
+                            uploadAndInsertImage(file);
+                            return true;
+                        }
+                    }
+                    return false;
+                },
                 handleKeyDown: function (view, event) {
                     if (
                         event.key === "Backspace" &&
@@ -1499,6 +1533,37 @@
                 })
                 .catch(function () {});
         }
+
+        // ── Image upload: usada tanto pelo slash command quanto pelo Ctrl+V ──
+        async function uploadAndInsertImage(file) {
+            var fd = new FormData();
+            fd.append("file", file);
+
+            try {
+                var resp = await fetch("/api/upload-image", {
+                    method: "POST",
+                    body: fd,
+                });
+                var data = await resp.json();
+                if (data.ok && editor) {
+                    editor.chain().focus().setImage({ src: data.url }).run();
+                    setStatus("dirty");
+                } else {
+                    alert("Erro ao fazer upload da imagem: " + (data.error || "desconhecido"));
+                }
+            } catch (err) {
+                alert("Erro ao fazer upload da imagem: " + err.message);
+            }
+        }
+
+        document
+            .getElementById("editor-image-input")
+            .addEventListener("change", async function (e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                e.target.value = ""; // reset para poder selecionar o mesmo arquivo de novo
+                await uploadAndInsertImage(file);
+            });
 
         setTimeout(checkEmbedStatus, 500);
 

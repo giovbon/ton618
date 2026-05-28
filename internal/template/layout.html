@@ -424,22 +424,30 @@
                 <!-- Tabs -->
                 <div class="flex gap-0 px-6 pt-4 border-b border-zinc-800">
                     <button
-                        data-tab="exclusao"
-                        onclick="switchSettingsTab('exclusao')"
+                        data-tab="arquivamento"
+                        onclick="switchSettingsTab('arquivamento')"
                         class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors"
                     >
-                        🗑️ Exclusão
+                        🗂️ Arquivamento
+                    </button>
+                    <button
+                        data-tab="restaurar"
+                        onclick="switchSettingsTab('restaurar'); loadArchives()"
+                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
+                    >
+                        📦 Restaurar
                     </button>
                 </div>
 
                 <!-- Tab Content -->
                 <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-                    <!-- Exclusão Tab -->
-                    <div id="tab-exclusao" class="settings-tab space-y-6">
+                    <!-- Arquivamento Tab -->
+                    <div id="tab-arquivamento" class="settings-tab space-y-6">
                         <p class="text-sm text-zinc-400">
-                            Configure filtros progressivos para exclusão de
-                            notas. Os filtros ativos são combinados
-                            (interseção).
+                            Selecione filtros para encontrar notas, marque quais
+                            arquivar e clique em "Arquivar Selecionadas". As
+                            notas serão zipadas e movidas para a pasta de
+                            arquivos mortos, podendo ser restauradas depois.
                         </p>
 
                         <!-- Filtro 1: Por Idade -->
@@ -456,7 +464,7 @@
                                 />
                                 <span
                                     class="text-sm font-semibold text-zinc-200"
-                                    >Excluir por idade</span
+                                    >Filtrar por idade</span
                                 >
                             </label>
                             <div class="ml-7 space-y-2">
@@ -501,12 +509,12 @@
                                 />
                                 <span
                                     class="text-sm font-semibold text-zinc-200"
-                                    >Excluir por tag(s)</span
+                                    >Filtrar por tag(s)</span
                                 >
                             </label>
                             <div class="ml-7">
                                 <label class="block text-xs text-zinc-500 mb-2"
-                                    >Excluir notas que contenham estas tags
+                                    >Notas que contenham estas tags
                                     (separadas por vírgula):</label
                                 >
                                 <input
@@ -537,6 +545,21 @@
                                         class="text-[10px] text-zinc-600"
                                     ></span>
                                 </div>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <button
+                                        onclick="selectAllPreview(true)"
+                                        class="text-[10px] font-semibold text-sky-400 hover:text-sky-300 transition-colors"
+                                    >
+                                        ✓ Selecionar Todos
+                                    </button>
+                                    <span class="text-zinc-700 text-[10px]">|</span>
+                                    <button
+                                        onclick="selectAllPreview(false)"
+                                        class="text-[10px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    >
+                                        ✕ Desmarcar Todos
+                                    </button>
+                                </div>
                                 <div id="preview-list" class="space-y-1"></div>
                             </div>
                             <div
@@ -558,13 +581,22 @@
                                     Próximo →
                                 </button>
                             </div>
-                            <button
-                                id="confirm-delete-btn"
-                                onclick="doBulkDelete()"
-                                class="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
-                            >
-                                Confirmar Exclusão
-                            </button>
+                            <div class="flex gap-2">
+                                <button
+                                    id="confirm-archive-btn"
+                                    onclick="doBulkArchive()"
+                                    class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
+                                >
+                                    📦 Arquivar Selecionadas
+                                </button>
+                                <button
+                                    id="confirm-delete-btn"
+                                    onclick="doBulkDelete()"
+                                    class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
+                                >
+                                    🗑️ Excluir Selecionadas
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Action -->
@@ -575,7 +607,39 @@
                         >
                             🔍 Previsualizar Notas
                         </button>
+
+                        <!-- Cleanup orphan images -->
+                        <div class="border-t border-zinc-800 pt-4">
+                            <p class="text-[10px] text-zinc-600 mb-2">
+                                Imagens enviadas pelo editor que não são mais
+                                referenciadas por nenhuma nota podem ser
+                                removidas para liberar espaço.
+                            </p>
+                            <button
+                                id="cleanup-images-btn"
+                                onclick="cleanupOrphanImages()"
+                                class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors"
+                            >
+                                🧹 Limpar imagens órfãs
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- Restaurar Tab -->
+                    <div id="tab-restaurar" class="settings-tab hidden space-y-6">
+                        <p class="text-sm text-zinc-400">
+                            Arquivos de notas archivadas. Restaure para
+                            trazer as notas de volta ao diretório de trabalho.
+                        </p>
+                        <div id="archives-list">
+                            <div class="text-center py-10">
+                                <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                                <p class="text-xs text-zinc-600">Carregando...</p>
+                            </div>
+                        </div>
+                    </div>
+
+
                 </div>
             </div>
         </div>
@@ -877,16 +941,74 @@
                 .scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
 
+        var selectedFiles = {};
+        var allPreviewFiles = [];
+
+        function selectAllPreview(select) {
+            allPreviewFiles.forEach(function (f) {
+                selectedFiles[f] = select;
+                var cb = document.querySelector(
+                    'input[data-file="' + f.replace(/"/g, '\\"') + '"]',
+                );
+                if (cb) cb.checked = select;
+            });
+            updateArchiveBtn();
+        }
+
+        function updateArchiveBtn() {
+            var count = Object.keys(selectedFiles).filter(function (k) {
+                return selectedFiles[k];
+            }).length;
+            var btn = document.getElementById("confirm-archive-btn");
+            if (count > 0) {
+                btn.disabled = false;
+                btn.textContent = "📦 Arquivar (" + count + ")";
+            } else {
+                btn.disabled = true;
+                btn.textContent = "📦 Arquivar Selecionadas";
+            }
+            var delBtn = document.getElementById("confirm-delete-btn");
+            if (count > 0) {
+                delBtn.disabled = false;
+                delBtn.textContent = "🗑️ Excluir (" + count + ")";
+            } else {
+                delBtn.disabled = true;
+                delBtn.textContent = "🗑️ Excluir Selecionadas";
+            }
+        }
+
+        function toggleFile(filename) {
+            selectedFiles[filename] = !selectedFiles[filename];
+            updateArchiveBtn();
+        }
+
         function buildPreviewItem(filename) {
             var display = filename.replace(/^notes\//, "").replace(/\.md$/, "");
+            var icon = filename.indexOf("pdfs/") === 0 ? "📕" : "📄";
+            var checked = selectedFiles[filename] ? "checked" : "";
             return (
-                '<div class="flex items-center gap-2 text-xs text-zinc-300">' +
-                '<span class="text-zinc-600">📄</span>' +
+                '<div class="flex items-center gap-2 text-xs text-zinc-300 py-1">' +
+                '<input type="checkbox" data-file="' +
+                filename.replace(/"/g, "&quot;") +
+                '" ' +
+                checked +
+                ' onchange="toggleFile(\'' +
+                filename.replace(/'/g, "\\'") +
+                '\')" class="accent-sky-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer" />' +
+                '<span class="text-zinc-600 shrink-0">' +
+                icon +
+                "</span>" +
                 "<span>" +
                 display +
                 "</span>" +
                 "</div>"
             );
+        }
+
+        function getSelectedFiles() {
+            return allPreviewFiles.filter(function (f) {
+                return selectedFiles[f];
+            });
         }
 
         function previewBulkDelete() {
@@ -925,13 +1047,23 @@
                     var area = document.getElementById("bulk-preview-area");
 
                     if (data.files && data.files.length > 0) {
+                        allPreviewFiles = data.files;
                         previewFiles = data.files;
                         previewPageNum = 0;
+
+                        // Inicializa selecao: todos marcados por padrao
+                        allPreviewFiles.forEach(function (f) {
+                            selectedFiles[f] = true;
+                        });
+
                         renderPreviewPage();
+                        updateArchiveBtn();
                         area.classList.remove("hidden");
                     } else {
+                        allPreviewFiles = [];
                         previewFiles = [];
                         previewPageNum = 0;
+                        selectedFiles = {};
                         area.classList.add("hidden");
                         alert(
                             "Nenhuma nota encontrada com os filtros selecionados.",
@@ -946,24 +1078,17 @@
         }
 
         function doBulkDelete() {
-            var p = getFilterParams();
-
-            // Build description for confirmation
-            var parts = [];
-            if (p.byAge)
-                parts.push(
-                    "mais velhas que " +
-                        p.ageYears +
-                        (p.ageYears === 1 ? " ano" : " anos"),
-                );
-            if (p.byTag) parts.push('com as tag(s): "' + p.tagRaw + '"');
-            var desc = parts.join(" e ");
+            var selected = getSelectedFiles();
+            if (selected.length === 0) {
+                alert("Nenhuma nota selecionada.");
+                return;
+            }
 
             if (
                 !confirm(
-                    "Tem certeza que deseja excluir TODAS as notas " +
-                        desc +
-                        "? Esta ação não pode ser desfeita.",
+                    "Tem certeza que deseja EXCLUIR PERMANENTEMENTE " +
+                        selected.length +
+                        " nota(s)? Esta ação não pode ser desfeita.",
                 )
             )
                 return;
@@ -972,11 +1097,11 @@
             btn.disabled = true;
             btn.textContent = "Excluindo...";
 
+            // Envia a lista de arquivos selecionados
             var formData = new URLSearchParams();
-            formData.set("by_age", p.byAge ? "true" : "false");
-            formData.set("age_years", p.ageYears.toString());
-            formData.set("by_tag", p.byTag ? "true" : "false");
-            formData.set("tag_name", p.tagRaw);
+            selected.forEach(function (f) {
+                formData.append("files", f);
+            });
 
             fetch("/api/bulk-delete", {
                 method: "POST",
@@ -994,7 +1119,7 @@
                 })
                 .then(function (data) {
                     btn.disabled = false;
-                    btn.textContent = "Confirmar Exclusão";
+                    btn.textContent = "🗑️ Excluir Selecionadas";
                     alert(
                         "Excluídas " + data.deleted + " nota(s) com sucesso!",
                     );
@@ -1005,7 +1130,213 @@
                 })
                 .catch(function (err) {
                     btn.disabled = false;
-                    btn.textContent = "Confirmar Exclusão";
+                    btn.textContent = "🗑️ Excluir Selecionadas";
+                    alert("Erro: " + err.message);
+                });
+        }
+
+        // ── Bulk Archive ──
+        function doBulkArchive() {
+            var selected = getSelectedFiles();
+            if (selected.length === 0) {
+                alert("Nenhuma nota selecionada.");
+                return;
+            }
+
+            if (
+                !confirm(
+                    "Arquivar " +
+                        selected.length +
+                        " nota(s)? Elas serão zipadas e movidas para a pasta de arquivos mortos.",
+                )
+            )
+                return;
+
+            var btn = document.getElementById("confirm-archive-btn");
+            btn.disabled = true;
+            btn.textContent = "Arquivando...";
+
+            var formData = new URLSearchParams();
+            selected.forEach(function (f) {
+                formData.append("files", f);
+            });
+
+            fetch("/api/bulk-archive", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: formData.toString(),
+            })
+                .then(function (r) {
+                    if (!r.ok)
+                        return r.text().then(function (t) {
+                            throw new Error(t);
+                        });
+                    return r.json();
+                })
+                .then(function (data) {
+                    btn.disabled = false;
+                    btn.textContent = "📦 Arquivar Selecionadas";
+                    if (data.ok) {
+                        alert(
+                            "Arquivadas " +
+                                data.archived +
+                                " nota(s) com sucesso!\nArquivo: " +
+                                data.archive,
+                        );
+                        closeSettings();
+                        if (window.location.pathname === "/") {
+                            window.location.reload();
+                        }
+                    }
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = "📦 Arquivar Selecionadas";
+                    alert("Erro ao arquivar: " + err.message);
+                });
+        }
+
+        // ── List Archives ──
+        function loadArchives() {
+            var list = document.getElementById("archives-list");
+            list.innerHTML =
+                '<div class="text-center py-10"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
+
+            fetch("/api/archives")
+                .then(function (r) {
+                    if (!r.ok) throw new Error("Erro ao carregar archives");
+                    return r.json();
+                })
+                .then(function (data) {
+                    var archives = data.archives || [];
+                    if (archives.length === 0) {
+                        list.innerHTML =
+                            '<div class="text-center py-10"><p class="text-xs text-zinc-500">Nenhum archive encontrado.</p></div>';
+                        return;
+                    }
+                    var html =
+                        '<div class="space-y-2">';
+                    archives.forEach(function (a) {
+                        var sizeStr = a.size > 1024 * 1024
+                            ? (a.size / 1024 / 1024).toFixed(1) + " MB"
+                            : a.size > 1024
+                              ? (a.size / 1024).toFixed(1) + " KB"
+                              : a.size + " B";
+                        var dateStr = a.modified
+                            ? new Date(a.modified).toLocaleDateString("pt-BR")
+                            : "?";
+                        html +=
+                            '<div class="flex items-center justify-between gap-3 bg-zinc-800/40 rounded-xl p-3 border border-zinc-700/50">' +
+                            '<div class="flex-1 min-w-0">' +
+                            '<div class="text-sm font-semibold text-zinc-200 truncate">📦 ' +
+                            a.name +
+                            "</div>" +
+                            '<div class="text-[10px] text-zinc-500 mt-0.5">' +
+                            a.file_count +
+                            " arquivo(s) · " +
+                            sizeStr +
+                            " · " +
+                            dateStr +
+                            "</div>" +
+                            "</div>" +
+                            '<button onclick="restoreArchive(\'' +
+                            a.name.replace(/'/g, "\\'") +
+                            '\')" class="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors restore-btn">Restaurar</button>' +
+                            "</div>";
+                    });
+                    html += "</div>";
+                    list.innerHTML = html;
+                })
+                .catch(function (err) {
+                    list.innerHTML =
+                        '<div class="text-center py-10"><p class="text-xs text-red-400">Erro: ' +
+                        err.message +
+                        "</p></div>";
+                });
+        }
+
+        function restoreArchive(name) {
+            if (
+                !confirm(
+                    'Restaurar o archive "' +
+                        name +
+                        '"? As notas serão extraídas de volta para o diretório de trabalho.',
+                )
+            )
+                return;
+
+            var btns = document.querySelectorAll(".restore-btn");
+            btns.forEach(function (b) {
+                b.disabled = true;
+                b.textContent = "Restaurando...";
+            });
+
+            var formData = new URLSearchParams();
+            formData.set("archive", name);
+
+            fetch("/api/archive/restore", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: formData.toString(),
+            })
+                .then(function (r) {
+                    if (!r.ok)
+                        return r.text().then(function (t) {
+                            throw new Error(t);
+                        });
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data.ok) {
+                        alert(
+                            "Archive restaurado com sucesso!\n" +
+                                data.restored +
+                                " arquivo(s) restaurados.",
+                        );
+                        closeSettings();
+                        if (window.location.pathname === "/") {
+                            window.location.reload();
+                        }
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro ao restaurar: " + err.message);
+                    btns.forEach(function (b) {
+                        b.disabled = false;
+                        b.textContent = "Restaurar";
+                    });
+                });
+        }
+
+        // ── Cleanup Orphan Images ──
+        function cleanupOrphanImages() {
+            var btn = document.getElementById("cleanup-images-btn");
+            if (!confirm(
+                "Remover imagens que não são mais referenciadas por nenhuma nota?"
+            )) return;
+            btn.disabled = true;
+            btn.textContent = "Limpando...";
+            fetch("/api/cleanup-images", { method: "POST" })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    btn.disabled = false;
+                    btn.textContent = "🧹 Limpar imagens órfãs";
+                    if (data.ok) {
+                        var msg = data.count > 0
+                            ? data.count + " imagem(ns) órfã(s) removida(s)!"
+                            : "Nenhuma imagem órfã encontrada.";
+                        alert(msg);
+                    } else {
+                        alert("Erro: " + (data.error || "desconhecido"));
+                    }
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = "🧹 Limpar imagens órfãs";
                     alert("Erro: " + err.message);
                 });
         }

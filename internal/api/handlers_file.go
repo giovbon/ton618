@@ -96,7 +96,47 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Para arquivos .md e imagens, usa o comportamento anterior
+	// Archives (ZIPs): download igual anexos
+	if strings.HasPrefix(raw, "archives/") || strings.HasPrefix(raw, "archives\\") {
+		basename := filepath.Base(raw)
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, "archives", basename)
+		if _, err := os.Stat(fullPath); err == nil {
+			w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
+			w.Header().Set("Content-Type", "application/zip")
+			http.ServeFile(w, r, fullPath)
+			return
+		}
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	// Imagens: serve direto do diretório notes/
+	imageExts := []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+	isImage := false
+	for _, ie := range imageExts {
+		if ext == ie {
+			isImage = true
+			break
+		}
+	}
+	if isImage {
+		basename := filepath.Base(raw)
+		// Se já tem prefixo notes/, usa direto; senão força notes/
+		prefix := ""
+		if strings.HasPrefix(raw, "notes/") || strings.HasPrefix(raw, "notes\\") {
+			prefix = "notes/"
+		}
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, prefix, basename)
+		if _, err := os.Stat(fullPath); err == nil {
+			ctx.Store.IncrementPopularity(prefix + basename)
+			http.ServeFile(w, r, fullPath)
+			return
+		}
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	// Para arquivos .md, usa o comportamento anterior
 	filename := sanitizeFilename(raw)
 	ctx.Store.IncrementPopularity(filename)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
@@ -115,7 +155,7 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "docs/", "voice/"}
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "docs/", "voice/", "archives/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -533,6 +573,153 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 
 	// Redireciona para a pagina inicial (modo compacto)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// ── Upload Image (from editor, returns JSON) ──
+
+// HandleUploadImage recebe uma imagem, salva em notes/ e retorna JSON com a URL.
+// Diferente do HandleUpload, não redireciona — usado pelo editor via fetch.
+func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.ParseMultipartForm(10 << 20) // 10MB
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": false, "error": err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp"
+
+	if !isImage {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": false, "error": "apenas imagens (.png, .jpg, .jpeg, .gif, .webp)",
+		})
+		return
+	}
+
+	// Salva em notes/ com prefixo img_
+	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+	cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
+	filename := fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
+
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": false, "error": err.Error(),
+		})
+		return
+	}
+	defer dst.Close()
+
+	io.Copy(dst, file)
+
+	// Marca como recentemente processado para evitar race com o watcher
+	watcher.MarkRecentlyProcessed(filename)
+
+	// Processa como imagem (cria documento stub, sem FTS, sem embedding)
+	info, _ := os.Stat(fullPath)
+	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
+	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+
+	imageURL := "/file?name=" + url.QueryEscape(filename)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":       true,
+		"filename": filename,
+		"url":      imageURL,
+	})
+}
+
+// ── Cleanup Orphan Images ──
+
+// HandleCleanupImages varre o diretório notes/ em busca de arquivos img_*
+// que não são referenciados por nenhum documento (texto), e os remove
+// junto com seus registros no DB (documento stub, file_mod).
+func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
+	entries, err := os.ReadDir(notesDir)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": false, "error": err.Error(),
+		})
+		return
+	}
+
+	var removed []string
+	var errors []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Só processa arquivos com prefixo img_
+		if !strings.HasPrefix(name, "img_") {
+			continue
+		}
+		// Verifica se é extensão de imagem
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" {
+			continue
+		}
+
+		filename := "notes/" + name
+		// Verifica se a imagem é referenciada em algum documento
+		count, err := ctx.Store.SearchDocumentText(filename)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("%s: erro ao buscar: %v", name, err))
+			continue
+		}
+		if count > 0 {
+			continue // ainda referenciada
+		}
+
+		// Remove o arquivo físico
+		fullPath := filepath.Join(notesDir, name)
+		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+			errors = append(errors, fmt.Sprintf("%s: erro ao remover: %v", name, err))
+			continue
+		}
+
+		// Remove registros do DB
+		ctx.Store.DeleteDocumentsByFile(filename)
+		ctx.Store.DeleteFTSByFile(filename)
+		ctx.Store.DeleteEmbeddingsByFile(filename)
+		ctx.Store.DeleteFileMod(filename)
+		ctx.Store.ResetPopularity(filename)
+		ctx.Store.SetFileTags(filename, nil)
+
+		removed = append(removed, name)
+	}
+
+	slog.Info("Limpeza de imagens órfãs", "removidas", len(removed), "erros", len(errors))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":      true,
+		"removed": removed,
+		"count":   len(removed),
+		"errors":  errors,
+	})
 }
 
 // ── Toggle Embed ──

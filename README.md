@@ -1,4 +1,4 @@
-repomix --compress --ignore "**/*_test.go"
+repomix --remove-comments --compress --ignore "**/*_test.go"
 
 # 🌌 TON-618 v2 — Motor de Busca + Mapa Semântico Personal Knowledge Management
 
