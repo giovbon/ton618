@@ -483,11 +483,7 @@
                                     value="8"
                                     step="0.5"
                                     class="flex-1 accent-sky-500 cursor-pointer"
-                                    oninput="
-                                        document.getElementById(
-                                            'sleep-hours-display',
-                                        ).textContent = this.value + 'h'
-                                    "
+                                    oninput="updateSleepDisplay(this.value)"
                                 />
                                 <span
                                     id="sleep-hours-display"
@@ -930,6 +926,11 @@
         }
 
         // ── Sleep Hours ──
+        function updateSleepDisplay(val) {
+            document.getElementById("sleep-hours-display").textContent =
+                val + "h";
+        }
+
         function loadSleepHours() {
             fetch("/api/settings")
                 .then(function (r) {
