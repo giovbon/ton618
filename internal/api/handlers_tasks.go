@@ -22,6 +22,25 @@ func (ctx *HandlerContext) HandleTasksPage(w http.ResponseWriter, r *http.Reques
 	ctx.render(w, "tasks.html", data)
 }
 
+func (ctx *HandlerContext) HandleTaskListPage(w http.ResponseWriter, r *http.Request) {
+	ctx.render(w, "tasks.html", map[string]interface{}{
+		"Title":        "Tarefas - TON-618",
+		"ContentBlock": "taskListContent",
+	})
+}
+
+func (ctx *HandlerContext) HandleAllTasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := ctx.Tasks.GetAllTasks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tasks": tasks,
+	})
+}
+
 // ── API CRUD ──
 
 func (ctx *HandlerContext) HandleListTasks(w http.ResponseWriter, r *http.Request) {

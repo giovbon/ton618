@@ -33,6 +33,11 @@
         >
             ➕ Nova Tarefa
         </button>
+        <a
+            href="/tasks/list"
+            class="text-zinc-400 hover:text-white text-[11px] font-bold transition-colors"
+            >📋 Lista</a
+        >
     </div>
 
     <!-- Stats Cards -->
@@ -69,23 +74,17 @@
         </div>
     </div>
 
-    <!-- Charts Row -->
-    <div class="grid grid-cols-2 gap-6 mb-6">
-        <!-- Occupancy History (line chart - like stock) -->
-        <div
-            class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 col-span-2"
+    <!-- Upcoming Tasks -->
+    <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 mb-6">
+        <h3
+            class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
         >
-            <h3
-                class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
-            >
-                Histórico de Ocupação ({{.Year}})
-            </h3>
-            <div class="h-64">
-                <canvas id="occupancyChart"></canvas>
-            </div>
-        </div>
+            Próximas Tarefas
+        </h3>
+        <div id="upcoming-tasks" class="space-y-2"></div>
     </div>
 
+    <!-- Charts Row -->
     <div class="grid grid-cols-2 gap-6 mb-6">
         <!-- Category Pie -->
         <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
@@ -112,14 +111,20 @@
         </div>
     </div>
 
-    <!-- Upcoming Tasks -->
-    <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 mb-6">
-        <h3
-            class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+    <!-- Occupancy History (line chart - like stock) -->
+    <div class="grid grid-cols-2 gap-6 mb-6">
+        <div
+            class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 col-span-2"
         >
-            Próximas Tarefas
-        </h3>
-        <div id="upcoming-tasks" class="space-y-2"></div>
+            <h3
+                class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+            >
+                Histórico de Ocupação ({{.Year}})
+            </h3>
+            <div class="h-64">
+                <canvas id="occupancyChart"></canvas>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -790,4 +795,341 @@
     src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
     defer
 ></script>
+{{end}} {{define "taskListContent"}}
+<div class="tasks-root">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-black tracking-tight text-zinc-200">
+            📋 Tarefas
+        </h1>
+        <div class="flex items-center gap-3">
+            <button
+                onclick="openCreateModal()"
+                class="bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
+            >
+                ➕ Nova
+            </button>
+            <a
+                href="/tasks"
+                class="text-zinc-400 hover:text-white text-[11px] font-bold transition-colors"
+                >📊 Dashboard</a
+            >
+        </div>
+    </div>
+    <div id="task-list" class="space-y-1">
+        <div class="text-sm text-zinc-600 py-8 text-center">Carregando...</div>
+    </div>
+</div>
+
+<!-- Edit Task Modal (reuse create modal but with different title) -->
+<div
+    id="edit-modal"
+    class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm"
+>
+    <div
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl"
+    >
+        <h2 class="text-lg font-black text-zinc-200 mb-4" id="edit-modal-title">
+            Editar Tarefa
+        </h2>
+        <form
+            id="edit-form"
+            onsubmit="return editTask(event);"
+            class="space-y-3"
+        >
+            <input id="edit-task-id" type="hidden" />
+            <input
+                id="edit-task-title"
+                type="text"
+                placeholder="Título"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                required
+            />
+            <textarea
+                id="edit-task-desc"
+                placeholder="Descrição"
+                rows="2"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+            ></textarea>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Categoria</label
+                    >
+                    <input
+                        id="edit-task-category"
+                        type="text"
+                        list="cat-suggestions-edit"
+                        autocomplete="off"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                    />
+                    <datalist id="cat-suggestions-edit"></datalist>
+                </div>
+                <select
+                    id="edit-task-priority"
+                    class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                    <option value="normal">Normal</option>
+                    <option value="important">Importante</option>
+                    <option value="dispensable">Dispensável</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Início</label
+                    >
+                    <input
+                        id="edit-task-start"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Fim</label
+                    >
+                    <input
+                        id="edit-task-end"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <select
+                    id="edit-task-status"
+                    class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                    <option value="pending">Pendente</option>
+                    <option value="in_progress">Em andamento</option>
+                    <option value="done">Concluída</option>
+                    <option value="cancelled">Cancelada</option>
+                </select>
+                <div></div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeEditModal()"
+                    class="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="submit"
+                    class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
+                >
+                    Salvar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function loadTaskList() {
+        fetch("/api/tasks/all")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var tasks = data.tasks || [];
+                var el = document.getElementById("task-list");
+                if (!tasks.length) {
+                    el.innerHTML =
+                        '<div class="text-sm text-zinc-600 py-8 text-center">Nenhuma tarefa criada ainda.</div>';
+                    return;
+                }
+                var html = "";
+                tasks.forEach(function (t) {
+                    var colorDot = t.color
+                        ? '<span class="w-2 h-2 rounded-full shrink-0" style="background:' +
+                          t.color +
+                          '"></span>'
+                        : '<span class="w-2 h-2 rounded-full shrink-0 bg-zinc-700"></span>';
+                    var statusClass =
+                        {
+                            pending: "text-zinc-400",
+                            in_progress: "text-sky-400",
+                            done: "text-emerald-400",
+                            cancelled: "text-zinc-600",
+                        }[t.status] || "text-zinc-400";
+                    var statusLabel =
+                        {
+                            pending: "Pendente",
+                            in_progress: "Em andamento",
+                            done: "Concluída",
+                            cancelled: "Cancelada",
+                        }[t.status] || t.status;
+                    var start = new Date(t.start_time);
+                    var end = new Date(t.end_time);
+                    var dateStr = start.toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "short",
+                    });
+                    var timeStr =
+                        start.toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        }) +
+                        "—" +
+                        end.toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        });
+                    var priorityIcon =
+                        { important: "🔴", normal: "🔵", dispensable: "⚪" }[
+                            t.priority
+                        ] || "";
+                    html +=
+                        '<div class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-zinc-800/50 transition-colors group cursor-pointer" onclick="openEditModal(\'' +
+                        t.id +
+                        "')\">" +
+                        colorDot +
+                        '<span class="text-sm text-zinc-300 flex-1 truncate">' +
+                        priorityIcon +
+                        " " +
+                        t.title +
+                        "</span>" +
+                        '<span class="text-[10px] ' +
+                        statusClass +
+                        ' font-bold">' +
+                        statusLabel +
+                        "</span>" +
+                        '<span class="text-[10px] text-zinc-600 hidden sm:inline">' +
+                        dateStr +
+                        " " +
+                        timeStr +
+                        "</span>" +
+                        "<button onclick=\"event.stopPropagation(); deleteTaskFromList('" +
+                        t.id +
+                        '\')" class="text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs px-1" title="Excluir">✕</button>' +
+                        "</div>";
+                });
+                el.innerHTML = html;
+            })
+            .catch(function () {
+                document.getElementById("task-list").innerHTML =
+                    '<div class="text-sm text-red-400 py-8 text-center">Erro ao carregar tarefas.</div>';
+            });
+    }
+
+    function openEditModal(id) {
+        fetch("/api/tasks/all")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var task = null;
+                (data.tasks || []).forEach(function (t) {
+                    if (t.id === id) task = t;
+                });
+                if (!task) return;
+                document.getElementById("edit-task-id").value = task.id;
+                document.getElementById("edit-task-title").value = task.title;
+                document.getElementById("edit-task-desc").value =
+                    task.description || "";
+                document.getElementById("edit-task-category").value =
+                    task.category || "";
+                document.getElementById("edit-task-priority").value =
+                    task.priority || "normal";
+                document.getElementById("edit-task-status").value =
+                    task.status || "pending";
+                var startLocal = new Date(
+                    new Date(task.start_time).getTime() -
+                        new Date(task.start_time).getTimezoneOffset() * 60000,
+                )
+                    .toISOString()
+                    .slice(0, 16);
+                var endLocal = new Date(
+                    new Date(task.end_time).getTime() -
+                        new Date(task.end_time).getTimezoneOffset() * 60000,
+                )
+                    .toISOString()
+                    .slice(0, 16);
+                document.getElementById("edit-task-start").value = startLocal;
+                document.getElementById("edit-task-end").value = endLocal;
+                document
+                    .getElementById("edit-modal")
+                    .classList.remove("hidden");
+            })
+            .catch(function () {});
+    }
+
+    function closeEditModal() {
+        document.getElementById("edit-modal").classList.add("hidden");
+    }
+
+    document
+        .getElementById("edit-modal")
+        .addEventListener("click", function (e) {
+            if (e.target === this) closeEditModal();
+        });
+
+    function editTask(e) {
+        e.preventDefault();
+        var id = document.getElementById("edit-task-id").value;
+        var body = {
+            title: document.getElementById("edit-task-title").value,
+            description: document.getElementById("edit-task-desc").value,
+            status: document.getElementById("edit-task-status").value,
+            priority: document.getElementById("edit-task-priority").value,
+            category: document.getElementById("edit-task-category").value,
+            start_time: new Date(
+                document.getElementById("edit-task-start").value,
+            ).toISOString(),
+            end_time: new Date(
+                document.getElementById("edit-task-end").value,
+            ).toISOString(),
+        };
+        fetch("/api/tasks/" + id, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function () {
+                closeEditModal();
+                loadTaskList();
+            })
+            .catch(function (err) {
+                console.error(err);
+            });
+        return false;
+    }
+
+    function deleteTaskFromList(id) {
+        if (!confirm("Excluir esta tarefa?")) return;
+        fetch("/api/tasks/" + id, { method: "DELETE" })
+            .then(function () {
+                loadTaskList();
+            })
+            .catch(function (err) {
+                console.error(err);
+            });
+    }
+
+    // ── Sugestões de categoria para o modal de edição ──
+    (function loadEditCategories() {
+        fetch("/api/tasks/categories")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var datalist = document.getElementById("cat-suggestions-edit");
+                (data.categories || []).forEach(function (cat) {
+                    var opt = document.createElement("option");
+                    opt.value = cat;
+                    datalist.appendChild(opt);
+                });
+            })
+            .catch(function () {});
+    })();
+
+    document.addEventListener("DOMContentLoaded", loadTaskList);
+</script>
 {{end}}

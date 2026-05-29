@@ -399,7 +399,9 @@
             {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
             .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
             "editorContent" .}}{{end}} {{if eq .ContentBlock
-            "tasksContent"}}{{template "tasksContent" .}}{{end}}
+            "tasksContent"}}{{template "tasksContent" .}}{{end}} {{if eq
+            .ContentBlock "taskListContent"}}{{template "taskListContent"
+            .}}{{end}}
         </main>
 
         <!-- Settings Modal -->

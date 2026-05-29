@@ -73,7 +73,9 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 
 	// Tarefas / Agenda
 	mux.HandleFunc("GET /tasks", ctx.HandleTasksPage)
+	mux.HandleFunc("GET /tasks/list", ctx.HandleTaskListPage)
 	mux.HandleFunc("GET /api/tasks", ctx.HandleListTasks)
+	mux.HandleFunc("GET /api/tasks/all", ctx.HandleAllTasks)
 	mux.HandleFunc("POST /api/tasks", ctx.HandleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", ctx.HandleUpdateTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", ctx.HandleDeleteTask)
