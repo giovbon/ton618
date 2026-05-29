@@ -8,6 +8,8 @@ server
 *.test-output
 /tmp/
 
+package-lock.json
+
 data/
 docs/
 *.db
@@ -46,3 +48,4 @@ vendor/
 repomix-output.xml
 *.log
 coverage.out
+package-lock.json
