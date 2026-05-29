@@ -81,7 +81,6 @@ func (ctx *HandlerContext) HandleCreateTask(w http.ResponseWriter, r *http.Reque
 			Interval    int    `json:"interval"`
 			EndDate     string `json:"end_date"`
 		} `json:"recurrence"`
-		NoteLink string `json:"note_link"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -115,8 +114,8 @@ func (ctx *HandlerContext) HandleCreateTask(w http.ResponseWriter, r *http.Reque
 		EndTime:     endTime,
 		AllDay:      input.AllDay,
 		Color:       task.CategoryColor(input.Category),
-		NoteLink:    input.NoteLink,
 	}
+
 	if t.Priority == "" {
 		t.Priority = task.PriorityNormal
 	}
@@ -181,7 +180,6 @@ func (ctx *HandlerContext) HandleUpdateTask(w http.ResponseWriter, r *http.Reque
 		StartTime   string `json:"start_time"`
 		EndTime     string `json:"end_time"`
 		AllDay      bool   `json:"all_day"`
-		NoteLink    string `json:"note_link"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -194,6 +192,7 @@ func (ctx *HandlerContext) HandleUpdateTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Update common fields
 	if input.Title != "" {
 		t.Title = input.Title
 	}
@@ -221,7 +220,6 @@ func (ctx *HandlerContext) HandleUpdateTask(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	t.AllDay = input.AllDay
-	t.NoteLink = input.NoteLink
 
 	if err := ctx.Tasks.UpdateTask(*t); err != nil {
 		slog.Error("update task", "error", err)
@@ -315,4 +313,15 @@ func loadRecurrences(store *task.Store, tasks []task.Task) map[string]*task.Task
 		result[t.RecurrenceID] = rec
 	}
 	return result
+}
+
+func (ctx *HandlerContext) HandleTaskCategories(w http.ResponseWriter, r *http.Request) {
+	categories, err := ctx.Tasks.GetDistinctCategories()
+	if err != nil {
+		categories = nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"categories": categories,
+	})
 }

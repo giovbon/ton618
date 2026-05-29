@@ -139,6 +139,25 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
+// GetDistinctCategories retorna todas as categorias distintas usadas em tarefas.
+func (s *Store) GetDistinctCategories() ([]string, error) {
+	rows, err := s.db.DB.Query("SELECT DISTINCT category FROM tasks WHERE category != '' ORDER BY category")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var cat string
+		if err := rows.Scan(&cat); err != nil {
+			continue
+		}
+		categories = append(categories, cat)
+	}
+	return categories, rows.Err()
+}
+
 func scanTask(s scanner) (*Task, error) {
 	var t Task
 	var startStr, endStr, createdStr, updatedStr string

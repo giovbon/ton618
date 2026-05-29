@@ -1,13 +1,36 @@
 {{template "layout" .}} {{define "tasksContent"}}
 <div class="tasks-root">
     <div class="flex items-center gap-3 mb-6">
-        <h1 class="text-2xl font-black tracking-tight text-zinc-200">📅 Agenda</h1>
+        <h1 class="text-2xl font-black tracking-tight text-zinc-200">
+            📅 Agenda
+        </h1>
         <div class="flex items-center gap-1.5 bg-zinc-900 rounded-lg p-1">
-            <button onclick="switchPeriod('day', this)" class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors" data-period="day">Dia</button>
-            <button onclick="switchPeriod('week', this)" class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors bg-zinc-800 text-white" data-period="week">Semana</button>
-            <button onclick="switchPeriod('month', this)" class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors" data-period="month">Mês</button>
+            <button
+                onclick="switchPeriod('day', this)"
+                class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors"
+                data-period="day"
+            >
+                Dia
+            </button>
+            <button
+                onclick="switchPeriod('week', this)"
+                class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors bg-zinc-800 text-white"
+                data-period="week"
+            >
+                Semana
+            </button>
+            <button
+                onclick="switchPeriod('month', this)"
+                class="period-btn px-3 py-1 text-[11px] font-bold rounded-md text-zinc-400 hover:text-white transition-colors"
+                data-period="month"
+            >
+                Mês
+            </button>
         </div>
-        <button onclick="openCreateModal()" class="ml-auto bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors">
+        <button
+            onclick="openCreateModal()"
+            class="ml-auto bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
+        >
             ➕ Nova Tarefa
         </button>
     </div>
@@ -15,24 +38,48 @@
     <!-- Stats Cards -->
     <div class="grid grid-cols-3 gap-4 mb-6">
         <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-            <div class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Horas Livres</div>
-            <div id="stat-free" class="text-2xl font-black text-emerald-400">—</div>
+            <div
+                class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
+                Horas Livres
+            </div>
+            <div id="stat-free" class="text-2xl font-black text-emerald-400">
+                —
+            </div>
         </div>
         <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-            <div class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Horas Ocupadas</div>
-            <div id="stat-busy" class="text-2xl font-black text-amber-400">—</div>
+            <div
+                class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
+                Horas Ocupadas
+            </div>
+            <div id="stat-busy" class="text-2xl font-black text-amber-400">
+                —
+            </div>
         </div>
         <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-            <div class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Pendentes</div>
-            <div id="stat-pending" class="text-2xl font-black text-sky-400">—</div>
+            <div
+                class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1"
+            >
+                Pendentes
+            </div>
+            <div id="stat-pending" class="text-2xl font-black text-sky-400">
+                —
+            </div>
         </div>
     </div>
 
     <!-- Charts Row -->
     <div class="grid grid-cols-2 gap-6 mb-6">
         <!-- Occupancy History (line chart - like stock) -->
-        <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 col-span-2">
-            <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Histórico de Ocupação ({{.Year}})</h3>
+        <div
+            class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 col-span-2"
+        >
+            <h3
+                class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+            >
+                Histórico de Ocupação ({{.Year}})
+            </h3>
             <div class="h-64">
                 <canvas id="occupancyChart"></canvas>
             </div>
@@ -42,7 +89,11 @@
     <div class="grid grid-cols-2 gap-6 mb-6">
         <!-- Category Pie -->
         <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
-            <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Por Categoria</h3>
+            <h3
+                class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+            >
+                Por Categoria
+            </h3>
             <div class="h-48 flex items-center justify-center">
                 <canvas id="categoryChart"></canvas>
             </div>
@@ -50,7 +101,11 @@
         </div>
         <!-- Priority Pie -->
         <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
-            <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Por Prioridade</h3>
+            <h3
+                class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+            >
+                Por Prioridade
+            </h3>
             <div class="h-48 flex items-center justify-center">
                 <canvas id="priorityChart"></canvas>
             </div>
@@ -59,28 +114,61 @@
 
     <!-- Upcoming Tasks -->
     <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800 mb-6">
-        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Próximas Tarefas</h3>
+        <h3
+            class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3"
+        >
+            Próximas Tarefas
+        </h3>
         <div id="upcoming-tasks" class="space-y-2"></div>
     </div>
 </div>
 
 <!-- Create Task Modal -->
-<div id="create-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+<div
+    id="create-modal"
+    class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm"
+>
+    <div
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl"
+    >
         <h2 class="text-lg font-black text-zinc-200 mb-4">Nova Tarefa</h2>
-        <form id="create-form" onsubmit="return createTask(event)" class="space-y-3">
-            <input id="task-title" type="text" placeholder="Título da tarefa" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500" required />
-            <textarea id="task-desc" placeholder="Descrição (opcional)" rows="2" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"></textarea>
+        <form
+            id="create-form"
+            onsubmit="return createTask(event);"
+            class="space-y-3"
+        >
+            <input
+                id="task-title"
+                type="text"
+                placeholder="Título da tarefa"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                required
+            />
+            <textarea
+                id="task-desc"
+                placeholder="Descrição (opcional)"
+                rows="2"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+            ></textarea>
             <div class="grid grid-cols-2 gap-3">
-                <select id="task-category" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500">
-                    <option value="">Categoria</option>
-                    <option value="trabalho">Trabalho</option>
-                    <option value="estudo">Estudo</option>
-                    <option value="pessoal">Pessoal</option>
-                    <option value="saude">Saúde</option>
-                    <option value="lazer">Lazer</option>
-                </select>
-                <select id="task-priority" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Categoria</label
+                    >
+                    <input
+                        id="task-category"
+                        type="text"
+                        list="cat-suggestions"
+                        placeholder="ex: trabalho, estudo..."
+                        autocomplete="off"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                    />
+                    <datalist id="cat-suggestions"></datalist>
+                </div>
+                <select
+                    id="task-priority"
+                    class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
                     <option value="normal">Normal</option>
                     <option value="important">Importante</option>
                     <option value="dispensable">Dispensável</option>
@@ -88,284 +176,618 @@
             </div>
             <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <label class="text-[10px] text-zinc-500 uppercase">Início</label>
-                    <input id="task-start" type="datetime-local" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500" required />
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Início</label
+                    >
+                    <input
+                        id="task-start"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
                 </div>
                 <div>
-                    <label class="text-[10px] text-zinc-500 uppercase">Fim</label>
-                    <input id="task-end" type="datetime-local" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500" required />
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Fim</label
+                    >
+                    <input
+                        id="task-end"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
                 </div>
             </div>
             <!-- Quick presets -->
             <div class="flex gap-2 flex-wrap">
-                <button type="button" onclick="setQuickTime(60)" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded">1h</button>
-                <button type="button" onclick="setQuickTime(120)" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded">2h</button>
-                <button type="button" onclick="setQuickTime(480)" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded">8h (dia todo)</button>
-                <button type="button" onclick="setTomorrow()" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded">Amanhã 9h-10h</button>
+                <button
+                    type="button"
+                    onclick="setQuickTime(60)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    1h
+                </button>
+                <button
+                    type="button"
+                    onclick="setQuickTime(120)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    2h
+                </button>
+                <button
+                    type="button"
+                    onclick="setQuickTime(480)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    8h (dia todo)
+                </button>
+                <button
+                    type="button"
+                    onclick="setTomorrow()"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    Amanhã 9h-10h
+                </button>
             </div>
             <details class="text-xs text-zinc-500">
-                <summary class="cursor-pointer hover:text-zinc-400">Recorrência</summary>
+                <summary class="cursor-pointer hover:text-zinc-400">
+                    Recorrência
+                </summary>
                 <div class="grid grid-cols-2 gap-3 mt-2">
-                    <select id="task-recurrence-rule" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200">
+                    <select
+                        id="task-recurrence-rule"
+                        onchange="onRecurrenceChange()"
+                        class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
+                    >
                         <option value="">Sem recorrência</option>
                         <option value="weekly">Semanal</option>
                         <option value="monthly">Mensal</option>
                     </select>
-                    <select id="task-recurrence-interval" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200">
+                    <select
+                        id="task-recurrence-interval"
+                        class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
+                    >
                         <option value="1">A cada 1</option>
                         <option value="2">A cada 2</option>
                         <option value="4">A cada 4</option>
                     </select>
                 </div>
+                <!-- Day-of-week picker (weekly) -->
+                <div id="weekly-days" class="hidden mt-2">
+                    <p class="text-[10px] text-zinc-500 mb-1">
+                        Repetir nos dias:
+                    </p>
+                    <div class="flex gap-1">
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 0)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors"
+                            data-day="0"
+                        >
+                            Dom
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 1)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="1"
+                        >
+                            Seg
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 2)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="2"
+                        >
+                            Ter
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 3)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="3"
+                        >
+                            Qua
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 4)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="4"
+                        >
+                            Qui
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 5)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="5"
+                        >
+                            Sex
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 6)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors"
+                            data-day="6"
+                        >
+                            Sáb
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-zinc-600 mt-1">
+                        Dia da semana da data escolhida vem pré-selecionado.
+                    </p>
+                </div>
+                <!-- Day-of-month picker (monthly) -->
+                <div id="monthly-days" class="hidden mt-2">
+                    <p class="text-[10px] text-zinc-500 mb-1">
+                        Repetir nos dias:
+                    </p>
+                    <div class="flex flex-wrap gap-1"></div>
+                    <p class="text-[9px] text-zinc-600 mt-1">
+                        Clique nos dias do mês em que a tarefa se repete.
+                    </p>
+                </div>
             </details>
-            <input id="task-note-link" type="text" placeholder="Link para nota (ex: notes/reuniao.md)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500" />
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeCreateModal()" class="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors">Cancelar</button>
-                <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors">Criar</button>
+                <button
+                    type="button"
+                    onclick="closeCreateModal()"
+                    class="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="submit"
+                    class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
+                >
+                    Criar
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-    let currentPeriod = 'week';
+    let currentPeriod = "week";
     let occupancyChart, categoryChart, priorityChart;
 
-    document.addEventListener('DOMContentLoaded', function() {
-        loadDashboard('week');
+    document.addEventListener("DOMContentLoaded", function () {
+        loadDashboard("week");
     });
 
     function switchPeriod(period, btn) {
         currentPeriod = period;
-        document.querySelectorAll('.period-btn').forEach(function(b) {
-            b.classList.remove('bg-zinc-800', 'text-white');
+        document.querySelectorAll(".period-btn").forEach(function (b) {
+            b.classList.remove("bg-zinc-800", "text-white");
         });
-        btn.classList.add('bg-zinc-800', 'text-white');
+        btn.classList.add("bg-zinc-800", "text-white");
         loadDashboard(period);
     }
 
     function loadDashboard(period) {
-        fetch('/api/tasks/dashboard?period=' + period)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+        fetch("/api/tasks/dashboard?period=" + period)
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
                 updateStats(data);
                 updateOccupancyChart(data.occupancy_history || []);
                 updateCategoryChart(data.by_category || []);
                 updatePriorityChart(data.by_priority || []);
                 updateUpcomingTasks(data.upcoming_tasks || []);
             })
-            .catch(function(err) {
-                console.error('dashboard error:', err);
+            .catch(function (err) {
+                console.error("dashboard error:", err);
             });
     }
 
     function updateStats(data) {
-        document.getElementById('stat-free').textContent = (data.free_hours || 0).toFixed(1) + 'h';
-        document.getElementById('stat-busy').textContent = (data.busy_hours || 0).toFixed(1) + 'h';
-        document.getElementById('stat-pending').textContent = data.pending_count || 0;
+        document.getElementById("stat-free").textContent =
+            (data.free_hours || 0).toFixed(1) + "h";
+        document.getElementById("stat-busy").textContent =
+            (data.busy_hours || 0).toFixed(1) + "h";
+        document.getElementById("stat-pending").textContent =
+            data.pending_count || 0;
     }
 
     function updateOccupancyChart(history) {
-        var ctx = document.getElementById('occupancyChart');
+        var ctx = document.getElementById("occupancyChart");
         if (occupancyChart) occupancyChart.destroy();
 
-        var labels = history.map(function(d) { return d.date; });
-        var busyData = history.map(function(d) { return d.busy_hours; });
-        var freeData = history.map(function(d) { return d.free_hours; });
+        var labels = history.map(function (d) {
+            return d.date;
+        });
+        var busyData = history.map(function (d) {
+            return d.busy_hours;
+        });
+        var freeData = history.map(function (d) {
+            return d.free_hours;
+        });
 
         occupancyChart = new Chart(ctx, {
-            type: 'line',
+            type: "line",
             data: {
                 labels: labels,
-                datasets: [{
-                    label: 'Horas Ocupadas',
-                    data: busyData,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    borderWidth: 1.5
-                }, {
-                    label: 'Horas Livres',
-                    data: freeData,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    borderWidth: 1
-                }]
+                datasets: [
+                    {
+                        label: "Horas Ocupadas",
+                        data: busyData,
+                        borderColor: "#f59e0b",
+                        backgroundColor: "rgba(245, 158, 11, 0.1)",
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 1.5,
+                    },
+                    {
+                        label: "Horas Livres",
+                        data: freeData,
+                        borderColor: "#10b981",
+                        backgroundColor: "rgba(16, 185, 129, 0.05)",
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 1,
+                    },
+                ],
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: '#a1a1aa', font: { size: 10 } } } },
-                scales: {
-                    x: { ticks: { color: '#52525b', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: 'rgba(63,63,70,0.3)' } },
-                    y: { ticks: { color: '#52525b' }, grid: { color: 'rgba(63,63,70,0.3)' }, title: { display: true, text: 'Horas', color: '#71717a' } }
+                plugins: {
+                    legend: {
+                        labels: { color: "#a1a1aa", font: { size: 10 } },
+                    },
                 },
-                interaction: { mode: 'index', intersect: false }
-            }
+                scales: {
+                    x: {
+                        ticks: {
+                            color: "#52525b",
+                            maxTicksLimit: 12,
+                            maxRotation: 0,
+                        },
+                        grid: { color: "rgba(63,63,70,0.3)" },
+                    },
+                    y: {
+                        ticks: { color: "#52525b" },
+                        grid: { color: "rgba(63,63,70,0.3)" },
+                        title: {
+                            display: true,
+                            text: "Horas",
+                            color: "#71717a",
+                        },
+                    },
+                },
+                interaction: { mode: "index", intersect: false },
+            },
         });
     }
 
     function updateCategoryChart(data) {
-        var ctx = document.getElementById('categoryChart');
+        var ctx = document.getElementById("categoryChart");
         if (categoryChart) categoryChart.destroy();
 
-        var legendHtml = '';
-        data.forEach(function(d) {
-            legendHtml += '<div class="flex items-center gap-2 text-[10px]"><span class="w-2 h-2 rounded-full shrink-0" style="background:' + d.color + '"></span><span class="text-zinc-400">' + (d.category || 'Sem categoria') + '</span><span class="text-zinc-500 ml-auto">' + d.hours + 'h</span></div>';
+        var legendHtml = "";
+        data.forEach(function (d) {
+            legendHtml +=
+                '<div class="flex items-center gap-2 text-[10px]"><span class="w-2 h-2 rounded-full shrink-0" style="background:' +
+                d.color +
+                '"></span><span class="text-zinc-400">' +
+                (d.category || "Sem categoria") +
+                '</span><span class="text-zinc-500 ml-auto">' +
+                d.hours +
+                "h</span></div>";
         });
-        document.getElementById('category-legend').innerHTML = legendHtml;
+        document.getElementById("category-legend").innerHTML = legendHtml;
 
         categoryChart = new Chart(ctx, {
-            type: 'doughnut',
+            type: "doughnut",
             data: {
-                labels: data.map(function(d) { return d.category || 'Sem categoria'; }),
-                datasets: [{
-                    data: data.map(function(d) { return d.hours; }),
-                    backgroundColor: data.map(function(d) { return d.color; }),
-                    borderColor: '#18181b',
-                    borderWidth: 2
-                }]
+                labels: data.map(function (d) {
+                    return d.category || "Sem categoria";
+                }),
+                datasets: [
+                    {
+                        data: data.map(function (d) {
+                            return d.hours;
+                        }),
+                        backgroundColor: data.map(function (d) {
+                            return d.color;
+                        }),
+                        borderColor: "#18181b",
+                        borderWidth: 2,
+                    },
+                ],
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
-                plugins: { legend: { display: false } }
-            }
+                plugins: { legend: { display: false } },
+            },
         });
     }
 
     function updatePriorityChart(data) {
-        var ctx = document.getElementById('priorityChart');
+        var ctx = document.getElementById("priorityChart");
         if (priorityChart) priorityChart.destroy();
 
-        var priorityColors = { important: '#ef4444', normal: '#3b82f6', dispensable: '#71717a' };
+        var priorityColors = {
+            important: "#ef4444",
+            normal: "#3b82f6",
+            dispensable: "#71717a",
+        };
 
         priorityChart = new Chart(ctx, {
-            type: 'doughnut',
+            type: "doughnut",
             data: {
-                labels: data.map(function(d) { return { important: 'Importante', normal: 'Normal', dispensable: 'Dispensável' }[d.priority] || d.priority; }),
-                datasets: [{
-                    data: data.map(function(d) { return d.hours; }),
-                    backgroundColor: data.map(function(d) { return priorityColors[d.priority] || '#71717a'; }),
-                    borderColor: '#18181b',
-                    borderWidth: 2
-                }]
+                labels: data.map(function (d) {
+                    return (
+                        {
+                            important: "Importante",
+                            normal: "Normal",
+                            dispensable: "Dispensável",
+                        }[d.priority] || d.priority
+                    );
+                }),
+                datasets: [
+                    {
+                        data: data.map(function (d) {
+                            return d.hours;
+                        }),
+                        backgroundColor: data.map(function (d) {
+                            return priorityColors[d.priority] || "#71717a";
+                        }),
+                        borderColor: "#18181b",
+                        borderWidth: 2,
+                    },
+                ],
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
-                plugins: { legend: { labels: { color: '#a1a1aa', font: { size: 10 } } } }
-            }
+                plugins: {
+                    legend: {
+                        labels: { color: "#a1a1aa", font: { size: 10 } },
+                    },
+                },
+            },
         });
     }
 
     function updateUpcomingTasks(tasks) {
-        var el = document.getElementById('upcoming-tasks');
+        var el = document.getElementById("upcoming-tasks");
         if (!tasks.length) {
-            el.innerHTML = '<div class="text-sm text-zinc-600">Nenhuma tarefa pendente</div>';
+            el.innerHTML =
+                '<div class="text-sm text-zinc-600">Nenhuma tarefa pendente</div>';
             return;
         }
-        var html = '';
-        tasks.forEach(function(t) {
-            var colorDot = t.color ? '<span class="w-2 h-2 rounded-full shrink-0" style="background:' + t.color + '"></span>' : '';
-            var noteLink = t.note_link ? ' <a href="/editor?file=' + encodeURIComponent(t.note_link) + '" class="text-[10px] text-sky-500 hover:text-sky-400">📝</a>' : '';
-            html += '<div class="flex items-center gap-3 text-sm py-1.5 border-b border-zinc-800 last:border-0">' +
+        var html = "";
+        tasks.forEach(function (t) {
+            var colorDot = t.color
+                ? '<span class="w-2 h-2 rounded-full shrink-0" style="background:' +
+                  t.color +
+                  '"></span>'
+                : "";
+            var noteLink = t.note_link
+                ? ' <a href="/editor?file=' +
+                  encodeURIComponent(t.note_link) +
+                  '" class="text-[10px] text-sky-500 hover:text-sky-400">📝</a>'
+                : "";
+            html +=
+                '<div class="flex items-center gap-3 text-sm py-1.5 border-b border-zinc-800 last:border-0">' +
                 colorDot +
-                '<span class="text-zinc-300 flex-1 truncate">' + t.title + '</span>' +
+                '<span class="text-zinc-300 flex-1 truncate">' +
+                t.title +
+                "</span>" +
                 noteLink +
-                '<span class="text-[10px] text-zinc-500">' + formatDate(t.start_time) + '</span>' +
-                '</div>';
+                '<span class="text-[10px] text-zinc-500">' +
+                formatDate(t.start_time) +
+                "</span>" +
+                "</div>";
         });
         el.innerHTML = html;
     }
 
     function formatDate(iso) {
         var d = new Date(iso);
-        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' ' +
-            d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        return (
+            d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) +
+            " " +
+            d.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+            })
+        );
     }
 
     // ── Create Task Modal ──
 
     function openCreateModal() {
-        document.getElementById('create-modal').classList.remove('hidden');
+        document.getElementById("create-modal").classList.remove("hidden");
         var now = new Date();
-        var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        document.getElementById('task-start').value = local;
-        var end = new Date(now.getTime() + 3600000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        document.getElementById('task-end').value = end;
-        document.getElementById('task-title').focus();
+        var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = local;
+        var end = new Date(
+            now.getTime() + 3600000 - now.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-end").value = end;
+        document.getElementById("task-title").focus();
     }
 
     function closeCreateModal() {
-        document.getElementById('create-modal').classList.add('hidden');
-        document.getElementById('create-form').reset();
+        document.getElementById("create-modal").classList.add("hidden");
+        document.getElementById("create-form").reset();
     }
 
-    document.getElementById('create-modal').addEventListener('click', function(e) {
-        if (e.target === this) closeCreateModal();
-    });
+    document
+        .getElementById("create-modal")
+        .addEventListener("click", function (e) {
+            if (e.target === this) closeCreateModal();
+        });
 
     function setQuickTime(minutes) {
         var now = new Date();
-        var start = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        var end = new Date(now.getTime() + minutes * 60000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        document.getElementById('task-start').value = start;
-        document.getElementById('task-end').value = end;
+        var start = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+        var end = new Date(
+            now.getTime() + minutes * 60000 - now.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = start;
+        document.getElementById("task-end").value = end;
     }
 
     function setTomorrow() {
         var tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(9, 0, 0, 0);
-        var start = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        var start = new Date(
+            tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
         tomorrow.setHours(10, 0, 0, 0);
-        var end = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        document.getElementById('task-start').value = start;
-        document.getElementById('task-end').value = end;
+        var end = new Date(
+            tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = start;
+        document.getElementById("task-end").value = end;
     }
 
     function createTask(e) {
         e.preventDefault();
         var body = {
-            title: document.getElementById('task-title').value,
-            description: document.getElementById('task-desc').value,
-            priority: document.getElementById('task-priority').value,
-            category: document.getElementById('task-category').value,
-            start_time: new Date(document.getElementById('task-start').value).toISOString(),
-            end_time: new Date(document.getElementById('task-end').value).toISOString(),
-            note_link: document.getElementById('task-note-link').value
+            title: document.getElementById("task-title").value,
+            description: document.getElementById("task-desc").value,
+            priority: document.getElementById("task-priority").value,
+            category: document.getElementById("task-category").value,
+            start_time: new Date(
+                document.getElementById("task-start").value,
+            ).toISOString(),
+            end_time: new Date(
+                document.getElementById("task-end").value,
+            ).toISOString(),
         };
-        var rule = document.getElementById('task-recurrence-rule').value;
+        var rule = document.getElementById("task-recurrence-rule").value;
         if (rule) {
             body.recurrence = {
                 rule: rule,
-                interval: parseInt(document.getElementById('task-recurrence-interval').value)
+                interval: parseInt(
+                    document.getElementById("task-recurrence-interval").value,
+                ),
             };
-            if (rule === 'weekly') {
-                var d = new Date(document.getElementById('task-start').value);
-                body.recurrence.days_of_week = '' + d.getDay();
+            if (rule === "weekly") {
+                var days = [];
+                document
+                    .querySelectorAll(".day-btn.selected")
+                    .forEach(function (b) {
+                        days.push(b.getAttribute("data-day"));
+                    });
+                body.recurrence.days_of_week = days.length
+                    ? days.join(",")
+                    : document
+                          .querySelector(".day-btn.bg-sky-600")
+                          ?.getAttribute("data-day") || "1";
+            }
+            if (rule === "monthly") {
+                var days = [];
+                document
+                    .querySelectorAll("#monthly-days .day-btn.selected")
+                    .forEach(function (b) {
+                        days.push(b.getAttribute("data-day"));
+                    });
+                body.recurrence.days_of_month = days.length
+                    ? days.join(",")
+                    : "1";
             }
         }
-        fetch('/api/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+        fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
         })
-        .then(function(r) { return r.json(); })
-        .then(function() {
-            closeCreateModal();
-            loadDashboard(currentPeriod);
-        })
-        .catch(function(err) { console.error(err); });
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function () {
+                closeCreateModal();
+                loadDashboard(currentPeriod);
+            })
+            .catch(function (err) {
+                console.error(err);
+            });
         return false;
     }
+
+    // ── Recurrence UI ──
+
+    function onRecurrenceChange() {
+        var rule = document.getElementById("task-recurrence-rule").value;
+        document
+            .getElementById("weekly-days")
+            .classList.toggle("hidden", rule !== "weekly");
+        document
+            .getElementById("monthly-days")
+            .classList.toggle("hidden", rule !== "monthly");
+    }
+
+    function toggleDay(btn, day) {
+        btn.classList.toggle("bg-sky-600");
+        btn.classList.toggle("text-white");
+        btn.classList.toggle("bg-zinc-800");
+        btn.classList.toggle("text-zinc-500");
+        btn.classList.toggle("hover:bg-zinc-700");
+        btn.classList.toggle("selected");
+    }
+
+    // Gera botoes de 1 a 31 para o picker mensal
+    (function buildMonthDays() {
+        var container = document.querySelector("#monthly-days .flex");
+        for (var d = 1; d <= 31; d++) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+                "day-btn w-8 h-8 text-[10px] font-bold rounded bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors";
+            btn.setAttribute("data-day", d);
+            btn.textContent = d;
+            btn.onclick = function () {
+                toggleDay(this, parseInt(this.getAttribute("data-day")));
+            };
+            container.appendChild(btn);
+        }
+    })();
+
+    // ── Category suggestions ──
+
+    (function loadCategories() {
+        fetch("/api/tasks/categories")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var datalist = document.getElementById("cat-suggestions");
+                (data.categories || []).forEach(function (cat) {
+                    var opt = document.createElement("option");
+                    opt.value = cat;
+                    datalist.appendChild(opt);
+                });
+            })
+            .catch(function () {});
+    })();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<script
+    src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+    defer
+></script>
 {{end}}
