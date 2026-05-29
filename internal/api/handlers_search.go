@@ -257,6 +257,13 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		// Extract multi-term context windows with ellipsis between distant terms
 		snippet = buildContextSnippet(query, snippet)
 		tags := db.TagsToSlice(hit.Doc.Tags)
+		// Pula PDFs e anexos na busca global (nao fazem sentido como resultado textual)
+		if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(hit.Doc.Arquivo), ".pdf") {
+			continue
+		}
+		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
+			continue
+		}
 		items = append(items, resultItem{
 			ID:         hit.Doc.ID,
 			Arquivo:    hit.Doc.Arquivo,

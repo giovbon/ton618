@@ -339,4 +339,42 @@ func scalePoints2D(pts map[string]Point2D, target float64) {
 			Y: (p.Y - midY) / (rangeY / (2 * target)),
 		}
 	}
+
+	// Minimum separation: se dois pontos estao mais proximos que 3%% do
+	// range total, empurra um para longe do outro.
+	// Isso evita sobreposicao visual no mapa semantico.
+	if len(pts) < 2 {
+		return
+	}
+	minSep := target * 0.03
+
+	// Multiplas iteracoes para resolver colisoes
+	for iter := 0; iter < 10; iter++ {
+		moved := false
+		keys := make([]string, 0, len(pts))
+		for k := range pts {
+			keys = append(keys, k)
+		}
+		for i := 0; i < len(keys); i++ {
+			for j := i + 1; j < len(keys); j++ {
+				dx := pts[keys[i]].X - pts[keys[j]].X
+				dy := pts[keys[i]].Y - pts[keys[j]].Y
+				dist := math.Sqrt(dx*dx + dy*dy)
+				if dist < minSep && dist > 0 {
+					// Empurra ambos na direcao oposta
+					push := (minSep - dist) / 2
+					nx := dx / dist
+					ny := dy / dist
+					p1 := pts[keys[i]]
+					p2 := pts[keys[j]]
+					pts[keys[i]] = Point2D{X: p1.X + nx*push, Y: p1.Y + ny*push}
+					pts[keys[j]] = Point2D{X: p2.X - nx*push, Y: p2.Y - ny*push}
+					moved = true
+				}
+			}
+		}
+		if !moved {
+			break
+		}
+	}
 }

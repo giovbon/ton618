@@ -245,9 +245,10 @@ func (ctx *HandlerContext) HandleGraphData(w http.ResponseWriter, r *http.Reques
 						px := cx / totalWeight
 						py := cy / totalWeight
 
-						// Adiciona pequeno jitter para nao sobrepor
-						px += (float64(len(fileNodes)%7) - 3) * 5
-						py += (float64(len(fileNodes)%13) - 6) * 5
+						// Adiciona jitter para nao sobrepor — proporcional ao range
+						// total do grafo (estima ~1000 com target=500)
+						px += (float64(len(fileNodes)%7) - 3) * 15
+						py += (float64(len(fileNodes)%13) - 6) * 15
 
 						if docID, ok := unprojDocID[arquivo]; ok {
 							ctx.Store.SetEmbedding2D(docID, px, py)
