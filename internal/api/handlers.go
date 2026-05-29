@@ -80,22 +80,13 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	ctx.render(w, "editor.html", data)
 }
 
-func (ctx *HandlerContext) HandleGraph(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":        "Mapa Semântico - TON-618",
-		"ContentBlock": "graphContent",
-	}
-	ctx.render(w, "graph.html", data)
-}
-
 // ── API ──
 
 func (ctx *HandlerContext) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":     "ok",
-		"documents":  ctx.Store.GetDocumentCount(),
-		"embeddings": ctx.Store.GetEmbeddingCount(),
+		"status":    "ok",
+		"documents": ctx.Store.GetDocumentCount(),
 	})
 }
 
@@ -129,21 +120,18 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 	}
 
 	type noteItem struct {
-		Arquivo  string   `json:"arquivo"`
-		Tags     []string `json:"tags"`
-		Mtime    string   `json:"mtime"`
-		Embedded bool     `json:"embedded"`
+		Arquivo string   `json:"arquivo"`
+		Tags    []string `json:"tags"`
+		Mtime   string   `json:"mtime"`
 	}
 
 	var notes []noteItem
 	for arquivo, mtime := range mods {
 		tags, _ := ctx.Store.GetFileTags(arquivo)
-		embedded := ctx.Store.HasFileEmbedding(arquivo)
 		notes = append(notes, noteItem{
-			Arquivo:  arquivo,
-			Tags:     tags,
-			Mtime:    mtime,
-			Embedded: embedded,
+			Arquivo: arquivo,
+			Tags:    tags,
+			Mtime:   mtime,
 		})
 	}
 

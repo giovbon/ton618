@@ -13,12 +13,6 @@
             class="text-base font-mono text-zinc-600 shrink-0"
             >—</span
         >
-        <span
-            id="embed-status"
-            class="text-[10px] font-mono shrink-0"
-            title="Status do embedding"
-            >—</span
-        >
         <button
             id="save-btn"
             onclick="saveNow()"
@@ -109,7 +103,12 @@
     </div>
 
     <textarea id="content-output" class="hidden">{{.Content}}</textarea>
-    <input id="editor-image-input" type="file" accept="image/*" class="hidden" />
+    <input
+        id="editor-image-input"
+        type="file"
+        accept="image/*"
+        class="hidden"
+    />
 </div>
 
 <style>
@@ -848,7 +847,8 @@
             editorProps: {
                 attributes: { spellcheck: "false" },
                 handlePaste: function (view, event) {
-                    var items = event.clipboardData && event.clipboardData.items;
+                    var items =
+                        event.clipboardData && event.clipboardData.items;
                     if (!items) return false;
                     for (var i = 0; i < items.length; i++) {
                         if (items[i].type.indexOf("image") === 0) {
@@ -1495,45 +1495,6 @@
             }
         });
 
-        // ── Check embedding status ──
-        function checkEmbedStatus() {
-            var filename = filenameInput.value;
-            fetch("/api/notes")
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    var notes = data.notes || [];
-                    var found = false;
-                    for (var i = 0; i < notes.length; i++) {
-                        if (notes[i].arquivo === filename) {
-                            found = true;
-                            var el = document.getElementById("embed-status");
-                            if (notes[i].embedded) {
-                                el.textContent = "✦";
-                                el.className =
-                                    "text-[10px] font-mono shrink-0 text-emerald-600/70";
-                                el.title = "Embedado";
-                            } else {
-                                el.textContent = "○";
-                                el.className =
-                                    "text-[10px] font-mono shrink-0 text-zinc-700/50";
-                                el.title = "Sem embedding";
-                            }
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        var el = document.getElementById("embed-status");
-                        el.textContent = "○";
-                        el.className =
-                            "text-[10px] font-mono shrink-0 text-zinc-700/50";
-                        el.title = "Sem embedding";
-                    }
-                })
-                .catch(function () {});
-        }
-
         // ── Image upload: usada tanto pelo slash command quanto pelo Ctrl+V ──
         async function uploadAndInsertImage(file) {
             var fd = new FormData();
@@ -1549,7 +1510,10 @@
                     editor.chain().focus().setImage({ src: data.url }).run();
                     setStatus("dirty");
                 } else {
-                    alert("Erro ao fazer upload da imagem: " + (data.error || "desconhecido"));
+                    alert(
+                        "Erro ao fazer upload da imagem: " +
+                            (data.error || "desconhecido"),
+                    );
                 }
             } catch (err) {
                 alert("Erro ao fazer upload da imagem: " + err.message);
@@ -1564,8 +1528,6 @@
                 e.target.value = ""; // reset para poder selecionar o mesmo arquivo de novo
                 await uploadAndInsertImage(file);
             });
-
-        setTimeout(checkEmbedStatus, 500);
 
         loadWikiNotes();
         setStatus("saved");

@@ -256,7 +256,7 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, ctx.Cfg.EmbeddingAll); err != nil {
+	if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
 		slog.Error("process file after save", "error", err)
 	}
 
@@ -316,7 +316,6 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Remove from DB
-	ctx.Store.DeleteEmbeddingsByFile(filename)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
 	ctx.Store.DeleteFileMod(filename)
@@ -404,13 +403,12 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	// Update DB: delete old, re-index new
 	ctx.Store.DeleteDocumentsByFile(oldName)
 	ctx.Store.DeleteFTSByFile(oldName)
-	ctx.Store.DeleteEmbeddingsByFile(oldName)
 
 	info, err := os.Stat(newPath)
 	if err == nil {
 		watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 			Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-		}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+		})
 	}
 
 	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
@@ -488,7 +486,6 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	// Limpa registros anteriores (segurança, caso haja colisão de nome)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
-	ctx.Store.DeleteEmbeddingsByFile(filename)
 
 	doc := db.Document{
 		ID:        docID,
@@ -565,11 +562,11 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	// Marca como recentemente processado para evitar race com o watcher
 	watcher.MarkRecentlyProcessed(filename)
 
-	// Process the file (index, embed)
+	// Process the file (index)
 	info, _ := os.Stat(fullPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+	})
 
 	// Redireciona para a pagina inicial (modo compacto)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -628,11 +625,11 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	// Marca como recentemente processado para evitar race com o watcher
 	watcher.MarkRecentlyProcessed(filename)
 
-	// Processa como imagem (cria documento stub, sem FTS, sem embedding)
+	// Processa como imagem (cria documento stub, sem FTS)
 	info, _ := os.Stat(fullPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+	})
 
 	imageURL := "/file?name=" + url.QueryEscape(filename)
 
@@ -703,7 +700,6 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 		// Remove registros do DB
 		ctx.Store.DeleteDocumentsByFile(filename)
 		ctx.Store.DeleteFTSByFile(filename)
-		ctx.Store.DeleteEmbeddingsByFile(filename)
 		ctx.Store.DeleteFileMod(filename)
 		ctx.Store.ResetPopularity(filename)
 		ctx.Store.SetFileTags(filename, nil)
@@ -720,83 +716,4 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 		"count":   len(removed),
 		"errors":  errors,
 	})
-}
-
-// ── Toggle Embed ──
-
-// HandleToggleEmbed adiciona ou remove a tag "embed" de um arquivo e
-// aciona/reprocessa o embedding. Funciona para qualquer tipo de arquivo
-// (markdown, PDF, etc.).
-func (ctx *HandlerContext) HandleToggleEmbed(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	filename := r.FormValue("filename")
-	if filename == "" {
-		http.Error(w, "filename required", http.StatusBadRequest)
-		return
-	}
-
-	// Verifica se o arquivo existe em qualquer subdiretorio monitorado
-	basename := filepath.Base(filename)
-	allSubdirs := append([]string{"notes"}, watcher.MonitoredSubDirs...)
-	var fullPath string
-	found := false
-	for _, sd := range allSubdirs {
-		testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-		if _, err := os.Stat(testPath); err == nil {
-			filename = sd + "/" + basename
-			fullPath = testPath
-			found = true
-			break
-		}
-	}
-	if !found {
-		// Fallback: tenta o filename como veio (ja normalizado)
-		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-	}
-
-	// Busca tags atuais do arquivo
-	currentTags, err := ctx.Store.GetFileTags(filename)
-	if err != nil {
-		currentTags = nil
-	}
-
-	// Verifica se ja tem a tag "embed"
-	hasEmbed := false
-	for _, t := range currentTags {
-		if t == "embed" {
-			hasEmbed = true
-			break
-		}
-	}
-
-	if hasEmbed {
-		// Remove a tag "embed" e deleta os embeddings
-		ctx.Store.RemoveTagFromFile(filename, "embed")
-		ctx.Store.DeleteEmbeddingsByFile(filename)
-		slog.Info("Embedding desativado", "file", filename)
-	} else {
-		// Adiciona a tag "embed" e reprocessa o arquivo com embedding forçado
-		ctx.Store.AddTagToFile(filename, "embed")
-		info, err := os.Stat(fullPath)
-		if err == nil {
-			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-				Path:     fullPath,
-				Filename: filename,
-				ModTime:  info.ModTime(),
-				Type:     "create",
-			}, ctx.Embed, true) // embedAll=true para forçar embedding
-		}
-		slog.Info("Embedding ativado", "file", filename)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true, "embedded": !hasEmbed})
 }

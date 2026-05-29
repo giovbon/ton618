@@ -23,7 +23,6 @@ func ProcessPDF(path, filename string, modTime time.Time) ([]Document, []string,
 		Timestamp:  modTime.UTC().Format(time.RFC3339),
 		Created:    modTime.UTC().Format(time.RFC3339),
 		Hash:       CalculateHash("pdf", baseName, nil),
-		VectorHash: CalculateVectorHash("pdf", ""),
 		Tags:       []string{"pdf"},
 	}
 

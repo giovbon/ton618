@@ -5,7 +5,11 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{{.Title}} — TON-618</title>
-        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffffff' opacity='0.15'/%3E%3Ccircle cx='50' cy='50' r='26' fill='%23000'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23000'/%3E%3Cpath d='M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z' fill='%23fff' opacity='0.7'/%3E%3Cpath d='M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z' fill='%23e2e8f0' opacity='0.3' transform='rotate(120 50 50)'/%3E%3Cpath d='M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z' fill='%23fff' opacity='0.5' transform='rotate(240 50 50)'/%3E%3C/svg%3E" />
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffffff' opacity='0.15'/%3E%3Ccircle cx='50' cy='50' r='26' fill='%23000'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23000'/%3E%3Cpath d='M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z' fill='%23fff' opacity='0.7'/%3E%3Cpath d='M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z' fill='%23e2e8f0' opacity='0.3' transform='rotate(120 50 50)'/%3E%3Cpath d='M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z' fill='%23fff' opacity='0.5' transform='rotate(240 50 50)'/%3E%3C/svg%3E"
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
@@ -269,9 +273,9 @@
                         🌐 CAPTURA
                     </button>
                     <a
-                        href="/graph"
+                        href="/tasks"
                         class="text-zinc-400 hover:text-white transition-colors"
-                        >🗺️ Mapa</a
+                        >📅 Agenda</a
                     >
                     <button
                         onclick="openSettings()"
@@ -363,9 +367,9 @@
                     🌐 CAPTURA
                 </button>
                 <a
-                    href="/graph"
+                    href="/tasks"
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
-                    >🗺️ Mapa</a
+                    >📅 Agenda</a
                 >
                 <button
                     onclick="
@@ -395,7 +399,7 @@
             {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
             .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
             "editorContent" .}}{{end}} {{if eq .ContentBlock
-            "graphContent"}}{{template "graphContent" .}}{{end}}
+            "tasksContent"}}{{template "tasksContent" .}}{{end}}
         </main>
 
         <!-- Settings Modal -->
@@ -432,7 +436,10 @@
                     </button>
                     <button
                         data-tab="restaurar"
-                        onclick="switchSettingsTab('restaurar'); loadArchives()"
+                        onclick="
+                            switchSettingsTab('restaurar');
+                            loadArchives();
+                        "
                         class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
                     >
                         📦 Restaurar
@@ -514,8 +521,8 @@
                             </label>
                             <div class="ml-7">
                                 <label class="block text-xs text-zinc-500 mb-2"
-                                    >Notas que contenham estas tags
-                                    (separadas por vírgula):</label
+                                    >Notas que contenham estas tags (separadas
+                                    por vírgula):</label
                                 >
                                 <input
                                     type="text"
@@ -552,7 +559,9 @@
                                     >
                                         ✓ Selecionar Todos
                                     </button>
-                                    <span class="text-zinc-700 text-[10px]">|</span>
+                                    <span class="text-zinc-700 text-[10px]"
+                                        >|</span
+                                    >
                                     <button
                                         onclick="selectAllPreview(false)"
                                         class="text-[10px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -626,20 +635,25 @@
                     </div>
 
                     <!-- Restaurar Tab -->
-                    <div id="tab-restaurar" class="settings-tab hidden space-y-6">
+                    <div
+                        id="tab-restaurar"
+                        class="settings-tab hidden space-y-6"
+                    >
                         <p class="text-sm text-zinc-400">
-                            Arquivos de notas archivadas. Restaure para
-                            trazer as notas de volta ao diretório de trabalho.
+                            Arquivos de notas archivadas. Restaure para trazer
+                            as notas de volta ao diretório de trabalho.
                         </p>
                         <div id="archives-list">
                             <div class="text-center py-10">
-                                <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-                                <p class="text-xs text-zinc-600">Carregando...</p>
+                                <div
+                                    class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"
+                                ></div>
+                                <p class="text-xs text-zinc-600">
+                                    Carregando...
+                                </p>
                             </div>
                         </div>
                     </div>
-
-
                 </div>
             </div>
         </div>
@@ -992,7 +1006,7 @@
                 filename.replace(/"/g, "&quot;") +
                 '" ' +
                 checked +
-                ' onchange="toggleFile(\'' +
+                " onchange=\"toggleFile('" +
                 filename.replace(/'/g, "\\'") +
                 '\')" class="accent-sky-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer" />' +
                 '<span class="text-zinc-600 shrink-0">' +
@@ -1216,14 +1230,14 @@
                             '<div class="text-center py-10"><p class="text-xs text-zinc-500">Nenhum archive encontrado.</p></div>';
                         return;
                     }
-                    var html =
-                        '<div class="space-y-2">';
+                    var html = '<div class="space-y-2">';
                     archives.forEach(function (a) {
-                        var sizeStr = a.size > 1024 * 1024
-                            ? (a.size / 1024 / 1024).toFixed(1) + " MB"
-                            : a.size > 1024
-                              ? (a.size / 1024).toFixed(1) + " KB"
-                              : a.size + " B";
+                        var sizeStr =
+                            a.size > 1024 * 1024
+                                ? (a.size / 1024 / 1024).toFixed(1) + " MB"
+                                : a.size > 1024
+                                  ? (a.size / 1024).toFixed(1) + " KB"
+                                  : a.size + " B";
                         var dateStr = a.modified
                             ? new Date(a.modified).toLocaleDateString("pt-BR")
                             : "?";
@@ -1241,7 +1255,7 @@
                             dateStr +
                             "</div>" +
                             "</div>" +
-                            '<button onclick="restoreArchive(\'' +
+                            "<button onclick=\"restoreArchive('" +
                             a.name.replace(/'/g, "\\'") +
                             '\')" class="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors restore-btn">Restaurar</button>' +
                             "</div>";
@@ -1315,20 +1329,27 @@
         // ── Cleanup Orphan Images ──
         function cleanupOrphanImages() {
             var btn = document.getElementById("cleanup-images-btn");
-            if (!confirm(
-                "Remover imagens que não são mais referenciadas por nenhuma nota?"
-            )) return;
+            if (
+                !confirm(
+                    "Remover imagens que não são mais referenciadas por nenhuma nota?",
+                )
+            )
+                return;
             btn.disabled = true;
             btn.textContent = "Limpando...";
             fetch("/api/cleanup-images", { method: "POST" })
-                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                    return r.json();
+                })
                 .then(function (data) {
                     btn.disabled = false;
                     btn.textContent = "🧹 Limpar imagens órfãs";
                     if (data.ok) {
-                        var msg = data.count > 0
-                            ? data.count + " imagem(ns) órfã(s) removida(s)!"
-                            : "Nenhuma imagem órfã encontrada.";
+                        var msg =
+                            data.count > 0
+                                ? data.count +
+                                  " imagem(ns) órfã(s) removida(s)!"
+                                : "Nenhuma imagem órfã encontrada.";
                         alert(msg);
                     } else {
                         alert("Erro: " + (data.error || "desconhecido"));

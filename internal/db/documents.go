@@ -18,9 +18,21 @@ type Document struct {
 	Timestamp  string
 	CreatedAt  string
 	Hash       string
-	VectorHash string
-	IsIndexing bool
-	IsNoEmbed  bool
+}
+
+func docColumns() string {
+	return "id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash"
+}
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanDocument(s scanner) (Document, error) {
+	var doc Document
+	err := s.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
+		&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash)
+	return doc, err
 }
 
 // TagsToSlice converts a comma-separated tag string to a slice.
@@ -40,10 +52,10 @@ func SliceToTags(tags []string) string {
 func (s *Store) InsertDocument(doc Document) error {
 	_, err := s.DB.Exec(`
 		INSERT OR REPLACE INTO documents
-		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, doc.Tags,
-		doc.Pagina, doc.Ordem, doc.Timestamp, doc.CreatedAt, doc.Hash, doc.VectorHash,
+		doc.Pagina, doc.Ordem, doc.Timestamp, doc.CreatedAt, doc.Hash,
 	)
 	return err
 }
@@ -62,12 +74,8 @@ func (s *Store) DeleteDocumentsByFile(arquivo string) error {
 
 // GetDocument returns a single document by ID, or nil if not found.
 func (s *Store) GetDocument(id string) (*Document, error) {
-	row := s.DB.QueryRow(`
-		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
-		FROM documents WHERE id = ?`, id)
-	var doc Document
-	err := row.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-		&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash)
+	row := s.DB.QueryRow(`SELECT `+docColumns()+` FROM documents WHERE id = ?`, id)
+	doc, err := scanDocument(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -79,9 +87,7 @@ func (s *Store) GetDocument(id string) (*Document, error) {
 
 // GetDocumentsByFile returns all documents belonging to a file, ordered by position.
 func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
-	rows, err := s.DB.Query(`
-		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
-		FROM documents WHERE arquivo = ? ORDER BY ordem ASC`, arquivo)
+	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents WHERE arquivo = ? ORDER BY ordem ASC`, arquivo)
 	if err != nil {
 		return nil, err
 	}
@@ -89,9 +95,8 @@ func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
 
 	var docs []Document
 	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-			&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash); err != nil {
+		doc, err := scanDocument(rows)
+		if err != nil {
 			return nil, err
 		}
 		docs = append(docs, doc)
@@ -101,9 +106,7 @@ func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
 
 // GetAllDocumentsByFile returns all documents grouped by their file path.
 func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
-	rows, err := s.DB.Query(`
-		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
-		FROM documents ORDER BY arquivo, ordem ASC`)
+	rows, err := s.DB.Query(`SELECT ` + docColumns() + ` FROM documents ORDER BY arquivo, ordem ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +114,8 @@ func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
 
 	result := make(map[string][]Document)
 	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-			&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash); err != nil {
+		doc, err := scanDocument(rows)
+		if err != nil {
 			return nil, err
 		}
 		result[doc.Arquivo] = append(result[doc.Arquivo], doc)
@@ -123,9 +125,7 @@ func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
 
 // GetAllDocuments returns every document in the database.
 func (s *Store) GetAllDocuments() ([]Document, error) {
-	rows, err := s.DB.Query(`
-		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
-		FROM documents ORDER BY arquivo, ordem ASC`)
+	rows, err := s.DB.Query(`SELECT ` + docColumns() + ` FROM documents ORDER BY arquivo, ordem ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +133,8 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 
 	var docs []Document
 	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-			&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash); err != nil {
+		doc, err := scanDocument(rows)
+		if err != nil {
 			return nil, err
 		}
 		docs = append(docs, doc)
@@ -148,9 +147,7 @@ func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
 	var total int
 	s.DB.QueryRow("SELECT COUNT(*) FROM documents").Scan(&total)
 
-	rows, err := s.DB.Query(`
-		SELECT id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, vector_hash
-		FROM documents ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
+	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,9 +155,8 @@ func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
 
 	var docs []Document
 	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-			&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash, &doc.VectorHash); err != nil {
+		doc, err := scanDocument(rows)
+		if err != nil {
 			return nil, 0, err
 		}
 		docs = append(docs, doc)

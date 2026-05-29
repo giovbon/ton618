@@ -11,86 +11,11 @@ import (
 
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/index"
 	"ton618/internal/processor"
 
 	"github.com/fsnotify/fsnotify"
 )
 
-// ── Embedding Worker Pool ──
-// O embedding (chamada de rede para Gemini/Ollama/OpenAI) é o gargalo.
-// Um worker pool executa essas chamadas concorrentemente, enquanto o
-// processamento de arquivos (rápido, só DB) continua serializado pelo mutex.
-
-const numEmbedWorkers = 5
-
-// embedJob carrega os dados necessários para gerar um embedding em background.
-type embedJob struct {
-	store *db.Store
-	docID string
-	title string
-	text  string
-	embed index.EmbeddingProvider
-}
-
-var (
-	embedQueue   chan embedJob
-	embedWg      sync.WaitGroup
-	embedOnce    sync.Once
-	embedStartMu sync.Mutex
-)
-
-// startEmbedWorkers inicializa o worker pool (lazy, chamado na primeira vez).
-func startEmbedWorkers(ctx context.Context) {
-	embedOnce.Do(func() {
-		embedQueue = make(chan embedJob, 200)
-		for i := range numEmbedWorkers {
-			embedWg.Add(1)
-			go embedWorker(ctx, i)
-		}
-		slog.Info("Worker pool de embeddings iniciado", "workers", numEmbedWorkers)
-	})
-}
-
-// embedWorker processa jobs de embedding concorrentemente.
-// Usa select multiplexado para responder tanto a jobs quanto a cancelamento.
-func embedWorker(ctx context.Context, id int) {
-	defer embedWg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case job, ok := <-embedQueue:
-			if !ok {
-				return // canal fechado
-			}
-			slog.Debug("embed worker processando", "worker", id, "doc", job.docID, "arquivo", job.title)
-			vec, err := job.embed.Embed(ctx, job.text)
-			if err != nil {
-				slog.Warn("embedding falhou (worker)", "worker", id, "doc", job.docID, "arquivo", job.title, "error", err)
-				continue
-			}
-			if err := job.store.SetEmbedding(job.docID, vec, job.title); err != nil {
-				slog.Error("store embedding (worker)", "worker", id, "doc", job.docID, "error", err)
-			} else {
-				slog.Info("embedding armazenado (worker)", "worker", id, "doc", job.docID, "arquivo", job.title)
-			}
-		}
-	}
-}
-
-// stopEmbedWorkers aguarda a fila esvaziar e para os workers.
-func stopEmbedWorkers() {
-	close(embedQueue)
-	embedWg.Wait()
-	embedOnce = sync.Once{} // permite reiniciar se necessário
-}
-
-// drainEmbedQueue aguarda a fila de embedding esvaziar sem fechar o canal.
-// Usado em testes para garantir que embeddings assincronos foram processados.
-func drainEmbedQueue() {
-	embedWg.Wait()
-}
 
 // processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
 // entre o processamento direto (HandleFileSave) e o watcher fsnotify.
@@ -162,28 +87,20 @@ type FileEvent struct {
 // ── Watcher ──
 
 type Watcher struct {
-	cfg      *config.AppConfig
-	store    *db.Store
-	embed    index.EmbeddingProvider
-	embedAll bool
-	watcher  *fsnotify.Watcher
-	events   chan FileEvent
-	wg       sync.WaitGroup
+	cfg     *config.AppConfig
+	store   *db.Store
+	watcher *fsnotify.Watcher
+	events  chan FileEvent
+	wg      sync.WaitGroup
 }
 
 // NewWatcher creates a new watcher instance.
 func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
 	return &Watcher{
-		cfg:      cfg,
-		store:    store,
-		embedAll: cfg.EmbeddingAll,
-		events:   make(chan FileEvent, 100),
+		cfg:    cfg,
+		store:  store,
+		events: make(chan FileEvent, 100),
 	}
-}
-
-// SetEmbedProvider sets the embedding provider for generating vectors.
-func (w *Watcher) SetEmbedProvider(embed index.EmbeddingProvider) {
-	w.embed = embed
 }
 
 // Start launches the fsnotify watcher and polling loop.
@@ -202,9 +119,6 @@ func (w *Watcher) Start(ctx context.Context) {
 		w.watcher.Add(dir)
 	}
 
-	// Inicia worker pool de embeddings (chamadas de rede concorrentes)
-	startEmbedWorkers(ctx)
-
 	w.wg.Add(2)
 	go w.fsnotifyLoop(ctx)
 	go w.pollLoop(ctx)
@@ -222,28 +136,51 @@ func (w *Watcher) Events() <-chan FileEvent {
 // other goroutines (e.g., HandleFileSave) and allows SQLite to batch
 // internal WAL checkpoints, significantly improving throughput during
 // bulk operations like initial indexing.
-func ProcessBatch(store *db.Store, events []FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
+func ProcessBatch(store *db.Store, events []FileEvent) error {
 	processMu.Lock()
 	defer processMu.Unlock()
 
 	for _, ev := range events {
-		if err := processFileLocked(store, ev, embed, embedAll); err != nil {
+		if err := processFileLocked(store, ev); err != nil {
 			slog.Error("batch process file", "file", ev.Filename, "error", err)
 		}
 	}
 	return nil
 }
 
-// ProcessFile processes a single file event: reads, parses, indexes, and optionally embeds the content.
-func ProcessFile(store *db.Store, ev FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
+// ProcessFile processes a single file event: reads, parses, and indexes the content.
+func ProcessFile(store *db.Store, ev FileEvent) error {
 	processMu.Lock()
 	defer processMu.Unlock()
-	return processFileLocked(store, ev, embed, embedAll)
+	return processFileLocked(store, ev)
+}
+
+func processMarkdownFile(path, filename string, modTime time.Time, creationTime time.Time) ([]processor.Document, []string, []string) {
+	return processor.ProcessMarkdown(path, filename, modTime, creationTime)
+}
+
+func processPDFFile(path, filename string, modTime time.Time) ([]processor.Document, []string, []string) {
+	return processor.ProcessPDF(path, filename, modTime)
+}
+
+// Processa como imagem (cria documento stub, sem FTS)
+func processImageFile(filename string, modTime time.Time, creationTime time.Time) []processor.Document {
+	return []processor.Document{{
+		ID:        processor.HashFunc("img-" + filename),
+		Tipo:      "imagem",
+		Arquivo:   filename,
+		Secao:     "Anexos / Imagens",
+		Texto:     "",
+		Timestamp: modTime.UTC().Format(time.RFC3339),
+		Created:   creationTime.UTC().Format(time.RFC3339),
+		Hash:      processor.CalculateHash("img", "", nil),
+		Tags:      nil,
+	}}
 }
 
 // processFileLocked é a implementação compartilhada entre ProcessFile e ProcessBatch.
 // REQUER que processMu já esteja lockado pelo caller.
-func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvider, embedAll bool) error {
+func processFileLocked(store *db.Store, ev FileEvent) error {
 
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -255,7 +192,6 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 	if ev.Type == "delete" {
 		store.DeleteDocumentsByFile(filename)
 		store.DeleteFTSByFile(filename)
-		store.DeleteEmbeddingsByFile(filename)
 		store.DeleteFileMod(filename)
 		store.ResetPopularity(filename)
 		store.SetFileTags(filename, nil) // limpa tags
@@ -313,24 +249,13 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 
 	switch tipo {
 	case "markdown":
-		docs, links, fileTags = processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
+		docs, links, fileTags = processMarkdownFile(ev.Path, filename, ev.ModTime, creationTime)
 	case "pdf":
-		docs, links, fileTags = processor.ProcessPDF(ev.Path, filename, ev.ModTime)
+		docs, links, fileTags = processPDFFile(ev.Path, filename, ev.ModTime)
 	case "imagem":
-		docs = []processor.Document{{
-			ID:         processor.HashFunc("img-" + filename),
-			Tipo:       "imagem",
-			Arquivo:    filename,
-			Secao:      "Anexos / Imagens",
-			Texto:      "",
-			Timestamp:  ev.ModTime.UTC().Format(time.RFC3339),
-			Created:    creationTime.UTC().Format(time.RFC3339),
-			Hash:       processor.CalculateHash("img", "", nil),
-			VectorHash: processor.CalculateVectorHash("img", ""),
-			Tags:       nil,
-		}}
+		docs = processImageFile(filename, ev.ModTime, creationTime)
 	}
-	// Busca tags do arquivo no banco (gerenciadas via toggle-embed na UI)
+	// Busca tags do arquivo no banco
 	existingFileTags, _ := store.GetFileTags(filename)
 
 	for _, doc := range docs {
@@ -346,7 +271,6 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 			Timestamp:  doc.Timestamp,
 			CreatedAt:  doc.Created,
 			Hash:       doc.Hash,
-			VectorHash: doc.VectorHash,
 		}
 		if err := store.InsertDocument(dbDoc); err != nil {
 			slog.Error("insert doc", "id", doc.ID, "error", err)
@@ -355,30 +279,6 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 		if err := store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, db.SliceToTags(doc.Tags)); err != nil {
 			slog.Error("index fts", "id", doc.ID, "error", err)
 		}
-
-		// Generate embedding via worker pool (assíncrono) se o provider estiver configurado.
-		// Para TODOS os tipos de documento: verifica se deve gerar embedding.
-		// As fontes possiveis da tag "embed" sao:
-		// 1. Frontmatter do markdown (doc.Tags)
-		// 2. File-level tags no banco (toggle-embed na UI)
-		// 3. EMBEDDING_ALL=true
-		allTags := append(doc.Tags, existingFileTags...)
-		if embed != nil && shouldEmbed(allTags, embedAll) {
-			textToEmbed := doc.Secao + " " + doc.Texto
-			textToEmbed = strings.TrimSpace(textToEmbed)
-			if textToEmbed != "" && len(textToEmbed) > 10 {
-				title := doc.Secao
-				if title == "" {
-					title = doc.Arquivo
-				}
-				// Enfileira o job para o worker pool — não bloqueia o mutex.
-				select {
-				case embedQueue <- embedJob{store: store, docID: doc.ID, title: title, text: textToEmbed, embed: embed}:
-				default:
-					slog.Warn("fila de embedding cheia, pulando", "id", doc.ID, "arquivo", doc.Arquivo)
-				}
-			}
-		}
 	}
 
 	// Store links
@@ -386,8 +286,7 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 		store.AddLink(filename, link)
 	}
 
-	// Store tags: mescla as tags do frontmatter/hashtags com as tags
-	// existentes no banco (ex: "embed" adicionada via toggle-embed na UI).
+	// Store tags: mescla as tags do frontmatter/hashtags com as tags existentes no banco
 	mergedTags := fileTags
 	for _, et := range existingFileTags {
 		found := false
@@ -409,19 +308,6 @@ func processFileLocked(store *db.Store, ev FileEvent, embed index.EmbeddingProvi
 	store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
 
 	return nil
-}
-
-// shouldEmbed verifies if this document should have an embedding generated.
-func shouldEmbed(tags []string, embedAll bool) bool {
-	if embedAll {
-		return true
-	}
-	for _, t := range tags {
-		if t == "embed" {
-			return true
-		}
-	}
-	return false
 }
 
 // ── Internal loops ──
@@ -600,7 +486,7 @@ func (w *Watcher) pollAll() {
 		} else {
 			// Vários eventos: processa em lote com transação única
 			slog.Info("Processando lote de arquivos", "count", len(batchEvents))
-			if err := ProcessBatch(w.store, batchEvents, w.embed, w.embedAll); err != nil {
+			if err := ProcessBatch(w.store, batchEvents); err != nil {
 				slog.Error("batch process error", "error", err)
 			}
 		}

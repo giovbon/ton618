@@ -70,9 +70,6 @@ func TestProcessPDF_DocumentoValido(t *testing.T) {
 	if doc.Hash == "" {
 		t.Fatal("hash nao deveria ser vazio")
 	}
-	if doc.VectorHash == "" {
-		t.Fatal("vector hash nao deveria ser vazio")
-	}
 	if len(doc.Tags) != 1 || doc.Tags[0] != "pdf" {
 		t.Fatalf("tags esperado ['pdf'], got %v", doc.Tags)
 	}
@@ -94,9 +91,6 @@ func TestProcessPDF_HashDeterministico(t *testing.T) {
 	}
 	if docs1[0].Hash != docs2[0].Hash {
 		t.Fatal("hash deveria ser deterministico para mesmo conteudo")
-	}
-	if docs1[0].VectorHash != docs2[0].VectorHash {
-		t.Fatal("vector hash deveria ser deterministico")
 	}
 }
 

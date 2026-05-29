@@ -78,8 +78,18 @@
             class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
             title="Selecionar notas para mesclar"
         >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"/>
+            <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.5"
+                    d="M4 6h16M4 12h16m-7 6h7"
+                />
             </svg>
             <span id="merge-label">Mesclar</span>
         </button>
@@ -384,7 +394,10 @@
             }
             var safeName = n.arquivo.replace(/'/g, "\\'");
             var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
-            var isZip = n.arquivo && (n.arquivo.indexOf("attachments/") === 0 || n.arquivo.indexOf("archives/") === 0);
+            var isZip =
+                n.arquivo &&
+                (n.arquivo.indexOf("attachments/") === 0 ||
+                    n.arquivo.indexOf("archives/") === 0);
             var isCapture = (n.tags || []).indexOf("captura") !== -1;
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
@@ -404,11 +417,15 @@
             }
 
             var mdCb = mergeMode
-                ? '<input type="checkbox" data-merge-file="' + safeName + '" ' +
-                  (selectedNotes[n.arquivo] ? 'checked' : '') +
-                  ' onchange="toggleNoteSelection(\'' + safeName + '\')" ' +
+                ? '<input type="checkbox" data-merge-file="' +
+                  safeName +
+                  '" ' +
+                  (selectedNotes[n.arquivo] ? "checked" : "") +
+                  " onchange=\"toggleNoteSelection('" +
+                  safeName +
+                  "')\" " +
                   'class="accent-sky-500 w-4 h-4 rounded shrink-0 cursor-pointer" />'
-                : '';
+                : "";
 
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">' +
@@ -441,22 +458,6 @@
                     folder +
                     "</span>";
             html += "</a>";
-            // Embedding indicator + toggle button
-            var embedIcon = n.embedded ? "✦" : "○";
-            var embedColor = n.embedded ? "text-emerald-400" : "text-zinc-600";
-            var embedTitle = n.embedded
-                ? "Embedado - Clique para desativar"
-                : "Nao embedado - Clique para ativar";
-            html +=
-                "<button onclick=\"toggleEmbed('" +
-                safeName +
-                '\')" class="shrink-0 text-[11px] ' +
-                embedColor +
-                ' hover:text-sky-400 transition-colors px-1 py-0.5 rounded-md hover:bg-zinc-900/60" title="' +
-                embedTitle +
-                '">' +
-                embedIcon +
-                "</button>";
             if (tags.length) {
                 html += '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {
@@ -541,31 +542,6 @@
             hideTagAutocomplete();
         }
     });
-
-    function toggleEmbed(filename) {
-        var fd = new FormData();
-        fd.append("filename", filename);
-        fetch("/api/toggle-embed", { method: "POST", body: fd })
-            .then(function (r) {
-                return r.json();
-            })
-            .then(function (data) {
-                if (data && data.ok) {
-                    // Atualiza o estado local sem recarregar tudo
-                    allNotes = allNotes.map(function (n) {
-                        if (n.arquivo === filename) {
-                            n.embedded = data.embedded;
-                        }
-                        return n;
-                    });
-                    var filter = document.getElementById("search-input").value;
-                    onSearchInput(filter);
-                }
-            })
-            .catch(function (err) {
-                console.error("Erro ao toggle embed:", err);
-            });
-    }
 
     function deleteNote(filename) {
         if (!confirm('Excluir "' + filename + '"?')) return;
@@ -674,7 +650,14 @@
 
         // Se tem notas selecionadas, mescla
         if (files.length >= 2) {
-            if (!confirm("Mesclar " + files.length + " notas? As originais serao excluidas.")) return;
+            if (
+                !confirm(
+                    "Mesclar " +
+                        files.length +
+                        " notas? As originais serao excluidas.",
+                )
+            )
+                return;
 
             btn.disabled = true;
             label.textContent = "Mesclando...";
@@ -686,16 +669,25 @@
 
             fetch("/api/merge-notes", {
                 method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
                 body: formData.toString(),
             })
                 .then(function (r) {
-                    if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+                    if (!r.ok)
+                        return r.text().then(function (t) {
+                            throw new Error(t);
+                        });
                     return r.json();
                 })
                 .then(function (data) {
                     if (data.ok) {
-                        alert("Notas mescladas com sucesso! (" + data.deleted + " originais excluidas)");
+                        alert(
+                            "Notas mescladas com sucesso! (" +
+                                data.deleted +
+                                " originais excluidas)",
+                        );
                         mergeMode = false;
                         selectedNotes = {};
                         btn.className =
@@ -703,7 +695,10 @@
                         label.textContent = "Mesclar";
                         btn.disabled = false;
                         // Recarrega a lista
-                        fetch("/api/notes").then(function (r) { return r.json(); })
+                        fetch("/api/notes")
+                            .then(function (r) {
+                                return r.json();
+                            })
                             .then(function (d) {
                                 allNotes = d.notes || [];
                                 renderCompactNotes(allNotes);

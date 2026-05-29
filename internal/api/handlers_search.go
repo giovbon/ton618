@@ -19,7 +19,7 @@ import (
 	"unicode"
 
 	"ton618/internal/db"
-	"ton618/internal/index"
+	"ton618/internal/search"
 	"ton618/internal/watcher"
 )
 
@@ -416,7 +416,6 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
-		ctx.Store.DeleteEmbeddingsByFile(arquivo)
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
@@ -509,7 +508,6 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao remover: %v", arquivo, err))
 		}
 
-		ctx.Store.DeleteEmbeddingsByFile(arquivo)
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
@@ -690,7 +688,7 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 			ModTime:  info.ModTime(),
 			Type:     "create",
 		}
-		if err := watcher.ProcessFile(ctx.Store, ev, ctx.Embed, ctx.Cfg.EmbeddingAll); err != nil {
+		if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
 			slog.Error("reindex archive file", "arquivo", arquivo, "error", err)
 		}
 	}
@@ -796,7 +794,7 @@ func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Reque
 	info, _ := os.Stat(newPath)
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-	}, ctx.Embed, ctx.Cfg.EmbeddingAll)
+	})
 
 	// Aplica as tags da primeira nota à nova nota
 	if len(mergedTags) > 0 {
@@ -822,7 +820,6 @@ func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Reque
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
-		ctx.Store.DeleteEmbeddingsByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)

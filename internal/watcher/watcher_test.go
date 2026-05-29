@@ -1,45 +1,14 @@
 package watcher
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"ton618/internal/config"
 	"ton618/internal/db"
 )
-
-// mockEmbedProvider is a no-op embedding provider for testing.
-type mockEmbedProvider struct{}
-
-func (m *mockEmbedProvider) Embed(_ context.Context, _ string) ([]float32, error) {
-	return []float32{0.1, 0.2, 0.3}, nil
-}
-
-func (m *mockEmbedProvider) Dimensions() int {
-	return 3
-}
-
-// startEmbedWorkersForTest inicia o worker pool com contexto cancelavel
-// e reinicia o sync.Once para permitir uso entre testes.
-// Retorna uma funcao que drena a fila e aguarda os workers terminarem.
-func startEmbedWorkersForTest(t *testing.T) func() {
-	t.Helper()
-	embedOnce = sync.Once{}
-	ctx, cancel := context.WithCancel(context.Background())
-	startEmbedWorkers(ctx)
-	flush := func() {
-		stopEmbedWorkers()
-	}
-	t.Cleanup(func() {
-		cancel()
-		stopEmbedWorkers()
-	})
-	return flush
-}
 
 func newTestStore(t *testing.T) *db.Store {
 	t.Helper()
@@ -60,32 +29,7 @@ func newTestConfig(t *testing.T) *config.AppConfig {
 	return &config.AppConfig{DocsDir: docsDir}
 }
 
-func TestShouldEmbed_EmbedAll(t *testing.T) {
-	if !shouldEmbed(nil, true) {
-		t.Error("embedAll=true deveria retornar true sem tags")
-	}
-	if !shouldEmbed([]string{}, true) {
-		t.Error("embedAll=true deveria retornar true com lista vazia")
-	}
-}
 
-func TestShouldEmbed_TagEmbed(t *testing.T) {
-	if !shouldEmbed([]string{"embed"}, false) {
-		t.Error("tag 'embed' deveria retornar true")
-	}
-	if !shouldEmbed([]string{"golang", "embed", "importante"}, false) {
-		t.Error("tag 'embed' em lista deveria retornar true")
-	}
-}
-
-func TestShouldEmbed_SemTag(t *testing.T) {
-	if shouldEmbed([]string{"golang", "programacao"}, false) {
-		t.Error("sem tag 'embed' e embedAll=false deveria retornar false")
-	}
-	if shouldEmbed(nil, false) {
-		t.Error("nil tags com embedAll=false deveria retornar false")
-	}
-}
 
 func TestSupportedExts_CobreFormatos(t *testing.T) {
 	exts := []string{".md", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
@@ -125,7 +69,7 @@ func TestProcessFile_MarkdownSimples(t *testing.T) {
 		Type:     "modify",
 	}
 
-	err := ProcessFile(store, ev, nil, false)
+	err := ProcessFile(store, ev)
 	if err != nil {
 		t.Fatalf("ProcessFile: %v", err)
 	}
@@ -146,11 +90,11 @@ func TestProcessFile_Delete(t *testing.T) {
 	// Primeiro insere
 	fp := filepath.Join(cfg.DocsDir, "notes", "deleteme.md")
 	os.WriteFile(fp, []byte("sera deletado"), 0644)
-	ProcessFile(store, FileEvent{Path: fp, Filename: "notes/deleteme.md", ModTime: time.Now(), Type: "modify"}, nil, false)
+	ProcessFile(store, FileEvent{Path: fp, Filename: "notes/deleteme.md", ModTime: time.Now(), Type: "modify"})
 
 	// Depois deleta
 	ev := FileEvent{Path: fp, Filename: "notes/deleteme.md", Type: "delete"}
-	err := ProcessFile(store, ev, nil, false)
+	err := ProcessFile(store, ev)
 	if err != nil {
 		t.Fatalf("ProcessFile delete: %v", err)
 	}
@@ -169,7 +113,7 @@ func TestProcessFile_ExtensaoInvalida(t *testing.T) {
 	os.WriteFile(fp, []byte("arquivo txt"), 0644)
 
 	ev := FileEvent{Path: fp, Filename: "notes/teste.txt", ModTime: time.Now(), Type: "modify"}
-	err := ProcessFile(store, ev, nil, false)
+	err := ProcessFile(store, ev)
 	if err != nil {
 		t.Fatalf("ProcessFile: %v", err)
 	}
@@ -189,7 +133,7 @@ func TestProcessFile_ArquivoInexistente(t *testing.T) {
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	err := ProcessFile(store, ev, nil, false)
+	err := ProcessFile(store, ev)
 	if err != nil {
 		t.Fatalf("ProcessFile retornou erro inesperado: %v", err)
 	}
@@ -205,9 +149,6 @@ func TestNewWatcher(t *testing.T) {
 	}
 	if w.store != store {
 		t.Error("store nao foi atribuida")
-	}
-	if w.embedAll {
-		t.Error("embedAll deveria ser false por padrao")
 	}
 	if w.events == nil {
 		t.Error("events channel nao foi criado")
@@ -251,7 +192,7 @@ func TestProcessFile_Attachment_SoRegistraFileMod(t *testing.T) {
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
+	if err := ProcessFile(store, ev); err != nil {
 		t.Fatalf("ProcessFile(attachment): %v", err)
 	}
 
@@ -278,7 +219,7 @@ func TestProcessFile_Attachment_DeleteLimpaFileMod(t *testing.T) {
 		Filename: filename,
 		Type:     "delete",
 	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
+	if err := ProcessFile(store, ev); err != nil {
 		t.Fatalf("ProcessFile(attachment delete): %v", err)
 	}
 
@@ -315,7 +256,7 @@ func TestProcessFile_Attachment_NaoRemoveDocsExistentes(t *testing.T) {
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
-	if err := ProcessFile(store, ev, nil, false); err != nil {
+	if err := ProcessFile(store, ev); err != nil {
 		t.Fatalf("ProcessFile: %v", err)
 	}
 
@@ -332,165 +273,6 @@ func TestProcessFile_Attachment_NaoRemoveDocsExistentes(t *testing.T) {
 	}
 }
 
-// ── ProcessFile — Embedding decision (unified) ──────────────────
-// Testamos a decisao de embedding via tags (nao o embedding em si,
-// que é assincrono). A logica unificada em processFileLocked combina
-// doc.Tags (frontmatter) + existingFileTags (banco) e usa shouldEmbed.
-
-func TestProcessFile_Embed_TagEmbedPreservadaAposReprocessamento(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	// PDF com tag "embed" no banco (como faria o toggle-embed)
-	fp := filepath.Join(cfg.DocsDir, "pdfs", "relatorio.pdf")
-	os.MkdirAll(filepath.Dir(fp), 0755)
-	os.WriteFile(fp, []byte("%PDF-1.4 fake pdf content"), 0644)
-	store.AddTagToFile("pdfs/relatorio.pdf", "embed")
-
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "pdfs/relatorio.pdf", ModTime: time.Now(), Type: "modify",
-	}, nil, false)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	// Tag "embed" deve estar preservada
-	tags, _ := store.GetFileTags("pdfs/relatorio.pdf")
-	hasEmbed := false
-	for _, t := range tags {
-		if t == "embed" {
-			hasEmbed = true
-			break
-		}
-	}
-	if !hasEmbed {
-		t.Error("tag 'embed' do banco deveria ser preservada apos reprocessamento")
-	}
-}
-
-func TestProcessFile_Embed_SemTagEmbed_NaoGeraTag(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	fp := filepath.Join(cfg.DocsDir, "pdfs", "confidencial.pdf")
-	os.MkdirAll(filepath.Dir(fp), 0755)
-	os.WriteFile(fp, []byte("%PDF-1.4 fake"), 0644)
-
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "pdfs/confidencial.pdf", ModTime: time.Now(), Type: "modify",
-	}, nil, false)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	tags, _ := store.GetFileTags("pdfs/confidencial.pdf")
-	for _, tg := range tags {
-		if tg == "embed" {
-			t.Error("PDF sem tag 'embed' nao deveria ter a tag apos processamento")
-		}
-	}
-}
-
-func TestProcessFile_Embed_FrontmatterTagEmbedGeraFileTag(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	content := `---
-title: Teste
-tags: [embed]
----
-Conteudo importante.`
-	fp := filepath.Join(cfg.DocsDir, "notes", "importante.md")
-	os.MkdirAll(filepath.Dir(fp), 0755)
-	os.WriteFile(fp, []byte(content), 0644)
-
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/importante.md", ModTime: time.Now(), Type: "modify",
-	}, nil, false)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	// A tag "embed" do frontmatter vira file-level tag
-	tags, _ := store.GetFileTags("notes/importante.md")
-	hasEmbed := false
-	for _, t := range tags {
-		if t == "embed" {
-			hasEmbed = true
-			break
-		}
-	}
-	if !hasEmbed {
-		t.Error("tag 'embed' do frontmatter deveria virar file-level tag")
-	}
-}
-
-func TestProcessFile_Embed_FrontmatterSemEmbed_NaoGeraTag(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	content := `---
-title: Rascunho
-tags: [rascunho]
----
-Conteudo qualquer.`
-	fp := filepath.Join(cfg.DocsDir, "notes", "rascunho.md")
-	os.MkdirAll(filepath.Dir(fp), 0755)
-	os.WriteFile(fp, []byte(content), 0644)
-
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/rascunho.md", ModTime: time.Now(), Type: "modify",
-	}, nil, false)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	tags, _ := store.GetFileTags("notes/rascunho.md")
-	for _, tg := range tags {
-		if tg == "embed" {
-			t.Error("markdown sem tag 'embed' no frontmatter nao deveria ter a tag")
-		}
-	}
-}
-
-func TestProcessFile_Embed_ToggleTagNoBancoPreservadaMesmoSemFrontmatter(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	// Markdown SEM tag "embed" no frontmatter
-	content := `---
-title: Teste
-tags: [rascunho]
----
-Conteudo.`
-	fp := filepath.Join(cfg.DocsDir, "notes", "toggle-test.md")
-	os.MkdirAll(filepath.Dir(fp), 0755)
-	os.WriteFile(fp, []byte(content), 0644)
-
-	// Mas com tag "embed" no banco (vinda do toggle-embed)
-	store.AddTagToFile("notes/toggle-test.md", "embed")
-
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/toggle-test.md", ModTime: time.Now(), Type: "modify",
-	}, nil, false)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	// A tag do banco deve sobreviver ao reprocessamento
-	tags, _ := store.GetFileTags("notes/toggle-test.md")
-	hasEmbed := false
-	for _, t := range tags {
-		if t == "embed" {
-			hasEmbed = true
-			break
-		}
-	}
-	if !hasEmbed {
-		t.Error("tag 'embed' do toggle-embed deveria ser preservada")
-	}
-}
-
 func TestProcessFile_Embed_ImagemIndexada(t *testing.T) {
 	cfg := newTestConfig(t)
 	store := newTestStore(t)
@@ -501,13 +283,13 @@ func TestProcessFile_Embed_ImagemIndexada(t *testing.T) {
 
 	err := ProcessFile(store, FileEvent{
 		Path: fp, Filename: "notes/foto.png", ModTime: time.Now(), Type: "modify",
-	}, nil, true) // embedAll=true
+	})
 	if err != nil {
 		t.Fatalf("ProcessFile: %v", err)
 	}
 
 	// A imagem deve ter sido indexada como documento
 	if store.GetDocumentCount() == 0 {
-		t.Error("imagem deveria ter sido indexada com embedAll=true")
+		t.Error("imagem deveria ter sido indexada")
 	}
 }

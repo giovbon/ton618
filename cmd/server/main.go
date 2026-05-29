@@ -14,7 +14,6 @@ import (
 	"ton618/internal/api"
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/index"
 	internalTpl "ton618/internal/template"
 	"ton618/internal/watcher"
 )
@@ -39,26 +38,7 @@ func main() {
 	defer store.Close()
 	slog.Info("Banco SQLite pronto")
 
-	// 3. Embedding provider
-	embedProvider := index.NewProvider(
-		cfg.EmbeddingProvider,
-		cfg.EmbeddingAPIKey,
-		cfg.EmbeddingModel,
-		"", // baseURL (usando defaults por provedor)
-		cfg.OllamaHost,
-		cfg.OllamaModel,
-		cfg.EmbeddingDim,
-	)
-	slog.Info("Provedor de embedding", "provider", cfg.EmbeddingProvider)
-
-	// Se nao tem API key configurada, desabilita embedding para evitar erros
-	if cfg.EmbeddingAPIKey == "" && cfg.EmbeddingProvider == "gemini" {
-		slog.Warn("EMBEDDING_API_KEY nao configurada — embeddings desabilitados")
-		cfg.EmbeddingAll = false
-		embedProvider = nil
-	}
-
-	// 4. Templates
+	// 3. Templates
 	tpl := template.New("layout.html").Funcs(template.FuncMap{
 		"hasPrefix": strings.HasPrefix,
 		"baseName": func(s string) string {
@@ -101,9 +81,8 @@ func main() {
 	}
 	slog.Info("Templates carregados")
 
-	// 5. Watcher
+	// 4. Watcher
 	w := watcher.NewWatcher(cfg, store)
-	w.SetEmbedProvider(embedProvider)
 	ctxWatcher, cancelWatcher := context.WithCancel(context.Background())
 	defer cancelWatcher()
 	w.Start(ctxWatcher)
@@ -111,7 +90,7 @@ func main() {
 	go func() {
 		for ev := range w.Events() {
 			slog.Info("Processando", "file", ev.Filename, "type", ev.Type)
-			if err := watcher.ProcessFile(store, ev, embedProvider, cfg.EmbeddingAll); err != nil {
+			if err := watcher.ProcessFile(store, ev); err != nil {
 				slog.Error("processar arquivo", "file", ev.Filename, "error", err)
 			}
 		}
@@ -121,14 +100,8 @@ func main() {
 	w.PollAll()
 	slog.Info("Indexação inicial concluída")
 
-	// Nao agenda reprojecao em background.
-	// A projecao das embeddings e feita exclusivamente pelo
-	// HandleGraphData quando o usuario abre o mapa semantico.
-	// Isso garante que coordenadas existentes NUNCA sejam alteradas
-	// por processos em segundo plano.
-
-	// 6. API context
-	apiCtx := api.NewHandlerContext(cfg, store, w, embedProvider)
+	// 5. API context
+	apiCtx := api.NewHandlerContext(cfg, store, w)
 	apiCtx.SetTemplates(tpl)
 
 	mux := http.NewServeMux()

@@ -35,19 +35,18 @@ func initSchema(database *sql.DB) error {
 	// The old contentless FTS5 schema was already migrated in a previous version.
 	schema := `
 	CREATE TABLE IF NOT EXISTS documents (
-		id          TEXT PRIMARY KEY,
-		tipo        TEXT DEFAULT '',
-		arquivo     TEXT DEFAULT '',
-		secao       TEXT DEFAULT '',
-		texto       TEXT DEFAULT '',
-		tags        TEXT DEFAULT '',
-		pagina      INTEGER DEFAULT 0,
-		ordem       INTEGER DEFAULT 0,
-		timestamp   TEXT DEFAULT '',
-		created_at  TEXT DEFAULT '',
-		hash        TEXT DEFAULT '',
-		vector_hash TEXT DEFAULT ''
-	);
+			id          TEXT PRIMARY KEY,
+			tipo        TEXT DEFAULT '',
+			arquivo     TEXT DEFAULT '',
+			secao       TEXT DEFAULT '',
+			texto       TEXT DEFAULT '',
+			tags        TEXT DEFAULT '',
+			pagina      INTEGER DEFAULT 0,
+			ordem       INTEGER DEFAULT 0,
+			timestamp   TEXT DEFAULT '',
+			created_at  TEXT DEFAULT '',
+			hash        TEXT DEFAULT ''
+		);
 	`
 
 	schema += `
@@ -88,28 +87,41 @@ func initSchema(database *sql.DB) error {
 		value TEXT DEFAULT ''
 	);
 
-	CREATE TABLE IF NOT EXISTS embeddings (
-		doc_id     TEXT PRIMARY KEY,
-		vector     BLOB,
-		title      TEXT DEFAULT '',
-		x          REAL DEFAULT 0,
-		y          REAL DEFAULT 0,
-		created_at TEXT DEFAULT ''
-	);
-
-	CREATE TABLE IF NOT EXISTS semantic_links (
-		from_file TEXT NOT NULL,
-		to_file   TEXT NOT NULL,
-		PRIMARY KEY (from_file, to_file)
-	);
-
-	CREATE TABLE IF NOT EXISTS semantic_topics (
-		topic TEXT PRIMARY KEY
-	);
-
 	CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
 	CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
+
+	CREATE TABLE IF NOT EXISTS tasks (
+		id            TEXT PRIMARY KEY,
+		title         TEXT NOT NULL,
+		description   TEXT DEFAULT '',
+		status        TEXT DEFAULT 'pending',
+		priority      TEXT DEFAULT 'normal',
+		category      TEXT DEFAULT '',
+		start_time    TEXT NOT NULL,
+		end_time      TEXT NOT NULL,
+		all_day       INTEGER DEFAULT 0,
+		color         TEXT DEFAULT '',
+		recurrence_id TEXT DEFAULT '',
+		note_link     TEXT DEFAULT '',
+		is_exception  INTEGER DEFAULT 0,
+		created_at    TEXT DEFAULT '',
+		updated_at    TEXT DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS task_recurrence (
+		id            TEXT PRIMARY KEY,
+		rule          TEXT NOT NULL,
+		days_of_week  TEXT DEFAULT '',
+		days_of_month TEXT DEFAULT '',
+		interval      INTEGER DEFAULT 1,
+		end_date      TEXT NOT NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_tasks_start ON tasks(start_time);
+	CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+	CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
+	CREATE INDEX IF NOT EXISTS idx_tasks_recurrence ON tasks(recurrence_id);
 	`
 
 	_, err := database.Exec(schema)

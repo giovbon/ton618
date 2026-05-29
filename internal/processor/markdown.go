@@ -24,7 +24,6 @@ type Document struct {
 	Timestamp  string
 	Created    string
 	Hash       string
-	VectorHash string
 	Tags       []string
 }
 
@@ -49,13 +48,6 @@ func HashFunc(s string) string {
 // CalculateHash gera hash para detecção de mudanças.
 func CalculateHash(secao, texto string, tags []string) string {
 	input := secao + texto + strings.Join(tags, ",")
-	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("%x", h[:8])
-}
-
-// CalculateVectorHash gera hash do conteúdo textual (independente de tags/seção).
-func CalculateVectorHash(secao, texto string) string {
-	input := secao + texto
 	h := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", h[:8])
 }
@@ -197,7 +189,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 			Timestamp:  timestampStr,
 			Created:    creationStr,
 			Hash:       CalculateHash(SectionDefault, text, fileTags),
-			VectorHash: CalculateVectorHash(SectionDefault, text),
 			Tags:       fileTags,
 		})
 	} else {
@@ -216,7 +207,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					Timestamp:  timestampStr,
 					Created:    creationStr,
 					Hash:       CalculateHash(currentHeader, contentBefore, fileTags),
-					VectorHash: CalculateVectorHash(currentHeader, contentBefore),
 					Tags:       fileTags,
 					Ordem:      ordem,
 				})
@@ -239,7 +229,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 			Timestamp:  timestampStr,
 			Created:    creationStr,
 			Hash:       CalculateHash(currentHeader, remaining, fileTags),
-			VectorHash: CalculateVectorHash(currentHeader, remaining),
 			Tags:       fileTags,
 			Ordem:      ordem,
 		})

@@ -251,23 +251,6 @@ func TestCalculateHash(t *testing.T) {
 	}
 }
 
-func TestCalculateVectorHash(t *testing.T) {
-	h1 := CalculateVectorHash("secao", "texto")
-	h2 := CalculateVectorHash("secao", "texto")
-	if h1 != h2 {
-		t.Error("CalculateVectorHash nao e consistente")
-	}
-	different := CalculateVectorHash("secao", "texto-diferente")
-	if h1 == different {
-		t.Error("texto diferente deveria gerar hash diferente")
-	}
-	// Independente de tags
-	same := CalculateVectorHash("secao", "texto")
-	if h1 != same {
-		t.Error("CalculateVectorHash deveria ser independente de tags")
-	}
-}
-
 func TestProcessMarkdown_TagsFrontmatterMaisHashtags(t *testing.T) {
 	dir := t.TempDir()
 	fp := filepath.Join(dir, "ambos.md")

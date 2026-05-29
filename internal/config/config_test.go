@@ -109,15 +109,6 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.AuthPass != "ton618" {
 		t.Fatalf("esperado auth pass 'ton618', got %q", cfg.AuthPass)
 	}
-	if cfg.EmbeddingProvider != "gemini" {
-		t.Fatalf("esperado embedding provider 'gemini', got %q", cfg.EmbeddingProvider)
-	}
-	if cfg.EmbeddingDim != 768 {
-		t.Fatalf("esperado embedding dim 768, got %d", cfg.EmbeddingDim)
-	}
-	if cfg.EmbeddingAll != false {
-		t.Fatalf("esperado EmbeddingAll false, got %v", cfg.EmbeddingAll)
-	}
 	if cfg.PollIntervalSec != 30*time.Second {
 		t.Fatalf("esperado poll interval 30s, got %v", cfg.PollIntervalSec)
 	}
@@ -156,17 +147,11 @@ func TestLoad_LeeVariaveis(t *testing.T) {
 	os.Setenv("PORT", "9999")
 	os.Setenv("AUTH_USER", "testuser")
 	os.Setenv("AUTH_PASS", "testpass")
-	os.Setenv("EMBEDDING_PROVIDER", "ollama")
-	os.Setenv("EMBEDDING_DIM", "256")
-	os.Setenv("EMBEDDING_ALL", "true")
 	os.Setenv("POLL_INTERVAL_SEC", "60")
 	defer func() {
 		os.Unsetenv("PORT")
 		os.Unsetenv("AUTH_USER")
 		os.Unsetenv("AUTH_PASS")
-		os.Unsetenv("EMBEDDING_PROVIDER")
-		os.Unsetenv("EMBEDDING_DIM")
-		os.Unsetenv("EMBEDDING_ALL")
 		os.Unsetenv("POLL_INTERVAL_SEC")
 	}()
 
@@ -180,15 +165,6 @@ func TestLoad_LeeVariaveis(t *testing.T) {
 	}
 	if cfg.AuthPass != "testpass" {
 		t.Fatalf("esperado 'testpass', got %q", cfg.AuthPass)
-	}
-	if cfg.EmbeddingProvider != "ollama" {
-		t.Fatalf("esperado 'ollama', got %q", cfg.EmbeddingProvider)
-	}
-	if cfg.EmbeddingDim != 256 {
-		t.Fatalf("esperado 256, got %d", cfg.EmbeddingDim)
-	}
-	if cfg.EmbeddingAll != true {
-		t.Fatalf("esperado EmbeddingAll true, got %v", cfg.EmbeddingAll)
 	}
 	if cfg.PollIntervalSec != 60*time.Second {
 		t.Fatalf("esperado 60s, got %v", cfg.PollIntervalSec)
