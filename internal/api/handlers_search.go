@@ -201,7 +201,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		size = 20
 	}
 
-	results, err := index.Search(rCtx, ctx.Store, query, from, size,
+	results, err := search.Search(rCtx, ctx.Store, query, from, size,
 		ctx.Store.GetLinkCount, ctx.Store.GetPopularity)
 	if err != nil {
 		slog.Error("search error", "error", err)
