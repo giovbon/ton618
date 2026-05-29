@@ -211,15 +211,14 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 	// Build template data
 	type resultItem struct {
-		ID         string
-		Arquivo    string
-		Secao      string
-		Tags       []string
-		Snippet    string
-		Score      float64
-		Tipo       string
-		Timestamp  string
-		IsIndexing bool
+		ID        string
+		Arquivo   string
+		Secao     string
+		Tags      []string
+		Snippet   string
+		Score     float64
+		Tipo      string
+		Timestamp string
 	}
 
 	var items []resultItem
@@ -265,15 +264,14 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		items = append(items, resultItem{
-			ID:         hit.Doc.ID,
-			Arquivo:    hit.Doc.Arquivo,
-			Secao:      hit.Doc.Secao,
-			Tags:       tags,
-			Snippet:    snippet,
-			Score:      hit.FinalScore,
-			Tipo:       hit.Doc.Tipo,
-			Timestamp:  hit.Doc.Timestamp,
-			IsIndexing: hit.Doc.IsIndexing,
+			ID:        hit.Doc.ID,
+			Arquivo:   hit.Doc.Arquivo,
+			Secao:     hit.Doc.Secao,
+			Tags:      tags,
+			Snippet:   snippet,
+			Score:     hit.FinalScore,
+			Tipo:      hit.Doc.Tipo,
+			Timestamp: hit.Doc.Timestamp,
 		})
 	}
 
