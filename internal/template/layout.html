@@ -430,9 +430,16 @@
                 <!-- Tabs -->
                 <div class="flex gap-0 px-6 pt-4 border-b border-zinc-800">
                     <button
+                        data-tab="agenda"
+                        onclick="switchSettingsTab('agenda')"
+                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors"
+                    >
+                        📅 Agenda
+                    </button>
+                    <button
                         data-tab="arquivamento"
                         onclick="switchSettingsTab('arquivamento')"
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors"
+                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
                     >
                         🗂️ Arquivamento
                     </button>
@@ -450,6 +457,62 @@
 
                 <!-- Tab Content -->
                 <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                    <!-- Agenda Tab -->
+                    <div id="tab-agenda" class="settings-tab space-y-6">
+                        <p class="text-sm text-zinc-400">
+                            Configure suas estimativas para o dashboard da
+                            Agenda.
+                        </p>
+                        <div
+                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                        >
+                            <label
+                                class="block text-sm font-semibold text-zinc-200 mb-2"
+                                >😴 Horas de sono por noite</label
+                            >
+                            <p class="text-[11px] text-zinc-500 mb-3">
+                                Usado para calcular horas livres no dashboard. O
+                                sistema subtrai esse valor das 24h do dia.
+                            </p>
+                            <div class="flex items-center gap-3">
+                                <input
+                                    type="range"
+                                    id="sleep-hours-slider"
+                                    min="4"
+                                    max="12"
+                                    value="8"
+                                    step="0.5"
+                                    class="flex-1 accent-sky-500 cursor-pointer"
+                                    oninput="
+                                        document.getElementById(
+                                            'sleep-hours-display',
+                                        ).textContent = this.value + 'h'
+                                    "
+                                />
+                                <span
+                                    id="sleep-hours-display"
+                                    class="text-lg font-black text-sky-400 w-12 text-right"
+                                    >8h</span
+                                >
+                            </div>
+                            <div
+                                class="flex justify-between text-[10px] text-zinc-600 mt-1"
+                            >
+                                <span>4h</span>
+                                <span>8h</span>
+                                <span>12h</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button
+                                onclick="saveSleepHours()"
+                                class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors"
+                            >
+                                💾 Salvar
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Arquivamento Tab -->
                     <div id="tab-arquivamento" class="settings-tab space-y-6">
                         <p class="text-sm text-zinc-400">
@@ -841,6 +904,7 @@
             document
                 .getElementById("settings-modal")
                 .classList.remove("hidden");
+            loadSleepHours();
         }
 
         function closeSettings() {
@@ -860,9 +924,39 @@
             document.getElementById("tab-" + name).classList.remove("hidden");
             var btn = document.querySelector('[data-tab="' + name + '"]');
             if (btn) {
-                btn.classList.remove("text-zinc-400", "border-transparent");
                 btn.classList.add("text-white", "border-sky-500");
+                btn.classList.remove("text-zinc-400", "border-transparent");
             }
+        }
+
+        // ── Sleep Hours ──
+        function loadSleepHours() {
+            fetch("/api/settings")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    var val = data.sleep_hours || "8";
+                    document.getElementById("sleep-hours-slider").value = val;
+                    document.getElementById("sleep-hours-display").textContent =
+                        val + "h";
+                })
+                .catch(function () {});
+        }
+
+        function saveSleepHours() {
+            var val = document.getElementById("sleep-hours-slider").value;
+            fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key: "sleep_hours", value: val }),
+            })
+                .then(function () {
+                    alert("Horas de sono salvas: " + val + "h");
+                })
+                .catch(function (err) {
+                    alert("Erro ao salvar: " + err);
+                });
         }
 
         // ── Age slider: update display live ──

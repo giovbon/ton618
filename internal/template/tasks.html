@@ -238,25 +238,15 @@
                 <summary class="cursor-pointer hover:text-zinc-400">
                     Recorrência
                 </summary>
-                <div class="grid grid-cols-2 gap-3 mt-2">
-                    <select
-                        id="task-recurrence-rule"
-                        onchange="onRecurrenceChange()"
-                        class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
-                    >
-                        <option value="">Sem recorrência</option>
-                        <option value="weekly">Semanal</option>
-                        <option value="monthly">Mensal</option>
-                    </select>
-                    <select
-                        id="task-recurrence-interval"
-                        class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
-                    >
-                        <option value="1">A cada 1</option>
-                        <option value="2">A cada 2</option>
-                        <option value="4">A cada 4</option>
-                    </select>
-                </div>
+                <select
+                    id="task-recurrence-rule"
+                    onchange="onRecurrenceChange()"
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
+                >
+                    <option value="">Sem recorrência</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensal</option>
+                </select>
                 <!-- Day-of-week picker (weekly) -->
                 <div id="weekly-days" class="hidden mt-2">
                     <p class="text-[10px] text-zinc-500 mb-1">
@@ -687,9 +677,7 @@
         if (rule) {
             body.recurrence = {
                 rule: rule,
-                interval: parseInt(
-                    document.getElementById("task-recurrence-interval").value,
-                ),
+                interval: 1,
             };
             if (rule === "weekly") {
                 var days = [];
@@ -817,6 +805,222 @@
     </div>
     <div id="task-list" class="space-y-1">
         <div class="text-sm text-zinc-600 py-8 text-center">Carregando...</div>
+    </div>
+</div>
+
+<!-- Create Task Modal -->
+<div
+    id="create-modal"
+    class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm"
+>
+    <div
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl"
+    >
+        <h2 class="text-lg font-black text-zinc-200 mb-4">Nova Tarefa</h2>
+        <form
+            id="create-form"
+            onsubmit="return createTask(event);"
+            class="space-y-3"
+        >
+            <input
+                id="task-title"
+                type="text"
+                placeholder="Título da tarefa"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                required
+            />
+            <textarea
+                id="task-desc"
+                placeholder="Descrição (opcional)"
+                rows="2"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+            ></textarea>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Categoria</label
+                    >
+                    <input
+                        id="task-category"
+                        type="text"
+</div>                        list="cat-suggestions"
+                        placeholder="ex: trabalho, estudo..."
+                        autocomplete="off"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500"
+                    />
+                    <datalist id="cat-suggestions"></datalist>
+                </div>
+                <select
+                    id="task-priority"
+                    class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                    <option value="normal">Normal</option>
+                    <option value="important">Importante</option>
+                    <option value="dispensable">Dispensável</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Início</label
+                    >
+                    <input
+                        id="task-start"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase"
+                        >Fim</label
+                    >
+                    <input
+                        id="task-end"
+                        type="datetime-local"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500"
+                        required
+                    />
+                </div>
+            </div>
+            <!-- Quick presets -->
+            <div class="flex gap-2 flex-wrap">
+                <button
+                    type="button"
+                    onclick="setQuickTime(60)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    1h
+                </button>
+                <button
+                    type="button"
+                    onclick="setQuickTime(120)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    2h
+                </button>
+                <button
+                    type="button"
+                    onclick="setQuickTime(480)"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    8h (dia todo)
+                </button>
+                <button
+                    type="button"
+                    onclick="setTomorrow()"
+                    class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded"
+                >
+                    Amanhã 9h-10h
+                </button>
+            </div>
+            <details class="text-xs text-zinc-500">
+                <summary class="cursor-pointer hover:text-zinc-400">
+                    Recorrência
+                </summary>
+                <select
+                    id="task-recurrence-rule"
+                    onchange="onRecurrenceChange()"
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200"
+                >
+                    <option value="">Sem recorrência</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensal</option>
+                </select>
+                <!-- Day-of-week picker (weekly) -->
+                <div id="weekly-days" class="hidden mt-2">
+                    <p class="text-[10px] text-zinc-500 mb-1">
+                        Repetir nos dias:
+                    </p>
+                    <div class="flex gap-1">
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 0)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors"
+                            data-day="0"
+                        >
+                            Dom
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 1)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="1"
+                        >
+                            Seg
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 2)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="2"
+                        >
+                            Ter
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 3)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="3"
+                        >
+                            Qua
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 4)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="4"
+                        >
+                            Qui
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 5)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-sky-600 text-white transition-colors"
+                            data-day="5"
+                        >
+                            Sex
+                        </button>
+                        <button
+                            type="button"
+                            onclick="toggleDay(this, 6)"
+                            class="day-btn w-9 h-9 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors"
+                            data-day="6"
+                        >
+                            Sáb
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-zinc-600 mt-1">
+                        Dia da semana da data escolhida vem pré-selecionado.
+                    </p>
+                </div>
+                <!-- Day-of-month picker (monthly) -->
+                <div id="monthly-days" class="hidden mt-2">
+                    <p class="text-[10px] text-zinc-500 mb-1">
+                        Repetir nos dias:
+                    </p>
+                    <div class="flex flex-wrap gap-1"></div>
+                    <p class="text-[9px] text-zinc-600 mt-1">
+                        Clique nos dias do mês em que a tarefa se repete.
+                    </p>
+                </div>
+            </details>
+            <div class="flex justify-end gap-2 pt-2">
+                <button
+                    type="button"
+                    onclick="closeCreateModal()"
+                    class="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="submit"
+                    class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
+                >
+                    Criar
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -1112,6 +1316,187 @@
                 console.error(err);
             });
     }
+
+    // ── Create Task Modal ──
+
+    function openCreateModal() {
+        document.getElementById("create-modal").classList.remove("hidden");
+        var now = new Date();
+        var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = local;
+        var end = new Date(
+            now.getTime() + 3600000 - now.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-end").value = end;
+        document.getElementById("task-title").focus();
+    }
+
+    function closeCreateModal() {
+        document.getElementById("create-modal").classList.add("hidden");
+        document.getElementById("create-form").reset();
+    }
+
+    document
+        .getElementById("create-modal")
+        .addEventListener("click", function (e) {
+            if (e.target === this) closeCreateModal();
+        });
+
+    function setQuickTime(minutes) {
+        var now = new Date();
+        var start = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+        var end = new Date(
+            now.getTime() + minutes * 60000 - now.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = start;
+        document.getElementById("task-end").value = end;
+    }
+
+    function setTomorrow() {
+        var tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+        var start = new Date(
+            tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        tomorrow.setHours(10, 0, 0, 0);
+        var end = new Date(
+            tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000,
+        )
+            .toISOString()
+            .slice(0, 16);
+        document.getElementById("task-start").value = start;
+        document.getElementById("task-end").value = end;
+    }
+
+    function createTask(e) {
+        e.preventDefault();
+        var body = {
+            title: document.getElementById("task-title").value,
+            description: document.getElementById("task-desc").value,
+            priority: document.getElementById("task-priority").value,
+            category: document.getElementById("task-category").value,
+            start_time: new Date(
+                document.getElementById("task-start").value,
+            ).toISOString(),
+            end_time: new Date(
+                document.getElementById("task-end").value,
+            ).toISOString(),
+        };
+        var rule = document.getElementById("task-recurrence-rule").value;
+        if (rule) {
+            body.recurrence = {
+                rule: rule,
+                interval: 1,
+            };
+            if (rule === "weekly") {
+                var days = [];
+                document
+                    .querySelectorAll(".day-btn.selected")
+                    .forEach(function (b) {
+                        days.push(b.getAttribute("data-day"));
+                    });
+                body.recurrence.days_of_week = days.length
+                    ? days.join(",")
+                    : document
+                          .querySelector(".day-btn.bg-sky-600")
+                          ?.getAttribute("data-day") || "1";
+            }
+            if (rule === "monthly") {
+                var days = [];
+                document
+                    .querySelectorAll("#monthly-days .day-btn.selected")
+                    .forEach(function (b) {
+                        days.push(b.getAttribute("data-day"));
+                    });
+                body.recurrence.days_of_month = days.length
+                    ? days.join(",")
+                    : "1";
+            }
+        }
+        fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function () {
+                closeCreateModal();
+                loadTaskList();
+            })
+            .catch(function (err) {
+                console.error(err);
+            });
+        return false;
+    }
+
+    // ── Recurrence UI ──
+
+    function onRecurrenceChange() {
+        var rule = document.getElementById("task-recurrence-rule").value;
+        document
+            .getElementById("weekly-days")
+            .classList.toggle("hidden", rule !== "weekly");
+        document
+            .getElementById("monthly-days")
+            .classList.toggle("hidden", rule !== "monthly");
+    }
+
+    function toggleDay(btn, day) {
+        btn.classList.toggle("bg-sky-600");
+        btn.classList.toggle("text-white");
+        btn.classList.toggle("bg-zinc-800");
+        btn.classList.toggle("text-zinc-500");
+        btn.classList.toggle("hover:bg-zinc-700");
+        btn.classList.toggle("selected");
+    }
+
+    // Gera botoes de 1 a 31 para o picker mensal
+    (function buildMonthDays() {
+        var container = document.querySelector("#monthly-days .flex");
+        for (var d = 1; d <= 31; d++) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+                "day-btn w-8 h-8 text-[10px] font-bold rounded bg-zinc-800 text-zinc-500 hover:bg-zinc-700 transition-colors";
+            btn.setAttribute("data-day", d);
+            btn.textContent = d;
+            btn.onclick = function () {
+                toggleDay(this, parseInt(this.getAttribute("data-day")));
+            };
+            container.appendChild(btn);
+        }
+    })();
+
+    // ── Category suggestions ──
+
+    (function loadCategories() {
+        fetch("/api/tasks/categories")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var datalist = document.getElementById("cat-suggestions");
+                (data.categories || []).forEach(function (cat) {
+                    var opt = document.createElement("option");
+                    opt.value = cat;
+                    datalist.appendChild(opt);
+                });
+            })
+            .catch(function () {});
+    })();
 
     // ── Sugestões de categoria para o modal de edição ──
     (function loadEditCategories() {

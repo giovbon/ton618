@@ -344,3 +344,28 @@ func (ctx *HandlerContext) HandleTaskCategories(w http.ResponseWriter, r *http.R
 		"categories": categories,
 	})
 }
+
+func (ctx *HandlerContext) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
+	all, err := ctx.Store.GetAllSettings()
+	if err != nil {
+		all = make(map[string]string)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(all)
+}
+
+func (ctx *HandlerContext) HandleSetSettings(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := ctx.Store.SetSetting(input.Key, input.Value); err != nil {
+		http.Error(w, "failed to save", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -40,6 +40,45 @@ func Dashboard(store *db.Store, from, to time.Time, periodLabel string) (*Dashbo
 		to.Format(time.RFC3339), from.Format(time.RFC3339))
 	row.Scan(&data.BusyHours)
 
+	// Expande recorrências para contabilizar horas de instâncias virtuais
+	taskStore := NewStore(store)
+	periodTasks, err := taskStore.ListTasks(from, to)
+	if err != nil {
+		slog.Error("dashboard list tasks for recurrence", "error", err)
+	} else {
+		seen := make(map[string]bool)
+		var recIDs []string
+		for _, t := range periodTasks {
+			if t.RecurrenceID != "" && !seen[t.RecurrenceID] {
+				seen[t.RecurrenceID] = true
+				recIDs = append(recIDs, t.RecurrenceID)
+			}
+		}
+		if len(recIDs) > 0 {
+			recurrences := make(map[string]*TaskRecurrence)
+			for _, rid := range recIDs {
+				rec, err := taskStore.GetRecurrence(rid)
+				if err != nil {
+					slog.Error("dashboard get recurrence", "id", rid, "error", err)
+					continue
+				}
+				if rec != nil {
+					recurrences[rid] = rec
+				}
+			}
+			if len(recurrences) > 0 {
+				instances := ExpandRecurrences(periodTasks, recurrences, from, to)
+				var totalRecurrenceHours float64
+				for _, inst := range instances {
+					if inst.IsRecurrenceInstance {
+						totalRecurrenceHours += inst.EndTime.Sub(inst.StartTime).Hours()
+					}
+				}
+				data.BusyHours += totalRecurrenceHours
+			}
+		}
+	}
+
 	data.FreeHours = data.TotalHours - data.BusyHours - data.SleepHours
 	if data.FreeHours < 0 {
 		data.FreeHours = 0
@@ -59,7 +98,6 @@ func Dashboard(store *db.Store, from, to time.Time, periodLabel string) (*Dashbo
 	data.OccupancyHistory = queryOccupancyHistory(store, sleepHours)
 
 	// Próximas tarefas
-	taskStore := NewStore(store)
 	upcoming, err := taskStore.GetUpcomingTasks(5)
 	if err != nil {
 		slog.Error("dashboard upcoming", "error", err)

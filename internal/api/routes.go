@@ -81,6 +81,8 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/tasks/{id}", ctx.HandleDeleteTask)
 	mux.HandleFunc("GET /api/tasks/dashboard", ctx.HandleDashboard)
 	mux.HandleFunc("GET /api/tasks/categories", ctx.HandleTaskCategories)
+	mux.HandleFunc("GET /api/settings", ctx.HandleGetSettings)
+	mux.HandleFunc("POST /api/settings", ctx.HandleSetSettings)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))
