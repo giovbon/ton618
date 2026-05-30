@@ -82,46 +82,9 @@ func initSchema(database *sql.DB) error {
 		mtime   TEXT DEFAULT ''
 	);
 
-	CREATE TABLE IF NOT EXISTS settings (
-		key   TEXT PRIMARY KEY,
-		value TEXT DEFAULT ''
-	);
-
 	CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
 	CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
-
-	CREATE TABLE IF NOT EXISTS tasks (
-		id            TEXT PRIMARY KEY,
-		title         TEXT NOT NULL,
-		description   TEXT DEFAULT '',
-		status        TEXT DEFAULT 'pending',
-		priority      TEXT DEFAULT 'normal',
-		category      TEXT DEFAULT '',
-		start_time    TEXT NOT NULL,
-		end_time      TEXT NOT NULL,
-		all_day       INTEGER DEFAULT 0,
-		color         TEXT DEFAULT '',
-		recurrence_id TEXT DEFAULT '',
-		note_link     TEXT DEFAULT '',
-		is_exception  INTEGER DEFAULT 0,
-		created_at    TEXT DEFAULT '',
-		updated_at    TEXT DEFAULT ''
-	);
-
-	CREATE TABLE IF NOT EXISTS task_recurrence (
-		id            TEXT PRIMARY KEY,
-		rule          TEXT NOT NULL,
-		days_of_week  TEXT DEFAULT '',
-		days_of_month TEXT DEFAULT '',
-		interval      INTEGER DEFAULT 1,
-		end_date      TEXT NOT NULL
-	);
-
-	CREATE INDEX IF NOT EXISTS idx_tasks_start ON tasks(start_time);
-	CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-	CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
-	CREATE INDEX IF NOT EXISTS idx_tasks_recurrence ON tasks(recurrence_id);
 	`
 
 	_, err := database.Exec(schema)

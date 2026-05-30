@@ -52,16 +52,6 @@ var stopwords = map[string]bool{
 	"e": true, "the": true, "and": true, "or": true, "of": true, "to": true, "in": true,
 }
 
-// RankWeights remains exported for potential future configurability.
-// All weights are now hardcoded in scoreFragment as relative fractions of BM25.
-type RankWeights struct {
-	BoostFreshness float64
-}
-
-var weights = RankWeights{
-	BoostFreshness: 0.5,
-}
-
 func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getLinkCount func(string) int, getPopularity func(string) int) (*SearchResults, error) {
 	if rawQuery == "" || rawQuery == "*" {
 		return listAll(store, from, size)

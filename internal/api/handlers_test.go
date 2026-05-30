@@ -1,14 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
-	"html/template"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"ton618/internal/config"

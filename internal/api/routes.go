@@ -1,13 +1,12 @@
 package api
 
 import (
-	"html/template"
 	"net/http"
+	"text/template"
 	"time"
 
 	"ton618/internal/config"
 	"ton618/internal/db"
-	"ton618/internal/task"
 	"ton618/internal/watcher"
 )
 
@@ -16,7 +15,6 @@ type HandlerContext struct {
 	Cfg       *config.AppConfig
 	Store     *db.Store
 	Watcher   *watcher.Watcher
-	Tasks     *task.Store
 	Templates *template.Template // será populado em main
 }
 
@@ -26,7 +24,6 @@ func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watche
 		Cfg:     cfg,
 		Store:   store,
 		Watcher: w,
-		Tasks:   task.NewStore(store),
 	}
 }
 
@@ -70,19 +67,6 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/bulk-archive", ctx.HandleBulkArchive)
 	mux.HandleFunc("GET /api/archives", ctx.HandleListArchives)
 	mux.HandleFunc("POST /api/archive/restore", ctx.HandleRestoreArchive)
-
-	// Tarefas / Agenda
-	mux.HandleFunc("GET /tasks", ctx.HandleTasksPage)
-	mux.HandleFunc("GET /tasks/list", ctx.HandleTaskListPage)
-	mux.HandleFunc("GET /api/tasks", ctx.HandleListTasks)
-	mux.HandleFunc("GET /api/tasks/all", ctx.HandleAllTasks)
-	mux.HandleFunc("POST /api/tasks", ctx.HandleCreateTask)
-	mux.HandleFunc("PUT /api/tasks/{id}", ctx.HandleUpdateTask)
-	mux.HandleFunc("DELETE /api/tasks/{id}", ctx.HandleDeleteTask)
-	mux.HandleFunc("GET /api/tasks/dashboard", ctx.HandleDashboard)
-	mux.HandleFunc("GET /api/tasks/categories", ctx.HandleTaskCategories)
-	mux.HandleFunc("GET /api/settings", ctx.HandleGetSettings)
-	mux.HandleFunc("POST /api/settings", ctx.HandleSetSettings)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))

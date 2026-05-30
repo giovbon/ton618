@@ -584,8 +584,12 @@
                 })
                 .then(function (data) {
                     wikiNotes = (data.notes || []).map(function (n) {
-                        var name = n.arquivo.split("/").pop() || n.arquivo;
-                        return name.replace(/\.md$/i, "");
+                        return {
+                            fullPath: n.arquivo,
+                            label: (
+                                n.arquivo.split("/").pop() || n.arquivo
+                            ).replace(/\.md$/i, ""),
+                        };
                     });
                 })
                 .catch(function () {});
@@ -594,7 +598,7 @@
         function showWikiMenu(filter) {
             var f = filter.toLowerCase();
             var items = wikiNotes.filter(function (n) {
-                return n.toLowerCase().indexOf(f) !== -1;
+                return n.label.toLowerCase().indexOf(f) !== -1;
             });
             var el = document.getElementById("wikilink-menu");
             var list = document.getElementById("wikilink-items");
@@ -605,7 +609,8 @@
             }
             wikiSelected = 0;
             var html = "";
-            items.forEach(function (name, i) {
+            items.forEach(function (item, i) {
+                var name = item.label;
                 var idx = name.toLowerCase().indexOf(f);
                 var before = htmlEscape(name.substring(0, idx));
                 var match = htmlEscape(name.substring(idx, idx + f.length));
@@ -615,8 +620,10 @@
                     (i === 0 ? " active" : "") +
                     '" data-index="' +
                     i +
-                    '" data-wiki-name="' +
+                    ' data-wiki-name="' +
                     htmlEscape(name) +
+                    '" data-wiki-path="' +
+                    htmlEscape(item.fullPath) +
                     '">';
                 html += '<span class="wiki-icon">[[]]</span>';
                 html +=
@@ -660,6 +667,28 @@
         function selectWiki(name) {
             hideWikiMenu();
             if (!editor) return;
+
+            // Get full path from the closest .wikilink-item
+            var btn = document.querySelector(".wikilink-item.active");
+            var fullPath = btn ? btn.getAttribute("data-wiki-path") : "";
+            if (!fullPath) {
+                fullPath = "notes/" + name + ".md";
+            }
+
+            // Build href based on file type
+            var ext = fullPath.split(".").pop().toLowerCase();
+            var href;
+            if (ext === "pdf") {
+                href =
+                    "/file/download?name=" + encodeURIComponent("pdfs/" + name);
+            } else if (ext === "zip") {
+                href =
+                    "/file/download?name=" +
+                    encodeURIComponent("attachments/" + name);
+            } else {
+                href = "/editor?file=notes/" + encodeURIComponent(name) + ".md";
+            }
+
             var $from = editor.state.selection.$from;
             var textBefore = $from.parent.textBetween(0, $from.parentOffset);
             var bracketPos = textBefore.lastIndexOf("[[");
@@ -670,14 +699,14 @@
                     .chain()
                     .focus()
                     .deleteRange({ from: deleteFrom, to: deleteTo })
-                    .setLink({ href: "/editor?file=notes/" + name + ".md" })
+                    .setLink({ href: href })
                     .insertContent(name)
                     .run();
             } else {
                 editor
                     .chain()
                     .focus()
-                    .setLink({ href: "/editor?file=notes/" + name + ".md" })
+                    .setLink({ href: href })
                     .insertContent(name)
                     .run();
             }
@@ -995,10 +1024,12 @@
                                     "</a>"
                                 );
                             } else {
-                                // Arquivo não-markdown → link de download
+                                // Arquivo não-markdown (PDF, ZIP, etc.) → link de download
+                                var dir =
+                                    ext === "pdf" ? "pdfs" : "attachments";
                                 return (
-                                    '<a href="/file/download?name=attachments/' +
-                                    encodeURIComponent(target) +
+                                    '<a href="/file/download?name=' +
+                                    encodeURIComponent(dir + "/" + target) +
                                     '" class="wikish-link" download>' +
                                     target +
                                     "</a>"

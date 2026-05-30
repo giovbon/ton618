@@ -4,30 +4,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 type AppConfig struct {
-	DocsDir           string
-	DBPath            string
-	PollIntervalSec   time.Duration
-	Port              string
-	WebDir            string
-	StateDir          string
-	AuthUser          string
-	AuthPass          string
+	DocsDir         string
+	DBPath          string
+	PollIntervalSec time.Duration
+	Port            string
+	WebDir          string
+	StateDir        string
+	AuthUser        string
+	AuthPass        string
 }
 
 func Load() *AppConfig {
 	cfg := &AppConfig{
-		DocsDir:           getEnv("DOCS_DIR", "./docs"),
-		DBPath:            getEnv("DB_PATH", "./data/ton618.db"),
-		PollIntervalSec:   time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
-		Port:              getEnv("PORT", "6180"),
-		WebDir:            getEnv("WEB_DIR", "./web"),
-		StateDir:          getEnv("STATE_DIR", "./data"),
-		AuthUser:          getEnv("AUTH_USER", "admin"),
-		AuthPass:          getEnv("AUTH_PASS", "ton618"),
+		DocsDir:         getEnv("DOCS_DIR", "./docs"),
+		DBPath:          getEnv("DB_PATH", "./data/ton618.db"),
+		PollIntervalSec: time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
+		Port:            getEnv("PORT", "6180"),
+		WebDir:          getEnv("WEB_DIR", "./web"),
+		StateDir:        getEnv("STATE_DIR", "./data"),
+		AuthUser:        getEnv("AUTH_USER", "admin"),
+		AuthPass:        getEnv("AUTH_PASS", "ton618"),
 	}
 
 	// Resolve caminhos relativos para absolutos (essencial no Windows)
@@ -59,6 +60,18 @@ func getEnvAsInt(key string, fallback int) int {
 		var i int
 		if _, err := fmt.Sscanf(v, "%d", &i); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	if v, ok := os.LookupEnv(key); ok {
+		switch strings.ToLower(v) {
+		case "true", "1", "yes":
+			return true
+		default:
+			return false
 		}
 	}
 	return fallback

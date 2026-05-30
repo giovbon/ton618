@@ -93,7 +93,6 @@ func TestInsertDocument_EObtem(t *testing.T) {
 		Timestamp: "2025-01-01T00:00:00Z", CreatedAt: "2025-01-01T00:00:00Z",
 		Hash: "abc123",
 	}
-	}
 	if err := s.InsertDocument(doc); err != nil {
 		t.Fatalf("InsertDocument falhou: %v", err)
 	}

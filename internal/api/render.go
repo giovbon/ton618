@@ -1,7 +1,7 @@
 package api
 
 import (
-	"html/template"
+	"text/template"
 	"net/http"
 )
 

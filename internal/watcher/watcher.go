@@ -16,7 +16,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-
 // processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
 // entre o processamento direto (HandleFileSave) e o watcher fsnotify.
 var processMu sync.Mutex
@@ -155,14 +154,6 @@ func ProcessFile(store *db.Store, ev FileEvent) error {
 	return processFileLocked(store, ev)
 }
 
-func processMarkdownFile(path, filename string, modTime time.Time, creationTime time.Time) ([]processor.Document, []string, []string) {
-	return processor.ProcessMarkdown(path, filename, modTime, creationTime)
-}
-
-func processPDFFile(path, filename string, modTime time.Time) ([]processor.Document, []string, []string) {
-	return processor.ProcessPDF(path, filename, modTime)
-}
-
 // Processa como imagem (cria documento stub, sem FTS)
 func processImageFile(filename string, modTime time.Time, creationTime time.Time) []processor.Document {
 	return []processor.Document{{
@@ -249,9 +240,9 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 	switch tipo {
 	case "markdown":
-		docs, links, fileTags = processMarkdownFile(ev.Path, filename, ev.ModTime, creationTime)
+		docs, links, fileTags = processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
 	case "pdf":
-		docs, links, fileTags = processPDFFile(ev.Path, filename, ev.ModTime)
+		docs, links, fileTags = processor.ProcessPDF(ev.Path, filename, ev.ModTime)
 	case "imagem":
 		docs = processImageFile(filename, ev.ModTime, creationTime)
 	}
@@ -260,17 +251,17 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 	for _, doc := range docs {
 		dbDoc := db.Document{
-			ID:         doc.ID,
-			Tipo:       doc.Tipo,
-			Arquivo:    doc.Arquivo,
-			Secao:      doc.Secao,
-			Texto:      doc.Texto,
-			Tags:       db.SliceToTags(doc.Tags),
-			Pagina:     doc.Pagina,
-			Ordem:      doc.Ordem,
-			Timestamp:  doc.Timestamp,
-			CreatedAt:  doc.Created,
-			Hash:       doc.Hash,
+			ID:        doc.ID,
+			Tipo:      doc.Tipo,
+			Arquivo:   doc.Arquivo,
+			Secao:     doc.Secao,
+			Texto:     doc.Texto,
+			Tags:      db.SliceToTags(doc.Tags),
+			Pagina:    doc.Pagina,
+			Ordem:     doc.Ordem,
+			Timestamp: doc.Timestamp,
+			CreatedAt: doc.Created,
+			Hash:      doc.Hash,
 		}
 		if err := store.InsertDocument(dbDoc); err != nil {
 			slog.Error("insert doc", "id", doc.ID, "error", err)

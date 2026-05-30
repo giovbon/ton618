@@ -20,7 +20,6 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 		// Páginas
 		{"GET", "/", true},
 		{"GET", "/editor", true},
-		{"GET", "/graph", true},
 		{"GET", "/login", true},
 
 		// Busca
@@ -39,8 +38,6 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 		{"GET", "/api/health", true},
 		{"GET", "/api/tags", true},
 		{"GET", "/api/notes", true},
-		{"GET", "/api/graph/data", true},
-		{"POST", "/api/graph/project", true},
 		{"POST", "/api/sync", true},
 		{"POST", "/api/bulk-delete", true},
 	}

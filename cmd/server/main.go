@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
 
 	"ton618/internal/api"
@@ -39,7 +39,7 @@ func main() {
 	slog.Info("Banco SQLite pronto")
 
 	// 3. Templates
-	tpl := template.New("layout.html").Funcs(template.FuncMap{
+	funcMap := template.FuncMap{
 		"hasPrefix": strings.HasPrefix,
 		"baseName": func(s string) string {
 			if s == "" {
@@ -72,9 +72,9 @@ func main() {
 			}
 			return "📝"
 		},
-	})
+	}
 	var parseErr error
-	tpl, parseErr = tpl.ParseFS(internalTpl.TemplatesFS, "*.html")
+	tpl, parseErr := internalTpl.LoadTemplates(funcMap)
 	if parseErr != nil {
 		slog.Error("carregar templates", "error", parseErr)
 		os.Exit(1)
