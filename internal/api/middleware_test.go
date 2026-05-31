@@ -278,3 +278,44 @@ func TestMiddleware_CookieSobrepoeHeaderVazio(t *testing.T) {
 		t.Errorf("cookie valido sem header deveria permitir acesso, got %d", code)
 	}
 }
+
+// ── Recovery ────────────────────────────────────────────────────────
+
+func TestRecovery_Panics(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("test panic")
+	})
+
+	handler := Recovery(next)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("esperado 500 apos panic, got %d", rec.Code)
+	}
+	if rec.Body.String() != "Internal Server Error\n" {
+		t.Errorf("esperado 'Internal Server Error', got %q", rec.Body.String())
+	}
+}
+
+func TestRecovery_NoPanic(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	handler := Recovery(next)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("esperado 200 sem panic, got %d", rec.Code)
+	}
+	if rec.Body.String() != "OK" {
+		t.Errorf("esperado 'OK', got %q", rec.Body.String())
+	}
+}

@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -391,4 +392,187 @@ func contains(slice []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// ── MarkRecentlyProcessed / isRecentlyProcessed ───────────────────
+
+func TestRecentlyProcessed_MarksAndReturnsTrue(t *testing.T) {
+	MarkRecentlyProcessed("notes/test.md")
+	if !isRecentlyProcessed("notes/test.md") {
+		t.Error("should return true immediately after marking")
+	}
+}
+
+func TestRecentlyProcessed_UnknownFile_ReturnsFalse(t *testing.T) {
+	if isRecentlyProcessed("notes/unknown.md") {
+		t.Error("unknown file should return false")
+	}
+}
+
+func TestRecentlyProcessed_Expires(t *testing.T) {
+	// isRecentlyProcessed deletes the entry after checking within 3s,
+	// so calling it twice should return false the second time.
+	MarkRecentlyProcessed("notes/test.md")
+	isRecentlyProcessed("notes/test.md") // first call — returns true and deletes
+	if isRecentlyProcessed("notes/test.md") {
+		t.Error("second call should return false (entry was deleted)")
+	}
+}
+
+// ── Events() ─────────────────────────────────────────────────────
+
+func TestEvents_ChannelNaoNulo(t *testing.T) {
+	store := newTestStore(t)
+	cfg := newTestConfig(t)
+	w := NewWatcher(cfg, store)
+	if w.Events() == nil {
+		t.Error("Events() should not return nil channel")
+	}
+}
+
+// ── ProcessBatch ─────────────────────────────────────────────────
+
+func TestProcessBatch_MultiplosArquivos(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	f1 := filepath.Join(cfg.DocsDir, "notes", "batch1.md")
+	f2 := filepath.Join(cfg.DocsDir, "notes", "batch2.md")
+	os.WriteFile(f1, []byte("# Batch 1\ncontent"), 0644)
+	os.WriteFile(f2, []byte("# Batch 2\ncontent"), 0644)
+
+	events := []FileEvent{
+		{Path: f1, Filename: "notes/batch1.md", ModTime: time.Now(), Type: "modify"},
+		{Path: f2, Filename: "notes/batch2.md", ModTime: time.Now(), Type: "modify"},
+	}
+
+	err := ProcessBatch(store, events)
+	if err != nil {
+		t.Fatalf("ProcessBatch: %v", err)
+	}
+
+	if c := store.GetDocumentCount(); c != 2 {
+		t.Errorf("expected 2 documents, got %d", c)
+	}
+}
+
+// ── relPathFromAbs / relPathFromWalk ─────────────────────────────
+
+func TestRelPathFromAbs_Relativo(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+	w := NewWatcher(cfg, store)
+
+	absPath := filepath.Join(cfg.DocsDir, "notes", "test.md")
+	rel, ok := w.relPathFromAbs(absPath)
+	if !ok {
+		t.Fatal("relPathFromAbs should succeed")
+	}
+	if rel != "notes/test.md" {
+		t.Errorf("expected 'notes/test.md', got %q", rel)
+	}
+}
+
+func TestRelPathFromAbs_ForaDoDocDir(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+	w := NewWatcher(cfg, store)
+
+	_, ok := w.relPathFromAbs("/tmp/outside.md")
+	if ok {
+		t.Error("should return false for path outside DocsDir")
+	}
+}
+
+func TestRelPathFromWalk_Relativo(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+	w := NewWatcher(cfg, store)
+
+	absPath := filepath.Join(cfg.DocsDir, "notes", "test.md")
+	rel, ok := w.relPathFromWalk(absPath)
+	if !ok {
+		t.Fatal("relPathFromWalk should succeed")
+	}
+	if rel != "notes/test.md" {
+		t.Errorf("expected 'notes/test.md', got %q", rel)
+	}
+}
+
+// ── PollAll ──────────────────────────────────────────────────────
+
+func TestPollAll_IndexaArquivosNovos(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+	w := NewWatcher(cfg, store)
+
+	// pollAll calls ProcessBatch directly when there are 2+ files
+	// (single file goes to the events channel, which nothing reads)
+	fp1 := filepath.Join(cfg.DocsDir, "notes", "poll-test1.md")
+	fp2 := filepath.Join(cfg.DocsDir, "notes", "poll-test2.md")
+	os.WriteFile(fp1, []byte("# Poll Test 1\ncontent"), 0644)
+	os.WriteFile(fp2, []byte("# Poll Test 2\ncontent"), 0644)
+
+	w.PollAll()
+
+	if c := store.GetDocumentCount(); c != 2 {
+		t.Errorf("PollAll should index 2 files, got %d", c)
+	}
+}
+
+// ── processFileLocked — attachment recovery ─────────────────────
+
+func TestProcessFile_AttachmentRecovery(t *testing.T) {
+	store := newTestStore(t)
+	cfg := newTestConfig(t)
+
+	filename := "attachments/recover.zip"
+	fullPath := filepath.Join(cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("fake zip for recovery test"), 0644)
+
+	// Set up file_mod so it looks like the file was already indexed
+	store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+
+	ev := FileEvent{
+		Path:     fullPath,
+		Filename: filename,
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}
+	if err := ProcessFile(store, ev); err != nil {
+		t.Fatalf("ProcessFile: %v", err)
+	}
+
+	// Should have recovered the document
+	count := store.GetDocumentCount()
+	if count != 1 {
+		t.Errorf("expected 1 recovered document, got %d", count)
+	}
+
+	// Verify the tag was set
+	tags, _ := store.GetFileTags(filename)
+	if len(tags) != 1 || tags[0] != "zip" {
+		t.Errorf("expected [zip] tags for recovered attachment, got %v", tags)
+	}
+}
+
+// ── Start — context cancellation ────────────────────────────────
+
+func TestWatcher_StartCancellation(t *testing.T) {
+	cfg := newTestConfig(t)
+	cfg.PollIntervalSec = time.Hour // avoid panic from NewTicker(0)
+	store := newTestStore(t)
+	w := NewWatcher(cfg, store)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	w.Start(ctx)
+
+	// Should not panic when we cancel
+	cancel()
+
+	// Allow goroutines to finish
+	time.Sleep(50 * time.Millisecond)
+
+	// If we got here, test passes
 }

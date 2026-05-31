@@ -60,6 +60,26 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 	}
 }
 
+func TestNewHandlerContext(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Verifica que NewHandlerContext define corretamente os campos
+	hc := NewHandlerContext(ctx.Cfg, ctx.Store, ctx.Watcher)
+
+	if hc.Cfg != ctx.Cfg {
+		t.Error("Cfg nao foi definido corretamente")
+	}
+	if hc.Store != ctx.Store {
+		t.Error("Store nao foi definido corretamente")
+	}
+	if hc.Watcher != ctx.Watcher {
+		t.Error("Watcher nao foi definido corretamente")
+	}
+	if hc.Templates != nil {
+		t.Error("Templates deveria ser nil inicialmente")
+	}
+}
+
 func TestSetupRoutes_StaticFiles(t *testing.T) {
 	ctx := newTestContext(t)
 	mux := http.NewServeMux()
