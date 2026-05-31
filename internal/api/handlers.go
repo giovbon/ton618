@@ -105,32 +105,11 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 }
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
-	from, _ := strconv.Atoi(r.URL.Query().Get("from"))
-	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
-	if size <= 0 || size > 200 {
-		size = 50
-	}
-
-	mods, total, err := ctx.Store.GetAllNotesPaginated(from, size)
+	// Delega para o NoteService que consolida file_mods + notes
+	notes, err := ctx.Notes.GetMany()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	type noteItem struct {
-		Arquivo string   `json:"arquivo"`
-		Tags    []string `json:"tags"`
-		Mtime   string   `json:"mtime"`
-	}
-
-	var notes []noteItem
-	for arquivo, mtime := range mods {
-		tags, _ := ctx.Store.GetFileTags(arquivo)
-		notes = append(notes, noteItem{
-			Arquivo: arquivo,
-			Tags:    tags,
-			Mtime:   mtime,
-		})
 	}
 
 	sort.Slice(notes, func(i, j int) bool {
@@ -140,9 +119,7 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"notes": notes,
-		"total": total,
-		"from":  from,
-		"size":  size,
+		"total": len(notes),
 	})
 }
 

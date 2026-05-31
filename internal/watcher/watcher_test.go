@@ -40,7 +40,7 @@ func TestSupportedExts_CobreFormatos(t *testing.T) {
 }
 
 func TestMonitoredSubDirs(t *testing.T) {
-	expected := []string{"links", "voice", "pdfs", "attachments", "archives"}
+	expected := []string{"pdfs", "attachments", "archives"}
 	for _, sub := range expected {
 		found := false
 		for _, m := range MonitoredSubDirs {

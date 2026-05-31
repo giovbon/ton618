@@ -69,11 +69,7 @@ func newTestContext(t *testing.T) *HandlerContext {
 	})
 	tpl, _ = tpl.ParseFS(internalTpl.TemplatesFS, "*.html")
 
-	ctx := &HandlerContext{
-		Cfg:     cfg,
-		Store:   store,
-		Watcher: w,
-	}
+	ctx := NewHandlerContext(cfg, store, w)
 	ctx.SetTemplates(tpl)
 
 	return ctx

@@ -16,6 +16,7 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/processor"
+	"ton618/internal/service"
 	"ton618/internal/watcher"
 )
 
@@ -103,7 +104,7 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "docs/", "voice/", "archives/"}
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -169,36 +170,16 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Normaliza: garante prefixo notes/ e extensao .md
 	filename := noteFilename(raw)
-	now := time.Now()
-	mtimeStr := now.Format(time.RFC3339)
 
-	// Save content to notes table
-	if err := ctx.Store.SaveNote(filename, content, mtimeStr); err != nil {
+	// Delega para o NoteService (salva + reindexa + tags + links)
+	tagList := strings.Split(tags, ",")
+	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
+		slog.Error("save note", "file", filename, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Update tags
-	if tags != "" {
-		tagList := strings.Split(tags, ",")
-		var cleanTags []string
-		for _, t := range tagList {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				cleanTags = append(cleanTags, t)
-			}
-		}
-		ctx.Store.SetFileTags(filename, cleanTags)
-	}
-
-	// Process content (index documents, FTS, links)
-	if err := ctx.reindexNote(filename, content, now); err != nil {
-		slog.Error("process note after save", "error", err)
-	}
-
-	// Redirect back to editor
 	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
 }
 
@@ -327,43 +308,24 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else {
-		// Note: rename in DB
-		oldName = noteFilename(rawOld)
-		newName = noteFilename(rawNew)
-		if oldName == newName {
-			http.Redirect(w, r, "/editor?file="+url.QueryEscape(newName), http.StatusSeeOther)
-			return
-		}
-		if err := ctx.Store.RenameNote(oldName, newName); err != nil {
+		// Note: delega para o NoteService
+		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// Also rename on disk for backwards compat
-		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
-		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-		os.Rename(oldPath, newPath)
+		newName = noteFilename(rawNew)
 	}
 
-	// Update DB: delete old indexes, read new content and re-index
-	ctx.Store.DeleteDocumentsByFile(oldName)
-	ctx.Store.DeleteFTSByFile(oldName)
-
+	// Update DB: delete old indexes for PDF/ZIP; notes já foram tratados pelo Notes.Rename
 	if isPdf || isZip {
+		ctx.Store.DeleteDocumentsByFile(oldName)
+		ctx.Store.DeleteFTSByFile(oldName)
 		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 		info, err := os.Stat(newPath)
 		if err == nil {
 			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 				Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
 			})
-		}
-	} else {
-		// For notes: read from DB and reindex
-		content, err := ctx.Store.GetNote(newName)
-		if err == nil && content != "" {
-			now := time.Now()
-			if err := ctx.reindexNote(newName, content, now); err != nil {
-				slog.Error("reindex after rename", "file", newName, "error", err)
-			}
 		}
 	}
 
@@ -672,4 +634,21 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 		"count":   len(removed),
 		"errors":  errors,
 	})
+}
+
+// ── Backup ──
+
+// HandleBackup baixa um ZIP com todas as notas (markdown), PDFs e anexos,
+// excluindo a pasta archives/.
+func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) {
+	data, err := ctx.Backup.Create()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, service.Filename()))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
 }

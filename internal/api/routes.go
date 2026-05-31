@@ -7,6 +7,7 @@ import (
 
 	"ton618/internal/config"
 	"ton618/internal/db"
+	"ton618/internal/service"
 	"ton618/internal/watcher"
 )
 
@@ -15,7 +16,11 @@ type HandlerContext struct {
 	Cfg       *config.AppConfig
 	Store     *db.Store
 	Watcher   *watcher.Watcher
-	Templates *template.Template // será populado em main
+	Templates *template.Template
+
+	// Serviços (lógica de negócio separada dos handlers HTTP)
+	Backup *service.BackupService
+	Notes  *service.NoteService
 }
 
 // NewHandlerContext cria o contexto.
@@ -24,6 +29,9 @@ func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watche
 		Cfg:     cfg,
 		Store:   store,
 		Watcher: w,
+		// Backup e Notes são injetados depois (possuem dependências cíclicas)
+		Backup: service.NewBackupService(store, store, cfg.DocsDir),
+		Notes:  service.NewNoteService(store, store, store, store, store, store, cfg.DocsDir),
 	}
 }
 
@@ -67,6 +75,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/bulk-archive", ctx.HandleBulkArchive)
 	mux.HandleFunc("GET /api/archives", ctx.HandleListArchives)
 	mux.HandleFunc("POST /api/archive/restore", ctx.HandleRestoreArchive)
+	mux.HandleFunc("GET /api/backup", ctx.HandleBackup)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))
