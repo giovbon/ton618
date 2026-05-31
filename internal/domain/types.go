@@ -8,7 +8,7 @@ import "time"
 type Document struct {
 	ID        string
 	Type      string
-	File      string   // caminho relativo (ex: "notes/foo.md", "pdfs/bar.pdf")
+	File      string // caminho relativo (ex: "notes/foo.md", "pdfs/bar.pdf")
 	Section   string
 	Text      string
 	Tags      []string
