@@ -29,29 +29,6 @@ func (s *Store) DeleteFileMod(arquivo string) error {
 	return err
 }
 
-// GetFileModsPaginated returns a paginated slice of file modification times,
-// ordered by mtime descending, along with the total count.
-func (s *Store) GetFileModsPaginated(from, size int) (map[string]string, int, error) {
-	var total int
-	s.DB.QueryRow("SELECT COUNT(*) FROM file_mods").Scan(&total)
-
-	rows, err := s.DB.Query("SELECT arquivo, mtime FROM file_mods ORDER BY mtime DESC LIMIT ? OFFSET ?", size, from)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	result := make(map[string]string)
-	for rows.Next() {
-		var arquivo, mtime string
-		if err := rows.Scan(&arquivo, &mtime); err != nil {
-			continue
-		}
-		result[arquivo] = mtime
-	}
-	return result, total, rows.Err()
-}
-
 // GetAllFileMods returns all stored file modification times as a map.
 func (s *Store) GetAllFileMods() (map[string]string, error) {
 	rows, err := s.DB.Query("SELECT arquivo, mtime FROM file_mods")

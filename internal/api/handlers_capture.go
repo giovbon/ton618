@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -17,8 +15,6 @@ import (
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript"
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript_formatters"
-
-	"ton618/internal/watcher"
 )
 
 // isYouTubeURL verifica se é URL do YouTube.
@@ -257,32 +253,21 @@ source: %s
 	base := slug
 	finalFilename := filename
 	for counter := 2; ; counter++ {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, finalFilename)
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		if !ctx.Store.NoteExists(finalFilename) {
 			break
 		}
 		finalFilename = fmt.Sprintf("notes/captura-%s-%d.md", base, counter)
 	}
 	filename = finalFilename
 
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-	if err := os.WriteFile(fullPath, []byte(finalMarkdown), 0644); err != nil {
-		slog.Error("erro ao salvar captura", "error", err)
+	mtime := time.Now()
+	if err := ctx.Store.SaveNote(filename, finalMarkdown, mtime.Format(time.RFC3339)); err != nil {
+		slog.Error("erro ao salvar captura no DB", "error", err)
 		http.Error(w, "Erro ao salvar", http.StatusInternalServerError)
 		return
 	}
-
-	slog.Info("Captura salva", "file", filename)
-
-	ev := watcher.FileEvent{
-		Path:     fullPath,
-		Filename: filename,
-		ModTime:  time.Now(),
-		Type:     "modify",
-	}
-	if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
-		slog.Error("processar captura", "error", err)
+	if err := ctx.reindexNote(filename, finalMarkdown, mtime); err != nil {
+		slog.Error("reindexar captura", "error", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

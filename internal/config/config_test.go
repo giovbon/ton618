@@ -191,7 +191,7 @@ func TestEnsureDirs_CriaDiretorios(t *testing.T) {
 	}
 
 	// Verifica subdiretorios monitorados
-	for _, sub := range []string{"notes", "links", "voice", "pdfs"} {
+	for _, sub := range []string{"links", "voice", "pdfs", "attachments", "archives"} {
 		path := filepath.Join(cfg.DocsDir, sub)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			t.Fatalf("subdiretorio %q nao foi criado", path)

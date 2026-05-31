@@ -57,11 +57,10 @@ func isRecentlyProcessed(filename string) bool {
 }
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
-var MonitoredSubDirs = []string{"notes", "links", "voice", "pdfs", "attachments", "archives"}
+var MonitoredSubDirs = []string{"links", "voice", "pdfs", "attachments", "archives"}
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{
-	".md":   "markdown",
 	".pdf":  "pdf",
 	".png":  "imagem",
 	".jpg":  "imagem",

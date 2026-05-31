@@ -82,6 +82,12 @@ func initSchema(database *sql.DB) error {
 		mtime   TEXT DEFAULT ''
 	);
 
+	CREATE TABLE IF NOT EXISTS notes (
+		filename  TEXT PRIMARY KEY,
+		mtime     TEXT DEFAULT '',
+		content   TEXT DEFAULT ''
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
 	CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);

@@ -2,10 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,7 +35,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Normaliza o filename: garante prefixo notes/ e extensao .md
-	sanitized := sanitizeFilename(filename)
+	sanitized := noteFilename(filename)
 
 	// Se a URL nao estava normalizada, redireciona para a URL canonica
 	if sanitized != filename {
@@ -50,9 +49,8 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 
 	// So ignora conteudo para o template exato "notes/novo.md"
 	if filename != "notes/novo.md" {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-		if data, err := os.ReadFile(fullPath); err == nil {
-			content = string(data)
+		if data, err := ctx.Store.GetNote(filename); err == nil && data != "" {
+			content = data
 		}
 		// Incrementa popularidade ao abrir nota existente
 		ctx.Store.IncrementPopularity(filename)
@@ -113,7 +111,7 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 		size = 50
 	}
 
-	mods, total, err := ctx.Store.GetFileModsPaginated(from, size)
+	mods, total, err := ctx.Store.GetAllNotesPaginated(from, size)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -149,10 +147,34 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 }
 
 func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Request) {
-	// Trigger poll
-	ctx.Watcher.PollAll()
+	// Process all notes from the notes table in DB
+	allNotes, err := ctx.Store.GetAllNotes()
+	if err != nil {
+		slog.Error("manual sync: get all notes", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	count := 0
+	for filename, mtimeStr := range allNotes {
+		content, err := ctx.Store.GetNote(filename)
+		if err != nil || content == "" {
+			continue
+		}
+		mtime, err := time.Parse(time.RFC3339, mtimeStr)
+		if err != nil {
+			mtime = time.Now()
+		}
+		if err := ctx.reindexNote(filename, content, mtime); err != nil {
+			slog.Error("manual sync: reindex note", "file", filename, "error", err)
+			continue
+		}
+		count++
+	}
+
+	slog.Info("Manual sync completed", "notes_processed", count)
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<div class="text-green-500">✓ Sincronização iniciada</div>`))
+	w.Write([]byte(`<div class="text-green-500">✓ Sincronização concluída (` + strconv.Itoa(count) + ` notas processadas)</div>`))
 }
 
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {

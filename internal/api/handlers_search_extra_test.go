@@ -122,11 +122,10 @@ func TestHandleBulkArchive_Success(t *testing.T) {
 		t.Errorf("esperado 2 arquivos arquivados, got %v", archived)
 	}
 
-	// Arquivos originais removidos
+	// Notas removidas do banco
 	for _, f := range []string{"notes/archive-me-1.md", "notes/archive-me-2.md"} {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, f)
-		if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
-			t.Errorf("arquivo %s deveria ter sido removido", f)
+		if ctx.Store.NoteExists(f) {
+			t.Errorf("nota %s deveria ter sido removida do banco", f)
 		}
 	}
 }
@@ -171,9 +170,8 @@ func TestHandleBulkDelete_ByTag(t *testing.T) {
 		t.Errorf("esperado 2 notas deletadas, got %v", deleted)
 	}
 
-	// Nota com tag "keep" deve permanecer
-	keepPath := filepath.Join(ctx.Cfg.DocsDir, "notes/keep-me.md")
-	if _, err := os.Stat(keepPath); os.IsNotExist(err) {
+	// Nota com tag "keep" deve permanecer no banco
+	if !ctx.Store.NoteExists("notes/keep-me.md") {
 		t.Error("nota 'keep-me' nao deveria ter sido deletada")
 	}
 }
@@ -202,10 +200,9 @@ func TestHandleBulkDelete_ByTagPreview(t *testing.T) {
 		t.Errorf("esperado 1 no preview, got %v", total)
 	}
 
-	// Arquivo nao deve ser deletado (preview)
-	previewPath := filepath.Join(ctx.Cfg.DocsDir, "notes/preview-test.md")
-	if _, err := os.Stat(previewPath); os.IsNotExist(err) {
-		t.Error("preview nao deveria deletar o arquivo")
+	// Nota nao deve ser deletada (preview) - verifica no banco
+	if !ctx.Store.NoteExists("notes/preview-test.md") {
+		t.Error("preview nao deveria deletar a nota do banco")
 	}
 }
 
@@ -337,9 +334,9 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 		t.Fatal("archive name nao pode ser vazio")
 	}
 
-	// Arquivo original removido
-	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes/restore-test.md")); !os.IsNotExist(err) {
-		t.Error("arquivo original deveria ter sido removido")
+	// Nota removida do banco apos arquivar
+	if ctx.Store.NoteExists("notes/restore-test.md") {
+		t.Error("nota original deveria ter sido removida do banco")
 	}
 
 	// Restaura
@@ -366,10 +363,9 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 		t.Errorf("esperado 1 arquivo restaurado, got %v", restored)
 	}
 
-	// Arquivo restaurado
-	restoredPath := filepath.Join(ctx.Cfg.DocsDir, "notes/restore-test.md")
-	if _, err := os.Stat(restoredPath); os.IsNotExist(err) {
-		t.Error("arquivo deveria ter sido restaurado")
+	// Arquivo restaurado no banco
+	if !ctx.Store.NoteExists("notes/restore-test.md") {
+		t.Error("nota deveria ter sido restaurada no banco")
 	}
 }
 
@@ -426,22 +422,19 @@ func TestHandleMergeNotes_Success(t *testing.T) {
 		t.Errorf("esperado prefixo 'notes/mesclado-', got %q", filename)
 	}
 
-	// Notas originais deletadas
+	// Notas originais deletadas do banco
 	for _, f := range []string{"notes/merge-a.md", "notes/merge-b.md"} {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, f)
-		if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
-			t.Errorf("arquivo %s deveria ter sido deletado", f)
+		if ctx.Store.NoteExists(f) {
+			t.Errorf("nota %s deveria ter sido deletada do banco", f)
 		}
 	}
 
-	// Nota mesclada deve existir e conter ambos os conteudos
-	mergedPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	data, err := os.ReadFile(mergedPath)
+	// Nota mesclada deve existir no banco e conter ambos os conteudos
+	mergedContent, err := ctx.Store.GetNote(filename)
 	if err != nil {
-		t.Fatalf("erro ao ler nota mesclada: %v", err)
+		t.Fatalf("erro ao ler nota mesclada do banco: %v", err)
 	}
-	content := string(data)
-	if !strings.Contains(content, "Nota A") || !strings.Contains(content, "Nota B") {
-		t.Errorf("nota mesclada deve conter ambas as notas, got %q", content)
+	if !strings.Contains(mergedContent, "Nota A") || !strings.Contains(mergedContent, "Nota B") {
+		t.Errorf("nota mesclada deve conter ambas as notas, got %q", mergedContent)
 	}
 }

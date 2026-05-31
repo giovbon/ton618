@@ -31,7 +31,7 @@ func newTestConfig(t *testing.T) *config.AppConfig {
 }
 
 func TestSupportedExts_CobreFormatos(t *testing.T) {
-	exts := []string{".md", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+	exts := []string{".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".zip"}
 	for _, ext := range exts {
 		if _, ok := supportedExts[ext]; !ok {
 			t.Errorf("extensao %q nao esta em supportedExts", ext)
@@ -40,7 +40,7 @@ func TestSupportedExts_CobreFormatos(t *testing.T) {
 }
 
 func TestMonitoredSubDirs(t *testing.T) {
-	expected := []string{"notes", "links", "voice"}
+	expected := []string{"links", "voice", "pdfs", "attachments", "archives"}
 	for _, sub := range expected {
 		found := false
 		for _, m := range MonitoredSubDirs {
@@ -51,56 +51,6 @@ func TestMonitoredSubDirs(t *testing.T) {
 		if !found {
 			t.Errorf("subdiretorio %q nao esta em MonitoredSubDirs", sub)
 		}
-	}
-}
-
-func TestProcessFile_MarkdownSimples(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	fp := filepath.Join(cfg.DocsDir, "notes", "teste.md")
-	os.WriteFile(fp, []byte("# Título\nconteudo de teste"), 0644)
-
-	ev := FileEvent{
-		Path:     fp,
-		Filename: "notes/teste.md",
-		ModTime:  time.Now(),
-		Type:     "modify",
-	}
-
-	err := ProcessFile(store, ev)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	docs, err := store.GetDocumentsByFile("notes/teste.md")
-	if err != nil {
-		t.Fatalf("GetDocumentsByFile: %v", err)
-	}
-	if len(docs) < 1 {
-		t.Fatal("documento nao foi indexado")
-	}
-}
-
-func TestProcessFile_Delete(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	// Primeiro insere
-	fp := filepath.Join(cfg.DocsDir, "notes", "deleteme.md")
-	os.WriteFile(fp, []byte("sera deletado"), 0644)
-	ProcessFile(store, FileEvent{Path: fp, Filename: "notes/deleteme.md", ModTime: time.Now(), Type: "modify"})
-
-	// Depois deleta
-	ev := FileEvent{Path: fp, Filename: "notes/deleteme.md", Type: "delete"}
-	err := ProcessFile(store, ev)
-	if err != nil {
-		t.Fatalf("ProcessFile delete: %v", err)
-	}
-
-	docs, _ := store.GetDocumentsByFile("notes/deleteme.md")
-	if len(docs) != 0 {
-		t.Errorf("documentos ainda existem apos delete: %d docs", len(docs))
 	}
 }
 
@@ -124,11 +74,11 @@ func TestProcessFile_ExtensaoInvalida(t *testing.T) {
 	}
 }
 
-func TestProcessFile_ArquivoInexistente(t *testing.T) {
+func TestProcessFile_SkippedExtension(t *testing.T) {
 	store := newTestStore(t)
 	ev := FileEvent{
-		Path:     "/caminho/nao/existe.md",
-		Filename: "notes/inexistente.md",
+		Path:     "/caminho/nao/existe.txt",
+		Filename: "notes/inexistente.txt",
 		ModTime:  time.Now(),
 		Type:     "modify",
 	}
@@ -295,96 +245,6 @@ func TestProcessFile_Embed_ImagemIndexada(t *testing.T) {
 
 // ── Regressão: tags removidas do frontmatter devem sumir ──────
 
-func TestProcessFile_TagsRemovidasDoFrontmatterNaoPersistem(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	fp := filepath.Join(cfg.DocsDir, "notes", "tags-test.md")
-	content := `---
-title: Teste
-tags: [tag1, tag2]
----
-
-Conteudo do artigo.`
-	os.WriteFile(fp, []byte(content), 0644)
-
-	// 1a passada: indexa com [tag1, tag2]
-	err := ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/tags-test.md", ModTime: time.Now(), Type: "modify",
-	})
-	if err != nil {
-		t.Fatalf("ProcessFile 1: %v", err)
-	}
-
-	tags, _ := store.GetFileTags("notes/tags-test.md")
-	if len(tags) != 2 || !contains(tags, "tag1") || !contains(tags, "tag2") {
-		t.Fatalf("esperado [tag1 tag2], got %v", tags)
-	}
-
-	// 2a passada: remove tag2 do frontmatter, reindexa
-	contentV2 := `---
-title: Teste
-tags: [tag1]
----
-
-Conteudo do artigo.`
-	os.WriteFile(fp, []byte(contentV2), 0644)
-
-	err = ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/tags-test.md", ModTime: time.Now(), Type: "modify",
-	})
-	if err != nil {
-		t.Fatalf("ProcessFile 2: %v", err)
-	}
-
-	tags, _ = store.GetFileTags("notes/tags-test.md")
-	if contains(tags, "tag2") {
-		t.Fatal("REGRESSAO: tag2 foi removida do frontmatter mas ainda persiste no banco")
-	}
-	if !contains(tags, "tag1") {
-		t.Error("tag1 deveria permanecer")
-	}
-}
-
-func TestProcessFile_RemoveTodasAsTags_DeveLimpar(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	fp := filepath.Join(cfg.DocsDir, "notes", "limpar-tags.md")
-	content := `---
-tags: [a, b]
----
-
-Texto.`
-	os.WriteFile(fp, []byte(content), 0644)
-
-	ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/limpar-tags.md", ModTime: time.Now(), Type: "modify",
-	})
-
-	tags, _ := store.GetFileTags("notes/limpar-tags.md")
-	if len(tags) == 0 {
-		t.Fatal("tags deveriam existir apos 1a passada")
-	}
-
-	// Remove frontmatter completamente
-	contentV2 := `---
-title: Sem tags
----
-
-Texto.`
-	os.WriteFile(fp, []byte(contentV2), 0644)
-
-	ProcessFile(store, FileEvent{
-		Path: fp, Filename: "notes/limpar-tags.md", ModTime: time.Now(), Type: "modify",
-	})
-
-	tags, _ = store.GetFileTags("notes/limpar-tags.md")
-	if len(tags) != 0 {
-		t.Errorf("REGRESSAO: esperado 0 tags apos remover frontmatter, got %v", tags)
-	}
-}
-
 func contains(slice []string, target string) bool {
 	for _, s := range slice {
 		if s == target {
@@ -431,30 +291,6 @@ func TestEvents_ChannelNaoNulo(t *testing.T) {
 }
 
 // ── ProcessBatch ─────────────────────────────────────────────────
-
-func TestProcessBatch_MultiplosArquivos(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-
-	f1 := filepath.Join(cfg.DocsDir, "notes", "batch1.md")
-	f2 := filepath.Join(cfg.DocsDir, "notes", "batch2.md")
-	os.WriteFile(f1, []byte("# Batch 1\ncontent"), 0644)
-	os.WriteFile(f2, []byte("# Batch 2\ncontent"), 0644)
-
-	events := []FileEvent{
-		{Path: f1, Filename: "notes/batch1.md", ModTime: time.Now(), Type: "modify"},
-		{Path: f2, Filename: "notes/batch2.md", ModTime: time.Now(), Type: "modify"},
-	}
-
-	err := ProcessBatch(store, events)
-	if err != nil {
-		t.Fatalf("ProcessBatch: %v", err)
-	}
-
-	if c := store.GetDocumentCount(); c != 2 {
-		t.Errorf("expected 2 documents, got %d", c)
-	}
-}
 
 // ── relPathFromAbs / relPathFromWalk ─────────────────────────────
 
@@ -506,15 +342,18 @@ func TestPollAll_IndexaArquivosNovos(t *testing.T) {
 	store := newTestStore(t)
 	w := NewWatcher(cfg, store)
 
-	// pollAll calls ProcessBatch directly when there are 2+ files
-	// (single file goes to the events channel, which nothing reads)
-	fp1 := filepath.Join(cfg.DocsDir, "notes", "poll-test1.md")
-	fp2 := filepath.Join(cfg.DocsDir, "notes", "poll-test2.md")
-	os.WriteFile(fp1, []byte("# Poll Test 1\ncontent"), 0644)
-	os.WriteFile(fp2, []byte("# Poll Test 2\ncontent"), 0644)
+	// PollAll scans monitored directories (notes/ no longer monitored)
+	// Use attachments/ with images since they get indexed as documents
+	fp1 := filepath.Join(cfg.DocsDir, "attachments", "poll-test1.png")
+	fp2 := filepath.Join(cfg.DocsDir, "attachments", "poll-test2.png")
+	os.MkdirAll(filepath.Dir(fp1), 0755)
+	os.MkdirAll(filepath.Dir(fp2), 0755)
+	os.WriteFile(fp1, []byte("fake png"), 0644)
+	os.WriteFile(fp2, []byte("fake png"), 0644)
 
 	w.PollAll()
 
+	// Imagens são indexadas como documentos stub
 	if c := store.GetDocumentCount(); c != 2 {
 		t.Errorf("PollAll should index 2 files, got %d", c)
 	}

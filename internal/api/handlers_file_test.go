@@ -162,10 +162,9 @@ func TestHandleFileDelete_Success(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	// Verifica que o arquivo foi removido
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, "notes/delete-me.md")
-	if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
-		t.Error("arquivo deveria ter sido removido")
+	// Verifica que a nota foi removida do banco
+	if ctx.Store.NoteExists("notes/delete-me.md") {
+		t.Error("nota deveria ter sido removida do banco")
 	}
 
 	// Verifica resposta JSON
@@ -221,16 +220,14 @@ func TestHandleFileRename_Success(t *testing.T) {
 		t.Errorf("esperado 303, got %d", rec.Code)
 	}
 
-	// Arquivo antigo nao deve existir
-	oldPath := filepath.Join(ctx.Cfg.DocsDir, "notes/old-name.md")
-	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
-		t.Error("arquivo antigo deveria ter sido renomeado")
+	// Nota antiga nao deve existir no banco
+	if ctx.Store.NoteExists("notes/old-name.md") {
+		t.Error("nota antiga deveria ter sido renomeada no banco")
 	}
 
-	// Arquivo novo deve existir
-	newPath := filepath.Join(ctx.Cfg.DocsDir, "notes/new-name.md")
-	if _, err := os.Stat(newPath); os.IsNotExist(err) {
-		t.Error("arquivo novo deveria existir")
+	// Nota nova deve existir no banco
+	if !ctx.Store.NoteExists("notes/new-name.md") {
+		t.Error("nota nova deveria existir no banco")
 	}
 }
 

@@ -21,22 +21,19 @@ import (
 
 // ── Helpers de normalizacao ──
 
-// sanitizeFilename garante que o nome do arquivo:
-// 1. Nao tenha subdiretorios (strips tudo antes de /)
-// 2. Tenha extensao .md
-// 3. Esteja no diretorio notes/
-func sanitizeFilename(name string) string {
-	// Remove qualquer prefixo de diretorio
-	base := filepath.Base(name)
+// noteFilename garante que o nome do arquivo:
+// 1. Tenha extensao .md
+// 2. Esteja no diretorio notes/
+func noteFilename(name string) string {
 	// Garante extensao .md
-	if !strings.HasSuffix(base, ".md") {
-		base += ".md"
+	if !strings.HasSuffix(name, ".md") {
+		name += ".md"
 	}
-	// Forca prefixo notes/
-	if !strings.HasPrefix(base, "notes/") {
-		base = "notes/" + base
+	// Garante prefixo notes/
+	if !strings.HasPrefix(name, "notes/") {
+		name = "notes/" + name
 	}
-	return base
+	return name
 }
 
 // displayName retorna apenas o nome do arquivo (sem diretorio e sem .md) para exibicao.
@@ -52,6 +49,8 @@ func isNoteOrPdf(path string) bool {
 
 // ── File handlers ──
 
+// HandleFile serves files directly from disk: PDFs inline, everything else as download.
+// Markdown notes are now stored in the database and served via the editor.
 func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("name")
 	if raw == "" {
@@ -59,87 +58,36 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(raw))
-	isPdf := ext == ".pdf"
+	cleaned := filepath.Clean(raw)
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, cleaned)
 
-	if isPdf {
-		// PDF pode estar em pdfs/ ou notes/
-		basename := filepath.Base(raw)
-		subdirs := []string{"pdfs", "notes"}
-		for _, sd := range subdirs {
-			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-			if _, err := os.Stat(testPath); err == nil {
-				ctx.Store.IncrementPopularity(sd + "/" + basename)
-				w.Header().Set("Content-Type", "application/pdf")
-				w.Header().Set("Content-Disposition", "inline")
-				http.ServeFile(w, r, testPath)
-				return
-			}
-		}
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
 	}
 
-	// Anexos (ZIPs): serve como download
-	// NOTA: usa filepath.Base para evitar path traversal.
-	// O prefixo "attachments/" é forçado para manter a organização.
-	if strings.HasPrefix(raw, "attachments/") || strings.HasPrefix(raw, "attachments\\") {
-		basename := filepath.Base(raw)
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
-		if _, err := os.Stat(fullPath); err == nil {
-			w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
-			w.Header().Set("Content-Type", "application/zip")
-			http.ServeFile(w, r, fullPath)
-			return
+	basename := filepath.Base(cleaned)
+	ext := strings.ToLower(filepath.Ext(basename))
+
+	if ext == ".pdf" {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
+	} else {
+		ct := "application/octet-stream"
+		switch ext {
+		case ".zip":
+			ct = "application/zip"
+		case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+			ct = "image/" + strings.TrimPrefix(ext, ".")
+		case ".mp3", ".wav", ".ogg":
+			ct = "audio/" + strings.TrimPrefix(ext, ".")
+		case ".mp4", ".webm":
+			ct = "video/" + strings.TrimPrefix(ext, ".")
 		}
-		http.Error(w, "file not found", http.StatusNotFound)
-		return
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
+		w.Header().Set("Content-Type", ct)
 	}
 
-	// Archives (ZIPs): download igual anexos
-	if strings.HasPrefix(raw, "archives/") || strings.HasPrefix(raw, "archives\\") {
-		basename := filepath.Base(raw)
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, "archives", basename)
-		if _, err := os.Stat(fullPath); err == nil {
-			w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
-			w.Header().Set("Content-Type", "application/zip")
-			http.ServeFile(w, r, fullPath)
-			return
-		}
-		http.Error(w, "file not found", http.StatusNotFound)
-		return
-	}
-
-	// Imagens: serve direto do diretório notes/
-	imageExts := []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
-	isImage := false
-	for _, ie := range imageExts {
-		if ext == ie {
-			isImage = true
-			break
-		}
-	}
-	if isImage {
-		basename := filepath.Base(raw)
-		// Se já tem prefixo notes/, usa direto; senão força notes/
-		prefix := ""
-		if strings.HasPrefix(raw, "notes/") || strings.HasPrefix(raw, "notes\\") {
-			prefix = "notes/"
-		}
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, prefix, basename)
-		if _, err := os.Stat(fullPath); err == nil {
-			ctx.Store.IncrementPopularity(prefix + basename)
-			http.ServeFile(w, r, fullPath)
-			return
-		}
-		http.Error(w, "file not found", http.StatusNotFound)
-		return
-	}
-
-	// Para arquivos .md, usa o comportamento anterior
-	filename := sanitizeFilename(raw)
-	ctx.Store.IncrementPopularity(filename)
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	http.ServeFile(w, r, fullPath)
 }
 
@@ -205,6 +153,7 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	http.ServeFile(w, r, fullPath)
 }
 
+// HandleFileSave saves a note to the database and processes its content.
 func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -220,18 +169,13 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Normaliza: remove subdiretorios, garante .md e prefixo notes/
-	filename := sanitizeFilename(raw)
+	// Normaliza: garante prefixo notes/ e extensao .md
+	filename := noteFilename(raw)
+	now := time.Now()
+	mtimeStr := now.Format(time.RFC3339)
 
-	// Garante que o diretorio notes/ existe
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Write file
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+	// Save content to notes table
+	if err := ctx.Store.SaveNote(filename, content, mtimeStr); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -249,19 +193,10 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		ctx.Store.SetFileTags(filename, cleanTags)
 	}
 
-	// Process immediately (sync)
-	ev := watcher.FileEvent{
-		Path:     fullPath,
-		Filename: filename,
-		ModTime:  time.Now(),
-		Type:     "modify",
+	// Process content (index documents, FTS, links)
+	if err := ctx.reindexNote(filename, content, now); err != nil {
+		slog.Error("process note after save", "error", err)
 	}
-	if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
-		slog.Error("process file after save", "error", err)
-	}
-
-	// Mark as recently processed to prevent watcher from reprocessing
-	watcher.MarkRecentlyProcessed(filename)
 
 	// Redirect back to editor
 	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
@@ -281,7 +216,6 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 
 	ext := strings.ToLower(filepath.Ext(raw))
 	var filename string
-	var fullPath string
 
 	if ext == ".pdf" {
 		// PDF files: search in pdfs/ or notes/
@@ -292,7 +226,7 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
 			if _, err := os.Stat(testPath); err == nil {
 				filename = sd + "/" + basename
-				fullPath = testPath
+				os.Remove(testPath)
 				found = true
 				break
 			}
@@ -305,17 +239,18 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		// ZIP attachments: stored in attachments/
 		basename := filepath.Base(raw)
 		filename = "attachments/" + basename
-		fullPath = filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
+		os.Remove(fullPath)
 	} else {
-		filename = sanitizeFilename(raw)
-		fullPath = filepath.Join(ctx.Cfg.DocsDir, filename)
-	}
-	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// Note: delete from DB
+		filename = noteFilename(raw)
+		ctx.Store.DeleteNote(filename)
+		// Also remove any file on disk (for backwards compat during migration)
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+		os.Remove(fullPath)
 	}
 
-	// Remove from DB
+	// Remove from DB (common cleanup for all types)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
 	ctx.Store.DeleteFileMod(filename)
@@ -346,7 +281,6 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	isZip := ext == ".zip"
 
 	var oldName, newName string
-	var oldPath, newPath string
 
 	if isPdf {
 		// Para PDFs, busca o arquivo em pdfs/ ou notes/
@@ -363,8 +297,12 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 			if _, err := os.Stat(testPath); err == nil {
 				oldName = sd + "/" + basename
 				newName = sd + "/" + newBasename
-				oldPath = testPath
-				newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
+				oldPath := testPath
+				newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+				if err := os.Rename(oldPath, newPath); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 				found = true
 				break
 			}
@@ -382,33 +320,51 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}
 		oldName = "attachments/" + basename
 		newName = "attachments/" + newBasename
-		oldPath = filepath.Join(ctx.Cfg.DocsDir, oldName)
-		newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
-	} else {
-		oldName = sanitizeFilename(rawOld)
-		newName = sanitizeFilename(rawNew)
-		if oldName == newName {
-			http.Redirect(w, r, "/editor?file="+newName, http.StatusSeeOther)
+		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
+		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+		if err := os.Rename(oldPath, newPath); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		oldPath = filepath.Join(ctx.Cfg.DocsDir, oldName)
-		newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
+	} else {
+		// Note: rename in DB
+		oldName = noteFilename(rawOld)
+		newName = noteFilename(rawNew)
+		if oldName == newName {
+			http.Redirect(w, r, "/editor?file="+url.QueryEscape(newName), http.StatusSeeOther)
+			return
+		}
+		if err := ctx.Store.RenameNote(oldName, newName); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Also rename on disk for backwards compat
+		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
+		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+		os.Rename(oldPath, newPath)
 	}
 
-	if err := os.Rename(oldPath, newPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Update DB: delete old, re-index new
+	// Update DB: delete old indexes, read new content and re-index
 	ctx.Store.DeleteDocumentsByFile(oldName)
 	ctx.Store.DeleteFTSByFile(oldName)
 
-	info, err := os.Stat(newPath)
-	if err == nil {
-		watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-			Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-		})
+	if isPdf || isZip {
+		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+		info, err := os.Stat(newPath)
+		if err == nil {
+			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+				Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
+			})
+		}
+	} else {
+		// For notes: read from DB and reindex
+		content, err := ctx.Store.GetNote(newName)
+		if err == nil && content != "" {
+			now := time.Now()
+			if err := ctx.reindexNote(newName, content, now); err != nil {
+				slog.Error("reindex after rename", "file", newName, "error", err)
+			}
+		}
 	}
 
 	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
@@ -643,7 +599,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 
 // ── Cleanup Orphan Images ──
 
-// HandleCleanupImages varre o diretório notes/ em busca de arquivos img_*
+// HandleCleanupImages varre o diretorio notes/ em busca de arquivos img_*
 // que não são referenciados por nenhum documento (texto), e os remove
 // junto com seus registros no DB (documento stub, file_mod).
 func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Request) {

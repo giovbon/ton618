@@ -184,14 +184,17 @@ func TestIndexTemplate_TemElementosDeBusca(t *testing.T) {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-// saveTestNote cria uma nota de teste no disco e registra metadados no banco.
+// saveTestNote cria uma nota de teste no disco, no banco (notes table) e registra metadados.
 func saveTestNote(t *testing.T, ctx *HandlerContext, filename, content, tags string) {
 	t.Helper()
+	// Write to disk (for backwards compat with download handlers, etc)
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	os.MkdirAll(filepath.Dir(fullPath), 0755)
 	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 		t.Fatalf("write %s: %v", filename, err)
 	}
+	// Save to notes table
+	ctx.Store.SaveNote(filename, content, time.Now().Format(time.RFC3339))
 	if tags != "" {
 		tagList := strings.Split(tags, ",")
 		ctx.Store.SetFileTags(filename, tagList)

@@ -38,6 +38,15 @@ func main() {
 	defer store.Close()
 	slog.Info("Banco SQLite pronto")
 
+	// 2.5. Migrar notas .md do disco para o banco
+	imported, migErr := store.MigrateNotesFromDisk(cfg.DocsDir)
+	if migErr != nil {
+		slog.Error("migrar notas", "error", migErr)
+	}
+	if imported > 0 {
+		slog.Info("Notas migradas do disco para o SQLite", "count", imported)
+	}
+
 	// 3. Templates
 	funcMap := template.FuncMap{
 		"hasPrefix": strings.HasPrefix,

@@ -324,12 +324,12 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		cutoff := time.Now().AddDate(-ageYears, 0, 0)
-		allMods, err := ctx.Store.GetAllFileMods()
+		allNotes, err := ctx.Store.GetAllNotes()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		for arquivo, mtimeStr := range allMods {
+		for arquivo, mtimeStr := range allNotes {
 			if !isNoteOrPdf(arquivo) {
 				continue
 			}
@@ -407,11 +407,21 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 	deleted := 0
 	var errors []string
 	for arquivo := range filesToDelete {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+		isMd := strings.HasSuffix(strings.ToLower(arquivo), ".md")
 
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			errors = append(errors, arquivo+": "+err.Error())
-			continue
+		if isMd {
+			// Note: delete from DB
+			ctx.Store.DeleteNote(arquivo)
+			// Also remove from disk (backwards compat)
+			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+			os.Remove(fullPath)
+		} else {
+			// PDF or other: delete from disk
+			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+				errors = append(errors, arquivo+": "+err.Error())
+				continue
+			}
 		}
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
@@ -477,17 +487,37 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 		if arquivo == "" {
 			continue
 		}
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
 
-		// Le o conteudo do arquivo
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: nao encontrado", arquivo))
-			} else {
-				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: %v", arquivo, err))
+		isMd := strings.HasSuffix(strings.ToLower(arquivo), ".md")
+		var content []byte
+
+		if isMd {
+			// Read note content from DB
+			noteContent, err := ctx.Store.GetNote(arquivo)
+			if err != nil || noteContent == "" {
+				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: nao encontrado no banco", arquivo))
+				continue
 			}
-			continue
+			content = []byte(noteContent)
+			// Remove from DB
+			ctx.Store.DeleteNote(arquivo)
+		} else {
+			// Read from disk (PDFs, etc)
+			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+			data, err := os.ReadFile(fullPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					archiveErrors = append(archiveErrors, fmt.Sprintf("%s: nao encontrado", arquivo))
+				} else {
+					archiveErrors = append(archiveErrors, fmt.Sprintf("%s: %v", arquivo, err))
+				}
+				continue
+			}
+			content = data
+			// Remove from disk
+			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+				archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao remover: %v", arquivo, err))
+			}
 		}
 
 		// Adiciona ao ZIP preservando o caminho relativo (ex: notes/foo.md, pdfs/bar.pdf)
@@ -499,11 +529,6 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 		if _, err := f.Write(content); err != nil {
 			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao escrever: %v", arquivo, err))
 			continue
-		}
-
-		// Remove do DB e do filesystem
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			archiveErrors = append(archiveErrors, fmt.Sprintf("%s: erro ao remover: %v", arquivo, err))
 		}
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
@@ -637,57 +662,73 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 			continue
 		}
 
-		// O caminho dentro do ZIP ja e relativo (ex: notes/foo.md, pdfs/bar.pdf)
-		targetPath := filepath.Join(ctx.Cfg.DocsDir, f.Name)
-
-		// Garante que o diretorio de destino existe
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar diretorio: %v", f.Name, err))
-			continue
-		}
-
-		// Extrai o arquivo
+		// Lê o conteúdo do arquivo do ZIP
 		rc, err := f.Open()
 		if err != nil {
 			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao abrir no zip: %v", f.Name, err))
 			continue
 		}
-
-		outFile, err := os.Create(targetPath)
-		if err != nil {
-			rc.Close()
-			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar: %v", f.Name, err))
-			continue
-		}
-
-		if _, err := io.Copy(outFile, rc); err != nil {
-			outFile.Close()
-			rc.Close()
-			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao extrair: %v", f.Name, err))
-			continue
-		}
-		outFile.Close()
+		data, err := io.ReadAll(rc)
 		rc.Close()
+		if err != nil {
+			restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao ler: %v", f.Name, err))
+			continue
+		}
+
+		isMd := strings.HasSuffix(strings.ToLower(f.Name), ".md")
+
+		if isMd {
+			// Note: save to DB
+			now := time.Now()
+			if err := ctx.Store.SaveNote(f.Name, string(data), now.Format(time.RFC3339)); err != nil {
+				restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao salvar no banco: %v", f.Name, err))
+				continue
+			}
+		} else {
+			// PDFs and others: write to disk
+			targetPath := filepath.Join(ctx.Cfg.DocsDir, f.Name)
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar diretorio: %v", f.Name, err))
+				continue
+			}
+			if err := os.WriteFile(targetPath, data, 0644); err != nil {
+				restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao criar: %v", f.Name, err))
+				continue
+			}
+		}
 
 		restoredFiles = append(restoredFiles, f.Name)
 	}
 
 	// Reindexa todos os arquivos restaurados
 	for _, arquivo := range restoredFiles {
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
-		info, err := os.Stat(fullPath)
-		if err != nil {
-			continue
-		}
+		isMd := strings.HasSuffix(strings.ToLower(arquivo), ".md")
 
-		ev := watcher.FileEvent{
-			Path:     fullPath,
-			Filename: arquivo,
-			ModTime:  info.ModTime(),
-			Type:     "create",
-		}
-		if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
-			slog.Error("reindex archive file", "arquivo", arquivo, "error", err)
+		if isMd {
+			// Note: read from DB and reindex
+			content, err := ctx.Store.GetNote(arquivo)
+			if err == nil && content != "" {
+				now := time.Now()
+				if err := ctx.reindexNote(arquivo, content, now); err != nil {
+					slog.Error("reindex archive note", "arquivo", arquivo, "error", err)
+				}
+			}
+		} else {
+			// PDF/image: reindex from disk
+			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
+			info, err := os.Stat(fullPath)
+			if err != nil {
+				continue
+			}
+			ev := watcher.FileEvent{
+				Path:     fullPath,
+				Filename: arquivo,
+				ModTime:  info.ModTime(),
+				Type:     "create",
+			}
+			if err := watcher.ProcessFile(ctx.Store, ev); err != nil {
+				slog.Error("reindex archive file", "arquivo", arquivo, "error", err)
+			}
 		}
 	}
 
@@ -745,14 +786,13 @@ func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao ler: %v", arquivo, err))
+		data, err := ctx.Store.GetNote(arquivo)
+		if err != nil || data == "" {
+			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao ler do banco: %v", arquivo, err))
 			continue
 		}
 		// Remove o frontmatter de cada nota (apenas o conteúdo)
-		body := fmRegex.ReplaceAllString(string(data), "")
+		body := fmRegex.ReplaceAllString(data, "")
 		body = strings.TrimSpace(body)
 		if body != "" {
 			contents = append(contents, body)
@@ -776,23 +816,18 @@ func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Reque
 	// Gera nome para a nova nota
 	ts := time.Now().UnixMilli()
 	newName := fmt.Sprintf("notes/mesclado-%d.md", ts)
-	newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 
-	// Garante que o diretório existe
-	os.MkdirAll(filepath.Dir(newPath), 0755)
-
-	// Escreve o arquivo mesclado
-	if err := os.WriteFile(newPath, []byte(mergedContent), 0644); err != nil {
+	// Salva a nova nota no banco
+	now := time.Now()
+	if err := ctx.Store.SaveNote(newName, mergedContent, now.Format(time.RFC3339)); err != nil {
 		http.Error(w, fmt.Sprintf("erro ao criar nota mesclada: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Processa a nova nota
-	watcher.MarkRecentlyProcessed(newName)
-	info, _ := os.Stat(newPath)
-	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-		Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-	})
+	if err := ctx.reindexNote(newName, mergedContent, now); err != nil {
+		slog.Error("reindex merged note", "file", newName, "error", err)
+	}
 
 	// Aplica as tags da primeira nota à nova nota
 	if len(mergedTags) > 0 {
@@ -810,11 +845,10 @@ func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
+		ctx.Store.DeleteNote(arquivo)
+		// Also remove from disk (backwards compat)
 		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao excluir: %v", arquivo, err))
-			continue
-		}
+		os.Remove(fullPath)
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
