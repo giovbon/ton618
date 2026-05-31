@@ -246,8 +246,6 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 	case "imagem":
 		docs = processImageFile(filename, ev.ModTime, creationTime)
 	}
-	// Busca tags do arquivo no banco
-	existingFileTags, _ := store.GetFileTags(filename)
 
 	for _, doc := range docs {
 		dbDoc := db.Document{
@@ -277,22 +275,12 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		store.AddLink(filename, link)
 	}
 
-	// Store tags: mescla as tags do frontmatter/hashtags com as tags existentes no banco
-	mergedTags := fileTags
-	for _, et := range existingFileTags {
-		found := false
-		for _, ft := range fileTags {
-			if ft == et {
-				found = true
-				break
-			}
-		}
-		if !found {
-			mergedTags = append(mergedTags, et)
-		}
-	}
-	if len(mergedTags) > 0 {
-		store.SetFileTags(filename, mergedTags)
+	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo
+	if len(fileTags) > 0 {
+		store.SetFileTags(filename, fileTags)
+	} else {
+		// Se o arquivo não tem tags, limpa as tags existentes
+		store.SetFileTags(filename, nil)
 	}
 
 	// Track file mod

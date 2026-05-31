@@ -29,8 +29,6 @@ func newTestConfig(t *testing.T) *config.AppConfig {
 	return &config.AppConfig{DocsDir: docsDir}
 }
 
-
-
 func TestSupportedExts_CobreFormatos(t *testing.T) {
 	exts := []string{".md", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 	for _, ext := range exts {
@@ -292,4 +290,105 @@ func TestProcessFile_Embed_ImagemIndexada(t *testing.T) {
 	if store.GetDocumentCount() == 0 {
 		t.Error("imagem deveria ter sido indexada")
 	}
+}
+
+// ── Regressão: tags removidas do frontmatter devem sumir ──────
+
+func TestProcessFile_TagsRemovidasDoFrontmatterNaoPersistem(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	fp := filepath.Join(cfg.DocsDir, "notes", "tags-test.md")
+	content := `---
+title: Teste
+tags: [tag1, tag2]
+---
+
+Conteudo do artigo.`
+	os.WriteFile(fp, []byte(content), 0644)
+
+	// 1a passada: indexa com [tag1, tag2]
+	err := ProcessFile(store, FileEvent{
+		Path: fp, Filename: "notes/tags-test.md", ModTime: time.Now(), Type: "modify",
+	})
+	if err != nil {
+		t.Fatalf("ProcessFile 1: %v", err)
+	}
+
+	tags, _ := store.GetFileTags("notes/tags-test.md")
+	if len(tags) != 2 || !contains(tags, "tag1") || !contains(tags, "tag2") {
+		t.Fatalf("esperado [tag1 tag2], got %v", tags)
+	}
+
+	// 2a passada: remove tag2 do frontmatter, reindexa
+	contentV2 := `---
+title: Teste
+tags: [tag1]
+---
+
+Conteudo do artigo.`
+	os.WriteFile(fp, []byte(contentV2), 0644)
+
+	err = ProcessFile(store, FileEvent{
+		Path: fp, Filename: "notes/tags-test.md", ModTime: time.Now(), Type: "modify",
+	})
+	if err != nil {
+		t.Fatalf("ProcessFile 2: %v", err)
+	}
+
+	tags, _ = store.GetFileTags("notes/tags-test.md")
+	if contains(tags, "tag2") {
+		t.Fatal("REGRESSAO: tag2 foi removida do frontmatter mas ainda persiste no banco")
+	}
+	if !contains(tags, "tag1") {
+		t.Error("tag1 deveria permanecer")
+	}
+}
+
+func TestProcessFile_RemoveTodasAsTags_DeveLimpar(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	fp := filepath.Join(cfg.DocsDir, "notes", "limpar-tags.md")
+	content := `---
+tags: [a, b]
+---
+
+Texto.`
+	os.WriteFile(fp, []byte(content), 0644)
+
+	ProcessFile(store, FileEvent{
+		Path: fp, Filename: "notes/limpar-tags.md", ModTime: time.Now(), Type: "modify",
+	})
+
+	tags, _ := store.GetFileTags("notes/limpar-tags.md")
+	if len(tags) == 0 {
+		t.Fatal("tags deveriam existir apos 1a passada")
+	}
+
+	// Remove frontmatter completamente
+	contentV2 := `---
+title: Sem tags
+---
+
+Texto.`
+	os.WriteFile(fp, []byte(contentV2), 0644)
+
+	ProcessFile(store, FileEvent{
+		Path: fp, Filename: "notes/limpar-tags.md", ModTime: time.Now(), Type: "modify",
+	})
+
+	tags, _ = store.GetFileTags("notes/limpar-tags.md")
+	if len(tags) != 0 {
+		t.Errorf("REGRESSAO: esperado 0 tags apos remover frontmatter, got %v", tags)
+	}
+}
+
+func contains(slice []string, target string) bool {
+	for _, s := range slice {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
