@@ -11,14 +11,9 @@ services:
       - STATE_DIR=/app/data
       - WEB_DIR=/app/web
       - PORT=6180
-      - EMBEDDING_PROVIDER=gemini
-      - EMBEDDING_API_KEY= # Replace with your actual API key
-      - EMBEDDING_MODEL=gemini-embedding-2
       - POLL_INTERVAL_SEC=30
-      - EMBEDDING_DIM=768
-      # if you want to use Ollama for embeddings, set the following environment variables and ensure Ollama is running locally
-     # - OLLAMA_HOST=http://localhost:11434
-     # - OLLAMA_MODEL=nomic-embed-text
+      - AUTH_USER=admin
+      - AUTH_PASS=ton618_secret
     volumes:
       - ./docs:/app/docs
       - ./state:/app/state
