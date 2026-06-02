@@ -59,8 +59,8 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 	// Track file mod
 	store.SetFileMod(filename, modTime.Format(time.RFC3339))
 
-	// Extrai as 5 keywords mais relevantes via RAKE
-	keywords := processor.ExtractKeywords(content, 5)
+	// Extrai keywords via RAKE (quantidade varia conforme o tamanho do texto)
+	keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
 	if len(keywords) > 0 {
 		if err := store.SetNoteKeywords(filename, keywords); err != nil {
 			slog.Error("set keywords", "file", filename, "error", err)

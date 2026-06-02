@@ -193,7 +193,8 @@
 
             allNotes.forEach(function (n) {
                 if (!matchesTags(n)) return;
-                var nameMatch = n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
+                var nameMatch =
+                    n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
                 var kwMatch = false;
                 var kws = n.keywords || [];
                 for (var i = 0; i < kws.length; i++) {
@@ -479,12 +480,12 @@
                 '<div class="flex-1 min-w-0">' +
                 '<a href="' +
                 (isPdf
-                    ? '/file?name=' + encodeURIComponent(n.arquivo)
+                    ? "/file?name=" + encodeURIComponent(n.arquivo)
                     : isZip
-                      ? '/file/download?name=' + encodeURIComponent(n.arquivo)
-                      : '/editor?file=' + encodeURIComponent(n.arquivo)) +
+                      ? "/file/download?name=" + encodeURIComponent(n.arquivo)
+                      : "/editor?file=" + encodeURIComponent(n.arquivo)) +
                 '" target="' +
-                (isPdf || isZip ? '_blank' : '') +
+                (isPdf || isZip ? "_blank" : "") +
                 '" class="block">' +
                 '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
                 noteIcon +
@@ -494,12 +495,31 @@
             // Keywords no lugar do texto "notes" (abaixo do título)
             var kws = n.keywords || [];
             if (kws.length) {
-                html +=
-                    '<div class="flex flex-wrap gap-x-2 mt-0.5">';
+                html += '<div class="flex flex-wrap gap-x-2 mt-0.5">';
                 kws.forEach(function (kw) {
+                    var displayKw = kw;
+                    if (nameFilter) {
+                        var kwIdx = kw
+                            .toLowerCase()
+                            .indexOf(nameFilter.toLowerCase());
+                        if (kwIdx !== -1) {
+                            var before = kw.slice(0, kwIdx);
+                            var match = kw.slice(
+                                kwIdx,
+                                kwIdx + nameFilter.length,
+                            );
+                            var after = kw.slice(kwIdx + nameFilter.length);
+                            displayKw =
+                                before +
+                                '<span class="search-highlight">' +
+                                match +
+                                "</span>" +
+                                after;
+                        }
+                    }
                     html +=
                         '<span class="text-[10px] text-zinc-600 italic leading-tight">' +
-                        kw +
+                        displayKw +
                         "</span>";
                 });
                 html += "</div>";

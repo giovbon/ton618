@@ -75,14 +75,14 @@ var stopwordsPT = map[string]bool{
 	"ir": true, "ver": true, "dever": true, "passar": true,
 	"achei": true, "achou": true, "acha": true, "acho": true,
 	"tem": true, "têm": true, "tinha": true, "tive": true,
-	"era": true, "é": true, "são": true, "foi": true, "foram": true,
+	"era": true, "é": true, "são": true, "sao": true, "foi": true, "foram": true,
 	"está": true, "estão": true, "estava": true, "esteve": true,
 	"pode": true, "podem": true, "poderia": true,
 	"deve": true, "devem": true, "deveria": true,
 	// advérbios comuns
 	"não": true, "sim": true, "já": true, "mais": true,
 	"menos": true,
-	"bem": true, "mal": true, "sempre": true, "nunca": true,
+	"bem":   true, "mal": true, "sempre": true, "nunca": true,
 	"aqui": true, "ali": true, "lá": true, "cá": true,
 	"agora": true, "hoje": true, "ontem": true, "amanhã": true,
 	"antes": true, "depois": true, "ainda": true,
@@ -93,7 +93,7 @@ var stopwordsPT = map[string]bool{
 	"coisa": true, "coisas": true, "gente": true, "pessoa": true, "pessoas": true,
 	"vez": true, "vezes": true, "ano": true, "anos": true,
 	"dia": true, "dias": true,
-	"cada": true,
+	"cada":    true,
 	"através": true, "conforme": true, "consoante": true,
 	"durante": true, "mediante": true, "exceto": true,
 	"salvo": true, "tirante": true,
@@ -126,7 +126,7 @@ var phraseDelimiters = map[rune]bool{
 	'!': true, '?': true, '\n': true, '\r': true,
 	'(': true, ')': true, '[': true, ']': true,
 	'{': true, '}': true, '"': true, '\'': true,
-	'—': true, '–': true, '|': true, '/': true,
+	'—': true, '–': true, '-': true, '|': true, '/': true,
 	'\\': true, '*': true, '_': true, '~': true,
 }
 
@@ -138,6 +138,23 @@ func isStopword(w string) bool {
 // isPhraseDelimiter verifica se o caractere é um delimitador de frase.
 func isPhraseDelimiter(r rune) bool {
 	return phraseDelimiters[r] || unicode.IsSpace(r)
+}
+
+// KeywordsCount retorna o número ideal de keywords a extrair com base no
+// tamanho do texto (em caracteres Unicode):
+//   - < 500 chars  → 1 keyword (nota pequena)
+//   - 500-3000     → 3 keywords (nota média)
+//   - > 3000       → 5 keywords (nota longa)
+func KeywordsCount(text string) int {
+	n := len([]rune(text))
+	switch {
+	case n < 500:
+		return 1
+	case n <= 3000:
+		return 3
+	default:
+		return 5
+	}
 }
 
 // ExtractKeywords aplica o algoritmo RAKE (Rapid Automatic Keyword Extraction)
