@@ -44,6 +44,14 @@ type LinkStore interface {
 	ClearLinks(fromFile string) error
 }
 
+// ── Keywords ──
+
+// KeywordStore define operações na coluna keywords da tabela notes.
+type KeywordStore interface {
+	SetNoteKeywords(filename string, keywords []string) error
+	GetNoteKeywords(filename string) ([]string, error)
+}
+
 // ── Popularidade ──
 
 // PopStore define operações na tabela popularity.

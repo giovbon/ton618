@@ -98,6 +98,30 @@ func (s *Store) NoteExists(filename string) bool {
 	return count > 0
 }
 
+// SetNoteKeywords atualiza as keywords extraídas de uma nota.
+func (s *Store) SetNoteKeywords(filename string, keywords []string) error {
+	kw := strings.Join(keywords, ",")
+	_, err := s.DB.Exec("UPDATE notes SET keywords = ? WHERE filename = ?", kw, filename)
+	return err
+}
+
+// GetNoteKeywords retorna as keywords extraídas de uma nota.
+// Retorna slice vazio se não houver keywords ou a nota não existir.
+func (s *Store) GetNoteKeywords(filename string) ([]string, error) {
+	var kw string
+	err := s.DB.QueryRow("SELECT keywords FROM notes WHERE filename = ?", filename).Scan(&kw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if kw == "" {
+		return nil, nil
+	}
+	return strings.Split(kw, ","), nil
+}
+
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
 // It skips files that already exist in the DB (by filename).
 // Returns the count of imported notes.

@@ -167,27 +167,49 @@
             var valueLower = value.toLowerCase();
             // Strip #tags from the name-matching part
             var nameSearch = valueLower.replace(/#\w+/g, "").trim();
-            var filtered = allNotes.filter(function (n) {
-                // Check if name matches (only the non-tag part)
-                var nameMatch =
-                    !nameSearch ||
-                    n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
-                // Check tags
-                // Check if any tag matches explicit tag query
-                var tagMatch = true;
-                var tagQueries = value.match(/#(\w+)/g);
-                if (tagQueries) {
-                    tagQueries.forEach(function (tq) {
-                        var tag = tq.substring(1).toLowerCase();
-                        var hasTag = (n.tags || []).some(function (t) {
-                            return t.toLowerCase() === tag;
-                        });
-                        if (!hasTag) tagMatch = false;
+
+            // Tag filter (explicit #tag queries)
+            var tagQueries = value.match(/#(\w+)/g);
+            function matchesTags(n) {
+                if (!tagQueries) return true;
+                return tagQueries.every(function (tq) {
+                    var tag = tq.substring(1).toLowerCase();
+                    return (n.tags || []).some(function (t) {
+                        return t.toLowerCase() === tag;
                     });
+                });
+            }
+
+            if (!nameSearch) {
+                // Sem texto de busca: só filtra por tags, sem reordenar
+                var filtered = allNotes.filter(matchesTags);
+                renderCompactNotes(filtered);
+                return;
+            }
+
+            // Separa em dois grupos: match por nome (1º) e match por keyword (2º)
+            var nameMatches = [];
+            var keywordMatches = [];
+
+            allNotes.forEach(function (n) {
+                if (!matchesTags(n)) return;
+                var nameMatch = n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
+                var kwMatch = false;
+                var kws = n.keywords || [];
+                for (var i = 0; i < kws.length; i++) {
+                    if (kws[i].toLowerCase().indexOf(nameSearch) !== -1) {
+                        kwMatch = true;
+                        break;
+                    }
                 }
-                return nameMatch && tagMatch;
+                if (nameMatch) {
+                    nameMatches.push(n);
+                } else if (kwMatch) {
+                    keywordMatches.push(n);
+                }
             });
-            renderCompactNotes(filtered);
+
+            renderCompactNotes(nameMatches.concat(keywordMatches));
         } else {
             doGlobalSearch(value);
         }
@@ -261,24 +283,47 @@
     function filterByTagAndName(value) {
         var valueLower = value.toLowerCase();
         var nameSearch = valueLower.replace(/#\w+/g, "").trim();
-        var filtered = allNotes.filter(function (n) {
-            var nameMatch =
-                !nameSearch ||
-                n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
-            // Check explicit tag queries
-            var tagQueries = value.match(/#(\w+)/g);
-            if (tagQueries) {
-                tagQueries.forEach(function (tq) {
-                    var tag = tq.substring(1).toLowerCase();
-                    var hasTag = (n.tags || []).some(function (t) {
-                        return t.toLowerCase() === tag;
-                    });
-                    if (!hasTag) nameMatch = false;
+
+        var tagQueries = value.match(/#(\w+)/g);
+        function matchesTags(n) {
+            if (!tagQueries) return true;
+            return tagQueries.every(function (tq) {
+                var tag = tq.substring(1).toLowerCase();
+                return (n.tags || []).some(function (t) {
+                    return t.toLowerCase() === tag;
                 });
+            });
+        }
+
+        if (!nameSearch) {
+            var filtered = allNotes.filter(matchesTags);
+            renderCompactNotes(filtered);
+            return;
+        }
+
+        // Separa em dois grupos: match por nome (1º) e match por keyword (2º)
+        var nameMatches = [];
+        var keywordMatches = [];
+
+        allNotes.forEach(function (n) {
+            if (!matchesTags(n)) return;
+            var nameMatch = n.arquivo.toLowerCase().indexOf(nameSearch) !== -1;
+            var kwMatch = false;
+            var kws = n.keywords || [];
+            for (var i = 0; i < kws.length; i++) {
+                if (kws[i].toLowerCase().indexOf(nameSearch) !== -1) {
+                    kwMatch = true;
+                    break;
+                }
             }
-            return nameMatch;
+            if (nameMatch) {
+                nameMatches.push(n);
+            } else if (kwMatch) {
+                keywordMatches.push(n);
+            }
         });
-        renderCompactNotes(filtered);
+
+        renderCompactNotes(nameMatches.concat(keywordMatches));
     }
 
     function highlightSearchTerms(query) {
@@ -430,34 +475,41 @@
             var html =
                 '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">' +
                 mdCb;
-            if (isPdf) {
-                html +=
-                    '<a href="/file?name=' +
-                    encodeURIComponent(n.arquivo) +
-                    '" target="_blank" class="flex-1 min-w-0">';
-            } else if (isZip) {
-                html +=
-                    '<a href="/file/download?name=' +
-                    encodeURIComponent(n.arquivo) +
-                    '" target="_blank" class="flex-1 min-w-0">';
-            } else {
-                html +=
-                    '<a href="/editor?file=' +
-                    encodeURIComponent(n.arquivo) +
-                    '" class="flex-1 min-w-0">';
-            }
             html +=
+                '<div class="flex-1 min-w-0">' +
+                '<a href="' +
+                (isPdf
+                    ? '/file?name=' + encodeURIComponent(n.arquivo)
+                    : isZip
+                      ? '/file/download?name=' + encodeURIComponent(n.arquivo)
+                      : '/editor?file=' + encodeURIComponent(n.arquivo)) +
+                '" target="' +
+                (isPdf || isZip ? '_blank' : '') +
+                '" class="block">' +
                 '<span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">' +
                 noteIcon +
                 " " +
                 displayName +
                 "</span>";
-            if (folder)
+            // Keywords no lugar do texto "notes" (abaixo do título)
+            var kws = n.keywords || [];
+            if (kws.length) {
+                html +=
+                    '<div class="flex flex-wrap gap-x-2 mt-0.5">';
+                kws.forEach(function (kw) {
+                    html +=
+                        '<span class="text-[10px] text-zinc-600 italic leading-tight">' +
+                        kw +
+                        "</span>";
+                });
+                html += "</div>";
+            } else if (folder) {
                 html +=
                     '<span class="text-[10px] text-zinc-700">' +
                     folder +
                     "</span>";
-            html += "</a>";
+            }
+            html += "</a></div>";
             if (tags.length) {
                 html += '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {

@@ -98,12 +98,24 @@ func initSchema(database *sql.DB) error {
 		return err
 	}
 
+	// Migrations evolutivas
+	migrate(database)
+
 	// Performance PRAGMAs
 	database.Exec("PRAGMA synchronous=NORMAL")
 	database.Exec("PRAGMA cache_size=-8000")
 	database.Exec("PRAGMA temp_store=MEMORY")
 
 	return nil
+}
+
+// migrate aplica migrações evolutivas do schema (colunas novas, etc).
+// Cada migração é idempotente — usa ALTER TABLE e ignora erro se já existir.
+func migrate(database *sql.DB) {
+	// v1: adiciona coluna keywords à tabela notes
+	if _, err := database.Exec("ALTER TABLE notes ADD COLUMN keywords TEXT DEFAULT ''"); err != nil {
+		// coluna já existe — ignorado
+	}
 }
 
 // Close fecha a conexão com o banco.

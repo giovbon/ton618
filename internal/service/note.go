@@ -151,10 +151,12 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 	var items []NoteItem
 	for arquivo, mtime := range mods {
 		tags, _ := s.tags.GetFileTags(arquivo)
+		keywords, _ := s.store.GetNoteKeywords(arquivo)
 		items = append(items, NoteItem{
-			Arquivo: arquivo,
-			Tags:    tags,
-			Mtime:   mtime,
+			Arquivo:  arquivo,
+			Tags:     tags,
+			Mtime:    mtime,
+			Keywords: keywords,
 		})
 	}
 	return items, nil
@@ -162,9 +164,10 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 
 // NoteItem é o formato de listagem compacta.
 type NoteItem struct {
-	Arquivo string   `json:"arquivo"`
-	Tags    []string `json:"tags"`
-	Mtime   string   `json:"mtime"`
+	Arquivo  string   `json:"arquivo"`
+	Tags     []string `json:"tags"`
+	Mtime    string   `json:"mtime"`
+	Keywords []string `json:"keywords"`
 }
 
 // ── privado ──
@@ -220,6 +223,16 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 	}
 
 	s.fileMod.SetFileMod(filename, modTime.Format(time.RFC3339))
+
+	// Extrai as 5 keywords mais relevantes via RAKE
+	keywords := processor.ExtractKeywords(content, 5)
+	if len(keywords) > 0 {
+		if err := s.store.SetNoteKeywords(filename, keywords); err != nil {
+			slog.Error("set keywords", "file", filename, "error", err)
+		}
+	} else {
+		s.store.SetNoteKeywords(filename, nil)
+	}
 
 	return nil
 }

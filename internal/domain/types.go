@@ -75,7 +75,8 @@ type ArchiveInfo struct {
 
 // NoteItem é usado na listagem compacta de notas (JSON).
 type NoteItem struct {
-	File  string   `json:"arquivo"`
-	Tags  []string `json:"tags"`
-	Mtime string   `json:"mtime"`
+	File     string   `json:"arquivo"`
+	Tags     []string `json:"tags"`
+	Mtime    string   `json:"mtime"`
+	Keywords []string `json:"keywords"`
 }
