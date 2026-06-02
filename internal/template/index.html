@@ -423,6 +423,16 @@
             var name = n.arquivo.split("/").pop() || n.arquivo;
             var folder = n.arquivo.split("/").slice(0, -1).join("/") || "";
             var tags = n.tags || [];
+            var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
+            var isZip =
+                n.arquivo &&
+                (n.arquivo.indexOf("attachments/") === 0 ||
+                    n.arquivo.indexOf("archives/") === 0);
+            var isCapture = tags.indexOf("captura") !== -1;
+            // Remove prefixo "captura-" do nome quando for captura (o icone ja basta)
+            if (isCapture) {
+                name = name.replace(/^captura-/i, "");
+            }
             var displayName = name;
             if (nameFilter) {
                 var idx = name.toLowerCase().indexOf(nameFilter.toLowerCase());
@@ -439,12 +449,6 @@
                 }
             }
             var safeName = n.arquivo.replace(/'/g, "\\'");
-            var isPdf = n.arquivo && n.arquivo.indexOf("pdfs/") === 0;
-            var isZip =
-                n.arquivo &&
-                (n.arquivo.indexOf("attachments/") === 0 ||
-                    n.arquivo.indexOf("archives/") === 0);
-            var isCapture = (n.tags || []).indexOf("captura") !== -1;
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
 

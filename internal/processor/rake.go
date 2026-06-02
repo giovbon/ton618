@@ -117,6 +117,8 @@ var stopwordsPT = map[string]bool{
 	"most": true, "some": true, "any": true, "nor": true,
 	"only": true, "own": true, "same": true, "than": true, "too": true,
 	"very": true, "just": true, "also": true, "well": true,
+
+	"http": true, "https": true, "www": true, "br": true, "g1": true, "diz": true,
 }
 
 // phraseDelimiters são caracteres que separam frases candidatas.
@@ -184,7 +186,7 @@ func ExtractKeywords(text string, topN int) []string {
 		seen := make(map[string]bool)
 		for _, w := range words {
 			w = cleanWord(w)
-			if w == "" || isStopword(w) || len(w) < 2 || isNumeric(w) {
+			if w == "" || isStopword(w) || len(w) < 3 || isNumeric(w) {
 				continue
 			}
 			if wordMap[w] == nil {
@@ -227,7 +229,7 @@ func ExtractKeywords(text string, topN int) []string {
 		var contentWords []string
 		for _, w := range words {
 			w = cleanWord(w)
-			if w != "" && !isStopword(w) && len(w) >= 2 && !isNumeric(w) {
+			if w != "" && !isStopword(w) && len(w) >= 3 && !isNumeric(w) {
 				contentWords = append(contentWords, w)
 			}
 		}
