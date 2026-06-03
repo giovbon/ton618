@@ -137,6 +137,16 @@ func main() {
 
 	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(r.URL.Path) >= 8 && r.URL.Path[:8] == "/static/" {
+			// Serve arquivo .gz pre-comprimido se existir (apenas para editor.js)
+			if strings.HasSuffix(r.URL.Path, "editor.js") {
+				gzPath := cfg.WebDir + "/static/editor.js.gz"
+				if _, err := os.Stat(gzPath); err == nil {
+					w.Header().Set("Content-Encoding", "gzip")
+					w.Header().Set("Content-Type", "application/javascript")
+					http.ServeFile(w, r, gzPath)
+					return
+				}
+			}
 			staticHandler.ServeHTTP(w, r)
 			return
 		}

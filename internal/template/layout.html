@@ -281,6 +281,13 @@
                     >
                         🌐 CAPTURA
                     </button>
+                    <button
+                        onclick="openWordCloud()"
+                        class="text-zinc-400 hover:text-violet-400 transition-colors"
+                        title="Nuvem de palavras"
+                    >
+                        ☁️
+                    </button>
 
                     <a
                         href="/help"
@@ -400,12 +407,24 @@
                     🌐 CAPTURA
                 </button>
 
+                <button
+                    onclick="
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden');
+                        openWordCloud();
+                    "
+                    class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-violet-400 hover:bg-zinc-900 transition-colors"
+                >
+                    ☁️ Nuvem
+                </button>
+
                 <a
                     href="/help"
                     onclick="
                         document
                             .getElementById('mobile-menu')
-                            .classList.add('hidden');
+                            .classList.add('hidden')
                     "
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
                 >
@@ -494,7 +513,10 @@
                     </button>
                     <button
                         data-tab="stopwords"
-                        onclick="switchSettingsTab('stopwords');loadStopwords();"
+                        onclick="
+                            switchSettingsTab('stopwords');
+                            loadStopwords();
+                        "
                         class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
                     >
                         🚫 Stopwords
@@ -772,16 +794,16 @@
                             Adicione palavras que devem ser ignoradas na
                             extração de palavras-chave (RAKE). As stopwords
                             personalizadas são salvas em
-                            <code class="text-zinc-500">docs/stopwords-custom.json</code>.
+                            <code class="text-zinc-500"
+                                >docs/stopwords-custom.json</code
+                            >.
                         </p>
 
                         <!-- Lista de stopwords atuais -->
                         <div
                             class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
                         >
-                            <div
-                                class="flex items-center justify-between mb-3"
-                            >
+                            <div class="flex items-center justify-between mb-3">
                                 <span
                                     class="text-sm font-semibold text-zinc-200"
                                     >Stopwords atuais</span
@@ -816,7 +838,10 @@
                                     id="new-stopword-input"
                                     placeholder="ex: exemplo, teste, lorem"
                                     class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors"
-                                    onkeydown="if(event.key==='Enter')addStopword()"
+                                    onkeydown="
+                                        if (event.key === 'Enter')
+                                            addStopword();
+                                    "
                                 />
                                 <button
                                     onclick="addStopword()"
@@ -968,6 +993,11 @@
         function createNewNote() {
             window.location.href = "/editor";
             return false;
+        }
+
+        function openWordCloud() {
+            sessionStorage.setItem("showCloud", "1");
+            window.location.href = "/";
         }
 
         // ── Auth Integration ──
@@ -1531,8 +1561,8 @@
                             '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/50 text-xs text-zinc-300">' +
                             "<span>" +
                             w +
-                            '</span>' +
-                            '<button onclick="removeStopword(\'' +
+                            "</span>" +
+                            "<button onclick=\"removeStopword('" +
                             w.replace(/'/g, "\\'") +
                             '\')" class="text-zinc-600 hover:text-red-400 transition-colors leading-none text-sm ml-0.5" title="Remover">&times;</button>' +
                             "</span>";

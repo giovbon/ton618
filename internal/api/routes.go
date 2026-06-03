@@ -68,6 +68,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)
 	mux.HandleFunc("GET /api/help/markdown", ctx.HandleHelpMarkdown)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
+	mux.HandleFunc("GET /api/keywords", ctx.HandleGetKeywords)
 
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
