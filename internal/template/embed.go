@@ -7,7 +7,13 @@ import (
 )
 
 //go:embed *.html
+//go:embed help.md
 var TemplatesFS embed.FS
+
+// HelpMD is the raw content of the embedded help.md documentation file.
+func HelpMD() ([]byte, error) {
+	return TemplatesFS.ReadFile("help.md")
+}
 
 // LoadTemplates loads all embedded .html templates.
 // Uses text/template to avoid Go 1.24+ html/template strict parsing issues.

@@ -5,12 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
 	"ton618/internal/processor"
+	"ton618/internal/template"
 )
 
 // ── Pages ──
@@ -104,10 +105,9 @@ func (ctx *HandlerContext) HandleHelp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Request) {
-	helpPath := ctx.Cfg.DocsDir + "/help.md"
-	content, err := os.ReadFile(helpPath)
+	content, err := template.HelpMD()
 	if err != nil {
-		slog.Error("ler help.md", "error", err)
+		slog.Error("ler help.md embedado", "error", err)
 		http.Error(w, "Documentação não encontrada", http.StatusNotFound)
 		return
 	}

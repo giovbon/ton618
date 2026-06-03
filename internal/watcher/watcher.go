@@ -84,20 +84,31 @@ type FileEvent struct {
 
 // ── Watcher ──
 
+const debounceInterval = 300 * time.Millisecond
+
 type Watcher struct {
 	cfg     *config.AppConfig
 	store   *db.Store
 	watcher *fsnotify.Watcher
 	events  chan FileEvent
 	wg      sync.WaitGroup
+
+	// Debounce agrupa eventos repetidos do fsnotify para o mesmo arquivo.
+	// Quando um evento chega, um timer de debounceInterval é iniciado.
+	// Se outro evento para o mesmo arquivo chegar antes do timer disparar,
+	// o timer é reiniciado. Só após o período sem novos eventos o evento
+	// é enviado ao canal `events` para processamento.
+	debounceMu    sync.Mutex
+	debounceTimers map[string]*time.Timer
 }
 
 // NewWatcher creates a new watcher instance.
 func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
 	return &Watcher{
-		cfg:    cfg,
-		store:  store,
-		events: make(chan FileEvent, 100),
+		cfg:            cfg,
+		store:          store,
+		events:         make(chan FileEvent, 100),
+		debounceTimers: make(map[string]*time.Timer),
 	}
 }
 
@@ -294,6 +305,17 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 func (w *Watcher) fsnotifyLoop(ctx context.Context) {
 	defer w.wg.Done()
+
+	// Limpa todos os timers de debounce ao finalizar
+	defer func() {
+		w.debounceMu.Lock()
+		for _, t := range w.debounceTimers {
+			t.Stop()
+		}
+		w.debounceTimers = nil
+		w.debounceMu.Unlock()
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -331,6 +353,39 @@ func (w *Watcher) relPathFromAbs(absPath string) (string, bool) {
 	return rel, true
 }
 
+// debounceEvent agrupa eventos repetidos do fsnotify para o mesmo arquivo.
+// Cria ou reinicia um timer de debounceInterval. Quando o timer dispara,
+// o evento é enviado ao canal `events` para processamento.
+func (w *Watcher) debounceEvent(ev FileEvent) {
+	w.debounceMu.Lock()
+	defer w.debounceMu.Unlock()
+
+	// Se já existe um timer para este arquivo, reinicia
+	if t, ok := w.debounceTimers[ev.Filename]; ok {
+		t.Stop()
+		t.Reset(debounceInterval)
+		return
+	}
+
+	// Cria um novo timer
+	w.debounceTimers[ev.Filename] = time.AfterFunc(debounceInterval, func() {
+		// Remove o timer do mapa após disparar
+		w.debounceMu.Lock()
+		delete(w.debounceTimers, ev.Filename)
+		w.debounceMu.Unlock()
+
+		// Re-estatísticas do arquivo antes de enviar (mtime pode ter mudado)
+		if ev.Type == "modify" {
+			info, err := os.Stat(ev.Path)
+			if err == nil {
+				ev.ModTime = info.ModTime()
+			}
+		}
+
+		w.events <- ev
+	})
+}
+
 func (w *Watcher) handleCreateOrMod(absPath string) {
 	relPath, ok := w.relPathFromAbs(absPath)
 	if !ok {
@@ -353,12 +408,12 @@ func (w *Watcher) handleCreateOrMod(absPath string) {
 		return
 	}
 
-	w.events <- FileEvent{
+	w.debounceEvent(FileEvent{
 		Path:     absPath,
 		Filename: relPath,
 		ModTime:  info.ModTime(),
 		Type:     "modify",
-	}
+	})
 }
 
 func (w *Watcher) handleDelete(absPath string) {
@@ -373,11 +428,14 @@ func (w *Watcher) handleDelete(absPath string) {
 	}
 
 	slog.Info("Arquivo deletado", "file", relPath)
-	w.events <- FileEvent{
+
+	// Delete events also go through debounce to prevent race
+	// with subsequent create events (e.g. editor temp files)
+	w.debounceEvent(FileEvent{
 		Path:     absPath,
 		Filename: relPath,
 		Type:     "delete",
-	}
+	})
 }
 
 func (w *Watcher) pollLoop(ctx context.Context) {
