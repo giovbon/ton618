@@ -89,7 +89,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					}
 				}
 				// Detecta no_keywords: true e tag no-keywords
-				fileTags = detectNoKeywords(fm, fileTags)
+				fileTags = detectKeywords(fm, fileTags)
 				// Serializa demais campos do frontmatter para indexacao FTS
 				for k, v := range fm {
 					if k == "tags" || k == "no_keywords" {
@@ -277,7 +277,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					}
 				}
 				// Detecta no_keywords: true e tag no-keywords
-				fileTags = detectNoKeywords(fm, fileTags)
+				fileTags = detectKeywords(fm, fileTags)
 				// Serializa demais campos do frontmatter para indexacao FTS
 				for k, v := range fm {
 					if k == "tags" || k == "no_keywords" {
@@ -449,13 +449,13 @@ func ExtractTitle(content, filename string) string {
 // A propriedade no_keywords: true no frontmatter YAML ou a tag "no-keywords"
 // desabilita a extração de palavras-chave (RAKE) para esta nota.
 
-const noKeywordsSentinel = "__no_keywords__"
+const keywordsSentinel = "__keywords__"
 
 // HasNoKeywords verifica se o slice de tags contém o sentinel
 // que indica que a extração de keywords deve ser ignorada.
-func HasNoKeywords(fileTags []string) bool {
+func HasKeywords(fileTags []string) bool {
 	for _, t := range fileTags {
-		if t == noKeywordsSentinel {
+		if t == keywordsSentinel {
 			return true
 		}
 	}
@@ -464,10 +464,10 @@ func HasNoKeywords(fileTags []string) bool {
 
 // FilterNoKeywords remove o sentinel __no_keywords__ de fileTags
 // para que ele não seja persistido como tag real no banco.
-func FilterNoKeywords(fileTags []string) []string {
+func FilterKeywords(fileTags []string) []string {
 	filtered := make([]string, 0, len(fileTags))
 	for _, t := range fileTags {
-		if t != noKeywordsSentinel {
+		if t != keywordsSentinel {
 			filtered = append(filtered, t)
 		}
 	}
@@ -477,35 +477,35 @@ func FilterNoKeywords(fileTags []string) []string {
 // detectNoKeywords verifica se a propriedade no_keywords: true está presente
 // no frontmatter YAML, ou se a tag "no-keywords" está na lista de tags.
 // Se detectado, adiciona o sentinel __no_keywords__ a fileTags.
-func detectNoKeywords(fm map[string]interface{}, fileTags []string) []string {
-	// Verifica propriedade no_keywords no frontmatter
-	if v, ok := fm["no_keywords"]; ok {
+func detectKeywords(fm map[string]interface{}, fileTags []string) []string {
+	// Verifica propriedade keywords no frontmatter
+	if v, ok := fm["keywords"]; ok {
 		if b, ok := v.(bool); ok && b {
 			hasSentinel := false
 			for _, t := range fileTags {
-				if t == noKeywordsSentinel {
+				if t == keywordsSentinel {
 					hasSentinel = true
 					break
 				}
 			}
 			if !hasSentinel {
-				fileTags = append(fileTags, noKeywordsSentinel)
+				fileTags = append(fileTags, keywordsSentinel)
 			}
 			return fileTags
 		}
 	}
-	// Verifica se a tag "no-keywords" está presente
+	// Verifica se a tag "keywords" está presente (como hashtag #keywords)
 	for _, t := range fileTags {
-		if t == "no-keywords" {
+		if t == "keywords" {
 			hasSentinel := false
 			for _, ft := range fileTags {
-				if ft == noKeywordsSentinel {
+				if ft == keywordsSentinel {
 					hasSentinel = true
 					break
 				}
 			}
 			if !hasSentinel {
-				fileTags = append(fileTags, noKeywordsSentinel)
+				fileTags = append(fileTags, keywordsSentinel)
 			}
 			return fileTags
 		}
