@@ -275,8 +275,10 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 	}
 
 	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo
-	if len(fileTags) > 0 {
-		store.SetFileTags(filename, fileTags)
+	// Filtra o sentinel __no_keywords__ antes de persistir
+	cleanTags := processor.FilterNoKeywords(fileTags)
+	if len(cleanTags) > 0 {
+		store.SetFileTags(filename, cleanTags)
 	} else {
 		// Se o arquivo não tem tags, limpa as tags existentes
 		store.SetFileTags(filename, nil)

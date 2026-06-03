@@ -5,7 +5,6 @@
 
 # Identificar o diretório raiz do projeto de forma absoluta
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-DOCS_DIR="$BASE_DIR/docs"
 DATA_DIR="$BASE_DIR/data"
 
 export DOCS_DIR
@@ -23,21 +22,15 @@ fi
 PORT="${PORT:-6180}"
 DB_PATH="${DB_PATH:-$DATA_DIR/ton618.db}"
 STATE_DIR="${STATE_DIR:-$DATA_DIR}"
-EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-gemini}"
+
 EMBEDDING_ALL="${EMBEDDING_ALL:-false}"
 
 if [ -n "$EMBEDDING_API_KEY" ]; then
     echo "🌌 Iniciando TON-618 v2..."
-    echo "📂 Monitorando documentos em: $DOCS_DIR"
     echo "🗄️  Banco SQLite em: $DB_PATH"
-    echo "🧠 Embeddings: $EMBEDDING_PROVIDER (chave configurada)"
-    echo "🌐 Embed todas: $EMBEDDING_ALL"
 else
     echo "🌌 Iniciando TON-618 v2..."
-    echo "📂 Monitorando documentos em: $DOCS_DIR"
     echo "🗄️  Banco SQLite em: $DB_PATH"
-    echo "🧠 Embeddings: $EMBEDDING_PROVIDER (sem API key — desabilitado)"
-    echo "⚠️  Configure EMBEDDING_API_KEY no .env"
 fi
 echo "🔌 Porta: $PORT"
 

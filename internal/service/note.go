@@ -216,8 +216,10 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 		s.links.AddLink(filename, link)
 	}
 
-	if len(fileTags) > 0 {
-		s.tags.SetFileTags(filename, fileTags)
+	// Filtra o sentinel __no_keywords__ antes de persistir as tags
+	cleanTags := processor.FilterNoKeywords(fileTags)
+	if len(cleanTags) > 0 {
+		s.tags.SetFileTags(filename, cleanTags)
 	} else {
 		s.tags.SetFileTags(filename, nil)
 	}
@@ -225,10 +227,15 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 	s.fileMod.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
 
 	// Extrai keywords via RAKE (quantidade varia conforme o tamanho do texto)
-	keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
-	if len(keywords) > 0 {
-		if err := s.store.SetNoteKeywords(filename, keywords); err != nil {
-			slog.Error("set keywords", "file", filename, "error", err)
+	// Ignorado se a nota tiver no_keywords: true ou tag no-keywords
+	if !processor.HasNoKeywords(fileTags) {
+		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
+		if len(keywords) > 0 {
+			if err := s.store.SetNoteKeywords(filename, keywords); err != nil {
+				slog.Error("set keywords", "file", filename, "error", err)
+			}
+		} else {
+			s.store.SetNoteKeywords(filename, nil)
 		}
 	} else {
 		s.store.SetNoteKeywords(filename, nil)

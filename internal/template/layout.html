@@ -17,7 +17,7 @@
             rel="stylesheet"
         />
         <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
         <script>
             tailwind.config = {
                 theme: {
@@ -282,6 +282,13 @@
                         🌐 CAPTURA
                     </button>
 
+                    <a
+                        href="/help"
+                        class="text-zinc-400 hover:text-sky-400 transition-colors"
+                        title="Documentação"
+                        >❓</a
+                    >
+
                     <button
                         onclick="openSettings()"
                         class="text-zinc-400 hover:text-white transition-colors cursor-pointer"
@@ -393,6 +400,18 @@
                     🌐 CAPTURA
                 </button>
 
+                <a
+                    href="/help"
+                    onclick="
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden');
+                    "
+                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
+                >
+                    📖 Tutorial
+                </a>
+
                 <button
                     onclick="
                         document
@@ -420,7 +439,8 @@
         <main class="max-w-4xl mx-auto px-4 py-6">
             {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
             .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
-            "editorContent" .}}{{end}}
+            "editorContent" .}}{{end}} {{if eq .ContentBlock
+            "helpContent"}}{{template "helpContent" .}}{{end}}
         </main>
 
         <!-- Settings Modal -->
@@ -471,6 +491,13 @@
                         class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
                     >
                         💾 Backup
+                    </button>
+                    <button
+                        data-tab="stopwords"
+                        onclick="switchSettingsTab('stopwords');loadStopwords();"
+                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
+                    >
+                        🚫 Stopwords
                     </button>
                 </div>
 
@@ -734,6 +761,83 @@
                                 <code class="text-zinc-500">attachments/</code>
                             </p>
                         </div>
+                    </div>
+
+                    <!-- Stopwords Tab -->
+                    <div
+                        id="tab-stopwords"
+                        class="settings-tab hidden space-y-6"
+                    >
+                        <p class="text-sm text-zinc-400">
+                            Adicione palavras que devem ser ignoradas na
+                            extração de palavras-chave (RAKE). As stopwords
+                            personalizadas são salvas em
+                            <code class="text-zinc-500">docs/stopwords-custom.json</code>.
+                        </p>
+
+                        <!-- Lista de stopwords atuais -->
+                        <div
+                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                        >
+                            <div
+                                class="flex items-center justify-between mb-3"
+                            >
+                                <span
+                                    class="text-sm font-semibold text-zinc-200"
+                                    >Stopwords atuais</span
+                                >
+                                <span
+                                    id="stopwords-count"
+                                    class="text-xs text-zinc-500"
+                                    >0</span
+                                >
+                            </div>
+                            <div
+                                id="stopwords-list"
+                                class="flex flex-wrap gap-1.5 min-h-[40px]"
+                            >
+                                <span class="text-xs text-zinc-600">
+                                    Nenhuma stopword personalizada ainda.
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Adicionar nova stopword -->
+                        <div
+                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                        >
+                            <label
+                                class="block text-sm font-semibold text-zinc-200 mb-2"
+                                >Adicionar stopword</label
+                            >
+                            <div class="flex gap-2">
+                                <input
+                                    type="text"
+                                    id="new-stopword-input"
+                                    placeholder="ex: exemplo, teste, lorem"
+                                    class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors"
+                                    onkeydown="if(event.key==='Enter')addStopword()"
+                                />
+                                <button
+                                    onclick="addStopword()"
+                                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors shrink-0"
+                                >
+                                    + Adicionar
+                                </button>
+                            </div>
+                            <p class="text-[10px] text-zinc-600 mt-1.5">
+                                Digite uma palavra e pressione Enter ou clique
+                                em Adicionar.
+                            </p>
+                        </div>
+
+                        <!-- Botão de recarregar -->
+                        <button
+                            onclick="loadStopwords()"
+                            class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors"
+                        >
+                            🔄 Recarregar lista
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1397,6 +1501,104 @@
                 .catch(function (err) {
                     btn.disabled = false;
                     btn.textContent = "🧹 Limpar imagens órfãs";
+                    alert("Erro: " + err.message);
+                });
+        }
+
+        // ── Stopwords Customizadas ──
+        function loadStopwords() {
+            var container = document.getElementById("stopwords-list");
+            var countEl = document.getElementById("stopwords-count");
+            if (!container) return;
+            container.innerHTML =
+                '<span class="text-xs text-zinc-500">Carregando...</span>';
+
+            fetch("/api/stopwords")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    var words = data.stopwords || [];
+                    if (words.length === 0) {
+                        container.innerHTML =
+                            '<span class="text-xs text-zinc-600">Nenhuma stopword personalizada ainda.</span>';
+                        countEl.textContent = "0";
+                        return;
+                    }
+                    var html = "";
+                    words.forEach(function (w) {
+                        html +=
+                            '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/50 text-xs text-zinc-300">' +
+                            "<span>" +
+                            w +
+                            '</span>' +
+                            '<button onclick="removeStopword(\'' +
+                            w.replace(/'/g, "\\'") +
+                            '\')" class="text-zinc-600 hover:text-red-400 transition-colors leading-none text-sm ml-0.5" title="Remover">&times;</button>' +
+                            "</span>";
+                    });
+                    container.innerHTML = html;
+                    countEl.textContent = words.length;
+                })
+                .catch(function (err) {
+                    container.innerHTML =
+                        '<span class="text-xs text-red-400">Erro ao carregar: ' +
+                        err.message +
+                        "</span>";
+                });
+        }
+
+        function addStopword() {
+            var input = document.getElementById("new-stopword-input");
+            var word = input.value.trim().toLowerCase();
+            if (!word) {
+                alert("Digite uma palavra para adicionar.");
+                return;
+            }
+
+            fetch("/api/stopwords/add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ word: word }),
+            })
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data.success) {
+                        input.value = "";
+                        loadStopwords();
+                    } else {
+                        alert("Erro ao adicionar stopword.");
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro: " + err.message);
+                });
+        }
+
+        function removeStopword(word) {
+            if (
+                !confirm('Remover "' + word + '" das stopwords personalizadas?')
+            )
+                return;
+
+            fetch("/api/stopwords/remove", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ word: word }),
+            })
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data.success) {
+                        loadStopwords();
+                    } else {
+                        alert("Erro ao remover stopword.");
+                    }
+                })
+                .catch(function (err) {
                     alert("Erro: " + err.message);
                 });
         }

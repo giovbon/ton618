@@ -3,11 +3,150 @@
 package processor
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 )
+
+// ── Custom Stopwords ──
+// Os usuários podem adicionar stopwords personalizadas em um arquivo JSON
+// dentro do diretório docs. O caminho padrão é: <docsDir>/stopwords-custom.json
+
+var (
+	customStopwordsMu sync.RWMutex
+	customStopwords   = make(map[string]bool)
+)
+
+// stopwordsCustomFile returns the path to the custom stopwords JSON file.
+func stopwordsCustomFile(docsDir string) string {
+	return filepath.Join(docsDir, "stopwords-custom.json")
+}
+
+// LoadCustomStopwords carrega as stopwords personalizadas do arquivo JSON.
+// Se o arquivo não existir, não é um erro — retorna nil.
+func LoadCustomStopwords(docsDir string) error {
+	path := stopwordsCustomFile(docsDir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("ler stopwords custom: %w", err)
+	}
+
+	var words []string
+	if err := json.Unmarshal(data, &words); err != nil {
+		return fmt.Errorf("decodificar stopwords custom: %w", err)
+	}
+
+	customStopwordsMu.Lock()
+	customStopwords = make(map[string]bool, len(words))
+	for _, w := range words {
+		w = strings.TrimSpace(strings.ToLower(w))
+		if w != "" {
+			customStopwords[w] = true
+		}
+	}
+	customStopwordsMu.Unlock()
+	return nil
+}
+
+// SaveCustomStopwords salva a lista de stopwords personalizadas no arquivo JSON.
+func SaveCustomStopwords(docsDir string, words []string) error {
+	// Limpa e normaliza
+	clean := make([]string, 0, len(words))
+	seen := make(map[string]bool)
+	for _, w := range words {
+		w = strings.TrimSpace(strings.ToLower(w))
+		if w != "" && !seen[w] {
+			clean = append(clean, w)
+			seen[w] = true
+		}
+	}
+
+	data, err := json.MarshalIndent(clean, "", "  ")
+	if err != nil {
+		return fmt.Errorf("codificar stopwords custom: %w", err)
+	}
+
+	path := stopwordsCustomFile(docsDir)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("salvar stopwords custom: %w", err)
+	}
+
+	// Atualiza o mapa em memória
+	customStopwordsMu.Lock()
+	customStopwords = make(map[string]bool, len(clean))
+	for _, w := range clean {
+		customStopwords[w] = true
+	}
+	customStopwordsMu.Unlock()
+
+	return nil
+}
+
+// GetCustomStopwords retorna a lista atual de stopwords personalizadas.
+func GetCustomStopwords() []string {
+	customStopwordsMu.RLock()
+	defer customStopwordsMu.RUnlock()
+	words := make([]string, 0, len(customStopwords))
+	for w := range customStopwords {
+		words = append(words, w)
+	}
+	sort.Strings(words)
+	return words
+}
+
+// AddCustomStopword adiciona uma stopword personalizada.
+func AddCustomStopword(docsDir, word string) error {
+	word = strings.TrimSpace(strings.ToLower(word))
+	if word == "" {
+		return fmt.Errorf("stopword não pode ser vazia")
+	}
+
+	// Verifica se já existe na lista padrão
+	if isStopword(word) {
+		// Já é stopword padrão, mas não impede de adicionar — apenas avisa
+	}
+
+	words := GetCustomStopwords()
+	for _, w := range words {
+		if w == word {
+			return nil // já existe
+		}
+	}
+	words = append(words, word)
+	return SaveCustomStopwords(docsDir, words)
+}
+
+// RemoveCustomStopword remove uma stopword personalizada.
+func RemoveCustomStopword(docsDir, word string) error {
+	word = strings.TrimSpace(strings.ToLower(word))
+	if word == "" {
+		return nil
+	}
+
+	words := GetCustomStopwords()
+	filtered := make([]string, 0, len(words))
+	for _, w := range words {
+		if w != word {
+			filtered = append(filtered, w)
+		}
+	}
+
+	// Se não mudou, não precisa salvar
+	if len(filtered) == len(words) {
+		return nil
+	}
+
+	return SaveCustomStopwords(docsDir, filtered)
+}
 
 // ── Stopwords em português (ISO 639-1: pt) ──
 // Lista abrangente incluindo artigos, preposições, pronomes, conjunções,
@@ -32,11 +171,15 @@ var stopwordsPT = map[string]bool{
 	"nesse": true, "nessa": true, "nesses": true, "nessas": true,
 	"naquele": true, "naquela": true, "naqueles": true, "naquelas": true,
 	"àquele": true, "àquela": true, "àqueles": true, "àquelas": true,
+	"pro": true, "pra": true, "pros": true, "pras": true,
+	"daí": true, "podes": true,
+
 	// preposições
 	"de": true, "em": true, "com": true, "por": true, "para": true,
 	"sem": true, "sob": true, "sobre": true, "entre": true,
-	"perante": true, "após": true, "até": true, "contra": true,
+	"perante": true, "após": true, "hasta": true, "até": true, "contra": true,
 	"desde": true, "trás": true, "ante": true,
+
 	// pronomes pessoais / possessivos / demonstrativos
 	"eu": true, "tu": true, "ele": true, "ela": true,
 	"nós": true, "vós": true, "eles": true, "elas": true,
@@ -56,33 +199,39 @@ var stopwordsPT = map[string]bool{
 	"todo": true, "toda": true, "todos": true, "todas": true,
 	"muito": true, "muita": true, "muitos": true, "muitas": true,
 	"pouco": true, "pouca": true, "poucos": true, "poucas": true,
-	"certo": true, "certa": true, "certos": true, "certas": true,
+	"certa": true, "certo": true, "certos": true, "certas": true,
 	"algum": true, "alguma": true, "alguns": true, "algumas": true,
 	"nenhum": true, "nenhuma": true, "nenhuns": true, "nenhumas": true,
 	"quem": true, "que": true, "qual": true, "quais": true,
 	"quanto": true, "quanta": true, "quantos": true, "quantas": true,
+	"alguém": true, "qualquer": true,
+	"você": true, "vocês": true, "ti": true, "mim": true,
+
 	// conjunções
 	"e": true, "ou": true, "mas": true, "porém": true,
 	"contudo": true, "todavia": true, "entretanto": true,
 	"pois": true, "portanto": true, "logo": true, "assim": true,
 	"como": true, "quando": true, "enquanto": true,
 	"embora": true, "caso": true,
-	"porque": true,
+	"porque": true, "causa": true,
+
 	// verbos auxiliares / alta frequência
 	"ser": true, "estar": true, "ter": true, "haver": true,
 	"fazer": true, "dizer": true, "poder": true, "dar": true,
 	"ficar": true, "saber": true, "querer": true, "vir": true,
 	"ir": true, "ver": true, "dever": true, "passar": true,
 	"achei": true, "achou": true, "acha": true, "acho": true,
-	"tem": true, "têm": true, "tinha": true, "tive": true,
-	"era": true, "é": true, "são": true, "sao": true, "foi": true, "foram": true,
-	"está": true, "estão": true, "estava": true, "esteve": true,
+	"tem": true, "têm": true, "tinha": true, "tinham": true, "tive": true,
+	"era": true, "eram": true, "é": true, "são": true, "sao": true, "foi": true, "foram": true,
+	"está": true, "estão": true, "estava": true, "estavam": true, "esteve": true,
 	"pode": true, "podem": true, "poderia": true,
 	"sera": true, "tera": true, "fara": true, "havera": true,
 	"podera": true, "devera": true, "ficara": true,
 	"deve": true, "devem": true, "deveria": true,
 	"sendo": true, "estando": true, "tendo": true,
 	"parece": true, "existe": true, "existem": true,
+	"tá": true, "tava": true, "tavam": true, "vou": true, "vai": true, "vão": true, "vira": true,
+	"seriam": true, "ficaram": true, "parecia": true,
 	// advérbios comuns
 	"não": true, "nao": true, "sim": true, "já": true, "ja": true, "mais": true,
 	"menos": true,
@@ -93,6 +242,8 @@ var stopwordsPT = map[string]bool{
 	"tão": true, "tanto": true, "quase": true, "apenas": true,
 	"só": true, "so": true, "somente": true, "também": true,
 	"demais": true, "demasia": true,
+	"então": true, "talvez": true,
+
 	// outras palavras funcionais comuns
 	"coisa": true, "coisas": true, "gente": true, "pessoa": true, "pessoas": true,
 	"vez": true, "vezes": true, "ano": true, "anos": true,
@@ -109,8 +260,26 @@ var stopwordsPT = map[string]bool{
 	"dois": true, "três": true, "quatro": true, "cinco": true,
 	"seis": true, "sete": true, "oito": true, "nove": true, "dez": true,
 	"cento": true, "cem": true, "mil": true,
+
+	// gírias, contrações de chat e marcadores de discurso (EXPANSÃO COLOQUIAL)
+	"mano": true, "miga": true, "cara": true, "velho": true, "bicho": true, // Vocativos comuns
+	"tipo": true, "tipo assim": true, // Marcadores de hesitação / preenchimento
+	"né": true, "néé": true, "néh": true, "né?": true,
+	"hein": true, "uai": true, "oxe": true, "vixe": true, "pô": true,
+	"beleza": true, "blz": true, "ok": true, "okay": true, "tapi": true,
+	"tamo": true, "tamos": true, // Variações do "estar" cortadas
+	"pqp": true, "vc": true, "vcs": true, "tb": true, "tbm": true, // Abreviações de internet
+	"pq": true, "oq": true, "q": true, "kd": true, "gnt": true, "cmg": true, "ctg": true,
+	"ah": true, "oh": true, "eh": true, "uh": true, "ai": true, "aí": true, // Interjeições vazias
+	"entao": true, "dai": true,
+	"parada": true, "paradas": true, "bagulho": true, "negócio": true, // Substitutos genéricos para "coisa"
+	"ligado": true, "ligada": true, "tá ligado": true, "ta ligado": true, // Expressões de checagem de atenção
+	"sabe": true, "veja": true, "olha": true, "olha só": true, "fala": true, // Verbos imperativos de discurso
+	"meio": true, "meio que": true, // Atenuadores de discurso
+	"bora": true, "partiu": true, "vamos": true,
+
 	// stopwords inglesas básicas (conteúdo bilíngue)
-	"the": true, "an": true, "and": true, "or": true,
+	"the": true, "an": true, "and": true, "or": true, "mark": true,
 	"of": true, "to": true, "in": true, "is": true, "it": true,
 	"for": true, "on": true, "that": true, "this": true, "with": true,
 	"at": true, "by": true, "be": true, "was": true, "were": true,
@@ -155,9 +324,16 @@ var phraseDelimiters = map[rune]bool{
 	'\\': true, '*': true, '_': true, '~': true,
 }
 
-// isStopword verifica se a palavra (minúscula) é stopword.
+// isStopword verifica se a palavra (minúscula) é stopword,
+// considerando tanto a lista padrão quanto as personalizadas do usuário.
 func isStopword(w string) bool {
-	return stopwordsPT[w]
+	if stopwordsPT[w] {
+		return true
+	}
+	customStopwordsMu.RLock()
+	_, ok := customStopwords[w]
+	customStopwordsMu.RUnlock()
+	return ok
 }
 
 // isPhraseDelimiter verifica se o caractere é um delimitador de frase.

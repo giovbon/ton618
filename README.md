@@ -1,4 +1,4 @@
-`repomix --remove-comments --compress --ignore "**/*_test.go"`
+repomix --remove-comments --compress --ignore "**/*_test.go,**/*.html,web/**/*"
 
 # TON-618 v2
 

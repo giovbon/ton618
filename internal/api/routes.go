@@ -44,6 +44,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	// Páginas HTML (server-side rendered)
 	mux.HandleFunc("GET /", ctx.HandleIndex)
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
+	mux.HandleFunc("GET /help", ctx.HandleHelp)
 
 	mux.HandleFunc("GET /login", ctx.HandleLogin)
 
@@ -65,6 +66,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/capture", ctx.HandleCapture)
 	mux.HandleFunc("GET /api/status", ctx.HandleStatus)
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)
+	mux.HandleFunc("GET /api/help/markdown", ctx.HandleHelpMarkdown)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
@@ -75,6 +77,11 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/archives", ctx.HandleListArchives)
 	mux.HandleFunc("POST /api/archive/restore", ctx.HandleRestoreArchive)
 	mux.HandleFunc("GET /api/backup", ctx.HandleBackup)
+
+	// Stopwords customizadas
+	mux.HandleFunc("GET /api/stopwords", ctx.HandleGetStopwords)
+	mux.HandleFunc("POST /api/stopwords/add", ctx.HandleAddStopword)
+	mux.HandleFunc("POST /api/stopwords/remove", ctx.HandleRemoveStopword)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))

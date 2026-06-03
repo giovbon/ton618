@@ -14,6 +14,7 @@ import (
 	"ton618/internal/api"
 	"ton618/internal/config"
 	"ton618/internal/db"
+	"ton618/internal/processor"
 	internalTpl "ton618/internal/template"
 	"ton618/internal/watcher"
 )
@@ -89,6 +90,16 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("Templates carregados")
+
+	// 3.5. Carrega stopwords personalizadas do usuário
+	if err := processor.LoadCustomStopwords(cfg.DocsDir); err != nil {
+		slog.Error("carregar stopwords custom", "error", err)
+	} else {
+		customWords := processor.GetCustomStopwords()
+		if len(customWords) > 0 {
+			slog.Info("Stopwords custom carregadas", "count", len(customWords))
+		}
+	}
 
 	// 4. Watcher
 	w := watcher.NewWatcher(cfg, store)

@@ -49,9 +49,10 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 		store.AddLink(filename, link)
 	}
 
-	// Store tags
-	if len(fileTags) > 0 {
-		store.SetFileTags(filename, fileTags)
+	// Filtra o sentinel __no_keywords__ antes de persistir as tags
+	cleanTags := processor.FilterNoKeywords(fileTags)
+	if len(cleanTags) > 0 {
+		store.SetFileTags(filename, cleanTags)
 	} else {
 		store.SetFileTags(filename, nil)
 	}
@@ -60,10 +61,15 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 	store.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
 
 	// Extrai keywords via RAKE (quantidade varia conforme o tamanho do texto)
-	keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
-	if len(keywords) > 0 {
-		if err := store.SetNoteKeywords(filename, keywords); err != nil {
-			slog.Error("set keywords", "file", filename, "error", err)
+	// Ignorado se a nota tiver no_keywords: true ou tag no-keywords
+	if !processor.HasNoKeywords(fileTags) {
+		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
+		if len(keywords) > 0 {
+			if err := store.SetNoteKeywords(filename, keywords); err != nil {
+				slog.Error("set keywords", "file", filename, "error", err)
+			}
+		} else {
+			store.SetNoteKeywords(filename, nil)
 		}
 	} else {
 		store.SetNoteKeywords(filename, nil)

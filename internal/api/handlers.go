@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -90,6 +91,28 @@ func (ctx *HandlerContext) HandleStatus(w http.ResponseWriter, r *http.Request) 
 func (ctx *HandlerContext) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"up","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+}
+
+// ── Help / Documentation ──
+
+func (ctx *HandlerContext) HandleHelp(w http.ResponseWriter, r *http.Request) {
+	data := map[string]interface{}{
+		"Title":        "Documentação — TON-618",
+		"ContentBlock": "helpContent",
+	}
+	ctx.render(w, "docs.html", data)
+}
+
+func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Request) {
+	helpPath := ctx.Cfg.DocsDir + "/help.md"
+	content, err := os.ReadFile(helpPath)
+	if err != nil {
+		slog.Error("ler help.md", "error", err)
+		http.Error(w, "Documentação não encontrada", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Write(content)
 }
 
 func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request) {
