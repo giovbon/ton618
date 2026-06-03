@@ -244,7 +244,11 @@
                     <a
                         href="#"
                         id="pdf-upload-link"
-                        onclick="activePdfUploadButton=this;document.getElementById('pdf-file-input').click();return false;"
+                        onclick="
+                            activePdfUploadButton = this;
+                            document.getElementById('pdf-file-input').click();
+                            return false;
+                        "
                         class="text-zinc-400 hover:text-sky-400 transition-colors"
                         >📕 PDF</a
                     >
@@ -257,7 +261,10 @@
                     <a
                         href="#"
                         id="zip-upload-link"
-                        onclick="document.getElementById('zip-file-input').click();return false;"
+                        onclick="
+                            document.getElementById('zip-file-input').click();
+                            return false;
+                        "
                         class="text-zinc-400 hover:text-amber-400 transition-colors"
                         >📦 ANEXO</a
                     >
@@ -343,14 +350,33 @@
                 <a
                     href="#"
                     id="mobile-pdf-link"
-                    onclick="activePdfUploadButton=this;document.getElementById('mobile-menu').classList.add('hidden');document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded','false');document.getElementById('pdf-file-input').click();return false;"
+                    onclick="
+                        activePdfUploadButton = this;
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden');
+                        document
+                            .getElementById('mobile-menu-toggle')
+                            .setAttribute('aria-expanded', 'false');
+                        document.getElementById('pdf-file-input').click();
+                        return false;
+                    "
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
                     >📕 PDF</a
                 >
                 <a
                     href="#"
                     id="mobile-zip-link"
-                    onclick="document.getElementById('mobile-menu').classList.add('hidden');document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded','false');document.getElementById('zip-file-input').click();return false;"
+                    onclick="
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden');
+                        document
+                            .getElementById('mobile-menu-toggle')
+                            .setAttribute('aria-expanded', 'false');
+                        document.getElementById('zip-file-input').click();
+                        return false;
+                    "
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
                     >📦 ANEXO</a
                 >
@@ -658,10 +684,7 @@
                     </div>
 
                     <!-- Backup Tab -->
-                    <div
-                        id="tab-backup"
-                        class="settings-tab hidden space-y-6"
-                    >
+                    <div id="tab-backup" class="settings-tab hidden space-y-6">
                         <p class="text-sm text-zinc-400">
                             Baixe todas as suas notas (markdown), PDFs e anexos
                             em um único arquivo ZIP. Arquivos da pasta
@@ -684,7 +707,13 @@
                                 href="/api/backup"
                                 download
                                 class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors"
-                                onclick="this.classList.add('opacity-50','pointer-events-none');this.textContent='⏳ Gerando...';"
+                                onclick="
+                                    this.classList.add(
+                                        'opacity-50',
+                                        'pointer-events-none',
+                                    );
+                                    this.textContent = '⏳ Gerando...';
+                                "
                             >
                                 ⬇️ Baixar ZIP
                             </a>
@@ -694,10 +723,15 @@
                             class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50"
                         >
                             <p class="text-xs text-zinc-500 leading-relaxed">
-                                <strong class="text-zinc-400">O que é incluído:</strong><br />
-                                📄 Notas markdown da tabela <code class="text-zinc-500">notes</code><br />
-                                📕 PDFs da pasta <code class="text-zinc-500">pdfs/</code><br />
-                                📦 Anexos da pasta <code class="text-zinc-500">attachments/</code>
+                                <strong class="text-zinc-400"
+                                    >O que é incluído:</strong
+                                ><br />
+                                📄 Notas markdown da tabela
+                                <code class="text-zinc-500">notes</code><br />
+                                📕 PDFs da pasta
+                                <code class="text-zinc-500">pdfs/</code><br />
+                                📦 Anexos da pasta
+                                <code class="text-zinc-500">attachments/</code>
                             </p>
                         </div>
                     </div>
@@ -828,10 +862,7 @@
         }
 
         function createNewNote() {
-            var ts = Date.now();
-            var random = Math.random().toString(36).substring(2, 6);
-            window.location.href =
-                "/editor?file=notes/novo-" + ts + "-" + random + ".md";
+            window.location.href = "/editor";
             return false;
         }
 

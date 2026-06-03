@@ -57,7 +57,7 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 	}
 
 	// Track file mod
-	store.SetFileMod(filename, modTime.Format(time.RFC3339))
+	store.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
 
 	// Extrai keywords via RAKE (quantidade varia conforme o tamanho do texto)
 	keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))

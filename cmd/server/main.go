@@ -75,7 +75,7 @@ func main() {
 			} else if hasTag("artigo") {
 				return "📰"
 			} else if hasTag("captura") {
-				return "📋"
+				return "🌐"
 			} else if isAttach {
 				return "📦"
 			}

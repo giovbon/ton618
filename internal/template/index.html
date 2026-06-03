@@ -70,29 +70,6 @@
                 ></div>
             </div>
         </div>
-
-        <!-- Merge mode toggle (único botão: 1º click seleciona, 2º click mescla) -->
-        <button
-            id="merge-btn"
-            onclick="handleMerge()"
-            class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
-            title="Selecionar notas para mesclar"
-        >
-            <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-            >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2.5"
-                    d="M4 6h16M4 12h16m-7 6h7"
-                />
-            </svg>
-            <span id="merge-label">Mesclar</span>
-        </button>
     </div>
 
     <!-- Results -->
@@ -107,8 +84,6 @@
 <script>
     var isCompact = true;
     var allNotes = [];
-    var mergeMode = false;
-    var selectedNotes = {};
 
     function toggleMode() {
         isCompact = !isCompact;
@@ -463,23 +438,11 @@
             } else if (isArticle) {
                 noteIcon = "\uD83D\uDCF0"; // 📰 artigo
             } else if (isCapture) {
-                noteIcon = "\uD83D\uDCCB"; // 📋 captura genérica
+                noteIcon = "\uD83C\uDF10"; // 🌐 captura (web/youtube)
             }
 
-            var mdCb = mergeMode
-                ? '<input type="checkbox" data-merge-file="' +
-                  safeName +
-                  '" ' +
-                  (selectedNotes[n.arquivo] ? "checked" : "") +
-                  " onchange=\"toggleNoteSelection('" +
-                  safeName +
-                  "')\" " +
-                  'class="accent-sky-500 w-4 h-4 rounded shrink-0 cursor-pointer" />'
-                : "";
-
             var html =
-                '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">' +
-                mdCb;
+                '<div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">';
             html +=
                 '<div class="flex-1 min-w-0">' +
                 '<a href="' +
@@ -681,122 +644,6 @@
             });
     }
 
-    // ── Merge Mode (único botão: 1º click ativa seleção, 2º click mescla) ──
-    function toggleNoteSelection(filename) {
-        if (selectedNotes[filename]) {
-            delete selectedNotes[filename];
-        } else {
-            selectedNotes[filename] = true;
-        }
-        updateMergeBtn();
-    }
-
-    function updateMergeBtn() {
-        var count = Object.keys(selectedNotes).length;
-        var btn = document.getElementById("merge-btn");
-        var label = document.getElementById("merge-label");
-        if (count >= 2) {
-            btn.className =
-                "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-emerald-600/20 text-emerald-400 border-emerald-600/30 hover:bg-emerald-600/30";
-            label.textContent = "Mesclar (" + count + ")";
-        } else {
-            btn.className =
-                "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/15 text-sky-400 border-sky-500/30";
-            label.textContent = count > 0 ? "✔ " + count : "Cancelar";
-        }
-    }
-
-    function handleMerge() {
-        var btn = document.getElementById("merge-btn");
-        var label = document.getElementById("merge-label");
-
-        // Primeiro clique: entra em modo seleção
-        if (!mergeMode) {
-            mergeMode = true;
-            selectedNotes = {};
-            btn.className =
-                "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/15 text-sky-400 border-sky-500/30";
-            btn.title = "Selecione as notas e clique novamente para mesclar";
-            label.textContent = "Cancelar";
-            renderCompactNotes(allNotes);
-            return;
-        }
-
-        var files = Object.keys(selectedNotes);
-
-        // Se tem notas selecionadas, mescla
-        if (files.length >= 2) {
-            if (
-                !confirm(
-                    "Mesclar " +
-                        files.length +
-                        " notas? As originais serao excluidas.",
-                )
-            )
-                return;
-
-            btn.disabled = true;
-            label.textContent = "Mesclando...";
-
-            var formData = new URLSearchParams();
-            files.forEach(function (f) {
-                formData.append("files", f);
-            });
-
-            fetch("/api/merge-notes", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
-            })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data.ok) {
-                        alert(
-                            "Notas mescladas com sucesso! (" +
-                                data.deleted +
-                                " originais excluidas)",
-                        );
-                        mergeMode = false;
-                        selectedNotes = {};
-                        btn.className =
-                            "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600";
-                        label.textContent = "Mesclar";
-                        btn.disabled = false;
-                        // Recarrega a lista
-                        fetch("/api/notes")
-                            .then(function (r) {
-                                return r.json();
-                            })
-                            .then(function (d) {
-                                allNotes = d.notes || [];
-                                renderCompactNotes(allNotes);
-                            });
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro ao mesclar: " + err.message);
-                    btn.disabled = false;
-                    label.textContent = "Mesclar (" + files.length + ")";
-                });
-        }
-
-        // Sem notas selecionadas: sai do modo seleção
-        mergeMode = false;
-        btn.className =
-            "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600";
-        label.textContent = "Mesclar";
-        selectedNotes = {};
-        renderCompactNotes(allNotes);
-    }
-
     document.addEventListener("DOMContentLoaded", function () {
         // Load tags
         fetch("/api/tags")
@@ -825,6 +672,17 @@
                 document.getElementById("contentArea").innerHTML =
                     '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Erro ao carregar notas.</p></div>';
             });
+    });
+
+    // Atalho de teclado: / no mobile abre a busca (foca o input)
+    document.addEventListener("keydown", function (e) {
+        // Ignora se ja estiver digitando em um input
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+            return;
+        if (e.key === "/") {
+            e.preventDefault();
+            document.getElementById("search-input").focus();
+        }
     });
 </script>
 {{end}}

@@ -3,7 +3,6 @@ package api
 import (
 	"archive/zip"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +18,7 @@ import (
 	"unicode"
 
 	"ton618/internal/db"
+	"ton618/internal/processor"
 	"ton618/internal/search"
 	"ton618/internal/watcher"
 )
@@ -460,11 +460,8 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Gera nome unico para o archive
-	randBytes := make([]byte, 4)
-	rand.Read(randBytes)
-	ts := time.Now().Format("2006-01-02_150405")
-	archiveName := fmt.Sprintf("archive-%s-%x.zip", ts, randBytes)
+	// Gera nome legivel pro archive
+	archiveName := processor.GenerateCUID2() + ".zip"
 
 	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
 	os.MkdirAll(archiveDir, 0755)
@@ -544,7 +541,7 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 
 	// Registra o archive no file_mods (para aparecer na busca compacta)
 	// mas NÃO cria documento FTS — archives não têm conteúdo pesquisável.
-	ctx.Store.SetFileMod("archives/"+archiveName, time.Now().Format(time.RFC3339))
+	ctx.Store.SetFileMod("archives/"+archiveName, time.Now().UTC().Format(time.RFC3339))
 	ctx.Store.SetFileTags("archives/"+archiveName, []string{"arquivo"})
 
 	slog.Info("Archive criado", "archive", archiveName, "arquivos", len(archivedFiles))
@@ -747,124 +744,5 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 		"restored": len(restoredFiles),
 		"files":    restoredFiles,
 		"errors":   restoreErrors,
-	})
-}
-
-// ── Merge Notes ──
-// HandleMergeNotes recebe uma lista de notas, mescla o conteúdo em uma nova
-// nota e exclui as originais. A ordem da lista define a ordem do conteúdo final.
-func (ctx *HandlerContext) HandleMergeNotes(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
-		return
-	}
-
-	files := r.Form["files"]
-	if len(files) < 2 {
-		http.Error(w, "pelo menos 2 notas sao necessarias", http.StatusBadRequest)
-		return
-	}
-
-	// Lê o conteúdo e tags de cada nota
-	var contents []string
-	var mergedTags []string
-	var allErrors []string
-	fmRegex := regexp.MustCompile(`(?s)^---\n.*?\n---\n?`)
-
-	for _, arquivo := range files {
-		arquivo = strings.TrimSpace(arquivo)
-		if arquivo == "" {
-			continue
-		}
-		if !strings.HasPrefix(arquivo, "notes/") {
-			allErrors = append(allErrors, fmt.Sprintf("%s: nao e uma nota valida", arquivo))
-			continue
-		}
-
-		data, err := ctx.Store.GetNote(arquivo)
-		if err != nil || data == "" {
-			allErrors = append(allErrors, fmt.Sprintf("%s: erro ao ler do banco: %v", arquivo, err))
-			continue
-		}
-		// Remove o frontmatter de cada nota (apenas o conteúdo)
-		body := fmRegex.ReplaceAllString(data, "")
-		body = strings.TrimSpace(body)
-		if body != "" {
-			contents = append(contents, body)
-		}
-
-		// Pega as tags da primeira nota
-		if len(mergedTags) == 0 {
-			tags, _ := ctx.Store.GetFileTags(arquivo)
-			mergedTags = tags
-		}
-	}
-
-	if len(contents) < 2 {
-		http.Error(w, "nao foi possivel ler notas suficientes", http.StatusBadRequest)
-		return
-	}
-
-	// Concatena os conteúdos com separador (quebra de linha + --- + quebra de linha)
-	mergedContent := strings.Join(contents, "\n\n---\n\n")
-
-	// Gera nome para a nova nota
-	ts := time.Now().UnixMilli()
-	newName := fmt.Sprintf("notes/mesclado-%d.md", ts)
-
-	// Salva a nova nota no banco
-	now := time.Now()
-	if err := ctx.Store.SaveNote(newName, mergedContent, now.Format(time.RFC3339)); err != nil {
-		http.Error(w, fmt.Sprintf("erro ao criar nota mesclada: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Processa a nova nota
-	if err := ctx.reindexNote(newName, mergedContent, now); err != nil {
-		slog.Error("reindex merged note", "file", newName, "error", err)
-	}
-
-	// Aplica as tags da primeira nota à nova nota
-	if len(mergedTags) > 0 {
-		ctx.Store.SetFileTags(newName, mergedTags)
-	}
-
-	// Deleta as notas originais
-	var deleted int
-	for _, arquivo := range files {
-		arquivo = strings.TrimSpace(arquivo)
-		if arquivo == "" {
-			continue
-		}
-		if arquivo == newName {
-			continue
-		}
-
-		ctx.Store.DeleteNote(arquivo)
-		// Also remove from disk (backwards compat)
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
-		os.Remove(fullPath)
-
-		ctx.Store.DeleteDocumentsByFile(arquivo)
-		ctx.Store.DeleteFTSByFile(arquivo)
-		ctx.Store.DeleteFileMod(arquivo)
-		ctx.Store.ResetPopularity(arquivo)
-		ctx.Store.SetFileTags(arquivo, nil)
-		deleted++
-	}
-
-	slog.Info("Notas mescladas", "nova", newName, "originais", deleted)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":       true,
-		"filename": newName,
-		"deleted":  deleted,
-		"errors":   allErrors,
 	})
 }

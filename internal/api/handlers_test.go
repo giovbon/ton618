@@ -62,7 +62,7 @@ func newTestContext(t *testing.T) *HandlerContext {
 			} else if hasTag("artigo") {
 				return "📰"
 			} else if hasTag("captura") {
-				return "📋"
+				return "🌐"
 			}
 			return "📝"
 		},

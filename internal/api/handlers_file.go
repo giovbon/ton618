@@ -2,7 +2,6 @@ package api
 
 import (
 	"archive/zip"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/processor"
-	"ton618/internal/service"
 	"ton618/internal/watcher"
 )
 
@@ -350,10 +348,8 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Gera nome aleatorio pro zip
-	randBytes := make([]byte, 4)
-	rand.Read(randBytes)
-	zipName := fmt.Sprintf("%x.zip", randBytes)
+	// Gera nome legivel pro zip
+	zipName := processor.GenerateCUID2() + ".zip"
 
 	// Diretorio de anexos
 	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
@@ -419,7 +415,7 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	ctx.Store.InsertDocument(doc)
 	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 	ctx.Store.SetFileTags(filename, []string{"zip"})
-	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+	ctx.Store.SetFileMod(filename, time.Now().UTC().Format(time.RFC3339))
 
 	slog.Info("Anexo ZIP criado", "file", filename, "arquivos", len(files), "tamanho", filepath.Base(zipPath))
 
@@ -648,7 +644,7 @@ func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, service.Filename()))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, processor.GenerateCUID2()+".zip"))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Write(data)
 }

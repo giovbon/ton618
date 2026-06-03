@@ -3,7 +3,6 @@ package service
 import (
 	"archive/zip"
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -309,14 +308,6 @@ func TestBackupService_Create_ComPDFs(t *testing.T) {
 	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if len(zr.File) == 0 {
 		t.Error("ZIP vazio inesperadamente")
-	}
-}
-
-func TestBackupService_Filename(t *testing.T) {
-	name := Filename()
-	expected := fmt.Sprintf("ton618-backup-%s.zip", time.Now().Format("2006-01-02"))
-	if name != expected {
-		t.Errorf("Filename: esperado %q, got %q", expected, name)
 	}
 }
 

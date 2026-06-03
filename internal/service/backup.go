@@ -70,11 +70,6 @@ func (s *BackupService) Create() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Filename retorna o nome sugerido para o arquivo de backup.
-func Filename() string {
-	return fmt.Sprintf("ton618-backup-%s.zip", time.Now().Format("2006-01-02"))
-}
-
 func addToZip(zw *zip.Writer, name string, data []byte, modTime time.Time) {
 	h := &zip.FileHeader{
 		Name:   name,

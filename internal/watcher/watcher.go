@@ -197,7 +197,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		// recriar o registro básico.
 		existingMod, _ := store.GetFileMod(filename)
 
-		store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
+		store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
 
 		// Recovery: se o arquivo ja estava registrado mas perdeu os documentos
 		// (ex: race condition no pollAll que deletou docs mas nao o zip fisico)
@@ -283,7 +283,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 	}
 
 	// Track file mod
-	store.SetFileMod(filename, ev.ModTime.Format(time.RFC3339))
+	store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
 
 	return nil
 }

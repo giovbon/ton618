@@ -222,7 +222,7 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 		s.tags.SetFileTags(filename, nil)
 	}
 
-	s.fileMod.SetFileMod(filename, modTime.Format(time.RFC3339))
+	s.fileMod.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
 
 	// Extrai keywords via RAKE (quantidade varia conforme o tamanho do texto)
 	keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))

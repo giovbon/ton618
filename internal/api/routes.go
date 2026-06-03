@@ -60,7 +60,6 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /upload", ctx.HandleUpload)
 	mux.HandleFunc("POST /api/upload-image", ctx.HandleUploadImage)
 	mux.HandleFunc("POST /api/cleanup-images", ctx.HandleCleanupImages)
-	mux.HandleFunc("POST /api/merge-notes", ctx.HandleMergeNotes)
 
 	// API
 	mux.HandleFunc("POST /api/capture", ctx.HandleCapture)

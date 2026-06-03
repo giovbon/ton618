@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"ton618/internal/processor"
 )
 
 // ── Pages ──
@@ -25,7 +26,7 @@ func (ctx *HandlerContext) HandleIndex(w http.ResponseWriter, r *http.Request) {
 func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("file")
 	if filename == "" {
-		filename = "notes/novo.md"
+		filename = "notes/" + processor.GenerateCUID2() + ".md"
 	}
 
 	// Se for .zip, redireciona para download em vez de abrir o editor
@@ -47,11 +48,9 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	var content string
 	var tags []string
 
-	// So ignora conteudo para o template exato "notes/novo.md"
-	if filename != "notes/novo.md" {
-		if data, err := ctx.Store.GetNote(filename); err == nil && data != "" {
-			content = data
-		}
+	// Carrega conteudo se a nota ja existe
+	if data, err := ctx.Store.GetNote(filename); err == nil && data != "" {
+		content = data
 		// Incrementa popularidade ao abrir nota existente
 		ctx.Store.IncrementPopularity(filename)
 	}
