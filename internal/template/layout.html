@@ -4,7 +4,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{{.Title}} — TON-618</title>
+        <title>{{.Title}}</title>
         <link
             rel="icon"
             type="image/svg+xml"
@@ -100,6 +100,37 @@
                 box-shadow:
                     inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
                     inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+            }
+
+            .settings-tab-btn {
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            @media (max-width: 767px) {
+                .settings-tabs-container::-webkit-scrollbar {
+                    display: none;
+                }
+                .settings-tabs-container {
+                    scrollbar-width: none;
+                    -ms-overflow-style: none;
+                }
+            }
+
+            @media (min-width: 768px) {
+                .settings-tabs-container::-webkit-scrollbar {
+                    height: 4px;
+                }
+                .settings-tabs-container::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .settings-tabs-container::-webkit-scrollbar-thumb {
+                    background: #3f3f46;
+                    border-radius: 2px;
+                }
+                .settings-tabs-container::-webkit-scrollbar-thumb:hover {
+                    background: #52525b;
+                }
             }
 
             .loading-spinner {
@@ -239,7 +270,7 @@
                         href="#"
                         onclick="return createNewNote();"
                         class="text-zinc-400 hover:text-white transition-colors"
-                        >📄 NOTA</a
+                        >📄 +NOTA</a
                     >
                     <a
                         href="#"
@@ -250,7 +281,7 @@
                             return false;
                         "
                         class="text-zinc-400 hover:text-sky-400 transition-colors"
-                        >📕 PDF</a
+                        >📕 +PDF</a
                     >
                     <input
                         id="pdf-file-input"
@@ -266,7 +297,7 @@
                             return false;
                         "
                         class="text-zinc-400 hover:text-amber-400 transition-colors"
-                        >📦 ANEXO</a
+                        >📦 +ANEXO</a
                     >
                     <input
                         id="zip-file-input"
@@ -279,21 +310,14 @@
                         onclick="return promptCapture(this);"
                         class="text-zinc-400 hover:text-emerald-400 transition-colors"
                     >
-                        🌐 CAPTURA
+                        🌐 +CAPTURA
                     </button>
 
                     <a
                         href="/todos"
                         class="text-zinc-400 hover:text-amber-400 transition-colors"
                         title="TODOs"
-                        >🎯</a
-                    >
-
-                    <a
-                        href="/settings"
-                        class="text-zinc-400 hover:text-amber-400 transition-colors"
-                        title="Configurar Marcadores"
-                        >🔧</a
+                        >🎯TODOs</a
                     >
 
                     <a
@@ -315,7 +339,7 @@
                         class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
                         title="Sair"
                     >
-                        Sair
+                        ➜]
                     </button>
                 </div>
                 <button
@@ -427,11 +451,13 @@
                 </a>
 
                 <a
-                    href="/settings"
+                    href="#"
                     onclick="
                         document
                             .getElementById('mobile-menu')
-                            .classList.add('hidden')
+                            .classList.add('hidden');
+                        openSettingsTab('marcadores');
+                        return false;
                     "
                     class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
                 >
@@ -490,7 +516,7 @@
             class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm"
         >
             <div
-                class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col"
+                class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 max-h-[85vh] flex flex-col"
             >
                 <!-- Header -->
                 <div
@@ -508,7 +534,7 @@
                 </div>
 
                 <!-- Tabs -->
-                <div class="flex gap-0 px-6 pt-4 border-b border-zinc-800">
+                <div class="settings-tabs-container flex gap-0 px-6 pt-4 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scroll-smooth whitespace-nowrap flex-nowrap" style="-webkit-overflow-scrolling:touch;">
                     <button
                         data-tab="arquivamento"
                         onclick="switchSettingsTab('arquivamento')"
@@ -542,6 +568,16 @@
                         class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
                     >
                         🚫 Stopwords
+                    </button>
+                    <button
+                        data-tab="marcadores"
+                        onclick="
+                            switchSettingsTab('marcadores');
+                            loadMarcadores();
+                        "
+                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
+                    >
+                        🔖 Marcadores
                     </button>
                 </div>
 
@@ -886,6 +922,75 @@
                             🔄 Recarregar lista
                         </button>
                     </div>
+
+                    <!-- Marcadores Tab -->
+                    <div
+                        id="tab-marcadores"
+                        class="settings-tab hidden space-y-6"
+                    >
+                        <p class="text-sm text-zinc-400">
+                            Configure quais palavras-chave aparecem como TODOs na página
+                            <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
+                            Apenas marcadores <strong>ativos</strong> são detectados nas notas.
+                        </p>
+
+                        <!-- Add new marker -->
+                        <div class="flex gap-2">
+                            <input
+                                id="modal-new-marker"
+                                type="text"
+                                placeholder="Nova palavra-chave (ex: HACK)"
+                                class="flex-1 px-3 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 uppercase"
+                                maxlength="20"
+                            />
+                            <select
+                                id="modal-new-color"
+                                class="px-2 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:outline-none focus:border-zinc-600"
+                            >
+                                <option value="#3b82f6" style="background:#3b82f6">🔵 Azul</option>
+                                <option value="#f59e0b" style="background:#f59e0b">🟡 Âmbar</option>
+                                <option value="#ef4444" style="background:#ef4444">🔴 Vermelho</option>
+                                <option value="#10b981" style="background:#10b981">🟢 Verde</option>
+                                <option value="#8b5cf6" style="background:#8b5cf6">🟣 Roxo</option>
+                                <option value="#06b6d4" style="background:#06b6d4">🔵 Ciano</option>
+                                <option value="#f97316" style="background:#f97316">🟠 Laranja</option>
+                                <option value="#ec4899" style="background:#ec4899">🩷 Rosa</option>
+                            </select>
+                            <button
+                                id="modal-btn-add-marker"
+                                class="px-4 py-2 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
+                            >
+                                + Adicionar
+                            </button>
+                        </div>
+
+                        <!-- Markers list -->
+                        <div id="modal-markers-list" class="space-y-2">
+                            <div class="text-center py-8">
+                                <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                                <p class="text-xs text-zinc-600">Carregando...</p>
+                            </div>
+                        </div>
+
+                        <!-- Save status -->
+                        <span id="modal-save-status" class="text-xs text-zinc-500 block text-right"></span>
+
+                        <!-- Actions -->
+                        <div class="flex gap-3">
+                            <button
+                                id="modal-btn-save"
+                                class="flex-1 py-2.5 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
+                            >
+                                💾 Salvar configurações
+                            </button>
+                            <button
+                                id="modal-btn-reset"
+                                class="px-4 py-2.5 text-[13px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all border border-zinc-700"
+                            >
+                                ↩ Restaurar padrão
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1032,6 +1137,15 @@
                 .getElementById("settings-modal")
                 .classList.remove("hidden");
             switchSettingsTab("arquivamento");
+        }
+
+        function openSettingsTab(tabName) {
+            openSettings();
+            switchSettingsTab(tabName);
+            // Load tab-specific data
+            if (tabName === "marcadores") loadMarcadores();
+            if (tabName === "stopwords") loadStopwords();
+            if (tabName === "restaurar") loadArchives();
         }
 
         function closeSettings() {
@@ -1687,6 +1801,175 @@
                 return origFetch(url, opts);
             };
         })();
+
+        // ── Marcadores (settings modal tab) ──
+        var modalMarkers = [];
+
+        function loadMarcadores() {
+            var list = document.getElementById("modal-markers-list");
+            if (!list) return;
+            list.innerHTML =
+                '<div class="text-center py-8"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
+
+            fetch("/api/todo-markers")
+                .then(function (r) {
+                    if (!r.ok) throw new Error("Falha ao carregar");
+                    return r.json();
+                })
+                .then(function (data) {
+                    modalMarkers = data || [];
+                    renderModalMarkers();
+                })
+                .catch(function () {
+                    modalMarkers = [];
+                    renderModalMarkers();
+                });
+        }
+
+        function renderModalMarkers() {
+            var list = document.getElementById("modal-markers-list");
+            if (!list) return;
+            list.innerHTML = "";
+
+            if (modalMarkers.length === 0) {
+                list.innerHTML =
+                    '<div class="text-center py-8"><p class="text-xs text-zinc-500">Nenhum marcador configurado.</p></div>';
+                return;
+            }
+
+            modalMarkers.forEach(function (m, idx) {
+                var div = document.createElement("div");
+                div.className =
+                    "marker-row flex items-center gap-3 px-4 py-3 bg-zinc-800/40 border border-zinc-700/50 rounded-lg";
+                div.setAttribute("data-marker", m.marker);
+
+                var activeAttr = m.active ? "checked" : "";
+
+                div.innerHTML =
+                    '<label class="flex items-center gap-2 cursor-pointer">' +
+                    '<input type="checkbox" class="marker-active w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500" ' +
+                    activeAttr +
+                    " />" +
+                    "</label>" +
+                    '<span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style="background:' +
+                    m.color +
+                    "20; color:" +
+                    m.color +
+                    '">' +
+                    escapeHtml(m.marker) +
+                    "</span>" +
+                    '<input type="color" class="marker-color w-8 h-8 rounded cursor-pointer border-0 bg-transparent" value="' +
+                    m.color +
+                    '" />' +
+                    '<span class="flex-1 text-xs text-zinc-500">' +
+                    escapeHtml(m.marker) +
+                    ":</span>" +
+                    '<button class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2">✕</button>';
+
+                list.appendChild(div);
+
+                // Delete handler
+                div.querySelector(".marker-delete").addEventListener("click", function () {
+                    modalMarkers.splice(idx, 1);
+                    renderModalMarkers();
+                });
+
+                // Change handlers
+                div.querySelector(".marker-active").addEventListener("change", function () {
+                    m.active = this.checked;
+                });
+                div.querySelector(".marker-color").addEventListener("input", function () {
+                    m.color = this.value;
+                    div.querySelector(".marker-badge").style.background = m.color + "20";
+                    div.querySelector(".marker-badge").style.color = m.color;
+                });
+            });
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement("div");
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // Add marker
+            var addBtn = document.getElementById("modal-btn-add-marker");
+            if (addBtn) {
+                addBtn.addEventListener("click", function () {
+                    var input = document.getElementById("modal-new-marker");
+                    var colorSelect = document.getElementById("modal-new-color");
+                    var name = input.value.trim().toUpperCase();
+
+                    if (!name) return;
+                    if (modalMarkers.some(function (m) { return m.marker === name; })) {
+                        document.getElementById("modal-save-status").textContent = "⚠️ Marcador já existe";
+                        return;
+                    }
+
+                    modalMarkers.push({
+                        marker: name,
+                        color: colorSelect.value,
+                        active: true,
+                    });
+                    input.value = "";
+                    renderModalMarkers();
+                    document.getElementById("modal-save-status").textContent = "";
+                });
+            }
+
+            // Save
+            var saveBtn = document.getElementById("modal-btn-save");
+            if (saveBtn) {
+                saveBtn.addEventListener("click", async function () {
+                    var btn = this;
+                    btn.textContent = "💾 Salvando...";
+                    btn.disabled = true;
+
+                    try {
+                        var response = await fetch("/api/todo-markers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(modalMarkers),
+                        });
+
+                        if (!response.ok) throw new Error("Save failed");
+
+                        document.getElementById("modal-save-status").textContent =
+                            "✅ Configurações salvas!";
+                        setTimeout(function () {
+                            document.getElementById("modal-save-status").textContent = "";
+                        }, 3000);
+                    } catch (e) {
+                        document.getElementById("modal-save-status").textContent =
+                            "❌ Erro ao salvar";
+                    }
+
+                    btn.textContent = "💾 Salvar configurações";
+                    btn.disabled = false;
+                });
+            }
+
+            // Reset to defaults
+            var resetBtn = document.getElementById("modal-btn-reset");
+            if (resetBtn) {
+                resetBtn.addEventListener("click", async function () {
+                    var defaults = [
+                        { marker: "TODO", color: "#3b82f6", active: true },
+                        { marker: "FIXME", color: "#f59e0b", active: true },
+                        { marker: "BUG", color: "#ef4444", active: true },
+                        { marker: "HACK", color: "#8b5cf6", active: false },
+                        { marker: "NOTE", color: "#06b6d4", active: false },
+                        { marker: "OPTIMIZE", color: "#10b981", active: false },
+                        { marker: "REVIEW", color: "#f97316", active: false },
+                    ];
+                    modalMarkers = defaults;
+                    renderModalMarkers();
+                    document.getElementById("modal-save-status").textContent =
+                        "⚠️ Padrão restaurado. Clique em Salvar para confirmar.";
+                });
+            }
+        });
     </script>
 </html>
 {{end}}

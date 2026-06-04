@@ -273,16 +273,9 @@ func (ctx *HandlerContext) HandleTodosPage(w http.ResponseWriter, r *http.Reques
 // ── Todo Marker Settings ──
 
 func (ctx *HandlerContext) HandleTodoSettingsPage(w http.ResponseWriter, r *http.Request) {
-	markers, err := ctx.Store.GetTodoMarkers()
-	if err != nil {
-		markers = []db.TodoMarker{}
-	}
-	data := map[string]interface{}{
-		"Title":        "⚙️ Configurar Marcadores",
-		"ContentBlock": "settingsContent",
-		"Markers":      markers,
-	}
-	ctx.render(w, "settings.html", data)
+	// Redireciona para a página inicial — as configurações de marcadores
+	// foram movidas para o modal de Configurações (⚙️), aba "Marcadores".
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (ctx *HandlerContext) HandleGetTodoMarkers(w http.ResponseWriter, r *http.Request) {

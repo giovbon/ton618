@@ -12,7 +12,7 @@
         </div>
 
         <!-- Filter buttons -->
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2" id="marker-filters">
             <button
                 class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border"
                 data-type="all"
@@ -20,27 +20,7 @@
             >
                 Todos
             </button>
-            <button
-                class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
-                data-type="todo"
-                data-status="all"
-            >
-                TODO
-            </button>
-            <button
-                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                data-type="fixme"
-                data-status="all"
-            >
-                FIXME
-            </button>
-            <button
-                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-red-400 border-red-500/30 hover:bg-red-500/10"
-                data-type="bug"
-                data-status="all"
-            >
-                BUG
-            </button>
+            <div id="marker-filter-buttons" class="contents"></div>
             <button
                 class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 hover:bg-green-500/10"
                 data-type="task"
@@ -263,12 +243,106 @@
             search: "",
         };
 
+        let markerConfigs = [];
+
         // Initialize on page load
         document.addEventListener("DOMContentLoaded", function () {
-            loadTodos();
-            setupFilterButtons();
-            setupSearchInput();
+            loadMarkers().then(function () {
+                buildMarkerFilterButtons();
+                // Build initial type filter from active buttons
+                var activeTypes = [];
+                document.querySelectorAll('.filter-btn[data-type].active').forEach(function (b) {
+                    activeTypes.push(b.getAttribute("data-type"));
+                });
+                if (activeTypes.length > 0) {
+                    currentFilters.type = activeTypes.join(",");
+                }
+                setupFilterButtons();
+                loadTodos();
+                setupSearchInput();
+            });
         });
+
+        async function loadMarkers() {
+            try {
+                const response = await fetch("/api/todo-markers");
+                if (!response.ok) throw new Error("Failed to load markers");
+                markerConfigs = await response.json();
+            } catch (e) {
+                markerConfigs = [];
+            }
+        }
+
+        function buildMarkerFilterButtons() {
+            var container = document.getElementById("marker-filter-buttons");
+            if (!container) return;
+            container.innerHTML = "";
+
+            // Separate active and inactive markers
+            var activeMarkers = markerConfigs.filter(function (m) { return m.active; });
+            var inactiveMarkers = markerConfigs.filter(function (m) { return !m.active; });
+
+            // Mark "active" markers as active filter by default
+            var defaultActive = ["TODO", "FIXME", "BUG"];
+            var hasAnyDefaultActive = activeMarkers.some(function (m) {
+                return defaultActive.indexOf(m.marker) !== -1;
+            });
+
+            // Build active marker buttons
+            activeMarkers.forEach(function (m) {
+                var btn = document.createElement("button");
+                btn.className =
+                    "filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border";
+                btn.setAttribute("data-type", m.marker.toLowerCase());
+                btn.setAttribute("data-status", "all");
+                btn.textContent = m.marker;
+
+                // Apply marker color
+                btn.style.color = m.color;
+                btn.style.borderColor = m.color + "40";
+                btn.style.setProperty("--marker-color", m.color);
+
+                // Hover effect via inline style
+                btn.addEventListener("mouseenter", function () {
+                    if (!btn.classList.contains("active")) {
+                        btn.style.borderColor = m.color + "80";
+                        btn.style.color = m.color;
+                    }
+                });
+                btn.addEventListener("mouseleave", function () {
+                    if (!btn.classList.contains("active")) {
+                        btn.style.borderColor = m.color + "40";
+                        btn.style.color = m.color;
+                    }
+                });
+
+                // Mark as active by default if it's a common marker
+                if (defaultActive.indexOf(m.marker) !== -1) {
+                    btn.classList.add("active");
+                    btn.style.background = m.color + "20";
+                    btn.style.borderColor = m.color + "60";
+                }
+
+                container.appendChild(btn);
+            });
+
+            // Build inactive marker buttons (grayed out, optional)
+            inactiveMarkers.forEach(function (m) {
+                var btn = document.createElement("button");
+                btn.className =
+                    "filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border";
+                btn.setAttribute("data-type", m.marker.toLowerCase());
+                btn.setAttribute("data-status", "all");
+                btn.textContent = m.marker;
+                btn.style.color = "#52525b";
+                btn.style.borderColor = "#3f3f46";
+                btn.style.opacity = "0.5";
+                btn.title = "Marcador inativo — ative em ⚙️ Configurações > Marcadores";
+
+                // Can still be clicked to filter, but grayed
+                container.appendChild(btn);
+            });
+        }
 
         async function loadTodos() {
             try {
@@ -313,6 +387,7 @@
                                 .forEach((b) => b.classList.remove("active"));
                             this.classList.add("active");
                             currentFilters.type = "all";
+                            updateAllFilterButtonStyles();
                         } else {
                             // Toggle individual type buttons (multi-select)
                             document
@@ -331,6 +406,7 @@
                                 activeTypes.length > 0
                                     ? activeTypes.join(",")
                                     : "all";
+                            updateFilterButtonStyle(this);
                         }
                     } else if (status) {
                         // Status filter - deactivate status filters first
@@ -344,6 +420,48 @@
                     loadTodos();
                 });
             });
+        }
+
+        // Apply marker color styling when a filter button is toggled
+        function updateFilterButtonStyle(btn) {
+            var marker = findMarker(btn.getAttribute("data-type"));
+            if (!marker) return;
+            var color = marker.color;
+            if (btn.classList.contains("active")) {
+                btn.style.background = color + "20";
+                btn.style.borderColor = color + "60";
+                btn.style.color = color;
+            } else {
+                btn.style.background = "transparent";
+                btn.style.borderColor = color + "40";
+                btn.style.color = color;
+            }
+        }
+
+        function updateAllFilterButtonStyles() {
+            document.querySelectorAll('.filter-btn[data-type]:not([data-type="all"]):not([data-type="task"])').forEach(function (btn) {
+                var marker = findMarker(btn.getAttribute("data-type"));
+                if (!marker) return;
+                var color = marker.color;
+                btn.style.background = "transparent";
+                btn.style.borderColor = color + "40";
+                btn.style.color = color;
+            });
+            // Also reset TASK
+            var taskBtn = document.querySelector('.filter-btn[data-type="task"]');
+            if (taskBtn) {
+                taskBtn.style.background = "transparent";
+                taskBtn.style.borderColor = "rgba(16,185,129,0.3)";
+                taskBtn.style.color = "#34d399";
+            }
+        }
+
+        function findMarker(typeName) {
+            var upper = typeName.toUpperCase();
+            for (var i = 0; i < markerConfigs.length; i++) {
+                if (markerConfigs[i].marker === upper) return markerConfigs[i];
+            }
+            return null;
         }
 
         function setupSearchInput() {
