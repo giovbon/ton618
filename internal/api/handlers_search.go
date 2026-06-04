@@ -219,6 +219,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		Score     float64
 		Tipo      string
 		Timestamp string
+		Line      int
 	}
 
 	var items []resultItem
@@ -263,6 +264,9 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
 			continue
 		}
+		// Compute line number: find first line in the note that matches the query
+		line := findQueryLine(ctx, hit.Doc.Arquivo, query)
+
 		items = append(items, resultItem{
 			ID:        hit.Doc.ID,
 			Arquivo:   hit.Doc.Arquivo,
@@ -272,6 +276,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			Score:     hit.FinalScore,
 			Tipo:      hit.Doc.Tipo,
 			Timestamp: hit.Doc.Timestamp,
+			Line:      line,
 		})
 	}
 
@@ -284,6 +289,50 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	// HTMX: return only the results partial
 	w.Header().Set("Content-Type", "text/html")
 	ctx.renderPartial(w, "search_results.html", data)
+}
+
+// findQueryLine encontra a primeira linha no conteúdo da nota que contém o termo buscado.
+func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
+	if query == "" {
+		return 0
+	}
+	content, err := ctx.Store.GetNote(arquivo)
+	if err != nil || content == "" {
+		return 0
+	}
+
+	queryLower := strings.ToLower(query)
+	terms := strings.Fields(queryLower)
+
+	lines := strings.Split(content, "\n")
+	// Skip frontmatter
+	startIdx := 0
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimSpace(lines[i]) == "---" {
+				startIdx = i + 1
+				break
+			}
+		}
+	}
+
+	for i := startIdx; i < len(lines); i++ {
+		lineLower := strings.ToLower(lines[i])
+		// Check if all query terms appear in this line
+		allMatch := true
+		for _, term := range terms {
+			if !strings.Contains(lineLower, term) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return i + 1 // 1-indexed line number
+		}
+	}
+
+	// Fallback: return the section's approximate position
+	return startIdx + 1
 }
 
 // ── Bulk Delete (Config → Exclusão) ──

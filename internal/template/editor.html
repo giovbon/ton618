@@ -356,6 +356,52 @@
     .ProseMirror li {
         margin: 0.1em 0;
     }
+    /* ── Tarefas (Task Lists) ── */
+    .ProseMirror li[data-checked] {
+        list-style: none;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0.75em;
+        align-items: flex-start;
+        margin: 0.3em 0;
+        padding-left: 0;
+    }
+    .ProseMirror li[data-checked] > div,
+    .ProseMirror li[data-checked] > label,
+    .ProseMirror li[data-checked] > span {
+        min-width: 0;
+        width: 100%;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"] {
+        margin-top: 0.25em;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        cursor: pointer;
+        accent-color: #3b82f6;
+        border: 2px solid #52525b;
+        border-radius: 4px;
+        background: #18181b;
+        transition: all 0.15s;
+        flex-shrink: 0;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"]:hover {
+        border-color: #71717a;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"]:checked {
+        background: #3b82f6;
+        border-color: #3b82f6;
+    }
+    .ProseMirror li[data-checked] p {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .ProseMirror li[data-checked="true"] > div p,
+    .ProseMirror li[data-checked="true"] p {
+        color: #71717a;
+        text-decoration: line-through;
+    }
     /* ── Tabelas ── */
     .ProseMirror table {
         width: 100%;
@@ -1083,6 +1129,59 @@
             },
         });
 
+        // ── Scroll to line from URL hash (ex: #line-42) ──
+        (function () {
+            var hash = window.location.hash;
+            if (!hash || !hash.startsWith("#line-")) return;
+            var lineNum = parseInt(hash.replace("#line-", ""), 10);
+            if (isNaN(lineNum) || lineNum < 1) return;
+
+            // Espera o editor renderizar e o onCreate terminar
+            var scrollAttempts = 0;
+            var scrollTimer = setInterval(function () {
+                scrollAttempts++;
+                if (!editor || editor.isDestroyed) {
+                    if (scrollAttempts > 20) clearInterval(scrollTimer);
+                    return;
+                }
+
+                var doc = editor.state.doc;
+                if (!doc || doc.content.size === 0) {
+                    if (scrollAttempts > 20) {
+                        clearInterval(scrollTimer);
+                    }
+                    return;
+                }
+
+                clearInterval(scrollTimer);
+
+                // Percorre os nós do topo do documento até a linha alvo
+                var targetPos = 1;
+                var currentLine = 0;
+                doc.forEach(function (node, offset) {
+                    if (currentLine < lineNum - 1) {
+                        targetPos = offset + 1;
+                        currentLine++;
+                    }
+                });
+
+                try {
+                    var dom = editor.view.domAtPos(targetPos);
+                    if (dom && dom.node) {
+                        // Pequeno delay extra para garantir que o DOM terminou de renderizar
+                        setTimeout(function () {
+                            dom.node.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                            });
+                        }, 50);
+                    }
+                } catch (e) {
+                    // fallback silencioso
+                }
+            }, 100);
+        })();
+
         // ── Bubble Menu ──
         function updateBubble() {
             if (!editor || editor.isDestroyed) {
@@ -1272,7 +1371,17 @@
                     chain.toggleOrderedList();
                     break;
                 case "taskList":
-                    chain.toggleTaskList();
+                    // Direct insertion is more reliable than toggleTaskList on empty paragraphs
+                    chain.insertContent({
+                        type: "taskList",
+                        content: [
+                            {
+                                type: "taskItem",
+                                attrs: { checked: false },
+                                content: [{ type: "paragraph" }],
+                            },
+                        ],
+                    });
                     break;
                 case "blockquote":
                     chain.toggleBlockquote();

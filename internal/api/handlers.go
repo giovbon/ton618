@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"ton618/internal/db"
 	"ton618/internal/processor"
 	"ton618/internal/template"
 )
@@ -164,6 +165,151 @@ func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Requ
 		"keywords": list,
 		"total":    len(list),
 	})
+}
+
+func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Request) {
+	// Query parameters: type (all|todo|fixme|bug|task - comma-separated for multiple), status (all|pending|completed)
+	rawType := strings.ToUpper(r.URL.Query().Get("type"))
+	typeFilter := map[string]bool{}
+	if rawType == "" || rawType == "ALL" {
+		typeFilter["ALL"] = true
+	} else {
+		for _, t := range strings.Split(rawType, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				typeFilter[t] = true
+			}
+		}
+	}
+	statusFilter := strings.ToLower(r.URL.Query().Get("status"))
+	if statusFilter == "" {
+		statusFilter = "all"
+	}
+
+	// Get all notes
+	notes, err := ctx.Notes.GetMany()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var allTodos []map[string]interface{}
+
+	// Get active markers from DB
+	activeMarkers, _ := ctx.Store.GetActiveTodoMarkers()
+	markerWords := make([]string, 0, len(activeMarkers))
+	for _, m := range activeMarkers {
+		markerWords = append(markerWords, m.Marker)
+	}
+
+	// Extract TODOs from each note
+	for _, note := range notes {
+		content, err := ctx.Store.GetNote(note.Arquivo)
+		if err != nil || content == "" {
+			continue
+		}
+
+		mtime, err := time.Parse(time.RFC3339, note.Mtime)
+		if err != nil {
+			mtime = time.Now()
+		}
+
+		todos := processor.ExtractTodos(content, note.Arquivo, mtime, markerWords)
+
+		for _, todo := range todos {
+			// Apply type filter
+			if !typeFilter["ALL"] && !typeFilter[todo.Type] {
+				continue
+			}
+			// Apply status filter
+			if statusFilter != "all" && todo.Status != statusFilter {
+				continue
+			}
+
+			allTodos = append(allTodos, map[string]interface{}{
+				"id":      todo.ID,
+				"file":    todo.File,
+				"section": todo.Section,
+				"type":    todo.Type,
+				"status":  todo.Status,
+				"text":    todo.Text,
+				"line":    todo.Line,
+				"created": todo.Created.Format(time.RFC3339),
+			})
+		}
+	}
+
+	// Sort by file, then by line (preserves document order, sections appear by appearance)
+	sort.Slice(allTodos, func(i, j int) bool {
+		iFile := allTodos[i]["file"].(string)
+		jFile := allTodos[j]["file"].(string)
+		if iFile != jFile {
+			return iFile < jFile
+		}
+		iLine := allTodos[i]["line"].(int)
+		jLine := allTodos[j]["line"].(int)
+		return iLine < jLine
+	})
+
+	if allTodos == nil {
+		allTodos = []map[string]interface{}{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"todos": allTodos,
+		"total": len(allTodos),
+	})
+}
+
+func (ctx *HandlerContext) HandleTodosPage(w http.ResponseWriter, r *http.Request) {
+	data := map[string]interface{}{
+		"Title":        "🎯 TODOs",
+		"ContentBlock": "todosContent",
+	}
+	ctx.render(w, "todos.html", data)
+}
+
+// ── Todo Marker Settings ──
+
+func (ctx *HandlerContext) HandleTodoSettingsPage(w http.ResponseWriter, r *http.Request) {
+	markers, err := ctx.Store.GetTodoMarkers()
+	if err != nil {
+		markers = []db.TodoMarker{}
+	}
+	data := map[string]interface{}{
+		"Title":        "⚙️ Configurar Marcadores",
+		"ContentBlock": "settingsContent",
+		"Markers":      markers,
+	}
+	ctx.render(w, "settings.html", data)
+}
+
+func (ctx *HandlerContext) HandleGetTodoMarkers(w http.ResponseWriter, r *http.Request) {
+	markers, err := ctx.Store.GetTodoMarkers()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if markers == nil {
+		markers = []db.TodoMarker{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(markers)
+}
+
+func (ctx *HandlerContext) HandleSaveTodoMarkers(w http.ResponseWriter, r *http.Request) {
+	var markers []db.TodoMarker
+	if err := json.NewDecoder(r.Body).Decode(&markers); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if err := ctx.Store.SaveTodoMarkers(markers); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {

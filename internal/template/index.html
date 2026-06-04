@@ -78,42 +78,6 @@
             <div id="contentArea"></div>
         </div>
         <div id="global-container" class="hidden"></div>
-        <div id="cloud-container" class="hidden">
-            <div class="flex items-center gap-3 mb-4">
-                <span
-                    class="text-[11px] font-bold tracking-wide uppercase text-zinc-500"
-                    >☁️ Nuvem de Palavras</span
-                >
-                <span class="text-[10px] text-zinc-600" id="cloud-count"></span>
-                <div class="flex-1"></div>
-                <input
-                    id="cloud-zoom"
-                    name="cloud-zoom"
-                    type="range"
-                    min="1"
-                    max="10"
-                    value="2"
-                    class="w-24 accent-violet-500"
-                    title="Zoom: ajusta o limiar de frequência"
-                />
-                <span
-                    class="text-[10px] text-zinc-600 w-8 text-right"
-                    id="cloud-level"
-                    >5</span
-                >
-                <button
-                    onclick="closeCloud()"
-                    class="text-zinc-500 hover:text-zinc-300 transition-colors text-sm"
-                    title="Fechar nuvem"
-                >
-                    ✕
-                </button>
-            </div>
-            <div
-                id="cloud-area"
-                class="flex flex-wrap gap-3 justify-center items-center py-8 min-h-[300px] select-none"
-            ></div>
-        </div>
     </div>
 </div>
 
@@ -680,87 +644,7 @@
             });
     }
 
-    // ── Word Cloud ──
-    var cloudData = [];
 
-    function renderWordCloud(minFreq) {
-        var area = document.getElementById("cloud-area");
-        var filtered = cloudData.filter(function (w) {
-            return w.count >= minFreq;
-        });
-        if (!filtered.length) {
-            area.innerHTML =
-                '<div class="text-zinc-600 text-sm py-10">Nenhuma palavra com frequência ≥ ' +
-                minFreq +
-                ".</div>";
-            return;
-        }
-        var maxCount = filtered[0].count;
-        var minCount = filtered[filtered.length - 1].count;
-        var range = Math.max(maxCount - minCount, 1);
-        area.innerHTML = "";
-        filtered.forEach(function (w) {
-            var span = document.createElement("span");
-            var ratio = (w.count - minCount) / range;
-            var size = 12 + ratio * 36;
-            var opacity = 0.5 + ratio * 0.5;
-            span.textContent = w.word;
-            span.className =
-                "inline-block leading-tight transition-all duration-200 hover:opacity-100 cursor-default";
-            span.style.fontSize = size + "px";
-            span.style.fontWeight = Math.round(300 + ratio * 600);
-            span.style.opacity = opacity;
-            span.style.color = "#a78bfa";
-            span.title = w.word + " (" + w.count + "x)";
-            area.appendChild(span);
-        });
-        document.getElementById("cloud-count").textContent =
-            filtered.length + " palavras";
-    }
-
-    function loadWordCloud() {
-        document.getElementById("compact-container").classList.add("hidden");
-        document.getElementById("global-container").classList.add("hidden");
-        document.getElementById("cloud-container").classList.remove("hidden");
-        document
-            .getElementById("search-input")
-            .parentElement.classList.add("hidden");
-        var toggle = document.getElementById("mode-toggle");
-        if (toggle) toggle.classList.add("hidden");
-        var zoomSlider = document.getElementById("cloud-zoom");
-        zoomSlider.value = "2";
-        document.getElementById("cloud-level").textContent = "2";
-        var area = document.getElementById("cloud-area");
-        area.innerHTML =
-            '<div class="text-zinc-500 text-sm py-10">Carregando...</div>';
-        fetch("/api/keywords")
-            .then(function (r) {
-                return r.json();
-            })
-            .then(function (data) {
-                cloudData = data.keywords || [];
-                sessionStorage.removeItem("showCloud");
-                var zoom = parseInt(
-                    document.getElementById("cloud-zoom").value,
-                );
-                var minFreq = Math.max(1, 11 - zoom);
-                renderWordCloud(minFreq);
-            })
-            .catch(function () {
-                area.innerHTML =
-                    '<div class="text-zinc-600 text-sm py-10">Erro ao carregar nuvem.</div>';
-            });
-    }
-
-    function closeCloud() {
-        document.getElementById("cloud-container").classList.add("hidden");
-        document.getElementById("compact-container").classList.remove("hidden");
-        document
-            .getElementById("search-input")
-            .parentElement.classList.remove("hidden");
-        var toggle = document.getElementById("mode-toggle");
-        if (toggle) toggle.classList.remove("hidden");
-    }
 
     document.addEventListener("DOMContentLoaded", function () {
         // Load tags
@@ -772,40 +656,6 @@
                 availableTags = data.tags || [];
             })
             .catch(function () {});
-
-        // Zoom slider
-        var zoomSlider = document.getElementById("cloud-zoom");
-        if (zoomSlider) {
-            zoomSlider.addEventListener("input", function () {
-                var val = parseInt(this.value);
-                document.getElementById("cloud-level").textContent = val;
-                renderWordCloud(Math.max(1, 11 - val));
-            });
-            document.getElementById("cloud-area").addEventListener(
-                "wheel",
-                function (e) {
-                    if (e.deltaY < 0) {
-                        zoomSlider.value = Math.min(
-                            10,
-                            parseInt(zoomSlider.value) + 1,
-                        );
-                    } else {
-                        zoomSlider.value = Math.max(
-                            1,
-                            parseInt(zoomSlider.value) - 1,
-                        );
-                    }
-                    zoomSlider.dispatchEvent(new Event("input"));
-                },
-                { passive: true },
-            );
-        }
-
-        // Verifica se deve abrir a nuvem
-        if (sessionStorage.getItem("showCloud") === "1") {
-            loadWordCloud();
-            return;
-        }
 
         // Load notes (padrão)
         fetch("/api/notes")

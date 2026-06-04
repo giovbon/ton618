@@ -1,0 +1,233 @@
+{{template "layout" .}} {{define "settingsContent"}}
+<div class="max-w-2xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-zinc-100">⚙️ Marcadores de TODOs</h2>
+        <span id="save-status" class="text-xs text-zinc-500"></span>
+    </div>
+
+    <p class="text-zinc-400 text-sm mb-6">
+        Configure quais palavras-chave aparecem como TODOs na página <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
+        Apenas marcadores <strong>ativos</strong> são detectados nas notas.
+    </p>
+
+    <!-- Add new marker -->
+    <div class="flex gap-2 mb-4">
+        <input
+            id="new-marker"
+            type="text"
+            placeholder="Nova palavra-chave (ex: HACK)"
+            class="flex-1 px-3 py-2 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 uppercase"
+            maxlength="20"
+        />
+        <select
+            id="new-color"
+            class="px-2 py-2 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:border-zinc-600"
+        >
+            <option value="#3b82f6" style="background:#3b82f6">🔵 Azul</option>
+            <option value="#f59e0b" style="background:#f59e0b">🟡 Âmbar</option>
+            <option value="#ef4444" style="background:#ef4444">🔴 Vermelho</option>
+            <option value="#10b981" style="background:#10b981">🟢 Verde</option>
+            <option value="#8b5cf6" style="background:#8b5cf6">🟣 Roxo</option>
+            <option value="#06b6d4" style="background:#06b6d4">🔵 Ciano</option>
+            <option value="#f97316" style="background:#f97316">🟠 Laranja</option>
+            <option value="#ec4899" style="background:#ec4899">🩷 Rosa</option>
+        </select>
+        <button
+            id="btn-add-marker"
+            class="px-4 py-2 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
+        >
+            + Adicionar
+        </button>
+    </div>
+
+    <!-- Markers list -->
+    <div id="markers-list" class="space-y-2">
+        {{range .Markers}}
+        <div class="marker-row flex items-center gap-3 px-4 py-3 bg-zinc-900/40 border border-zinc-800 rounded-lg" data-marker="{{.Marker}}">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" class="marker-active w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500" {{if .Active}}checked{{end}} />
+            </label>
+            <span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style="background:{{.Color}}20; color:{{.Color}}">{{.Marker}}</span>
+            <input type="color" class="marker-color w-8 h-8 rounded cursor-pointer border-0 bg-transparent" value="{{.Color}}" />
+            <span class="flex-1 text-xs text-zinc-500">{{.Marker}}:</span>
+            <button class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2">✕</button>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Actions -->
+    <div class="flex gap-3 mt-6">
+        <button
+            id="btn-save"
+            class="px-6 py-2.5 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
+        >
+            💾 Salvar configurações
+        </button>
+        <button
+            id="btn-reset"
+            class="px-4 py-2.5 text-[13px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all border border-zinc-700"
+        >
+            ↩ Restaurar padrão
+        </button>
+    </div>
+</div>
+
+<style>
+    input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 2px;
+    }
+    input[type="color"]::-webkit-color-swatch {
+        border: 1px solid #3f3f46;
+        border-radius: 4px;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        let markers = [];
+
+        function loadMarkers() {
+            const rows = document.querySelectorAll(".marker-row");
+            markers = [];
+            rows.forEach(function (row) {
+                markers.push({
+                    marker: row.getAttribute("data-marker"),
+                    color: row.querySelector(".marker-color").value,
+                    active: row.querySelector(".marker-active").checked,
+                });
+            });
+        }
+
+        function renderMarkers() {
+            const list = document.getElementById("markers-list");
+            list.innerHTML = "";
+
+            markers.forEach(function (m) {
+                const div = document.createElement("div");
+                div.className =
+                    "marker-row flex items-center gap-3 px-4 py-3 bg-zinc-900/40 border border-zinc-800 rounded-lg";
+                div.setAttribute("data-marker", m.marker);
+
+                const active = m.active ? "checked" : "";
+
+                div.innerHTML =
+                    '<label class="flex items-center gap-2 cursor-pointer">' +
+                    '<input type="checkbox" class="marker-active w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500" ' +
+                    active +
+                    " />" +
+                    "</label>" +
+                    '<span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style="background:' +
+                    m.color +
+                    "20; color:" +
+                    m.color +
+                    '">' +
+                    m.marker +
+                    "</span>" +
+                    '<input type="color" class="marker-color w-8 h-8 rounded cursor-pointer border-0 bg-transparent" value="' +
+                    m.color +
+                    '" />' +
+                    '<span class="flex-1 text-xs text-zinc-500">' +
+                    m.marker +
+                    ":</span>" +
+                    '<button class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2">✕</button>';
+
+                list.appendChild(div);
+
+                // Delete handler
+                div.querySelector(".marker-delete").addEventListener("click", function () {
+                    markers = markers.filter(function (x) {
+                        return x.marker !== m.marker;
+                    });
+                    renderMarkers();
+                });
+
+                // Change handlers
+                div.querySelector(".marker-active").addEventListener("change", function () {
+                    m.active = this.checked;
+                });
+                div.querySelector(".marker-color").addEventListener("input", function () {
+                    m.color = this.value;
+                    div.querySelector(".marker-badge").style.background = m.color + "20";
+                    div.querySelector(".marker-badge").style.color = m.color;
+                });
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            loadMarkers();
+
+            // Add marker
+            document.getElementById("btn-add-marker").addEventListener("click", function () {
+                const input = document.getElementById("new-marker");
+                const colorSelect = document.getElementById("new-color");
+                const name = input.value.trim().toUpperCase();
+
+                if (!name) return;
+                if (markers.some(function (m) {
+                    return m.marker === name;
+                })) {
+                    document.getElementById("save-status").textContent = "⚠️ Marcador já existe";
+                    return;
+                }
+
+                markers.push({
+                    marker: name,
+                    color: colorSelect.value,
+                    active: true,
+                });
+                input.value = "";
+                renderMarkers();
+                document.getElementById("save-status").textContent = "";
+            });
+
+            // Save
+            document.getElementById("btn-save").addEventListener("click", async function () {
+                const btn = this;
+                btn.textContent = "💾 Salvando...";
+                btn.disabled = true;
+
+                try {
+                    const response = await fetch("/api/todo-markers", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(markers),
+                    });
+
+                    if (!response.ok) throw new Error("Save failed");
+
+                    document.getElementById("save-status").textContent =
+                        "✅ Configurações salvas!";
+                    setTimeout(function () {
+                        document.getElementById("save-status").textContent = "";
+                    }, 3000);
+                } catch (e) {
+                    document.getElementById("save-status").textContent =
+                        "❌ Erro ao salvar";
+                }
+
+                btn.textContent = "💾 Salvar configurações";
+                btn.disabled = false;
+            });
+
+            // Reset to defaults
+            document.getElementById("btn-reset").addEventListener("click", async function () {
+                const defaults = [
+                    { marker: "TODO", color: "#3b82f6", active: true },
+                    { marker: "FIXME", color: "#f59e0b", active: true },
+                    { marker: "BUG", color: "#ef4444", active: true },
+                    { marker: "HACK", color: "#8b5cf6", active: false },
+                    { marker: "NOTE", color: "#06b6d4", active: false },
+                    { marker: "OPTIMIZE", color: "#10b981", active: false },
+                    { marker: "REVIEW", color: "#f97316", active: false },
+                ];
+                markers = defaults;
+                renderMarkers();
+                document.getElementById("save-status").textContent =
+                    "⚠️ Padrão restaurado. Clique em Salvar para confirmar.";
+            });
+        });
+    })();
+</script>
+{{end}}

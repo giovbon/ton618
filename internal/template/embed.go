@@ -26,7 +26,7 @@ func LoadTemplates(funcMap template.FuncMap) (*template.Template, error) {
 	combined := string(data)
 
 	for _, name := range []string{"index.html", "editor.html",
-		"login.html", "search_results.html", "docs.html"} {
+		"login.html", "search_results.html", "docs.html", "todos.html", "settings.html"} {
 
 		data, err := TemplatesFS.ReadFile(name)
 		if err != nil {

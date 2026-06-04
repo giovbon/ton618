@@ -281,13 +281,20 @@
                     >
                         🌐 CAPTURA
                     </button>
-                    <button
-                        onclick="openWordCloud()"
-                        class="text-zinc-400 hover:text-violet-400 transition-colors"
-                        title="Nuvem de palavras"
+
+                    <a
+                        href="/todos"
+                        class="text-zinc-400 hover:text-amber-400 transition-colors"
+                        title="TODOs"
+                        >🎯</a
                     >
-                        ☁️
-                    </button>
+
+                    <a
+                        href="/settings"
+                        class="text-zinc-400 hover:text-amber-400 transition-colors"
+                        title="Configurar Marcadores"
+                        >🔧</a
+                    >
 
                     <a
                         href="/help"
@@ -407,17 +414,29 @@
                     🌐 CAPTURA
                 </button>
 
-                <button
+                <a
+                    href="/todos"
                     onclick="
                         document
                             .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        openWordCloud();
+                            .classList.add('hidden')
                     "
-                    class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-violet-400 hover:bg-zinc-900 transition-colors"
+                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
                 >
-                    ☁️ Nuvem
-                </button>
+                    🎯 TODOs
+                </a>
+
+                <a
+                    href="/settings"
+                    onclick="
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden')
+                    "
+                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
+                >
+                    🔧 Marcadores
+                </a>
 
                 <a
                     href="/help"
@@ -459,7 +478,10 @@
             {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
             .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
             "editorContent" .}}{{end}} {{if eq .ContentBlock
-            "helpContent"}}{{template "helpContent" .}}{{end}}
+            "helpContent"}}{{template "helpContent" .}}{{end}} {{if eq
+            .ContentBlock "todosContent"}}{{template "todosContent"
+            .}}{{end}} {{if eq .ContentBlock "settingsContent"}}{{template
+            "settingsContent" .}}{{end}}
         </main>
 
         <!-- Settings Modal -->
@@ -995,10 +1017,7 @@
             return false;
         }
 
-        function openWordCloud() {
-            sessionStorage.setItem("showCloud", "1");
-            window.location.href = "/";
-        }
+
 
         // ── Auth Integration ──
         function logout() {

@@ -80,3 +80,15 @@ type NoteItem struct {
 	Mtime    string   `json:"mtime"`
 	Keywords []string `json:"keywords"`
 }
+
+// TodoItem representa um TODO, FIXME, BUG ou checkbox encontrado em uma nota.
+type TodoItem struct {
+	ID      string    `json:"id"`      // hash único
+	File    string    `json:"file"`    // caminho relativo (ex: "notes/foo.md")
+	Section string    `json:"section"` // "Seção › Subseção" ou vazio
+	Type    string    `json:"type"`    // "TODO", "FIXME", "BUG", "TASK"
+	Status  string    `json:"status"`  // "pending", "completed"
+	Text    string    `json:"text"`    // conteúdo da linha
+	Line    int       `json:"line"`    // número da linha (para scroll)
+	Created time.Time `json:"created"` // timestamp do arquivo
+}

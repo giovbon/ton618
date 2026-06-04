@@ -91,6 +91,12 @@ func initSchema(database *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
 	CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
+
+	CREATE TABLE IF NOT EXISTS todo_markers (
+		marker TEXT PRIMARY KEY,
+		color  TEXT DEFAULT '#3b82f6',
+		active INTEGER DEFAULT 1
+	);
 	`
 
 	_, err := database.Exec(schema)
@@ -100,6 +106,9 @@ func initSchema(database *sql.DB) error {
 
 	// Migrations evolutivas
 	migrate(database)
+
+	// Seed default markers if empty
+	seedDefaultMarkers(database)
 
 	// Performance PRAGMAs
 	database.Exec("PRAGMA synchronous=NORMAL")
@@ -116,6 +125,119 @@ func migrate(database *sql.DB) {
 	if _, err := database.Exec("ALTER TABLE notes ADD COLUMN keywords TEXT DEFAULT ''"); err != nil {
 		// coluna já existe — ignorado
 	}
+}
+
+// seedDefaultMarkers insere marcadores padrão se a tabela estiver vazia.
+func seedDefaultMarkers(database *sql.DB) {
+	var count int
+	database.QueryRow("SELECT COUNT(*) FROM todo_markers").Scan(&count)
+	if count > 0 {
+		return
+	}
+	defaults := []struct {
+		marker string
+		color  string
+		active bool
+	}{
+		{"TODO", "#3b82f6", true},
+		{"FIXME", "#f59e0b", true},
+		{"BUG", "#ef4444", true},
+		{"HACK", "#8b5cf6", false},
+		{"NOTE", "#06b6d4", false},
+		{"OPTIMIZE", "#10b981", false},
+		{"REVIEW", "#f97316", false},
+	}
+	for _, m := range defaults {
+		active := 0
+		if m.active {
+			active = 1
+		}
+		database.Exec(
+			"INSERT OR IGNORE INTO todo_markers (marker, color, active) VALUES (?, ?, ?)",
+			m.marker, m.color, active,
+		)
+	}
+}
+
+// ── Todo Markers ──
+
+type TodoMarker struct {
+	Marker string `json:"marker"`
+	Color  string `json:"color"`
+	Active bool   `json:"active"`
+}
+
+// GetTodoMarkers retorna todos os marcadores configurados.
+func (s *Store) GetTodoMarkers() ([]TodoMarker, error) {
+	rows, err := s.DB.Query("SELECT marker, color, active FROM todo_markers ORDER BY marker")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var markers []TodoMarker
+	for rows.Next() {
+		var m TodoMarker
+		var active int
+		if err := rows.Scan(&m.Marker, &m.Color, &active); err != nil {
+			continue
+		}
+		m.Active = active == 1
+		markers = append(markers, m)
+	}
+	return markers, rows.Err()
+}
+
+// GetActiveTodoMarkers retorna apenas os marcadores ativos.
+func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
+	rows, err := s.DB.Query("SELECT marker, color, active FROM todo_markers WHERE active = 1 ORDER BY marker")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var markers []TodoMarker
+	for rows.Next() {
+		var m TodoMarker
+		var active int
+		if err := rows.Scan(&m.Marker, &m.Color, &active); err != nil {
+			continue
+		}
+		m.Active = true
+		markers = append(markers, m)
+	}
+	return markers, rows.Err()
+}
+
+// SaveTodoMarkers substitui todos os marcadores pelos fornecidos.
+func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM todo_markers"); err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare("INSERT INTO todo_markers (marker, color, active) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, m := range markers {
+		active := 0
+		if m.Active {
+			active = 1
+		}
+		if _, err := stmt.Exec(m.Marker, m.Color, active); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // Close fecha a conexão com o banco.

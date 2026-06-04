@@ -44,6 +44,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	// Páginas HTML (server-side rendered)
 	mux.HandleFunc("GET /", ctx.HandleIndex)
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
+	mux.HandleFunc("GET /todos", ctx.HandleTodosPage)
 	mux.HandleFunc("GET /help", ctx.HandleHelp)
 
 	mux.HandleFunc("GET /login", ctx.HandleLogin)
@@ -69,6 +70,12 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/help/markdown", ctx.HandleHelpMarkdown)
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 	mux.HandleFunc("GET /api/keywords", ctx.HandleGetKeywords)
+	mux.HandleFunc("GET /api/todos", ctx.HandleListTodos)
+	mux.HandleFunc("GET /api/todo-markers", ctx.HandleGetTodoMarkers)
+	mux.HandleFunc("POST /api/todo-markers", ctx.HandleSaveTodoMarkers)
+
+	// Settings page
+	mux.HandleFunc("GET /settings", ctx.HandleTodoSettingsPage)
 
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)

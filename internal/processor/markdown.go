@@ -512,3 +512,97 @@ func detectKeywords(fm map[string]interface{}, fileTags []string) []string {
 	}
 	return fileTags
 }
+
+// TodoItem representa um TODO, FIXME, BUG ou checkbox encontrado em uma nota.
+type TodoItem struct {
+	ID      string
+	File    string
+	Section string
+	Type    string // "TODO", "FIXME", "BUG", "TASK"
+	Status  string // "pending", "completed"
+	Text    string
+	Line    int
+	Created time.Time
+}
+
+// ExtractTodos extrai marcadores (TODO, FIXME, BUG, etc) e checkboxes de conteúdo markdown.
+// markers é a lista de palavras-chave a detectar (ex: ["TODO", "FIXME", "BUG"]).
+// Se markers for nil/vazio, usa os defaults: TODO, FIXME, BUG.
+func ExtractTodos(content string, filename string, modTime time.Time, markers []string) []TodoItem {
+	var todos []TodoItem
+
+	if len(markers) == 0 {
+		markers = []string{"TODO", "FIXME", "BUG"}
+	}
+
+	// Build dynamic regex from markers list
+	markerPattern := strings.Join(markers, "|")
+	todoRegex := regexp.MustCompile(`(?i)^\s*(` + markerPattern + `):\s*(.+)$`)
+	checkboxRegex := regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
+	headerRegex := regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+
+	lines := strings.Split(content, "\n")
+	currentSection := "Geral"
+	lineNum := 0
+	startIdx := 0
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimSpace(lines[i]) == "---" {
+				startIdx = i + 1
+				lineNum = i + 1
+				break
+			}
+		}
+	}
+
+	for i := startIdx; i < len(lines); i++ {
+		line := lines[i]
+		lineNum = i + 1
+
+		// Update current section on header
+		if headerMatch := headerRegex.FindStringSubmatch(line); headerMatch != nil {
+			currentSection = strings.TrimSpace(headerMatch[2])
+			continue
+		}
+
+		// Check for TODO/FIXME/BUG
+		if todoMatch := todoRegex.FindStringSubmatch(line); todoMatch != nil {
+			todoType := strings.ToUpper(todoMatch[1])
+			todoText := strings.TrimSpace(todoMatch[2])
+			todos = append(todos, TodoItem{
+				ID:      HashFunc(filename + currentSection + strconv.Itoa(lineNum)),
+				File:    filename,
+				Section: currentSection,
+				Type:    todoType,
+				Status:  "pending",
+				Text:    todoText,
+				Line:    lineNum,
+				Created: modTime,
+			})
+			continue
+		}
+
+		// Check for checkboxes
+		if checkboxMatch := checkboxRegex.FindStringSubmatch(line); checkboxMatch != nil {
+			checkbox := checkboxMatch[1]
+			taskText := strings.TrimSpace(checkboxMatch[2])
+			status := "pending"
+			if strings.ToLower(checkbox) == "x" {
+				status = "completed"
+			}
+			todos = append(todos, TodoItem{
+				ID:      HashFunc(filename + currentSection + taskText + strconv.Itoa(lineNum)),
+				File:    filename,
+				Section: currentSection,
+				Type:    "TASK",
+				Status:  status,
+				Text:    taskText,
+				Line:    lineNum,
+				Created: modTime,
+			})
+			continue
+		}
+	}
+
+	return todos
+}

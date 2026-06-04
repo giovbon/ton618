@@ -1,0 +1,497 @@
+{{template "layout" .}} {{define "todosContent"}}
+<div>
+    <!-- Header with filters -->
+    <div class="flex flex-col gap-4 mb-6">
+        <div class="flex items-center justify-between">
+            <h2 class="text-2xl font-bold text-zinc-100">🎯 TODOs</h2>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-zinc-500">
+                    <span id="badge-pending" class="inline-block px-2 py-1 bg-amber-500/20 text-amber-400 rounded">0 pendentes</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Filter buttons -->
+        <div class="flex flex-wrap gap-2">
+            <button
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border"
+                data-type="all"
+                data-status="all"
+            >
+                Todos
+            </button>
+            <button
+                class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
+                data-type="todo"
+                data-status="all"
+            >
+                TODO
+            </button>
+            <button
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                data-type="fixme"
+                data-status="all"
+            >
+                FIXME
+            </button>
+            <button
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-red-400 border-red-500/30 hover:bg-red-500/10"
+                data-type="bug"
+                data-status="all"
+            >
+                BUG
+            </button>
+            <button
+                class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 hover:bg-green-500/10"
+                data-type="task"
+                data-status="all"
+            >
+                TASK
+            </button>
+            <div class="flex-1"></div>
+            <button
+                class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border bg-zinc-800 text-zinc-300 border-zinc-700"
+                data-status="pending"
+            >
+                Pendentes
+            </button>
+            <button
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-zinc-500 border-zinc-700 hover:text-zinc-400"
+                data-status="completed"
+            >
+                Completos
+            </button>
+        </div>
+
+        <!-- Search input -->
+        <div class="relative">
+            <input
+                id="todo-search"
+                type="text"
+                placeholder="Buscar TODOs..."
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all"
+            />
+        </div>
+    </div>
+
+    <!-- Todo tree container -->
+    <div id="todo-tree" class="space-y-0"></div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="text-center py-16 hidden">
+        <p class="text-zinc-500 text-sm">Nenhum TODO encontrado</p>
+    </div>
+</div>
+
+<style>
+    .filter-btn {
+        background: transparent;
+        border-color: #3f3f46;
+        color: #a1a1aa;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .filter-btn:hover {
+        color: #e4e4e7;
+        border-color: #52525b;
+    }
+
+    .filter-btn.active {
+        background: #27272a;
+        border-color: #52525b;
+        color: #e4e4e7;
+    }
+
+    .todo-tree-item {
+        padding: 0;
+        margin: 0;
+    }
+
+    .todo-tree-folder {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 4px;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.1s;
+        border-radius: 4px;
+    }
+
+    .todo-tree-folder:hover {
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .todo-tree-folder .toggle {
+        display: inline-flex;
+        width: 16px;
+        height: 16px;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.15s;
+        font-size: 10px;
+        color: #52525b;
+    }
+
+    .todo-tree-folder.expanded .toggle {
+        transform: rotate(90deg);
+    }
+
+    .todo-tree-folder .folder-icon {
+        font-size: 14px;
+    }
+
+    .todo-tree-folder .folder-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #d4d4d8;
+        flex: 1;
+    }
+
+    .todo-tree-folder .folder-count {
+        font-size: 10px;
+        color: #71717a;
+        padding: 0 6px;
+    }
+
+    .todo-tree-children {
+        margin-left: 12px;
+        border-left: 1px solid #27272a;
+        padding-left: 12px;
+        display: none;
+    }
+
+    .todo-tree-children.expanded {
+        display: block;
+    }
+
+    .todo-tree-todo {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 4px;
+        margin: 2px 0;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.1s;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .todo-tree-todo:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .todo-tree-todo .todo-icon {
+        flex-shrink: 0;
+        font-size: 12px;
+        width: 16px;
+        text-align: center;
+        margin-top: 2px;
+    }
+
+    .todo-tree-todo.todo-type-todo .todo-icon::before {
+        content: "🔵";
+    }
+    .todo-tree-todo.todo-type-fixme .todo-icon::before {
+        content: "🟡";
+    }
+    .todo-tree-todo.todo-type-bug .todo-icon::before {
+        content: "🔴";
+    }
+    .todo-tree-todo.todo-type-task.completed .todo-icon::before {
+        content: "✓";
+        color: #6b7280;
+    }
+    .todo-tree-todo.todo-type-task:not(.completed) .todo-icon::before {
+        content: "⬜";
+    }
+
+    .todo-tree-todo .todo-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .todo-tree-todo .todo-text {
+        color: #d4d4d8;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .todo-tree-todo.completed .todo-text {
+        color: #6b7280;
+        text-decoration: line-through;
+    }
+
+    .todo-tree-todo .todo-type {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        margin-right: 6px;
+    }
+
+    .todo-tree-todo.todo-type-todo .todo-type {
+        background: #3b82f6/20;
+        color: #3b82f6;
+    }
+    .todo-tree-todo.todo-type-fixme .todo-type {
+        background: #f59e0b/20;
+        color: #f59e0b;
+    }
+    .todo-tree-todo.todo-type-bug .todo-type {
+        background: #ef4444/20;
+        color: #ef4444;
+    }
+    .todo-tree-todo.todo-type-task .todo-type {
+        background: #10b981/20;
+        color: #10b981;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        let allTodos = [];
+        let currentFilters = {
+            type: "todo,task",
+            status: "pending",
+            search: "",
+        };
+
+        // Initialize on page load
+        document.addEventListener("DOMContentLoaded", function () {
+            loadTodos();
+            setupFilterButtons();
+            setupSearchInput();
+        });
+
+        async function loadTodos() {
+            try {
+                const url =
+                    "/api/todos?" +
+                    new URLSearchParams({
+                        type: currentFilters.type,
+                        status: currentFilters.status,
+                    }).toString();
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch todos");
+
+                const data = await response.json();
+                allTodos = data.todos || [];
+
+                // Update badge
+                if (currentFilters.status === "pending") {
+                    document.getElementById("badge-pending").textContent =
+                        allTodos.length + " pendentes";
+                }
+
+                renderTree();
+            } catch (error) {
+                console.error("Error loading todos:", error);
+                document.getElementById("todo-tree").innerHTML =
+                    '<div class="text-red-400 text-sm">Erro ao carregar TODOs</div>';
+            }
+        }
+
+        function setupFilterButtons() {
+            document.querySelectorAll(".filter-btn").forEach((btn) => {
+                btn.addEventListener("click", function () {
+                    const type = this.getAttribute("data-type");
+                    const status = this.getAttribute("data-status");
+
+                    if (type) {
+                        // "Todos" resets to show all
+                        if (type === "all") {
+                            document
+                                .querySelectorAll('.filter-btn[data-type]')
+                                .forEach((b) => b.classList.remove("active"));
+                            this.classList.add("active");
+                            currentFilters.type = "all";
+                        } else {
+                            // Toggle individual type buttons (multi-select)
+                            document
+                                .querySelector('.filter-btn[data-type="all"]')
+                                .classList.remove("active");
+                            this.classList.toggle("active");
+
+                            // Build comma-separated type from active buttons
+                            const activeTypes = [];
+                            document
+                                .querySelectorAll('.filter-btn[data-type].active')
+                                .forEach((b) => {
+                                    activeTypes.push(b.getAttribute("data-type"));
+                                });
+                            currentFilters.type =
+                                activeTypes.length > 0
+                                    ? activeTypes.join(",")
+                                    : "all";
+                        }
+                    } else if (status) {
+                        // Status filter - deactivate status filters first
+                        document
+                            .querySelectorAll('.filter-btn[data-status]:not([data-type])')
+                            .forEach((b) => b.classList.remove("active"));
+                        this.classList.add("active");
+                        currentFilters.status = status;
+                    }
+
+                    loadTodos();
+                });
+            });
+        }
+
+        function setupSearchInput() {
+            const searchInput = document.getElementById("todo-search");
+            let searchTimeout;
+
+            searchInput.addEventListener("input", function () {
+                clearTimeout(searchTimeout);
+                currentFilters.search = this.value.toLowerCase();
+
+                searchTimeout = setTimeout(() => {
+                    renderTree();
+                }, 150);
+            });
+        }
+
+        function applySearch(todos) {
+            if (!currentFilters.search) return todos;
+
+            return todos.filter(
+                (todo) =>
+                    todo.text.toLowerCase().includes(currentFilters.search) ||
+                    todo.file.toLowerCase().includes(currentFilters.search) ||
+                    todo.section
+                        .toLowerCase()
+                        .includes(currentFilters.search)
+            );
+        }
+
+        function renderTree() {
+            const container = document.getElementById("todo-tree");
+            const emptyState = document.getElementById("empty-state");
+
+            // Apply search filter
+            const filtered = applySearch(allTodos);
+
+            if (!filtered.length) {
+                container.innerHTML = "";
+                emptyState.classList.remove("hidden");
+                return;
+            }
+
+            emptyState.classList.add("hidden");
+
+            // Group by file
+            const grouped = {};
+            filtered.forEach((todo) => {
+                if (!grouped[todo.file]) {
+                    grouped[todo.file] = {};
+                }
+                if (!grouped[todo.file][todo.section]) {
+                    grouped[todo.file][todo.section] = [];
+                }
+                grouped[todo.file][todo.section].push(todo);
+            });
+
+            let html = "";
+
+            // Render tree
+            Object.keys(grouped)
+                .sort()
+                .forEach((file) => {
+                    const fileId = "file-" + btoa(file);
+                    const sections = grouped[file];
+                    const todoCount = Object.values(sections).reduce(
+                        (sum, todos) => sum + todos.length,
+                        0
+                    );
+
+                    html += `<div class="todo-tree-item">
+                        <div class="todo-tree-folder" data-toggle="${fileId}">
+                            <div class="toggle">▶</div>
+                            <div class="folder-icon">📄</div>
+                            <div class="folder-name">${escapeHtml(file)}</div>
+                            <div class="folder-count">${todoCount}</div>
+                        </div>
+                        <div class="todo-tree-children" id="${fileId}">`;
+
+                    // Iterate sections in insertion order (preserves document order from API)
+                    Object.keys(sections).forEach((section) => {
+                            const sectionId = fileId + "-" + btoa(section);
+                            const todos = sections[section];
+
+                            html += `<div class="todo-tree-item">
+                                <div class="todo-tree-folder" data-toggle="${sectionId}">
+                                    <div class="toggle">▶</div>
+                                    <div class="folder-icon">#️⃣</div>
+                                    <div class="folder-name">${escapeHtml(section)}</div>
+                                    <div class="folder-count">${todos.length}</div>
+                                </div>
+                                <div class="todo-tree-children" id="${sectionId}">`;
+
+                            todos.forEach((todo) => {
+                                const typeClass =
+                                    "todo-type-" + todo.type.toLowerCase();
+                                const statusClass =
+                                    todo.status === "completed"
+                                        ? "completed"
+                                        : "";
+
+                                html += `<div class="todo-tree-todo ${typeClass} ${statusClass}" onclick="openTodo('${escapeHtml(todo.file)}', ${todo.line})">
+                                    <div class="todo-icon"></div>
+                                    <div class="todo-content">
+                                        <span class="todo-type">${escapeHtml(todo.type)}</span>
+                                        <span class="todo-text">${escapeHtml(todo.text)}</span>
+                                    </div>
+                                </div>`;
+                            });
+
+                            html += `</div></div>`;
+                        });
+
+                    html += `</div></div>`;
+                });
+
+            container.innerHTML = html;
+
+            // Setup folder toggles
+            document.querySelectorAll(".todo-tree-folder").forEach((folder) => {
+                folder.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    const toggleId = this.getAttribute("data-toggle");
+                    const children = document.getElementById(toggleId);
+                    if (children) {
+                        this.classList.toggle("expanded");
+                        children.classList.toggle("expanded");
+                    }
+                });
+            });
+        }
+
+        function openTodo(file, line) {
+            // Open the file in editor and scroll to line
+            window.location.href =
+                "/editor?file=" +
+                encodeURIComponent(file) +
+                "#line-" +
+                line;
+        }
+
+        // Expose to global scope for onclick handlers
+        window.openTodo = openTodo;
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    })();
+</script>
+{{end}}

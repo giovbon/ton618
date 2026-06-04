@@ -25,7 +25,7 @@
                 </a>
                 {{else}}
                 <a
-                    href="/editor?file={{.Arquivo}}"
+                    href="/editor?file={{.Arquivo}}{{if .Line}}#line-{{.Line}}{{end}}"
                     class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400"
                 >
                     {{baseName .Arquivo}}
