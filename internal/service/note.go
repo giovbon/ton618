@@ -123,6 +123,11 @@ func (s *NoteService) Rename(oldName, newName string) error {
 
 	os.Rename(filepath.Join(s.docsDir, oldName), filepath.Join(s.docsDir, newName))
 
+	// Remove registros antigos do DB (file_mods, popularidade, tags)
+	s.fileMod.DeleteFileMod(oldName)
+	s.pop.ResetPopularity(oldName)
+	s.tags.SetFileTags(oldName, nil)
+
 	content, err := s.notes.GetNote(newName)
 	if err == nil && content != "" {
 		s.store.DeleteDocumentsByFile(oldName)

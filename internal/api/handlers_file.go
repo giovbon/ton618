@@ -318,6 +318,9 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	if isPdf || isZip {
 		ctx.Store.DeleteDocumentsByFile(oldName)
 		ctx.Store.DeleteFTSByFile(oldName)
+		ctx.Store.DeleteFileMod(oldName)
+		ctx.Store.ResetPopularity(oldName)
+		ctx.Store.SetFileTags(oldName, nil)
 		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 		info, err := os.Stat(newPath)
 		if err == nil {
