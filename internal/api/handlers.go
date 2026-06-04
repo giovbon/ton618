@@ -126,6 +126,46 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Request) {
+	notes, err := ctx.Notes.GetMany()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	freq := make(map[string]int)
+	for _, n := range notes {
+		for _, kw := range n.Keywords {
+			freq[kw]++
+		}
+	}
+
+	type kwEntry struct {
+		Word  string `json:"word"`
+		Count int    `json:"count"`
+	}
+	var list []kwEntry
+	for w, c := range freq {
+		list = append(list, kwEntry{w, c})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Count == list[j].Count {
+			return list[i].Word < list[j].Word
+		}
+		return list[i].Count > list[j].Count
+	})
+
+	if list == nil {
+		list = []kwEntry{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"keywords": list,
+		"total":    len(list),
+	})
+}
+
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
 	// Delega para o NoteService que consolida file_mods + notes
 	notes, err := ctx.Notes.GetMany()

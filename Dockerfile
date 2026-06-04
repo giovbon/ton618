@@ -25,6 +25,7 @@ COPY . .
 
 # Copia bundle web do estágio anterior
 COPY --from=web-builder /web/static/editor.js web/static/editor.js
+COPY --from=web-builder /web/static/editor.js.gz web/static/editor.js.gz
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \

@@ -49,3 +49,6 @@ repomix-output.xml
 *.log
 coverage.out
 package-lock.json
+
+# Build artifacts
+web/static/editor.js.gz

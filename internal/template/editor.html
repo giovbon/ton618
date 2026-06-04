@@ -356,6 +356,45 @@
     .ProseMirror li {
         margin: 0.1em 0;
     }
+    /* ── Tabelas ── */
+    .ProseMirror table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.8em 0;
+        overflow: hidden;
+    }
+    .ProseMirror th,
+    .ProseMirror td {
+        border: 1px solid #3f3f46;
+        padding: 8px 12px;
+        vertical-align: top;
+        min-width: 80px;
+    }
+    .ProseMirror th {
+        background: #27272a;
+        color: #e4e4e7;
+        font-weight: 700;
+        text-align: left;
+    }
+    .ProseMirror td {
+        color: #a1a1aa;
+    }
+    .ProseMirror td p {
+        margin: 0;
+    }
+    .ProseMirror .selectedCell {
+        background: rgba(56, 189, 248, 0.08);
+    }
+    /* Grips de redimensionamento da tabela */
+    .ProseMirror .column-resize-handle {
+        background: #38bdf8;
+        width: 2px;
+        position: absolute;
+        right: -1px;
+        top: 0;
+        bottom: 0;
+        pointer-events: none;
+    }
     .wikilink-item {
         display: flex;
         align-items: center;
