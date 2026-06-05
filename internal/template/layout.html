@@ -1,401 +1,250 @@
 {{define "layout"}}
 <!doctype html>
 <html lang="pt-BR" class="dark">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{{.Title}}</title>
-        <link
-            rel="icon"
-            type="image/svg+xml"
-            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffffff' opacity='0.15'/%3E%3Ccircle cx='50' cy='50' r='26' fill='%23000'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23000'/%3E%3Cpath d='M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z' fill='%23fff' opacity='0.7'/%3E%3Cpath d='M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z' fill='%23e2e8f0' opacity='0.3' transform='rotate(120 50 50)'/%3E%3Cpath d='M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z' fill='%23fff' opacity='0.5' transform='rotate(240 50 50)'/%3E%3C/svg%3E"
-        />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap"
-            rel="stylesheet"
-        />
-        <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-        <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        fontFamily: {
-                            sans: ["Inter", "system-ui", "sans-serif"],
-                        },
-                        animation: {
-                            "fast-spin": "fast-spin 0.4s linear infinite",
-                        },
-                        keyframes: {
-                            "fast-spin": {
-                                from: { transform: "rotate(0deg)" },
-                                to: { transform: "rotate(360deg)" },
-                            },
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}}</title>
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffffff' opacity='0.15'/%3E%3Ccircle cx='50' cy='50' r='26' fill='%23000'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23000'/%3E%3Cpath d='M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z' fill='%23fff' opacity='0.7'/%3E%3Cpath d='M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z' fill='%23e2e8f0' opacity='0.3' transform='rotate(120 50 50)'/%3E%3Cpath d='M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z' fill='%23fff' opacity='0.5' transform='rotate(240 50 50)'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ["Inter", "system-ui", "sans-serif"],
+                    },
+                    animation: {
+                        "fast-spin": "fast-spin 0.4s linear infinite",
+                    },
+                    keyframes: {
+                        "fast-spin": {
+                            from: { transform: "rotate(0deg)" },
+                            to: { transform: "rotate(360deg)" },
                         },
                     },
                 },
-            };
-        </script>
-        {{if .LoadTipTap}}
-        <script src="/static/editor.js"></script>
-        {{end}}
-        <style>
-            * {
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
-                scrollbar-width: thin;
-                scrollbar-color: #27272a transparent;
+            },
+        };
+    </script>
+    {{if .LoadTipTap}}
+    <script src="/static/editor.js"></script>
+    {{end}}
+    <style>
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            scrollbar-width: thin;
+            scrollbar-color: #27272a transparent;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+
+        body {
+            margin: 0;
+            min-width: 320px;
+            min-height: 100vh;
+            background-color: #09090b;
+            color: #a1a1aa;
+        }
+
+        .search-highlight {
+            background-color: rgba(14, 165, 233, 0.25);
+            color: #38bdf8;
+            font-weight: 700;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 200ms ease-in;
+        }
+
+        .htmx-request .htmx-indicator {
+            opacity: 1;
+        }
+
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+
+        .premium-card {
+            box-shadow:
+                inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+
+        .settings-tab-btn {
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 767px) {
+            .settings-tabs-container::-webkit-scrollbar {
+                display: none;
             }
 
-            ::-webkit-scrollbar {
-                width: 8px;
-                height: 8px;
+            .settings-tabs-container {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .settings-tabs-container::-webkit-scrollbar {
+                height: 4px;
             }
 
-            ::-webkit-scrollbar-track {
+            .settings-tabs-container::-webkit-scrollbar-track {
                 background: transparent;
             }
 
-            ::-webkit-scrollbar-thumb {
-                background: #27272a;
-                border-radius: 4px;
-            }
-
-            ::-webkit-scrollbar-thumb:hover {
+            .settings-tabs-container::-webkit-scrollbar-thumb {
                 background: #3f3f46;
+                border-radius: 2px;
             }
 
-            body {
-                margin: 0;
-                min-width: 320px;
-                min-height: 100vh;
-                background-color: #09090b;
-                color: #a1a1aa;
+            .settings-tabs-container::-webkit-scrollbar-thumb:hover {
+                background: #52525b;
             }
+        }
 
-            .search-highlight {
-                background-color: rgba(14, 165, 233, 0.25);
-                color: #38bdf8;
-                font-weight: 700;
-                padding: 0 4px;
-                border-radius: 4px;
+        .loading-spinner {
+            display: inline-block;
+            width: 0.9rem;
+            height: 0.9rem;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 999px;
+            animation: spin 0.8s linear infinite;
+            vertical-align: -0.12em;
+            margin-right: 0.4rem;
+        }
+
+        .button-loading {
+            opacity: 0.75;
+            pointer-events: none;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
             }
+        }
+    </style>
+</head>
 
-            .htmx-indicator {
-                opacity: 0;
-                transition: opacity 200ms ease-in;
-            }
-
-            .htmx-request .htmx-indicator {
-                opacity: 1;
-            }
-
-            .htmx-request.htmx-indicator {
-                opacity: 1;
-            }
-
-            .premium-card {
-                box-shadow:
-                    inset 0 4px 20px -5px rgba(0, 0, 0, 0.7),
-                    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-            }
-
-            .settings-tab-btn {
-                white-space: nowrap;
-                flex-shrink: 0;
-            }
-
-            @media (max-width: 767px) {
-                .settings-tabs-container::-webkit-scrollbar {
-                    display: none;
-                }
-                .settings-tabs-container {
-                    scrollbar-width: none;
-                    -ms-overflow-style: none;
-                }
-            }
-
-            @media (min-width: 768px) {
-                .settings-tabs-container::-webkit-scrollbar {
-                    height: 4px;
-                }
-                .settings-tabs-container::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .settings-tabs-container::-webkit-scrollbar-thumb {
-                    background: #3f3f46;
-                    border-radius: 2px;
-                }
-                .settings-tabs-container::-webkit-scrollbar-thumb:hover {
-                    background: #52525b;
-                }
-            }
-
-            .loading-spinner {
-                display: inline-block;
-                width: 0.9rem;
-                height: 0.9rem;
-                border: 2px solid currentColor;
-                border-top-color: transparent;
-                border-radius: 999px;
-                animation: spin 0.8s linear infinite;
-                vertical-align: -0.12em;
-                margin-right: 0.4rem;
-            }
-
-            .button-loading {
-                opacity: 0.75;
-                pointer-events: none;
-            }
-
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-        </style>
-    </head>
-
-    <body class="font-sans antialiased">
-        <nav
-            class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50"
-        >
-            <div
-                class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between"
-            >
-                <a
-                    href="/"
-                    class="flex items-center gap-2.5 group"
-                    title="TON-618 — Sistema de Gestão de Conhecimento"
-                >
-                    <div
-                        class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300"
-                    >
-                        <svg
-                            viewBox="0 0 100 100"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]"
-                        >
-                            <defs>
-                                <filter
-                                    id="logoGlow"
-                                    x="-50%"
-                                    y="-50%"
-                                    width="200%"
-                                    height="200%"
-                                >
-                                    <feGaussianBlur
-                                        stdDeviation="3"
-                                        result="blur"
-                                    />
-                                    <feColorMatrix
-                                        in="blur"
-                                        type="matrix"
-                                        values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7"
-                                        result="glow"
-                                    />
-                                    <feComposite
-                                        in="SourceGraphic"
-                                        in2="glow"
-                                        operator="over"
-                                    />
-                                </filter>
-                                <radialGradient
-                                    id="singularityGrad"
-                                    cx="50%"
-                                    cy="50%"
-                                    r="50%"
-                                >
-                                    <stop offset="65%" stop-color="#000000" />
-                                    <stop offset="100%" stop-color="#0f172a" />
-                                </radialGradient>
-                            </defs>
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="45"
-                                fill="white"
-                                filter="url(#logoGlow)"
-                                opacity="0.25"
-                            />
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="28"
-                                stroke="white"
-                                stroke-width="1.2"
-                                stroke-opacity="0.85"
-                                fill="none"
-                                filter="url(#logoGlow)"
-                            />
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="26"
-                                fill="url(#singularityGrad)"
-                            />
-                            <circle cx="50" cy="50" r="22" fill="#000000" />
-                            <path
-                                d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
-                                fill="white"
-                                opacity="0.7"
-                                transform="rotate(0 50 50)"
-                            />
-                            <path
-                                d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
-                                fill="#e2e8f0"
-                                opacity="0.3"
-                                transform="rotate(120 50 50)"
-                            />
-                            <path
-                                d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
-                                fill="white"
-                                opacity="0.5"
-                                transform="rotate(240 50 50)"
-                            />
-                        </svg>
-                    </div>
-                    <span
-                        class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors"
-                        >TON-618</span
-                    >
-                </a>
-                <div
-                    class="hidden md:flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase"
-                >
-                    <a
-                        href="#"
-                        onclick="return createNewNote();"
-                        class="text-zinc-400 hover:text-white transition-colors"
-                        >📄 +NOTA</a
-                    >
-                    <a
-                        href="#"
-                        id="pdf-upload-link"
-                        onclick="
+<body class="font-sans antialiased">
+    <nav class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2.5 group" title="TON-618 — Sistema de Gestão de Conhecimento">
+                <div class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300">
+                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]">
+                        <defs>
+                            <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feColorMatrix in="blur" type="matrix"
+                                    values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7" result="glow" />
+                                <feComposite in="SourceGraphic" in2="glow" operator="over" />
+                            </filter>
+                            <radialGradient id="singularityGrad" cx="50%" cy="50%" r="50%">
+                                <stop offset="65%" stop-color="#000000" />
+                                <stop offset="100%" stop-color="#0f172a" />
+                            </radialGradient>
+                        </defs>
+                        <circle cx="50" cy="50" r="45" fill="white" filter="url(#logoGlow)" opacity="0.25" />
+                        <circle cx="50" cy="50" r="28" stroke="white" stroke-width="1.2" stroke-opacity="0.85"
+                            fill="none" filter="url(#logoGlow)" />
+                        <circle cx="50" cy="50" r="26" fill="url(#singularityGrad)" />
+                        <circle cx="50" cy="50" r="22" fill="#000000" />
+                        <path d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
+                            fill="white" opacity="0.7" transform="rotate(0 50 50)" />
+                        <path d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
+                            fill="#e2e8f0" opacity="0.3" transform="rotate(120 50 50)" />
+                        <path d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
+                            fill="white" opacity="0.5" transform="rotate(240 50 50)" />
+                    </svg>
+                </div>
+                <span
+                    class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
+            </a>
+            <div class="hidden md:flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase">
+                <a href="#" onclick="return createNewNote();"
+                    class="text-zinc-400 hover:text-white transition-colors">📄 +NOTA</a>
+                <a href="#" id="pdf-upload-link" onclick="
                             activePdfUploadButton = this;
                             document.getElementById('pdf-file-input').click();
                             return false;
-                        "
-                        class="text-zinc-400 hover:text-sky-400 transition-colors"
-                        >📕 +PDF</a
-                    >
-                    <input
-                        id="pdf-file-input"
-                        type="file"
-                        accept=".pdf"
-                        class="hidden"
-                    />
-                    <a
-                        href="#"
-                        id="zip-upload-link"
-                        onclick="
+                        " class="text-zinc-400 hover:text-sky-400 transition-colors">📕 +PDF</a>
+                <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
+                <a href="#" id="zip-upload-link" onclick="
                             document.getElementById('zip-file-input').click();
                             return false;
-                        "
-                        class="text-zinc-400 hover:text-amber-400 transition-colors"
-                        >📦 +ANEXO</a
-                    >
-                    <input
-                        id="zip-file-input"
-                        type="file"
-                        multiple
-                        class="hidden"
-                    />
-                    <button
-                        id="capture-link"
-                        onclick="return promptCapture(this);"
-                        class="text-zinc-400 hover:text-emerald-400 transition-colors"
-                    >
-                        🌐 +CAPTURA
-                    </button>
+                        " class="text-zinc-400 hover:text-amber-400 transition-colors">📦 +ANEXO</a>
+                <input id="zip-file-input" type="file" multiple class="hidden" />
+                <button id="capture-link" onclick="return promptCapture(this);"
+                    class="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    🌐 +CAPTURA
+                </button>
 
-                    <a
-                        href="/todos"
-                        class="text-zinc-400 hover:text-amber-400 transition-colors"
-                        title="TODOs"
-                        >🎯TODOs</a
-                    >
+                <a id="nav-todos" href="/todos" class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯TODOs</a>
 
-                    <a
-                        href="/help"
-                        class="text-zinc-400 hover:text-sky-400 transition-colors"
-                        title="Documentação"
-                        >❓</a
-                    >
+                <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Documentação">❓</a>
 
-                    <button
-                        onclick="openSettings()"
-                        class="text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                        title="Configurações"
-                    >
-                        ⚙️
-                    </button>
-                    <button
-                        onclick="logout()"
-                        class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
-                        title="Sair"
-                    >
-                        ➜]
-                    </button>
-                </div>
-                <button
-                    id="mobile-menu-toggle"
-                    class="md:hidden text-zinc-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
-                    aria-expanded="false"
-                    aria-controls="mobile-menu"
-                    title="Abrir menu"
-                >
-                    <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <path
-                            d="M4 7H20"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                        />
-                        <path
-                            d="M4 12H20"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                        />
-                        <path
-                            d="M4 17H20"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                        />
-                    </svg>
+                <button onclick="openSettings()" class="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    title="Configurações">
+                    ⚙️
+                </button>
+                <button onclick="logout()" class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                    title="Sair">
+                    ➜]
                 </button>
             </div>
-            <div
-                id="mobile-menu"
-                class="md:hidden hidden border-t border-zinc-900/50 bg-zinc-950/95 px-4 pb-3 pt-2 space-y-2 text-[12px] font-bold tracking-wide uppercase"
-            >
-                <a
-                    href="#"
-                    onclick="
+            <button id="mobile-menu-toggle"
+                class="md:hidden text-zinc-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
+                aria-expanded="false" aria-controls="mobile-menu" title="Abrir menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M4 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M4 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+            </button>
+        </div>
+        <div id="mobile-menu"
+            class="md:hidden hidden border-t border-zinc-900/50 bg-zinc-950/95 px-4 pb-3 pt-2 space-y-2 text-[12px] font-bold tracking-wide uppercase">
+            <a href="#" onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden');
                         return createNewNote();
                     "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
-                    >📄 NOTA</a
-                >
-                <a
-                    href="#"
-                    id="mobile-pdf-link"
-                    onclick="
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">📄
+                +NOTA</a>
+            <a href="#" id="mobile-pdf-link" onclick="
                         activePdfUploadButton = this;
                         document
                             .getElementById('mobile-menu')
@@ -406,13 +255,9 @@
                         document.getElementById('pdf-file-input').click();
                         return false;
                     "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
-                    >📕 PDF</a
-                >
-                <a
-                    href="#"
-                    id="mobile-zip-link"
-                    onclick="
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors">📕
+                +PDF</a>
+            <a href="#" id="mobile-zip-link" onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden');
@@ -422,1554 +267,1403 @@
                         document.getElementById('zip-file-input').click();
                         return false;
                     "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
-                    >📦 ANEXO</a
-                >
-                <button
-                    id="mobile-capture-link"
-                    onclick="
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors">📦
+                +ANEXO</a>
+            <button id="mobile-capture-link" onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden');
                         return promptCapture(this);
                     "
-                    class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 transition-colors"
-                >
-                    🌐 CAPTURA
-                </button>
+                class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 transition-colors">
+                🌐 +CAPTURA
+            </button>
 
-                <a
-                    href="/todos"
-                    onclick="
+            <a id="mobile-nav-todos" href="/todos" onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden')
                     "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
-                >
-                    🎯 TODOs
-                </a>
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors">
+                🎯 TODOs
+            </a>
 
-                <a
-                    href="#"
-                    onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        openSettingsTab('marcadores');
-                        return false;
-                    "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors"
-                >
-                    🔧 Marcadores
-                </a>
-
-                <a
-                    href="/help"
-                    onclick="
+            <a href="/help" onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden')
                     "
-                    class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors"
-                >
-                    📖 Tutorial
-                </a>
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors">
+                📖 Tutorial
+            </a>
 
-                <button
-                    onclick="
+            <button onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden');
                         openSettings();
                     "
-                    class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
-                >
-                    ⚙️ Config
-                </button>
-                <button
-                    onclick="
+                class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">
+                ⚙️ Config
+            </button>
+            <button onclick="
                         document
                             .getElementById('mobile-menu')
                             .classList.add('hidden');
                         logout();
                     "
-                    class="w-full text-left rounded-lg px-3 py-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-900 transition-colors"
-                >
-                    Sair
+                class="w-full text-left rounded-lg px-3 py-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-900 transition-colors">
+                Sair
+            </button>
+        </div>
+    </nav>
+    <main class="max-w-4xl mx-auto px-4 py-6">
+        {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
+        .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
+        "editorContent" .}}{{end}} {{if eq .ContentBlock
+        "helpContent"}}{{template "helpContent" .}}{{end}} {{if eq
+        .ContentBlock "todosContent"}}{{template "todosContent"
+        .}}{{end}} {{if eq .ContentBlock "settingsContent"}}{{template
+        "settingsContent" .}}{{end}}
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal"
+        class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div
+            class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 max-h-[85vh] flex flex-col">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+                <h2 class="text-base font-bold text-zinc-200">
+                    ⚙️ Configurações
+                </h2>
+                <button onclick="closeSettings()"
+                    class="text-zinc-500 hover:text-white transition-colors text-xl leading-none">
+                    &times;
                 </button>
             </div>
-        </nav>
-        <main class="max-w-4xl mx-auto px-4 py-6">
-            {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
-            .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
-            "editorContent" .}}{{end}} {{if eq .ContentBlock
-            "helpContent"}}{{template "helpContent" .}}{{end}} {{if eq
-            .ContentBlock "todosContent"}}{{template "todosContent"
-            .}}{{end}} {{if eq .ContentBlock "settingsContent"}}{{template
-            "settingsContent" .}}{{end}}
-        </main>
 
-        <!-- Settings Modal -->
-        <div
-            id="settings-modal"
-            class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm"
-        >
-            <div
-                class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 max-h-[85vh] flex flex-col"
-            >
-                <!-- Header -->
-                <div
-                    class="flex items-center justify-between px-6 py-4 border-b border-zinc-800"
-                >
-                    <h2 class="text-base font-bold text-zinc-200">
-                        ⚙️ Configurações
-                    </h2>
-                    <button
-                        onclick="closeSettings()"
-                        class="text-zinc-500 hover:text-white transition-colors text-xl leading-none"
-                    >
-                        &times;
-                    </button>
-                </div>
-
-                <!-- Tabs -->
-                <div class="settings-tabs-container flex gap-0 px-6 pt-4 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scroll-smooth whitespace-nowrap flex-nowrap" style="-webkit-overflow-scrolling:touch;">
-                    <button
-                        data-tab="arquivamento"
-                        onclick="switchSettingsTab('arquivamento')"
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors"
-                    >
-                        🗂️ Arquivamento
-                    </button>
-                    <button
-                        data-tab="restaurar"
-                        onclick="
+            <!-- Tabs -->
+            <div class="settings-tabs-container flex gap-0 px-6 pt-4 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scroll-smooth whitespace-nowrap flex-nowrap"
+                style="-webkit-overflow-scrolling:touch;">
+                <button data-tab="arquivamento" onclick="switchSettingsTab('arquivamento')"
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors">
+                    🗂️ Arquivamento
+                </button>
+                <button data-tab="restaurar" onclick="
                             switchSettingsTab('restaurar');
                             loadArchives();
                         "
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
-                    >
-                        📦 Restaurar
-                    </button>
-                    <button
-                        data-tab="backup"
-                        onclick="switchSettingsTab('backup')"
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
-                    >
-                        💾 Backup
-                    </button>
-                    <button
-                        data-tab="stopwords"
-                        onclick="
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    📦 Restaurar
+                </button>
+                <button data-tab="backup" onclick="switchSettingsTab('backup')"
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    💾 Backup
+                </button>
+                <button data-tab="stopwords" onclick="
                             switchSettingsTab('stopwords');
                             loadStopwords();
                         "
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
-                    >
-                        🚫 Stopwords
-                    </button>
-                    <button
-                        data-tab="marcadores"
-                        onclick="
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    🚫 Stopwords
+                </button>
+                <button data-tab="marcadores" onclick="
                             switchSettingsTab('marcadores');
                             loadMarcadores();
                         "
-                        class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors"
-                    >
-                        🔖 Marcadores
-                    </button>
-                </div>
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    🔖 Marcadores
+                </button>
+            </div>
 
-                <!-- Tab Content -->
-                <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-                    <!-- Arquivamento Tab -->
-                    <div id="tab-arquivamento" class="settings-tab space-y-6">
-                        <p class="text-sm text-zinc-400">
-                            Selecione filtros para encontrar notas, marque quais
-                            arquivar e clique em "Arquivar Selecionadas". As
-                            notas serão zipadas e movidas para a pasta de
-                            arquivos mortos, podendo ser restauradas depois.
-                        </p>
+            <!-- Tab Content -->
+            <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                <!-- Arquivamento Tab -->
+                <div id="tab-arquivamento" class="settings-tab space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Selecione filtros para encontrar notas, marque quais
+                        arquivar e clique em "Arquivar Selecionadas". As
+                        notas serão zipadas e movidas para a pasta de
+                        arquivos mortos, podendo ser restauradas depois.
+                    </p>
 
-                        <!-- Filtro 1: Por Idade -->
-                        <div
-                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
-                        >
-                            <label
-                                class="flex items-center gap-3 cursor-pointer mb-3"
-                            >
-                                <input
-                                    type="checkbox"
-                                    id="filter-by-age"
-                                    class="accent-sky-500 w-4 h-4 rounded"
-                                />
-                                <span
-                                    class="text-sm font-semibold text-zinc-200"
-                                    >Filtrar por idade</span
-                                >
-                            </label>
-                            <div class="ml-7 space-y-2">
-                                <label class="block text-xs text-zinc-500"
-                                    >Notas mais velhas que:
-                                    <span
-                                        id="age-value-display"
-                                        class="text-sky-400 font-bold"
-                                        >2 anos</span
-                                    ></label
-                                >
-                                <input
-                                    type="range"
-                                    id="filter-age-slider"
-                                    min="1"
-                                    max="10"
-                                    value="2"
-                                    step="1"
-                                    class="w-full accent-sky-500 cursor-pointer"
-                                />
-                                <div
-                                    class="flex justify-between text-[10px] text-zinc-600"
-                                >
-                                    <span>1 ano</span>
-                                    <span>5 anos</span>
-                                    <span>10 anos</span>
-                                </div>
+                    <!-- Filtro 1: Por Idade -->
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <label class="flex items-center gap-3 cursor-pointer mb-3">
+                            <input type="checkbox" id="filter-by-age" class="accent-sky-500 w-4 h-4 rounded" />
+                            <span class="text-sm font-semibold text-zinc-200">Filtrar por idade</span>
+                        </label>
+                        <div class="ml-7 space-y-2">
+                            <label class="block text-xs text-zinc-500">Notas mais velhas que:
+                                <span id="age-value-display" class="text-sky-400 font-bold">2 anos</span></label>
+                            <input type="range" id="filter-age-slider" min="1" max="10" value="2" step="1"
+                                class="w-full accent-sky-500 cursor-pointer" />
+                            <div class="flex justify-between text-[10px] text-zinc-600">
+                                <span>1 ano</span>
+                                <span>5 anos</span>
+                                <span>10 anos</span>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Filtro 2: Por Tag (múltiplas) -->
-                        <div
-                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
-                        >
-                            <label
-                                class="flex items-center gap-3 cursor-pointer mb-3"
-                            >
-                                <input
-                                    type="checkbox"
-                                    id="filter-by-tag"
-                                    class="accent-sky-500 w-4 h-4 rounded"
-                                />
-                                <span
-                                    class="text-sm font-semibold text-zinc-200"
-                                    >Filtrar por tag(s)</span
-                                >
-                            </label>
-                            <div class="ml-7">
-                                <label class="block text-xs text-zinc-500 mb-2"
-                                    >Notas que contenham estas tags (separadas
-                                    por vírgula):</label
-                                >
-                                <input
-                                    type="text"
-                                    id="filter-tag-names"
-                                    placeholder="ex: temporario, rascunho, lixo"
-                                    class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors"
-                                />
-                            </div>
+                    <!-- Filtro 2: Por Tag (múltiplas) -->
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <label class="flex items-center gap-3 cursor-pointer mb-3">
+                            <input type="checkbox" id="filter-by-tag" class="accent-sky-500 w-4 h-4 rounded" />
+                            <span class="text-sm font-semibold text-zinc-200">Filtrar por tag(s)</span>
+                        </label>
+                        <div class="ml-7">
+                            <label class="block text-xs text-zinc-500 mb-2">Notas que contenham estas tags (separadas
+                                por vírgula):</label>
+                            <input type="text" id="filter-tag-names" placeholder="ex: temporario, rascunho, lixo"
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors" />
                         </div>
+                    </div>
 
-                        <!-- Preview Area -->
-                        <div id="bulk-preview-area" class="hidden space-y-3">
-                            <div
-                                class="bg-zinc-800/30 rounded-xl p-3 border border-zinc-700/50"
-                            >
-                                <div
-                                    class="text-xs text-zinc-500 mb-2 font-semibold flex items-center justify-between"
-                                >
-                                    <span
-                                        >Notas encontradas (<span
-                                            id="preview-count"
-                                            >0</span
-                                        >)</span
-                                    >
-                                    <span
-                                        id="preview-page-info"
-                                        class="text-[10px] text-zinc-600"
-                                    ></span>
-                                </div>
-                                <div class="flex items-center gap-2 mb-2">
-                                    <button
-                                        onclick="selectAllPreview(true)"
-                                        class="text-[10px] font-semibold text-sky-400 hover:text-sky-300 transition-colors"
-                                    >
-                                        ✓ Selecionar Todos
-                                    </button>
-                                    <span class="text-zinc-700 text-[10px]"
-                                        >|</span
-                                    >
-                                    <button
-                                        onclick="selectAllPreview(false)"
-                                        class="text-[10px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors"
-                                    >
-                                        ✕ Desmarcar Todos
-                                    </button>
-                                </div>
-                                <div id="preview-list" class="space-y-1"></div>
+                    <!-- Preview Area -->
+                    <div id="bulk-preview-area" class="hidden space-y-3">
+                        <div class="bg-zinc-800/30 rounded-xl p-3 border border-zinc-700/50">
+                            <div class="text-xs text-zinc-500 mb-2 font-semibold flex items-center justify-between">
+                                <span>Notas encontradas (<span id="preview-count">0</span>)</span>
+                                <span id="preview-page-info" class="text-[10px] text-zinc-600"></span>
                             </div>
-                            <div
-                                id="preview-pagination"
-                                class="hidden flex items-center justify-between gap-2"
-                            >
-                                <button
-                                    id="preview-prev-btn"
-                                    onclick="previewPage(-1)"
-                                    class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-300 text-xs font-semibold transition-colors"
-                                >
-                                    ← Anterior
+                            <div class="flex items-center gap-2 mb-2">
+                                <button onclick="selectAllPreview(true)"
+                                    class="text-[10px] font-semibold text-sky-400 hover:text-sky-300 transition-colors">
+                                    ✓ Selecionar Todos
                                 </button>
-                                <button
-                                    id="preview-next-btn"
-                                    onclick="previewPage(1)"
-                                    class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-300 text-xs font-semibold transition-colors"
-                                >
-                                    Próximo →
+                                <span class="text-zinc-700 text-[10px]">|</span>
+                                <button onclick="selectAllPreview(false)"
+                                    class="text-[10px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors">
+                                    ✕ Desmarcar Todos
                                 </button>
                             </div>
-                            <div class="flex gap-2">
-                                <button
-                                    id="confirm-archive-btn"
-                                    onclick="doBulkArchive()"
-                                    class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
-                                >
-                                    📦 Arquivar Selecionadas
-                                </button>
-                                <button
-                                    id="confirm-delete-btn"
-                                    onclick="doBulkDelete()"
-                                    class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
-                                >
-                                    🗑️ Excluir Selecionadas
-                                </button>
-                            </div>
+                            <div id="preview-list" class="space-y-1"></div>
                         </div>
-
-                        <!-- Action -->
-                        <button
-                            id="bulk-preview-btn"
-                            onclick="previewBulkDelete()"
-                            class="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
-                        >
-                            🔍 Previsualizar Notas
-                        </button>
-
-                        <!-- Cleanup orphan images -->
-                        <div class="border-t border-zinc-800 pt-4">
-                            <p class="text-[10px] text-zinc-600 mb-2">
-                                Imagens enviadas pelo editor que não são mais
-                                referenciadas por nenhuma nota podem ser
-                                removidas para liberar espaço.
-                            </p>
-                            <button
-                                id="cleanup-images-btn"
-                                onclick="cleanupOrphanImages()"
-                                class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors"
-                            >
-                                🧹 Limpar imagens órfãs
+                        <div id="preview-pagination" class="hidden flex items-center justify-between gap-2">
+                            <button id="preview-prev-btn" onclick="previewPage(-1)"
+                                class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-300 text-xs font-semibold transition-colors">
+                                ← Anterior
+                            </button>
+                            <button id="preview-next-btn" onclick="previewPage(1)"
+                                class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-300 text-xs font-semibold transition-colors">
+                                Próximo →
+                            </button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="confirm-archive-btn" onclick="doBulkArchive()"
+                                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors">
+                                📦 Arquivar Selecionadas
+                            </button>
+                            <button id="confirm-delete-btn" onclick="doBulkDelete()"
+                                class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors">
+                                🗑️ Excluir Selecionadas
                             </button>
                         </div>
                     </div>
 
-                    <!-- Restaurar Tab -->
-                    <div
-                        id="tab-restaurar"
-                        class="settings-tab hidden space-y-6"
-                    >
-                        <p class="text-sm text-zinc-400">
-                            Arquivos de notas archivadas. Restaure para trazer
-                            as notas de volta ao diretório de trabalho.
+                    <!-- Action -->
+                    <button id="bulk-preview-btn" onclick="previewBulkDelete()"
+                        class="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors">
+                        🔍 Previsualizar Notas
+                    </button>
+
+                    <!-- Cleanup orphan images -->
+                    <div class="border-t border-zinc-800 pt-4">
+                        <p class="text-[10px] text-zinc-600 mb-2">
+                            Imagens enviadas pelo editor que não são mais
+                            referenciadas por nenhuma nota podem ser
+                            removidas para liberar espaço.
                         </p>
-                        <div id="archives-list">
-                            <div class="text-center py-10">
-                                <div
-                                    class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"
-                                ></div>
-                                <p class="text-xs text-zinc-600">
-                                    Carregando...
-                                </p>
+                        <button id="cleanup-images-btn" onclick="cleanupOrphanImages()"
+                            class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors">
+                            🧹 Limpar imagens órfãs
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Restaurar Tab -->
+                <div id="tab-restaurar" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Arquivos de notas archivadas. Restaure para trazer
+                        as notas de volta ao diretório de trabalho.
+                    </p>
+                    <div id="archives-list">
+                        <div class="text-center py-10">
+                            <div
+                                class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3">
                             </div>
+                            <p class="text-xs text-zinc-600">
+                                Carregando...
+                            </p>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Backup Tab -->
-                    <div id="tab-backup" class="settings-tab hidden space-y-6">
-                        <p class="text-sm text-zinc-400">
-                            Baixe todas as suas notas (markdown), PDFs e anexos
-                            em um único arquivo ZIP. Arquivos da pasta
-                            <code class="text-zinc-500">archives/</code> não são
-                            incluídos.
+                <!-- Backup Tab -->
+                <div id="tab-backup" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Baixe todas as suas notas (markdown), PDFs e anexos
+                        em um único arquivo ZIP. Arquivos da pasta
+                        <code class="text-zinc-500">archives/</code> não são
+                        incluídos.
+                    </p>
+
+                    <div class="bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 text-center">
+                        <div class="text-4xl mb-3">💾</div>
+                        <p class="text-sm text-zinc-300 font-semibold mb-1">
+                            Backup completo dos dados
                         </p>
-
-                        <div
-                            class="bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 text-center"
-                        >
-                            <div class="text-4xl mb-3">💾</div>
-                            <p class="text-sm text-zinc-300 font-semibold mb-1">
-                                Backup completo dos dados
-                            </p>
-                            <p class="text-xs text-zinc-500 mb-4">
-                                Notas, PDFs e attachments
-                            </p>
-                            <a
-                                id="backup-download-btn"
-                                href="/api/backup"
-                                download
-                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors"
-                                onclick="
+                        <p class="text-xs text-zinc-500 mb-4">
+                            Notas, PDFs e attachments
+                        </p>
+                        <a id="backup-download-btn" href="/api/backup" download
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors"
+                            onclick="
                                     this.classList.add(
                                         'opacity-50',
                                         'pointer-events-none',
                                     );
                                     this.textContent = '⏳ Gerando...';
-                                "
-                            >
-                                ⬇️ Baixar ZIP
-                            </a>
-                        </div>
+                                ">
+                            ⬇️ Baixar ZIP
+                        </a>
+                    </div>
 
-                        <div
-                            class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50"
-                        >
-                            <p class="text-xs text-zinc-500 leading-relaxed">
-                                <strong class="text-zinc-400"
-                                    >O que é incluído:</strong
-                                ><br />
-                                📄 Notas markdown da tabela
-                                <code class="text-zinc-500">notes</code><br />
-                                📕 PDFs da pasta
-                                <code class="text-zinc-500">pdfs/</code><br />
-                                📦 Anexos da pasta
-                                <code class="text-zinc-500">attachments/</code>
-                            </p>
+                    <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
+                        <p class="text-xs text-zinc-500 leading-relaxed">
+                            <strong class="text-zinc-400">O que é incluído:</strong><br />
+                            📄 Notas markdown da tabela
+                            <code class="text-zinc-500">notes</code><br />
+                            📕 PDFs da pasta
+                            <code class="text-zinc-500">pdfs/</code><br />
+                            📦 Anexos da pasta
+                            <code class="text-zinc-500">attachments/</code>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Stopwords Tab -->
+                <div id="tab-stopwords" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Adicione palavras que devem ser ignoradas na
+                        extração de palavras-chave (RAKE). As stopwords
+                        personalizadas são salvas em
+                        <code class="text-zinc-500">docs/stopwords-custom.json</code>.
+                    </p>
+
+                    <!-- Lista de stopwords atuais -->
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-sm font-semibold text-zinc-200">Stopwords atuais</span>
+                            <span id="stopwords-count" class="text-xs text-zinc-500">0</span>
+                        </div>
+                        <div id="stopwords-list" class="flex flex-wrap gap-1.5 min-h-[40px]">
+                            <span class="text-xs text-zinc-600">
+                                Nenhuma stopword personalizada ainda.
+                            </span>
                         </div>
                     </div>
 
-                    <!-- Stopwords Tab -->
-                    <div
-                        id="tab-stopwords"
-                        class="settings-tab hidden space-y-6"
-                    >
-                        <p class="text-sm text-zinc-400">
-                            Adicione palavras que devem ser ignoradas na
-                            extração de palavras-chave (RAKE). As stopwords
-                            personalizadas são salvas em
-                            <code class="text-zinc-500"
-                                >docs/stopwords-custom.json</code
-                            >.
-                        </p>
-
-                        <!-- Lista de stopwords atuais -->
-                        <div
-                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
-                        >
-                            <div class="flex items-center justify-between mb-3">
-                                <span
-                                    class="text-sm font-semibold text-zinc-200"
-                                    >Stopwords atuais</span
-                                >
-                                <span
-                                    id="stopwords-count"
-                                    class="text-xs text-zinc-500"
-                                    >0</span
-                                >
-                            </div>
-                            <div
-                                id="stopwords-list"
-                                class="flex flex-wrap gap-1.5 min-h-[40px]"
-                            >
-                                <span class="text-xs text-zinc-600">
-                                    Nenhuma stopword personalizada ainda.
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Adicionar nova stopword -->
-                        <div
-                            class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
-                        >
-                            <label
-                                class="block text-sm font-semibold text-zinc-200 mb-2"
-                                >Adicionar stopword</label
-                            >
-                            <div class="flex gap-2">
-                                <input
-                                    type="text"
-                                    id="new-stopword-input"
-                                    placeholder="ex: exemplo, teste, lorem"
-                                    class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors"
-                                    onkeydown="
+                    <!-- Adicionar nova stopword -->
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <label class="block text-sm font-semibold text-zinc-200 mb-2">Adicionar stopword</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="new-stopword-input" placeholder="ex: exemplo, teste, lorem"
+                                class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors"
+                                onkeydown="
                                         if (event.key === 'Enter')
                                             addStopword();
-                                    "
-                                />
-                                <button
-                                    onclick="addStopword()"
-                                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors shrink-0"
-                                >
-                                    + Adicionar
-                                </button>
-                            </div>
-                            <p class="text-[10px] text-zinc-600 mt-1.5">
-                                Digite uma palavra e pressione Enter ou clique
-                                em Adicionar.
-                            </p>
-                        </div>
-
-                        <!-- Botão de recarregar -->
-                        <button
-                            onclick="loadStopwords()"
-                            class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors"
-                        >
-                            🔄 Recarregar lista
-                        </button>
-                    </div>
-
-                    <!-- Marcadores Tab -->
-                    <div
-                        id="tab-marcadores"
-                        class="settings-tab hidden space-y-6"
-                    >
-                        <p class="text-sm text-zinc-400">
-                            Configure quais palavras-chave aparecem como TODOs na página
-                            <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
-                            Apenas marcadores <strong>ativos</strong> são detectados nas notas.
-                        </p>
-
-                        <!-- Add new marker -->
-                        <div class="flex gap-2">
-                            <input
-                                id="modal-new-marker"
-                                type="text"
-                                placeholder="Nova palavra-chave (ex: HACK)"
-                                class="flex-1 px-3 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 uppercase"
-                                maxlength="20"
-                            />
-                            <select
-                                id="modal-new-color"
-                                class="px-2 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:outline-none focus:border-zinc-600"
-                            >
-                                <option value="#3b82f6" style="background:#3b82f6">🔵 Azul</option>
-                                <option value="#f59e0b" style="background:#f59e0b">🟡 Âmbar</option>
-                                <option value="#ef4444" style="background:#ef4444">🔴 Vermelho</option>
-                                <option value="#10b981" style="background:#10b981">🟢 Verde</option>
-                                <option value="#8b5cf6" style="background:#8b5cf6">🟣 Roxo</option>
-                                <option value="#06b6d4" style="background:#06b6d4">🔵 Ciano</option>
-                                <option value="#f97316" style="background:#f97316">🟠 Laranja</option>
-                                <option value="#ec4899" style="background:#ec4899">🩷 Rosa</option>
-                            </select>
-                            <button
-                                id="modal-btn-add-marker"
-                                class="px-4 py-2 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
-                            >
+                                    " />
+                            <button onclick="addStopword()"
+                                class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors shrink-0">
                                 + Adicionar
                             </button>
                         </div>
+                        <p class="text-[10px] text-zinc-600 mt-1.5">
+                            Digite uma palavra e pressione Enter ou clique
+                            em Adicionar.
+                        </p>
+                    </div>
 
-                        <!-- Markers list -->
-                        <div id="modal-markers-list" class="space-y-2">
-                            <div class="text-center py-8">
-                                <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-                                <p class="text-xs text-zinc-600">Carregando...</p>
+                    <!-- Botão de recarregar -->
+                    <button onclick="loadStopwords()"
+                        class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition-colors">
+                        🔄 Recarregar lista
+                    </button>
+                </div>
+
+                <!-- Marcadores Tab -->
+                <div id="tab-marcadores" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Configure quais palavras-chave aparecem como TODOs na página
+                        <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
+                        Apenas marcadores <strong>ativos</strong> são detectados nas notas.
+                    </p>
+
+                    <!-- Add new marker -->
+                    <div class="flex gap-2">
+                        <input id="modal-new-marker" type="text" placeholder="Nova palavra-chave (ex: HACK)"
+                            class="flex-1 px-3 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 uppercase"
+                            maxlength="20" />
+                        <select id="modal-new-color"
+                            class="px-2 py-2 text-[13px] bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:outline-none focus:border-zinc-600">
+                            <option value="#3b82f6" style="background:#3b82f6">🔵 Azul</option>
+                            <option value="#f59e0b" style="background:#f59e0b">🟡 Âmbar</option>
+                            <option value="#ef4444" style="background:#ef4444">🔴 Vermelho</option>
+                            <option value="#10b981" style="background:#10b981">🟢 Verde</option>
+                            <option value="#8b5cf6" style="background:#8b5cf6">🟣 Roxo</option>
+                            <option value="#06b6d4" style="background:#06b6d4">🔵 Ciano</option>
+                            <option value="#f97316" style="background:#f97316">🟠 Laranja</option>
+                            <option value="#ffffff" style="background:#ffffff; color:#000000;">⚪ Branco</option>
+                        </select>
+                        <button id="modal-btn-add-marker"
+                            class="px-4 py-2 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all">
+                            + Adicionar
+                        </button>
+                    </div>
+
+                    <!-- Markers list -->
+                    <div id="modal-markers-list" class="space-y-2">
+                        <div class="text-center py-8">
+                            <div
+                                class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3">
                             </div>
+                            <p class="text-xs text-zinc-600">Carregando...</p>
                         </div>
+                    </div>
 
-                        <!-- Save status -->
-                        <span id="modal-save-status" class="text-xs text-zinc-500 block text-right"></span>
+                    <!-- Save status -->
+                    <span id="modal-save-status" class="text-xs text-zinc-500 block text-right"></span>
 
-                        <!-- Actions -->
-                        <div class="flex gap-3">
-                            <button
-                                id="modal-btn-save"
-                                class="flex-1 py-2.5 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all"
-                            >
-                                💾 Salvar configurações
-                            </button>
-                            <button
-                                id="modal-btn-reset"
-                                class="px-4 py-2.5 text-[13px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all border border-zinc-700"
-                            >
-                                ↩ Restaurar padrão
-                            </button>
-                        </div>
+                    <!-- Actions -->
+                    <div class="flex gap-3">
+                        <button id="modal-btn-save"
+                            class="flex-1 py-2.5 text-[13px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-all">
+                            💾 Salvar configurações
+                        </button>
+                        <button id="modal-btn-reset"
+                            class="px-4 py-2.5 text-[13px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all border border-zinc-700">
+                            ↩ Restaurar padrão
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
-    </body>
+    </div>
+</body>
 
-    <script>
-        // ── PDF Upload ──
-        var activePdfUploadButton = null;
+<script>
+    // ── PDF Upload ──
+    var activePdfUploadButton = null;
 
-        document.addEventListener("change", async function (e) {
-            if (e.target && e.target.id === "pdf-file-input") {
-                var file = e.target.files[0];
-                if (!file) return;
-                var link =
-                    activePdfUploadButton ||
-                    document.getElementById("pdf-upload-link");
-                setButtonLoading(link, true, "Processando...", "📕");
-                var fd = new FormData();
-                fd.append("file", file);
-                try {
-                    var resp = await fetch("/upload", {
-                        method: "POST",
-                        body: fd,
-                    });
-                    if (resp.ok) {
-                        window.location.href = "/";
-                        return;
-                    }
-                    setButtonLoading(link, false, "PDF", "📕");
-                    alert("Erro ao fazer upload do PDF.");
-                } catch (err) {
-                    setButtonLoading(link, false, "PDF", "📕");
-                    alert("Erro ao fazer upload do PDF.");
+    document.addEventListener("change", async function (e) {
+        if (e.target && e.target.id === "pdf-file-input") {
+            var file = e.target.files[0];
+            if (!file) return;
+            var link =
+                activePdfUploadButton ||
+                document.getElementById("pdf-upload-link");
+            setButtonLoading(link, true, "Processando...", "📕");
+            var fd = new FormData();
+            fd.append("file", file);
+            try {
+                var resp = await fetch("/upload", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (resp.ok) {
+                    window.location.href = "/";
+                    return;
                 }
-                e.target.value = "";
+                setButtonLoading(link, false, "PDF", "📕");
+                alert("Erro ao fazer upload do PDF.");
+            } catch (err) {
+                setButtonLoading(link, false, "PDF", "📕");
+                alert("Erro ao fazer upload do PDF.");
+            }
+            e.target.value = "";
+        }
+    });
+
+    // ── ZIP Upload ──
+    document
+        .getElementById("zip-file-input")
+        .addEventListener("change", async function (e) {
+            var files = e.target.files;
+            if (!files || files.length === 0) return;
+            var fd = new FormData();
+            for (var i = 0; i < files.length; i++) {
+                fd.append("files", files[i]);
+            }
+            var link = document.getElementById("zip-upload-link");
+            setButtonLoading(link, true, "ZIPando...", "📦");
+            try {
+                var resp = await fetch("/api/upload-attachment", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (resp.ok) {
+                    window.location.href = "/";
+                    return;
+                }
+                setButtonLoading(link, false, "ANEXO", "📦");
+                alert("Erro ao criar anexo.");
+            } catch (err) {
+                setButtonLoading(link, false, "ANEXO", "📦");
+                alert("Erro: " + err.message);
             }
         });
 
-        // ── ZIP Upload ──
-        document
-            .getElementById("zip-file-input")
-            .addEventListener("change", async function (e) {
-                var files = e.target.files;
-                if (!files || files.length === 0) return;
-                var fd = new FormData();
-                for (var i = 0; i < files.length; i++) {
-                    fd.append("files", files[i]);
-                }
-                var link = document.getElementById("zip-upload-link");
-                setButtonLoading(link, true, "ZIPando...", "📦");
-                try {
-                    var resp = await fetch("/api/upload-attachment", {
-                        method: "POST",
-                        body: fd,
-                    });
-                    if (resp.ok) {
-                        window.location.href = "/";
-                        return;
-                    }
-                    setButtonLoading(link, false, "ANEXO", "📦");
-                    alert("Erro ao criar anexo.");
-                } catch (err) {
-                    setButtonLoading(link, false, "ANEXO", "📦");
-                    alert("Erro: " + err.message);
-                }
-            });
-
-        document
-            .getElementById("mobile-menu-toggle")
-            .addEventListener("click", function () {
-                var menu = document.getElementById("mobile-menu");
-                var expanded = this.getAttribute("aria-expanded") === "true";
-                if (expanded) {
-                    menu.classList.add("hidden");
-                    this.setAttribute("aria-expanded", "false");
-                } else {
-                    menu.classList.remove("hidden");
-                    this.setAttribute("aria-expanded", "true");
-                }
-            });
-
-        // ── New Note com nome único ──
-
-        // ── Captura de artigo/YouTube ──
-        function promptCapture(button) {
-            var url = prompt("Insira a URL do artigo ou video do YouTube:");
-            if (!url) return false;
-            if (button) {
-                setButtonLoading(button, true, "Capturando...", "🌐");
+    document
+        .getElementById("mobile-menu-toggle")
+        .addEventListener("click", function () {
+            var menu = document.getElementById("mobile-menu");
+            var expanded = this.getAttribute("aria-expanded") === "true";
+            if (expanded) {
+                menu.classList.add("hidden");
+                this.setAttribute("aria-expanded", "false");
+            } else {
+                menu.classList.remove("hidden");
+                this.setAttribute("aria-expanded", "true");
             }
-            fetch("/api/capture", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: url }),
+        });
+
+    // ── New Note com nome único ──
+
+    // ── Captura de artigo/YouTube ──
+    function promptCapture(button) {
+        var url = prompt("Insira a URL do artigo ou video do YouTube:");
+        if (!url) return false;
+        if (button) {
+            setButtonLoading(button, true, "Capturando...", "🌐");
+        }
+        fetch("/api/capture", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: url }),
+        })
+            .then(function (r) {
+                if (!r.ok)
+                    return r.text().then(function (t) {
+                        throw new Error(t);
+                    });
+                return r.json();
             })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    window.location.href =
-                        "/editor?file=" + encodeURIComponent(data.filename);
-                })
-                .catch(function (err) {
-                    if (button) {
-                        setButtonLoading(button, false, "CAPTURA", "🌐");
-                    }
-                    alert("Erro ao capturar: " + err.message);
-                });
-            return false;
-        }
-
-        function setButtonLoading(el, loading, text, icon) {
-            if (!el) return;
-            if (loading) {
-                el.classList.add("button-loading");
-                el.innerHTML = '<span class="loading-spinner"></span>' + text;
-            } else {
-                el.classList.remove("button-loading");
-                el.innerHTML = icon ? icon + " " + text : text;
-            }
-        }
-
-        function createNewNote() {
-            window.location.href = "/editor";
-            return false;
-        }
-
-
-
-        // ── Auth Integration ──
-        function logout() {
-            localStorage.removeItem("ton_auth");
-            document.cookie = "ton_auth=;path=/;max-age=0";
-            window.location.href = "/login";
-        }
-
-        // ── Configurações (⚙️ Settings Modal) ──
-        function openSettings() {
-            document
-                .getElementById("settings-modal")
-                .classList.remove("hidden");
-            switchSettingsTab("arquivamento");
-        }
-
-        function openSettingsTab(tabName) {
-            openSettings();
-            switchSettingsTab(tabName);
-            // Load tab-specific data
-            if (tabName === "marcadores") loadMarcadores();
-            if (tabName === "stopwords") loadStopwords();
-            if (tabName === "restaurar") loadArchives();
-        }
-
-        function closeSettings() {
-            document.getElementById("settings-modal").classList.add("hidden");
-        }
-        function switchSettingsTab(name) {
-            document.querySelectorAll(".settings-tab").forEach(function (el) {
-                el.classList.add("hidden");
+            .then(function (data) {
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent(data.filename);
+            })
+            .catch(function (err) {
+                if (button) {
+                    setButtonLoading(button, false, "CAPTURA", "🌐");
+                }
+                alert("Erro ao capturar: " + err.message);
             });
-            document.getElementById("tab-" + name).classList.remove("hidden");
-            document
-                .querySelectorAll(".settings-tab-btn")
-                .forEach(function (el) {
-                    el.classList.remove("text-white", "border-sky-500");
-                    el.classList.add("text-zinc-400", "border-transparent");
-                });
-            var btn = document.querySelector('[data-tab="' + name + '"]');
-            if (btn) {
-                btn.classList.add("text-white", "border-sky-500");
-                btn.classList.remove("text-zinc-400", "border-transparent");
-            }
-        }
+        return false;
+    }
 
-        // ── Age slider: update display live ──
-        document.addEventListener("DOMContentLoaded", function () {
-            var slider = document.getElementById("filter-age-slider");
-            if (!slider) return;
-            function updateAgeDisplay() {
-                var v = parseInt(slider.value);
-                document.getElementById("age-value-display").textContent =
-                    v + (v === 1 ? " ano" : " anos");
-            }
-            slider.addEventListener("input", updateAgeDisplay);
-            updateAgeDisplay();
+    function setButtonLoading(el, loading, text, icon) {
+        if (!el) return;
+        if (loading) {
+            el.classList.add("button-loading");
+            el.innerHTML = '<span class="loading-spinner"></span>' + text;
+        } else {
+            el.classList.remove("button-loading");
+            el.innerHTML = icon ? icon + " " + text : text;
+        }
+    }
+
+    function createNewNote() {
+        window.location.href = "/editor";
+        return false;
+    }
+
+
+
+    // ── Auth Integration ──
+    function logout() {
+        localStorage.removeItem("ton_auth");
+        document.cookie = "ton_auth=;path=/;max-age=0";
+        window.location.href = "/login";
+    }
+
+    // ── Configurações (⚙️ Settings Modal) ──
+    function openSettings() {
+        document
+            .getElementById("settings-modal")
+            .classList.remove("hidden");
+        switchSettingsTab("arquivamento");
+    }
+
+    function openSettingsTab(tabName) {
+        openSettings();
+        switchSettingsTab(tabName);
+        // Load tab-specific data
+        if (tabName === "marcadores") loadMarcadores();
+        if (tabName === "stopwords") loadStopwords();
+        if (tabName === "restaurar") loadArchives();
+    }
+
+    function closeSettings() {
+        document.getElementById("settings-modal").classList.add("hidden");
+    }
+    function switchSettingsTab(name) {
+        document.querySelectorAll(".settings-tab").forEach(function (el) {
+            el.classList.add("hidden");
         });
-
-        function getFilterParams() {
-            var byAge = document.getElementById("filter-by-age").checked;
-            var byTag = document.getElementById("filter-by-tag").checked;
-            var ageYears =
-                parseInt(document.getElementById("filter-age-slider").value) ||
-                0;
-            var tagRaw = document
-                .getElementById("filter-tag-names")
-                .value.trim();
-            return {
-                byAge: byAge,
-                byTag: byTag,
-                ageYears: ageYears,
-                tagRaw: tagRaw,
-            };
-        }
-
-        function validateFilters() {
-            var p = getFilterParams();
-            if (!p.byAge && !p.byTag) {
-                alert("Selecione pelo menos um filtro de exclusão.");
-                return null;
-            }
-            if (p.byAge && (p.ageYears < 1 || p.ageYears > 10)) {
-                alert("Selecione uma idade válida (1-10 anos).");
-                return null;
-            }
-            if (p.byTag && !p.tagRaw) {
-                alert("Digite pelo menos uma tag.");
-                return null;
-            }
-            return p;
-        }
-
-        // ── Preview pagination state ──
-        var previewFiles = [];
-        var previewPageNum = 0;
-        var previewPageSize = 100;
-
-        function renderPreviewPage() {
-            var start = previewPageNum * previewPageSize;
-            var end = Math.min(start + previewPageSize, previewFiles.length);
-            var pageItems = previewFiles.slice(start, end);
-
-            var list = document.getElementById("preview-list");
-            list.innerHTML = pageItems.map(buildPreviewItem).join("");
-
-            document.getElementById("preview-count").textContent =
-                previewFiles.length;
-
-            if (previewFiles.length > 0) {
-                document.getElementById("preview-page-info").textContent =
-                    start + 1 + "-" + end + " de " + previewFiles.length;
-            }
-
-            var pag = document.getElementById("preview-pagination");
-            if (previewFiles.length > previewPageSize) {
-                pag.classList.remove("hidden");
-                document.getElementById("preview-prev-btn").disabled =
-                    previewPageNum === 0;
-                document.getElementById("preview-next-btn").disabled =
-                    end >= previewFiles.length;
-            } else {
-                pag.classList.add("hidden");
-            }
-        }
-
-        function previewPage(delta) {
-            var newPage = previewPageNum + delta;
-            if (newPage < 0) return;
-            var start = newPage * previewPageSize;
-            if (start >= previewFiles.length) return;
-            previewPageNum = newPage;
-            renderPreviewPage();
-            document
-                .getElementById("bulk-preview-area")
-                .scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
-
-        var selectedFiles = {};
-        var allPreviewFiles = [];
-
-        function selectAllPreview(select) {
-            allPreviewFiles.forEach(function (f) {
-                selectedFiles[f] = select;
-                var cb = document.querySelector(
-                    'input[data-file="' + f.replace(/"/g, '\\"') + '"]',
-                );
-                if (cb) cb.checked = select;
+        document.getElementById("tab-" + name).classList.remove("hidden");
+        document
+            .querySelectorAll(".settings-tab-btn")
+            .forEach(function (el) {
+                el.classList.remove("text-white", "border-sky-500");
+                el.classList.add("text-zinc-400", "border-transparent");
             });
-            updateArchiveBtn();
+        var btn = document.querySelector('[data-tab="' + name + '"]');
+        if (btn) {
+            btn.classList.add("text-white", "border-sky-500");
+            btn.classList.remove("text-zinc-400", "border-transparent");
+        }
+    }
+
+    // ── Age slider: update display live ──
+    document.addEventListener("DOMContentLoaded", function () {
+        var slider = document.getElementById("filter-age-slider");
+        if (!slider) return;
+        function updateAgeDisplay() {
+            var v = parseInt(slider.value);
+            document.getElementById("age-value-display").textContent =
+                v + (v === 1 ? " ano" : " anos");
+        }
+        slider.addEventListener("input", updateAgeDisplay);
+        updateAgeDisplay();
+    });
+
+    function getFilterParams() {
+        var byAge = document.getElementById("filter-by-age").checked;
+        var byTag = document.getElementById("filter-by-tag").checked;
+        var ageYears =
+            parseInt(document.getElementById("filter-age-slider").value) ||
+            0;
+        var tagRaw = document
+            .getElementById("filter-tag-names")
+            .value.trim();
+        return {
+            byAge: byAge,
+            byTag: byTag,
+            ageYears: ageYears,
+            tagRaw: tagRaw,
+        };
+    }
+
+    function validateFilters() {
+        var p = getFilterParams();
+        if (!p.byAge && !p.byTag) {
+            alert("Selecione pelo menos um filtro de exclusão.");
+            return null;
+        }
+        if (p.byAge && (p.ageYears < 1 || p.ageYears > 10)) {
+            alert("Selecione uma idade válida (1-10 anos).");
+            return null;
+        }
+        if (p.byTag && !p.tagRaw) {
+            alert("Digite pelo menos uma tag.");
+            return null;
+        }
+        return p;
+    }
+
+    // ── Preview pagination state ──
+    var previewFiles = [];
+    var previewPageNum = 0;
+    var previewPageSize = 100;
+
+    function renderPreviewPage() {
+        var start = previewPageNum * previewPageSize;
+        var end = Math.min(start + previewPageSize, previewFiles.length);
+        var pageItems = previewFiles.slice(start, end);
+
+        var list = document.getElementById("preview-list");
+        list.innerHTML = pageItems.map(buildPreviewItem).join("");
+
+        document.getElementById("preview-count").textContent =
+            previewFiles.length;
+
+        if (previewFiles.length > 0) {
+            document.getElementById("preview-page-info").textContent =
+                start + 1 + "-" + end + " de " + previewFiles.length;
         }
 
-        function updateArchiveBtn() {
-            var count = Object.keys(selectedFiles).filter(function (k) {
-                return selectedFiles[k];
-            }).length;
-            var btn = document.getElementById("confirm-archive-btn");
-            if (count > 0) {
-                btn.disabled = false;
-                btn.textContent = "📦 Arquivar (" + count + ")";
-            } else {
-                btn.disabled = true;
-                btn.textContent = "📦 Arquivar Selecionadas";
-            }
-            var delBtn = document.getElementById("confirm-delete-btn");
-            if (count > 0) {
-                delBtn.disabled = false;
-                delBtn.textContent = "🗑️ Excluir (" + count + ")";
-            } else {
-                delBtn.disabled = true;
-                delBtn.textContent = "🗑️ Excluir Selecionadas";
-            }
+        var pag = document.getElementById("preview-pagination");
+        if (previewFiles.length > previewPageSize) {
+            pag.classList.remove("hidden");
+            document.getElementById("preview-prev-btn").disabled =
+                previewPageNum === 0;
+            document.getElementById("preview-next-btn").disabled =
+                end >= previewFiles.length;
+        } else {
+            pag.classList.add("hidden");
         }
+    }
 
-        function toggleFile(filename) {
-            selectedFiles[filename] = !selectedFiles[filename];
-            updateArchiveBtn();
-        }
+    function previewPage(delta) {
+        var newPage = previewPageNum + delta;
+        if (newPage < 0) return;
+        var start = newPage * previewPageSize;
+        if (start >= previewFiles.length) return;
+        previewPageNum = newPage;
+        renderPreviewPage();
+        document
+            .getElementById("bulk-preview-area")
+            .scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
 
-        function buildPreviewItem(filename) {
-            var display = filename.replace(/^notes\//, "").replace(/\.md$/, "");
-            var icon = filename.indexOf("pdfs/") === 0 ? "📕" : "📄";
-            var checked = selectedFiles[filename] ? "checked" : "";
-            return (
-                '<div class="flex items-center gap-2 text-xs text-zinc-300 py-1">' +
-                '<input type="checkbox" data-file="' +
-                filename.replace(/"/g, "&quot;") +
-                '" ' +
-                checked +
-                " onchange=\"toggleFile('" +
-                filename.replace(/'/g, "\\'") +
-                '\')" class="accent-sky-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer" />' +
-                '<span class="text-zinc-600 shrink-0">' +
-                icon +
-                "</span>" +
-                "<span>" +
-                display +
-                "</span>" +
-                "</div>"
+    var selectedFiles = {};
+    var allPreviewFiles = [];
+
+    function selectAllPreview(select) {
+        allPreviewFiles.forEach(function (f) {
+            selectedFiles[f] = select;
+            var cb = document.querySelector(
+                'input[data-file="' + f.replace(/"/g, '\\"') + '"]',
             );
-        }
+            if (cb) cb.checked = select;
+        });
+        updateArchiveBtn();
+    }
 
-        function getSelectedFiles() {
-            return allPreviewFiles.filter(function (f) {
-                return selectedFiles[f];
-            });
-        }
-
-        function previewBulkDelete() {
-            var p = validateFilters();
-            if (!p) return;
-
-            var btn = document.getElementById("bulk-preview-btn");
+    function updateArchiveBtn() {
+        var count = Object.keys(selectedFiles).filter(function (k) {
+            return selectedFiles[k];
+        }).length;
+        var btn = document.getElementById("confirm-archive-btn");
+        if (count > 0) {
+            btn.disabled = false;
+            btn.textContent = "📦 Arquivar (" + count + ")";
+        } else {
             btn.disabled = true;
-            btn.textContent = "Buscando...";
-
-            var formData = new URLSearchParams();
-            formData.set("by_age", p.byAge ? "true" : "false");
-            formData.set("age_years", p.ageYears.toString());
-            formData.set("by_tag", p.byTag ? "true" : "false");
-            formData.set("tag_name", p.tagRaw);
-            formData.set("preview", "true");
-
-            fetch("/api/bulk-delete", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
-            })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    btn.disabled = false;
-                    btn.textContent = "🔍 Previsualizar Notas";
-
-                    var area = document.getElementById("bulk-preview-area");
-
-                    if (data.files && data.files.length > 0) {
-                        allPreviewFiles = data.files;
-                        previewFiles = data.files;
-                        previewPageNum = 0;
-
-                        // Inicializa selecao: todos marcados por padrao
-                        allPreviewFiles.forEach(function (f) {
-                            selectedFiles[f] = true;
-                        });
-
-                        renderPreviewPage();
-                        updateArchiveBtn();
-                        area.classList.remove("hidden");
-                    } else {
-                        allPreviewFiles = [];
-                        previewFiles = [];
-                        previewPageNum = 0;
-                        selectedFiles = {};
-                        area.classList.add("hidden");
-                        alert(
-                            "Nenhuma nota encontrada com os filtros selecionados.",
-                        );
-                    }
-                })
-                .catch(function (err) {
-                    btn.disabled = false;
-                    btn.textContent = "🔍 Previsualizar Notas";
-                    alert("Erro: " + err.message);
-                });
+            btn.textContent = "📦 Arquivar Selecionadas";
         }
+        var delBtn = document.getElementById("confirm-delete-btn");
+        if (count > 0) {
+            delBtn.disabled = false;
+            delBtn.textContent = "🗑️ Excluir (" + count + ")";
+        } else {
+            delBtn.disabled = true;
+            delBtn.textContent = "🗑️ Excluir Selecionadas";
+        }
+    }
 
-        function doBulkDelete() {
-            var selected = getSelectedFiles();
-            if (selected.length === 0) {
-                alert("Nenhuma nota selecionada.");
-                return;
-            }
+    function toggleFile(filename) {
+        selectedFiles[filename] = !selectedFiles[filename];
+        updateArchiveBtn();
+    }
 
-            if (
-                !confirm(
-                    "Tem certeza que deseja EXCLUIR PERMANENTEMENTE " +
-                        selected.length +
-                        " nota(s)? Esta ação não pode ser desfeita.",
-                )
-            )
-                return;
+    function buildPreviewItem(filename) {
+        var display = filename.replace(/^notes\//, "").replace(/\.md$/, "");
+        var icon = filename.indexOf("pdfs/") === 0 ? "📕" : "📄";
+        var checked = selectedFiles[filename] ? "checked" : "";
+        return (
+            '<div class="flex items-center gap-2 text-xs text-zinc-300 py-1">' +
+            '<input type="checkbox" data-file="' +
+            filename.replace(/"/g, "&quot;") +
+            '" ' +
+            checked +
+            " onchange=\"toggleFile('" +
+            filename.replace(/'/g, "\\'") +
+            '\')" class="accent-sky-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer" />' +
+            '<span class="text-zinc-600 shrink-0">' +
+            icon +
+            "</span>" +
+            "<span>" +
+            display +
+            "</span>" +
+            "</div>"
+        );
+    }
 
-            var btn = document.getElementById("confirm-delete-btn");
-            btn.disabled = true;
-            btn.textContent = "Excluindo...";
+    function getSelectedFiles() {
+        return allPreviewFiles.filter(function (f) {
+            return selectedFiles[f];
+        });
+    }
 
-            // Envia a lista de arquivos selecionados
-            var formData = new URLSearchParams();
-            selected.forEach(function (f) {
-                formData.append("files", f);
-            });
+    function previewBulkDelete() {
+        var p = validateFilters();
+        if (!p) return;
 
-            fetch("/api/bulk-delete", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
+        var btn = document.getElementById("bulk-preview-btn");
+        btn.disabled = true;
+        btn.textContent = "Buscando...";
+
+        var formData = new URLSearchParams();
+        formData.set("by_age", p.byAge ? "true" : "false");
+        formData.set("age_years", p.ageYears.toString());
+        formData.set("by_tag", p.byTag ? "true" : "false");
+        formData.set("tag_name", p.tagRaw);
+        formData.set("preview", "true");
+
+        fetch("/api/bulk-delete", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formData.toString(),
+        })
+            .then(function (r) {
+                if (!r.ok)
+                    return r.text().then(function (t) {
+                        throw new Error(t);
+                    });
+                return r.json();
             })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    btn.disabled = false;
-                    btn.textContent = "🗑️ Excluir Selecionadas";
+            .then(function (data) {
+                btn.disabled = false;
+                btn.textContent = "🔍 Previsualizar Notas";
+
+                var area = document.getElementById("bulk-preview-area");
+
+                if (data.files && data.files.length > 0) {
+                    allPreviewFiles = data.files;
+                    previewFiles = data.files;
+                    previewPageNum = 0;
+
+                    // Inicializa selecao: todos marcados por padrao
+                    allPreviewFiles.forEach(function (f) {
+                        selectedFiles[f] = true;
+                    });
+
+                    renderPreviewPage();
+                    updateArchiveBtn();
+                    area.classList.remove("hidden");
+                } else {
+                    allPreviewFiles = [];
+                    previewFiles = [];
+                    previewPageNum = 0;
+                    selectedFiles = {};
+                    area.classList.add("hidden");
                     alert(
-                        "Excluídas " + data.deleted + " nota(s) com sucesso!",
+                        "Nenhuma nota encontrada com os filtros selecionados.",
+                    );
+                }
+            })
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = "🔍 Previsualizar Notas";
+                alert("Erro: " + err.message);
+            });
+    }
+
+    function doBulkDelete() {
+        var selected = getSelectedFiles();
+        if (selected.length === 0) {
+            alert("Nenhuma nota selecionada.");
+            return;
+        }
+
+        if (
+            !confirm(
+                "Tem certeza que deseja EXCLUIR PERMANENTEMENTE " +
+                selected.length +
+                " nota(s)? Esta ação não pode ser desfeita.",
+            )
+        )
+            return;
+
+        var btn = document.getElementById("confirm-delete-btn");
+        btn.disabled = true;
+        btn.textContent = "Excluindo...";
+
+        // Envia a lista de arquivos selecionados
+        var formData = new URLSearchParams();
+        selected.forEach(function (f) {
+            formData.append("files", f);
+        });
+
+        fetch("/api/bulk-delete", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formData.toString(),
+        })
+            .then(function (r) {
+                if (!r.ok)
+                    return r.text().then(function (t) {
+                        throw new Error(t);
+                    });
+                return r.json();
+            })
+            .then(function (data) {
+                btn.disabled = false;
+                btn.textContent = "🗑️ Excluir Selecionadas";
+                alert(
+                    "Excluídas " + data.deleted + " nota(s) com sucesso!",
+                );
+                closeSettings();
+                if (window.location.pathname === "/") {
+                    window.location.reload();
+                }
+            })
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = "🗑️ Excluir Selecionadas";
+                alert("Erro: " + err.message);
+            });
+    }
+
+    // ── Bulk Archive ──
+    function doBulkArchive() {
+        var selected = getSelectedFiles();
+        if (selected.length === 0) {
+            alert("Nenhuma nota selecionada.");
+            return;
+        }
+
+        if (
+            !confirm(
+                "Arquivar " +
+                selected.length +
+                " nota(s)? Elas serão zipadas e movidas para a pasta de arquivos mortos.",
+            )
+        )
+            return;
+
+        var btn = document.getElementById("confirm-archive-btn");
+        btn.disabled = true;
+        btn.textContent = "Arquivando...";
+
+        var formData = new URLSearchParams();
+        selected.forEach(function (f) {
+            formData.append("files", f);
+        });
+
+        fetch("/api/bulk-archive", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formData.toString(),
+        })
+            .then(function (r) {
+                if (!r.ok)
+                    return r.text().then(function (t) {
+                        throw new Error(t);
+                    });
+                return r.json();
+            })
+            .then(function (data) {
+                btn.disabled = false;
+                btn.textContent = "📦 Arquivar Selecionadas";
+                if (data.ok) {
+                    alert(
+                        "Arquivadas " +
+                        data.archived +
+                        " nota(s) com sucesso!\nArquivo: " +
+                        data.archive,
                     );
                     closeSettings();
                     if (window.location.pathname === "/") {
                         window.location.reload();
                     }
-                })
-                .catch(function (err) {
-                    btn.disabled = false;
-                    btn.textContent = "🗑️ Excluir Selecionadas";
-                    alert("Erro: " + err.message);
-                });
-        }
-
-        // ── Bulk Archive ──
-        function doBulkArchive() {
-            var selected = getSelectedFiles();
-            if (selected.length === 0) {
-                alert("Nenhuma nota selecionada.");
-                return;
-            }
-
-            if (
-                !confirm(
-                    "Arquivar " +
-                        selected.length +
-                        " nota(s)? Elas serão zipadas e movidas para a pasta de arquivos mortos.",
-                )
-            )
-                return;
-
-            var btn = document.getElementById("confirm-archive-btn");
-            btn.disabled = true;
-            btn.textContent = "Arquivando...";
-
-            var formData = new URLSearchParams();
-            selected.forEach(function (f) {
-                formData.append("files", f);
-            });
-
-            fetch("/api/bulk-archive", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
+                }
             })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    btn.disabled = false;
-                    btn.textContent = "📦 Arquivar Selecionadas";
-                    if (data.ok) {
-                        alert(
-                            "Arquivadas " +
-                                data.archived +
-                                " nota(s) com sucesso!\nArquivo: " +
-                                data.archive,
-                        );
-                        closeSettings();
-                        if (window.location.pathname === "/") {
-                            window.location.reload();
-                        }
-                    }
-                })
-                .catch(function (err) {
-                    btn.disabled = false;
-                    btn.textContent = "📦 Arquivar Selecionadas";
-                    alert("Erro ao arquivar: " + err.message);
-                });
-        }
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = "📦 Arquivar Selecionadas";
+                alert("Erro ao arquivar: " + err.message);
+            });
+    }
 
-        // ── List Archives ──
-        function loadArchives() {
-            var list = document.getElementById("archives-list");
-            list.innerHTML =
-                '<div class="text-center py-10"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
+    // ── List Archives ──
+    function loadArchives() {
+        var list = document.getElementById("archives-list");
+        list.innerHTML =
+            '<div class="text-center py-10"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
 
-            fetch("/api/archives")
-                .then(function (r) {
-                    if (!r.ok) throw new Error("Erro ao carregar archives");
-                    return r.json();
-                })
-                .then(function (data) {
-                    var archives = data.archives || [];
-                    if (archives.length === 0) {
-                        list.innerHTML =
-                            '<div class="text-center py-10"><p class="text-xs text-zinc-500">Nenhum archive encontrado.</p></div>';
-                        return;
-                    }
-                    var html = '<div class="space-y-2">';
-                    archives.forEach(function (a) {
-                        var sizeStr =
-                            a.size > 1024 * 1024
-                                ? (a.size / 1024 / 1024).toFixed(1) + " MB"
-                                : a.size > 1024
-                                  ? (a.size / 1024).toFixed(1) + " KB"
-                                  : a.size + " B";
-                        var dateStr = a.modified
-                            ? new Date(a.modified).toLocaleDateString("pt-BR")
-                            : "?";
-                        html +=
-                            '<div class="flex items-center justify-between gap-3 bg-zinc-800/40 rounded-xl p-3 border border-zinc-700/50">' +
-                            '<div class="flex-1 min-w-0">' +
-                            '<div class="text-sm font-semibold text-zinc-200 truncate">📦 ' +
-                            a.name +
-                            "</div>" +
-                            '<div class="text-[10px] text-zinc-500 mt-0.5">' +
-                            a.file_count +
-                            " arquivo(s) · " +
-                            sizeStr +
-                            " · " +
-                            dateStr +
-                            "</div>" +
-                            "</div>" +
-                            "<button onclick=\"restoreArchive('" +
-                            a.name.replace(/'/g, "\\'") +
-                            '\')" class="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors restore-btn">Restaurar</button>' +
-                            "</div>";
-                    });
-                    html += "</div>";
-                    list.innerHTML = html;
-                })
-                .catch(function (err) {
+        fetch("/api/archives")
+            .then(function (r) {
+                if (!r.ok) throw new Error("Erro ao carregar archives");
+                return r.json();
+            })
+            .then(function (data) {
+                var archives = data.archives || [];
+                if (archives.length === 0) {
                     list.innerHTML =
-                        '<div class="text-center py-10"><p class="text-xs text-red-400">Erro: ' +
-                        err.message +
-                        "</p></div>";
+                        '<div class="text-center py-10"><p class="text-xs text-zinc-500">Nenhum archive encontrado.</p></div>';
+                    return;
+                }
+                var html = '<div class="space-y-2">';
+                archives.forEach(function (a) {
+                    var sizeStr =
+                        a.size > 1024 * 1024
+                            ? (a.size / 1024 / 1024).toFixed(1) + " MB"
+                            : a.size > 1024
+                                ? (a.size / 1024).toFixed(1) + " KB"
+                                : a.size + " B";
+                    var dateStr = a.modified
+                        ? new Date(a.modified).toLocaleDateString("pt-BR")
+                        : "?";
+                    html +=
+                        '<div class="flex items-center justify-between gap-3 bg-zinc-800/40 rounded-xl p-3 border border-zinc-700/50">' +
+                        '<div class="flex-1 min-w-0">' +
+                        '<div class="text-sm font-semibold text-zinc-200 truncate">📦 ' +
+                        a.name +
+                        "</div>" +
+                        '<div class="text-[10px] text-zinc-500 mt-0.5">' +
+                        a.file_count +
+                        " arquivo(s) · " +
+                        sizeStr +
+                        " · " +
+                        dateStr +
+                        "</div>" +
+                        "</div>" +
+                        "<button onclick=\"restoreArchive('" +
+                        a.name.replace(/'/g, "\\'") +
+                        '\')" class="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors restore-btn">Restaurar</button>' +
+                        "</div>";
                 });
-        }
-
-        function restoreArchive(name) {
-            if (
-                !confirm(
-                    'Restaurar o archive "' +
-                        name +
-                        '"? As notas serão extraídas de volta para o diretório de trabalho.',
-                )
-            )
-                return;
-
-            var btns = document.querySelectorAll(".restore-btn");
-            btns.forEach(function (b) {
-                b.disabled = true;
-                b.textContent = "Restaurando...";
+                html += "</div>";
+                list.innerHTML = html;
+            })
+            .catch(function (err) {
+                list.innerHTML =
+                    '<div class="text-center py-10"><p class="text-xs text-red-400">Erro: ' +
+                    err.message +
+                    "</p></div>";
             });
+    }
 
-            var formData = new URLSearchParams();
-            formData.set("archive", name);
-
-            fetch("/api/archive/restore", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
-            })
-                .then(function (r) {
-                    if (!r.ok)
-                        return r.text().then(function (t) {
-                            throw new Error(t);
-                        });
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data.ok) {
-                        alert(
-                            "Archive restaurado com sucesso!\n" +
-                                data.restored +
-                                " arquivo(s) restaurados.",
-                        );
-                        closeSettings();
-                        if (window.location.pathname === "/") {
-                            window.location.reload();
-                        }
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro ao restaurar: " + err.message);
-                    btns.forEach(function (b) {
-                        b.disabled = false;
-                        b.textContent = "Restaurar";
-                    });
-                });
-        }
-
-        // ── Cleanup Orphan Images ──
-        function cleanupOrphanImages() {
-            var btn = document.getElementById("cleanup-images-btn");
-            if (
-                !confirm(
-                    "Remover imagens que não são mais referenciadas por nenhuma nota?",
-                )
+    function restoreArchive(name) {
+        if (
+            !confirm(
+                'Restaurar o archive "' +
+                name +
+                '"? As notas serão extraídas de volta para o diretório de trabalho.',
             )
-                return;
-            btn.disabled = true;
-            btn.textContent = "Limpando...";
-            fetch("/api/cleanup-images", { method: "POST" })
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    btn.disabled = false;
-                    btn.textContent = "🧹 Limpar imagens órfãs";
-                    if (data.ok) {
-                        var msg =
-                            data.count > 0
-                                ? data.count +
-                                  " imagem(ns) órfã(s) removida(s)!"
-                                : "Nenhuma imagem órfã encontrada.";
-                        alert(msg);
-                    } else {
-                        alert("Erro: " + (data.error || "desconhecido"));
-                    }
-                })
-                .catch(function (err) {
-                    btn.disabled = false;
-                    btn.textContent = "🧹 Limpar imagens órfãs";
-                    alert("Erro: " + err.message);
-                });
-        }
+        )
+            return;
 
-        // ── Stopwords Customizadas ──
-        function loadStopwords() {
-            var container = document.getElementById("stopwords-list");
-            var countEl = document.getElementById("stopwords-count");
-            if (!container) return;
-            container.innerHTML =
-                '<span class="text-xs text-zinc-500">Carregando...</span>';
+        var btns = document.querySelectorAll(".restore-btn");
+        btns.forEach(function (b) {
+            b.disabled = true;
+            b.textContent = "Restaurando...";
+        });
 
-            fetch("/api/stopwords")
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    var words = data.stopwords || [];
-                    if (words.length === 0) {
-                        container.innerHTML =
-                            '<span class="text-xs text-zinc-600">Nenhuma stopword personalizada ainda.</span>';
-                        countEl.textContent = "0";
-                        return;
-                    }
-                    var html = "";
-                    words.forEach(function (w) {
-                        html +=
-                            '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/50 text-xs text-zinc-300">' +
-                            "<span>" +
-                            w +
-                            "</span>" +
-                            "<button onclick=\"removeStopword('" +
-                            w.replace(/'/g, "\\'") +
-                            '\')" class="text-zinc-600 hover:text-red-400 transition-colors leading-none text-sm ml-0.5" title="Remover">&times;</button>' +
-                            "</span>";
+        var formData = new URLSearchParams();
+        formData.set("archive", name);
+
+        fetch("/api/archive/restore", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formData.toString(),
+        })
+            .then(function (r) {
+                if (!r.ok)
+                    return r.text().then(function (t) {
+                        throw new Error(t);
                     });
-                    container.innerHTML = html;
-                    countEl.textContent = words.length;
-                })
-                .catch(function (err) {
-                    container.innerHTML =
-                        '<span class="text-xs text-red-400">Erro ao carregar: ' +
-                        err.message +
-                        "</span>";
-                });
-        }
-
-        function addStopword() {
-            var input = document.getElementById("new-stopword-input");
-            var word = input.value.trim().toLowerCase();
-            if (!word) {
-                alert("Digite uma palavra para adicionar.");
-                return;
-            }
-
-            fetch("/api/stopwords/add", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ word: word }),
+                return r.json();
             })
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data.success) {
-                        input.value = "";
-                        loadStopwords();
-                    } else {
-                        alert("Erro ao adicionar stopword.");
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro: " + err.message);
-                });
-        }
-
-        function removeStopword(word) {
-            if (
-                !confirm('Remover "' + word + '" das stopwords personalizadas?')
-            )
-                return;
-
-            fetch("/api/stopwords/remove", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ word: word }),
-            })
-                .then(function (r) {
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data.success) {
-                        loadStopwords();
-                    } else {
-                        alert("Erro ao remover stopword.");
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro: " + err.message);
-                });
-        }
-
-        (function () {
-            var auth = localStorage.getItem("ton_auth");
-
-            // Redirect to login if not authenticated (skip for login page and static)
-            var path = window.location.pathname;
-            if (!auth && path !== "/login" && !path.startsWith("/static/")) {
-                window.location.href = "/login";
-                return;
-            }
-
-            // Inject auth header into HTMX requests
-            if (typeof htmx !== "undefined") {
-                document.body.addEventListener(
-                    "htmx:configRequest",
-                    function (evt) {
-                        if (auth) evt.detail.headers["Authorization"] = auth;
-                    },
-                );
-            }
-
-            // Wrap fetch to always include auth
-            var origFetch = window.fetch;
-            window.fetch = function (url, opts) {
-                opts = opts || {};
-                opts.headers = opts.headers || {};
-                if (auth && !opts.headers["Authorization"]) {
-                    if (opts.headers instanceof Headers) {
-                        opts.headers.set("Authorization", auth);
-                    } else {
-                        opts.headers["Authorization"] = auth;
+            .then(function (data) {
+                if (data.ok) {
+                    alert(
+                        "Archive restaurado com sucesso!\n" +
+                        data.restored +
+                        " arquivo(s) restaurados.",
+                    );
+                    closeSettings();
+                    if (window.location.pathname === "/") {
+                        window.location.reload();
                     }
                 }
-                return origFetch(url, opts);
-            };
-        })();
-
-        // ── Marcadores (settings modal tab) ──
-        var modalMarkers = [];
-
-        function loadMarcadores() {
-            var list = document.getElementById("modal-markers-list");
-            if (!list) return;
-            list.innerHTML =
-                '<div class="text-center py-8"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
-
-            fetch("/api/todo-markers")
-                .then(function (r) {
-                    if (!r.ok) throw new Error("Falha ao carregar");
-                    return r.json();
-                })
-                .then(function (data) {
-                    modalMarkers = data || [];
-                    renderModalMarkers();
-                })
-                .catch(function () {
-                    modalMarkers = [];
-                    renderModalMarkers();
+            })
+            .catch(function (err) {
+                alert("Erro ao restaurar: " + err.message);
+                btns.forEach(function (b) {
+                    b.disabled = false;
+                    b.textContent = "Restaurar";
                 });
+            });
+    }
+
+    // ── Cleanup Orphan Images ──
+    function cleanupOrphanImages() {
+        var btn = document.getElementById("cleanup-images-btn");
+        if (
+            !confirm(
+                "Remover imagens que não são mais referenciadas por nenhuma nota?",
+            )
+        )
+            return;
+        btn.disabled = true;
+        btn.textContent = "Limpando...";
+        fetch("/api/cleanup-images", { method: "POST" })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                btn.disabled = false;
+                btn.textContent = "🧹 Limpar imagens órfãs";
+                if (data.ok) {
+                    var msg =
+                        data.count > 0
+                            ? data.count +
+                            " imagem(ns) órfã(s) removida(s)!"
+                            : "Nenhuma imagem órfã encontrada.";
+                    alert(msg);
+                } else {
+                    alert("Erro: " + (data.error || "desconhecido"));
+                }
+            })
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = "🧹 Limpar imagens órfãs";
+                alert("Erro: " + err.message);
+            });
+    }
+
+    // ── Stopwords Customizadas ──
+    function loadStopwords() {
+        var container = document.getElementById("stopwords-list");
+        var countEl = document.getElementById("stopwords-count");
+        if (!container) return;
+        container.innerHTML =
+            '<span class="text-xs text-zinc-500">Carregando...</span>';
+
+        fetch("/api/stopwords")
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                var words = data.stopwords || [];
+                if (words.length === 0) {
+                    container.innerHTML =
+                        '<span class="text-xs text-zinc-600">Nenhuma stopword personalizada ainda.</span>';
+                    countEl.textContent = "0";
+                    return;
+                }
+                var html = "";
+                words.forEach(function (w) {
+                    html +=
+                        '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700/50 text-xs text-zinc-300">' +
+                        "<span>" +
+                        w +
+                        "</span>" +
+                        "<button onclick=\"removeStopword('" +
+                        w.replace(/'/g, "\\'") +
+                        '\')" class="text-zinc-600 hover:text-red-400 transition-colors leading-none text-sm ml-0.5" title="Remover">&times;</button>' +
+                        "</span>";
+                });
+                container.innerHTML = html;
+                countEl.textContent = words.length;
+            })
+            .catch(function (err) {
+                container.innerHTML =
+                    '<span class="text-xs text-red-400">Erro ao carregar: ' +
+                    err.message +
+                    "</span>";
+            });
+    }
+
+    function addStopword() {
+        var input = document.getElementById("new-stopword-input");
+        var word = input.value.trim().toLowerCase();
+        if (!word) {
+            alert("Digite uma palavra para adicionar.");
+            return;
         }
 
-        function renderModalMarkers() {
-            var list = document.getElementById("modal-markers-list");
-            if (!list) return;
-            list.innerHTML = "";
+        fetch("/api/stopwords/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ word: word }),
+        })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                if (data.success) {
+                    input.value = "";
+                    loadStopwords();
+                } else {
+                    alert("Erro ao adicionar stopword.");
+                }
+            })
+            .catch(function (err) {
+                alert("Erro: " + err.message);
+            });
+    }
 
-            if (modalMarkers.length === 0) {
-                list.innerHTML =
-                    '<div class="text-center py-8"><p class="text-xs text-zinc-500">Nenhum marcador configurado.</p></div>';
-                return;
+    function removeStopword(word) {
+        if (
+            !confirm('Remover "' + word + '" das stopwords personalizadas?')
+        )
+            return;
+
+        fetch("/api/stopwords/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ word: word }),
+        })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                if (data.success) {
+                    loadStopwords();
+                } else {
+                    alert("Erro ao remover stopword.");
+                }
+            })
+            .catch(function (err) {
+                alert("Erro: " + err.message);
+            });
+    }
+
+    (function () {
+        var auth = localStorage.getItem("ton_auth");
+
+        // Redirect to login if not authenticated (skip for login page and static)
+        var path = window.location.pathname;
+        if (!auth && path !== "/login" && !path.startsWith("/static/")) {
+            window.location.href = "/login";
+            return;
+        }
+
+        // Inject auth header into HTMX requests
+        if (typeof htmx !== "undefined") {
+            document.body.addEventListener(
+                "htmx:configRequest",
+                function (evt) {
+                    if (auth) evt.detail.headers["Authorization"] = auth;
+                },
+            );
+        }
+
+        // Wrap fetch to always include auth
+        var origFetch = window.fetch;
+        window.fetch = function (url, opts) {
+            opts = opts || {};
+            opts.headers = opts.headers || {};
+            if (auth && !opts.headers["Authorization"]) {
+                if (opts.headers instanceof Headers) {
+                    opts.headers.set("Authorization", auth);
+                } else {
+                    opts.headers["Authorization"] = auth;
+                }
             }
+            return origFetch(url, opts);
+        };
+    })();
 
-            modalMarkers.forEach(function (m, idx) {
-                var div = document.createElement("div");
-                div.className =
-                    "marker-row flex items-center gap-3 px-4 py-3 bg-zinc-800/40 border border-zinc-700/50 rounded-lg";
-                div.setAttribute("data-marker", m.marker);
+    // ── Marcadores (settings modal tab) ──
+    var modalMarkers = [];
 
-                var activeAttr = m.active ? "checked" : "";
+    function loadMarcadores() {
+        var list = document.getElementById("modal-markers-list");
+        if (!list) return;
+        list.innerHTML =
+            '<div class="text-center py-8"><div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div><p class="text-xs text-zinc-600">Carregando...</p></div>';
 
-                div.innerHTML =
-                    '<label class="flex items-center gap-2 cursor-pointer">' +
-                    '<input type="checkbox" class="marker-active w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500" ' +
-                    activeAttr +
-                    " />" +
-                    "</label>" +
-                    '<span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style="background:' +
-                    m.color +
-                    "20; color:" +
-                    m.color +
-                    '">' +
-                    escapeHtml(m.marker) +
-                    "</span>" +
-                    '<input type="color" class="marker-color w-8 h-8 rounded cursor-pointer border-0 bg-transparent" value="' +
-                    m.color +
-                    '" />' +
-                    '<span class="flex-1 text-xs text-zinc-500">' +
-                    escapeHtml(m.marker) +
-                    ":</span>" +
-                    '<button class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2">✕</button>';
+        fetch("/api/todo-markers")
+            .then(function (r) {
+                if (!r.ok) throw new Error("Falha ao carregar");
+                return r.json();
+            })
+            .then(function (data) {
+                modalMarkers = data || [];
+                renderModalMarkers();
+            })
+            .catch(function () {
+                modalMarkers = [];
+                renderModalMarkers();
+            });
+    }
 
-                list.appendChild(div);
+    function renderModalMarkers() {
+        var list = document.getElementById("modal-markers-list");
+        if (!list) return;
+        list.innerHTML = "";
 
-                // Delete handler
-                div.querySelector(".marker-delete").addEventListener("click", function () {
-                    modalMarkers.splice(idx, 1);
-                    renderModalMarkers();
+        if (modalMarkers.length === 0) {
+            list.innerHTML =
+                '<div class="text-center py-8"><p class="text-xs text-zinc-500">Nenhum marcador configurado.</p></div>';
+            return;
+        }
+
+        modalMarkers.forEach(function (m, idx) {
+            var div = document.createElement("div");
+            div.className =
+                "marker-row flex items-center gap-3 px-4 py-3 bg-zinc-800/40 border border-zinc-700/50 rounded-lg";
+            div.setAttribute("data-marker", m.marker);
+
+            var activeAttr = m.active ? "checked" : "";
+
+            div.innerHTML =
+                '<label class="flex items-center gap-2 cursor-pointer">' +
+                '<input type="checkbox" class="marker-active w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500" ' +
+                activeAttr +
+                " />" +
+                "</label>" +
+                '<span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style="background:' +
+                m.color +
+                "20; color:" +
+                m.color +
+                '">' +
+                escapeHtml(m.marker) +
+                "</span>" +
+                '<input type="color" class="marker-color w-8 h-8 rounded cursor-pointer border-0 bg-transparent" value="' +
+                m.color +
+                '" />' +
+                '<span class="flex-1 text-xs text-zinc-500">' +
+                escapeHtml(m.marker) +
+                ":</span>" +
+                '<button class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2">✕</button>';
+
+            list.appendChild(div);
+
+            // Delete handler
+            div.querySelector(".marker-delete").addEventListener("click", function () {
+                modalMarkers.splice(idx, 1);
+                renderModalMarkers();
+            });
+
+            // Change handlers
+            div.querySelector(".marker-active").addEventListener("change", function () {
+                m.active = this.checked;
+            });
+            div.querySelector(".marker-color").addEventListener("input", function () {
+                m.color = this.value;
+                div.querySelector(".marker-badge").style.background = m.color + "20";
+                div.querySelector(".marker-badge").style.color = m.color;
+            });
+        });
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    async function updateTodosCount() {
+        try {
+            const response = await fetch("/api/todos?type=all&status=pending");
+            if (!response.ok) return;
+            const data = await response.json();
+            const count = data.todos ? data.todos.length : 0;
+            
+            const navTodos = document.getElementById("nav-todos");
+            const mobileNavTodos = document.getElementById("mobile-nav-todos");
+            
+            if (navTodos) {
+                navTodos.textContent = count > 0 ? `🎯TODOs ${count}` : `🎯TODOs`;
+            }
+            if (mobileNavTodos) {
+                mobileNavTodos.textContent = count > 0 ? `🎯 TODOs ${count}` : `🎯 TODOs`;
+            }
+        } catch (e) {
+            console.error("Error updating todos count:", e);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        updateTodosCount();
+
+        // Highlight active nav link on /todos page
+        if (window.location.pathname === "/todos") {
+            const navTodos = document.getElementById("nav-todos");
+            const mobileNavTodos = document.getElementById("mobile-nav-todos");
+            if (navTodos) {
+                navTodos.className = "bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-colors";
+            }
+            if (mobileNavTodos) {
+                mobileNavTodos.className = "block rounded-lg px-3 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 transition-colors";
+            }
+        }
+
+        // Add marker
+        var addBtn = document.getElementById("modal-btn-add-marker");
+        if (addBtn) {
+            addBtn.addEventListener("click", function () {
+                var input = document.getElementById("modal-new-marker");
+                var colorSelect = document.getElementById("modal-new-color");
+                var name = input.value.trim().toUpperCase();
+
+                if (!name) return;
+                if (modalMarkers.some(function (m) { return m.marker === name; })) {
+                    document.getElementById("modal-save-status").textContent = "⚠️ Marcador já existe";
+                    return;
+                }
+
+                modalMarkers.push({
+                    marker: name,
+                    color: colorSelect.value,
+                    active: true,
                 });
-
-                // Change handlers
-                div.querySelector(".marker-active").addEventListener("change", function () {
-                    m.active = this.checked;
-                });
-                div.querySelector(".marker-color").addEventListener("input", function () {
-                    m.color = this.value;
-                    div.querySelector(".marker-badge").style.background = m.color + "20";
-                    div.querySelector(".marker-badge").style.color = m.color;
-                });
+                input.value = "";
+                renderModalMarkers();
+                document.getElementById("modal-save-status").textContent = "";
             });
         }
 
-        function escapeHtml(str) {
-            var div = document.createElement("div");
-            div.textContent = str;
-            return div.innerHTML;
+        // Save
+        var saveBtn = document.getElementById("modal-btn-save");
+        if (saveBtn) {
+            saveBtn.addEventListener("click", async function () {
+                var btn = this;
+                btn.textContent = "💾 Salvando...";
+                btn.disabled = true;
+
+                try {
+                    var response = await fetch("/api/todo-markers", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(modalMarkers),
+                    });
+
+                    if (!response.ok) throw new Error("Save failed");
+
+                    document.getElementById("modal-save-status").textContent =
+                        "✅ Configurações salvas!";
+                    setTimeout(function () {
+                        document.getElementById("modal-save-status").textContent = "";
+                    }, 3000);
+                } catch (e) {
+                    document.getElementById("modal-save-status").textContent =
+                        "❌ Erro ao salvar";
+                }
+
+                btn.textContent = "💾 Salvar configurações";
+                btn.disabled = false;
+            });
         }
 
-        document.addEventListener("DOMContentLoaded", function () {
-            // Add marker
-            var addBtn = document.getElementById("modal-btn-add-marker");
-            if (addBtn) {
-                addBtn.addEventListener("click", function () {
-                    var input = document.getElementById("modal-new-marker");
-                    var colorSelect = document.getElementById("modal-new-color");
-                    var name = input.value.trim().toUpperCase();
+        // Reset to defaults
+        var resetBtn = document.getElementById("modal-btn-reset");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", async function () {
+                var defaults = [
+                    { marker: "TODO", color: "#3b82f6", active: true },
+                    { marker: "FIXME", color: "#f59e0b", active: true },
+                    { marker: "BUG", color: "#ef4444", active: true },
+                    { marker: "HACK", color: "#8b5cf6", active: false },
+                    { marker: "NOTE", color: "#06b6d4", active: false },
+                    { marker: "OPTIMIZE", color: "#10b981", active: false },
+                    { marker: "REVIEW", color: "#f97316", active: false },
+                ];
+                modalMarkers = defaults;
+                renderModalMarkers();
+                document.getElementById("modal-save-status").textContent =
+                    "⚠️ Padrão restaurado. Clique em Salvar para confirmar.";
+            });
+        }
+    });
+</script>
 
-                    if (!name) return;
-                    if (modalMarkers.some(function (m) { return m.marker === name; })) {
-                        document.getElementById("modal-save-status").textContent = "⚠️ Marcador já existe";
-                        return;
-                    }
-
-                    modalMarkers.push({
-                        marker: name,
-                        color: colorSelect.value,
-                        active: true,
-                    });
-                    input.value = "";
-                    renderModalMarkers();
-                    document.getElementById("modal-save-status").textContent = "";
-                });
-            }
-
-            // Save
-            var saveBtn = document.getElementById("modal-btn-save");
-            if (saveBtn) {
-                saveBtn.addEventListener("click", async function () {
-                    var btn = this;
-                    btn.textContent = "💾 Salvando...";
-                    btn.disabled = true;
-
-                    try {
-                        var response = await fetch("/api/todo-markers", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(modalMarkers),
-                        });
-
-                        if (!response.ok) throw new Error("Save failed");
-
-                        document.getElementById("modal-save-status").textContent =
-                            "✅ Configurações salvas!";
-                        setTimeout(function () {
-                            document.getElementById("modal-save-status").textContent = "";
-                        }, 3000);
-                    } catch (e) {
-                        document.getElementById("modal-save-status").textContent =
-                            "❌ Erro ao salvar";
-                    }
-
-                    btn.textContent = "💾 Salvar configurações";
-                    btn.disabled = false;
-                });
-            }
-
-            // Reset to defaults
-            var resetBtn = document.getElementById("modal-btn-reset");
-            if (resetBtn) {
-                resetBtn.addEventListener("click", async function () {
-                    var defaults = [
-                        { marker: "TODO", color: "#3b82f6", active: true },
-                        { marker: "FIXME", color: "#f59e0b", active: true },
-                        { marker: "BUG", color: "#ef4444", active: true },
-                        { marker: "HACK", color: "#8b5cf6", active: false },
-                        { marker: "NOTE", color: "#06b6d4", active: false },
-                        { marker: "OPTIMIZE", color: "#10b981", active: false },
-                        { marker: "REVIEW", color: "#f97316", active: false },
-                    ];
-                    modalMarkers = defaults;
-                    renderModalMarkers();
-                    document.getElementById("modal-save-status").textContent =
-                        "⚠️ Padrão restaurado. Clique em Salvar para confirmar.";
-                });
-            }
-        });
-    </script>
 </html>
 {{end}}

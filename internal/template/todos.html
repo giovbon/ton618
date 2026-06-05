@@ -2,55 +2,41 @@
 <div>
     <!-- Header with filters -->
     <div class="flex flex-col gap-4 mb-6">
-        <div class="flex items-center justify-between">
-            <h2 class="text-2xl font-bold text-zinc-100">🎯 TODOs</h2>
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-zinc-500">
-                    <span id="badge-pending" class="inline-block px-2 py-1 bg-amber-500/20 text-amber-400 rounded">0 pendentes</span>
-                </span>
-            </div>
-        </div>
+
 
         <!-- Filter buttons -->
         <div class="flex flex-wrap gap-2" id="marker-filters">
-            <button
-                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border"
-                data-type="all"
-                data-status="all"
-            >
+            <button class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border"
+                data-type="all" data-status="all">
                 Todos
             </button>
             <div id="marker-filter-buttons" class="contents"></div>
             <button
-                class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 hover:bg-green-500/10"
-                data-type="task"
-                data-status="all"
-            >
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 hover:bg-green-500/10"
+                data-type="task" data-status="all">
                 TASK
             </button>
             <div class="flex-1"></div>
             <button
                 class="filter-btn active px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border bg-zinc-800 text-zinc-300 border-zinc-700"
-                data-status="pending"
-            >
+                data-status="pending">
                 Pendentes
             </button>
             <button
                 class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-zinc-500 border-zinc-700 hover:text-zinc-400"
-                data-status="completed"
-            >
+                data-status="completed">
                 Completos
+            </button>
+            <button id="toggle-all-folders"
+                class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-zinc-400 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600">
+                Colapsar Tudo
             </button>
         </div>
 
         <!-- Search input -->
         <div class="relative">
-            <input
-                id="todo-search"
-                type="text"
-                placeholder="Buscar TODOs..."
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all"
-            />
+            <input id="todo-search" type="text" placeholder="Buscar TODOs..."
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all" />
         </div>
     </div>
 
@@ -171,21 +157,8 @@
         margin-top: 2px;
     }
 
-    .todo-tree-todo.todo-type-todo .todo-icon::before {
-        content: "🔵";
-    }
-    .todo-tree-todo.todo-type-fixme .todo-icon::before {
-        content: "🟡";
-    }
-    .todo-tree-todo.todo-type-bug .todo-icon::before {
-        content: "🔴";
-    }
-    .todo-tree-todo.todo-type-task.completed .todo-icon::before {
-        content: "✓";
+    .todo-tree-todo.completed .todo-icon {
         color: #6b7280;
-    }
-    .todo-tree-todo.todo-type-task:not(.completed) .todo-icon::before {
-        content: "⬜";
     }
 
     .todo-tree-todo .todo-content {
@@ -213,23 +186,6 @@
         letter-spacing: 0.05em;
         margin-right: 6px;
     }
-
-    .todo-tree-todo.todo-type-todo .todo-type {
-        background: #3b82f6/20;
-        color: #3b82f6;
-    }
-    .todo-tree-todo.todo-type-fixme .todo-type {
-        background: #f59e0b/20;
-        color: #f59e0b;
-    }
-    .todo-tree-todo.todo-type-bug .todo-type {
-        background: #ef4444/20;
-        color: #ef4444;
-    }
-    .todo-tree-todo.todo-type-task .todo-type {
-        background: #10b981/20;
-        color: #10b981;
-    }
 </style>
 
 <script>
@@ -238,7 +194,7 @@
 
         let allTodos = [];
         let currentFilters = {
-            type: "todo,task",
+            type: "all",
             status: "pending",
             search: "",
         };
@@ -258,6 +214,7 @@
                     currentFilters.type = activeTypes.join(",");
                 }
                 setupFilterButtons();
+                setupToggleAllButton();
                 loadTodos();
                 setupSearchInput();
             });
@@ -281,12 +238,6 @@
             // Separate active and inactive markers
             var activeMarkers = markerConfigs.filter(function (m) { return m.active; });
             var inactiveMarkers = markerConfigs.filter(function (m) { return !m.active; });
-
-            // Mark "active" markers as active filter by default
-            var defaultActive = ["TODO", "FIXME", "BUG"];
-            var hasAnyDefaultActive = activeMarkers.some(function (m) {
-                return defaultActive.indexOf(m.marker) !== -1;
-            });
 
             // Build active marker buttons
             activeMarkers.forEach(function (m) {
@@ -315,13 +266,6 @@
                         btn.style.color = m.color;
                     }
                 });
-
-                // Mark as active by default if it's a common marker
-                if (defaultActive.indexOf(m.marker) !== -1) {
-                    btn.classList.add("active");
-                    btn.style.background = m.color + "20";
-                    btn.style.borderColor = m.color + "60";
-                }
 
                 container.appendChild(btn);
             });
@@ -361,8 +305,15 @@
 
                 // Update badge
                 if (currentFilters.status === "pending") {
-                    document.getElementById("badge-pending").textContent =
-                        allTodos.length + " pendentes";
+                    const count = allTodos.length;
+                    const navTodos = document.getElementById("nav-todos");
+                    const mobileNavTodos = document.getElementById("mobile-nav-todos");
+                    if (navTodos) {
+                        navTodos.textContent = `🎯TODOs ${count}`;
+                    }
+                    if (mobileNavTodos) {
+                        mobileNavTodos.textContent = `🎯 TODOs ${count}`;
+                    }
                 }
 
                 renderTree();
@@ -375,6 +326,7 @@
 
         function setupFilterButtons() {
             document.querySelectorAll(".filter-btn").forEach((btn) => {
+                if (btn.id === "toggle-all-folders") return;
                 btn.addEventListener("click", function () {
                     const type = this.getAttribute("data-type");
                     const status = this.getAttribute("data-status");
@@ -458,10 +410,97 @@
 
         function findMarker(typeName) {
             var upper = typeName.toUpperCase();
+            if (upper === "TASK") {
+                return { marker: "TASK", color: "#34d399" };
+            }
             for (var i = 0; i < markerConfigs.length; i++) {
                 if (markerConfigs[i].marker === upper) return markerConfigs[i];
             }
             return null;
+        }
+
+        function hexToRgb(hex) {
+            const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+            const fullHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function getMarkerEmoji(todoType) {
+            const type = todoType.toUpperCase();
+            if (type === "TASK") {
+                return "⬜";
+            }
+            const marker = findMarker(type);
+            if (!marker) {
+                if (type === "TODO") return "🔵";
+                if (type === "FIXME") return "🟡";
+                if (type === "BUG") return "🔴";
+                return "🔵";
+            }
+
+            const hexColor = marker.color;
+            const targetRgb = hexToRgb(hexColor);
+            if (!targetRgb) return "🔵";
+
+            let bestEmoji = "🔵";
+            let minDistance = Infinity;
+
+            const colorMap = [
+                { hex: "#3b82f6", emoji: "🔵" },
+                { hex: "#06b6d4", emoji: "🔵" },
+                { hex: "#f59e0b", emoji: "🟡" },
+                { hex: "#ef4444", emoji: "🔴" },
+                { hex: "#10b981", emoji: "🟢" },
+                { hex: "#8b5cf6", emoji: "🟣" },
+                { hex: "#f97316", emoji: "🟠" },
+                { hex: "#ffffff", emoji: "⚪" }
+            ];
+
+            for (const item of colorMap) {
+                const itemRgb = hexToRgb(item.hex);
+                if (!itemRgb) continue;
+
+                const dist = Math.sqrt(
+                    Math.pow(targetRgb.r - itemRgb.r, 2) +
+                    Math.pow(targetRgb.g - itemRgb.g, 2) +
+                    Math.pow(targetRgb.b - itemRgb.b, 2)
+                );
+
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    bestEmoji = item.emoji;
+                }
+            }
+
+            return bestEmoji;
+        }
+
+        function getTodoIcon(todo) {
+            const type = todo.type.toUpperCase();
+            if (type === "TASK") {
+                return todo.status === "completed" ? "✓" : "⬜";
+            }
+            return getMarkerEmoji(type);
+        }
+
+        function getMarkerColor(todoType) {
+            const type = todoType.toUpperCase();
+            if (type === "TASK") {
+                return "#10b981";
+            }
+            const marker = findMarker(type);
+            if (!marker) {
+                if (type === "TODO") return "#3b82f6";
+                if (type === "FIXME") return "#f59e0b";
+                if (type === "BUG") return "#ef4444";
+                return "#3b82f6";
+            }
+            return marker.color;
         }
 
         function setupSearchInput() {
@@ -491,6 +530,38 @@
             );
         }
 
+        function updateToggleAllButtonText() {
+            const btn = document.getElementById("toggle-all-folders");
+            if (!btn) return;
+            const anyExpanded = document.querySelector(".todo-tree-folder.expanded") !== null;
+            if (anyExpanded) {
+                btn.textContent = "Colapsar Tudo";
+            } else {
+                btn.textContent = "Expandir Tudo";
+            }
+        }
+
+        function setupToggleAllButton() {
+            const btn = document.getElementById("toggle-all-folders");
+            if (!btn) return;
+            btn.addEventListener("click", function () {
+                const folders = document.querySelectorAll(".todo-tree-folder");
+                const children = document.querySelectorAll(".todo-tree-children");
+                const anyExpanded = document.querySelector(".todo-tree-folder.expanded") !== null;
+
+                if (anyExpanded) {
+                    // Collapse all
+                    folders.forEach(f => f.classList.remove("expanded"));
+                    children.forEach(c => c.classList.remove("expanded"));
+                } else {
+                    // Expand all
+                    folders.forEach(f => f.classList.add("expanded"));
+                    children.forEach(c => c.classList.add("expanded"));
+                }
+                updateToggleAllButtonText();
+            });
+        }
+
         function renderTree() {
             const container = document.getElementById("todo-tree");
             const emptyState = document.getElementById("empty-state");
@@ -501,10 +572,18 @@
             if (!filtered.length) {
                 container.innerHTML = "";
                 emptyState.classList.remove("hidden");
+                const toggleAllBtn = document.getElementById("toggle-all-folders");
+                if (toggleAllBtn) {
+                    toggleAllBtn.style.display = "none";
+                }
                 return;
             }
 
             emptyState.classList.add("hidden");
+            const toggleAllBtn = document.getElementById("toggle-all-folders");
+            if (toggleAllBtn) {
+                toggleAllBtn.style.display = "";
+            }
 
             // Group by file
             const grouped = {};
@@ -532,47 +611,49 @@
                     );
 
                     html += `<div class="todo-tree-item">
-                        <div class="todo-tree-folder" data-toggle="${fileId}">
+                        <div class="todo-tree-folder expanded" data-toggle="${fileId}">
                             <div class="toggle">▶</div>
                             <div class="folder-icon">📄</div>
                             <div class="folder-name">${escapeHtml(file)}</div>
                             <div class="folder-count">${todoCount}</div>
                         </div>
-                        <div class="todo-tree-children" id="${fileId}">`;
+                        <div class="todo-tree-children expanded" id="${fileId}">`;
 
                     // Iterate sections in insertion order (preserves document order from API)
                     Object.keys(sections).forEach((section) => {
-                            const sectionId = fileId + "-" + btoa(section);
-                            const todos = sections[section];
+                        const sectionId = fileId + "-" + btoa(section);
+                        const todos = sections[section];
 
-                            html += `<div class="todo-tree-item">
-                                <div class="todo-tree-folder" data-toggle="${sectionId}">
+                        html += `<div class="todo-tree-item">
+                                <div class="todo-tree-folder expanded" data-toggle="${sectionId}">
                                     <div class="toggle">▶</div>
                                     <div class="folder-icon">#️⃣</div>
                                     <div class="folder-name">${escapeHtml(section)}</div>
                                     <div class="folder-count">${todos.length}</div>
                                 </div>
-                                <div class="todo-tree-children" id="${sectionId}">`;
+                                <div class="todo-tree-children expanded" id="${sectionId}">`;
 
-                            todos.forEach((todo) => {
-                                const typeClass =
-                                    "todo-type-" + todo.type.toLowerCase();
-                                const statusClass =
-                                    todo.status === "completed"
-                                        ? "completed"
-                                        : "";
+                        todos.forEach((todo) => {
+                            const typeClass =
+                                "todo-type-" + todo.type.toLowerCase();
+                            const statusClass =
+                                todo.status === "completed"
+                                    ? "completed"
+                                    : "";
+                            const markerColor = getMarkerColor(todo.type);
+                            const jsEscapedText = todo.text.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
-                                html += `<div class="todo-tree-todo ${typeClass} ${statusClass}" onclick="openTodo('${escapeHtml(todo.file)}', ${todo.line})">
-                                    <div class="todo-icon"></div>
+                            html += `<div class="todo-tree-todo ${typeClass} ${statusClass}" onclick="openTodo('${escapeHtml(todo.file)}', ${todo.line}, '${jsEscapedText}')">
+                                    <div class="todo-icon">${getTodoIcon(todo)}</div>
                                     <div class="todo-content">
-                                        <span class="todo-type">${escapeHtml(todo.type)}</span>
+                                        <span class="todo-type" style="background: ${markerColor}20; color: ${markerColor}">${escapeHtml(todo.type)}</span>
                                         <span class="todo-text">${escapeHtml(todo.text)}</span>
                                     </div>
                                 </div>`;
-                            });
-
-                            html += `</div></div>`;
                         });
+
+                        html += `</div></div>`;
+                    });
 
                     html += `</div></div>`;
                 });
@@ -589,15 +670,19 @@
                         this.classList.toggle("expanded");
                         children.classList.toggle("expanded");
                     }
+                    updateToggleAllButtonText();
                 });
             });
+
+            updateToggleAllButtonText();
         }
 
-        function openTodo(file, line) {
-            // Open the file in editor and scroll to line
+        function openTodo(file, line, text) {
+            // Open the file in editor and scroll to line/text
             window.location.href =
                 "/editor?file=" +
                 encodeURIComponent(file) +
+                (text ? "&text=" + encodeURIComponent(text) : "") +
                 "#line-" +
                 line;
         }
