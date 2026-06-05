@@ -1182,6 +1182,28 @@
             }, 100);
         })();
 
+        // Se nao tem hash #line-, vai para o inicio do documento
+        (function () {
+            var hash = window.location.hash;
+            if (hash && hash.startsWith("#line-")) return;
+            var attempts = 0;
+            var timer = setInterval(function () {
+                attempts++;
+                if (!editor || editor.isDestroyed) {
+                    if (attempts > 20) clearInterval(timer);
+                    return;
+                }
+                var doc = editor.state.doc;
+                if (!doc || doc.content.size === 0) {
+                    if (attempts > 20) clearInterval(timer);
+                    return;
+                }
+                clearInterval(timer);
+                editor.commands.setTextSelection(1);
+                editor.commands.scrollIntoView();
+            }, 100);
+        })();
+
         // ── Bubble Menu ──
         function updateBubble() {
             if (!editor || editor.isDestroyed) {
