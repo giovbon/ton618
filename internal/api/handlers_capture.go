@@ -177,7 +177,7 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 
 		finalMarkdown = fmt.Sprintf(`---
 title: "%s"
-tags: [captura]
+tags: [captura, keywords]
 source: %s
 ---
 
@@ -228,7 +228,7 @@ source: %s
 
 		finalMarkdown = fmt.Sprintf(`---
 title: "%s"
-tags: [captura]
+tags: [captura, keywords]
 source: %s
 ---
 
