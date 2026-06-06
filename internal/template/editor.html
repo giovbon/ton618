@@ -705,7 +705,7 @@
                     (i === 0 ? " active" : "") +
                     '" data-index="' +
                     i +
-                    ' data-wiki-name="' +
+                    '" data-wiki-name="' +
                     htmlEscape(name) +
                     '" data-wiki-path="' +
                     htmlEscape(item.fullPath) +
@@ -728,8 +728,17 @@
             if (sel.rangeCount) {
                 var range = sel.getRangeAt(0);
                 var rect = range.getBoundingClientRect();
-                el.style.left = rect.left - 10 + "px";
-                el.style.top = rect.bottom + 4 + "px";
+                var left = rect.left - 10;
+                var mh = el.offsetHeight || 240;
+                var spaceBelow = window.innerHeight - rect.bottom - 8;
+                var top;
+                if (spaceBelow < mh && rect.top > mh + 8) {
+                    top = rect.top - mh - 4;
+                } else {
+                    top = rect.bottom + 4;
+                }
+                el.style.left = left + "px";
+                el.style.top = top + "px";
             }
         }
 
@@ -915,8 +924,8 @@
                 // Auto-detecção de linguagem em code blocks (debounced)
                 if (autoDetectTimer) clearTimeout(autoDetectTimer);
                 autoDetectTimer = setTimeout(autoDetectCodeLanguage, 1500);
-                // Update wikilink filter if menu is visible
-                if (wikiVisible) {
+                // Wikilink detection (também funciona sem keydown, ex: mobile)
+                if (editor) {
                     var $from = editor.state.selection.$from;
                     var textBefore = $from.parent.textBetween(
                         0,
@@ -924,12 +933,26 @@
                     );
                     var bracketPos = textBefore.lastIndexOf("[[");
                     if (bracketPos !== -1) {
+                        if (!wikiVisible) {
+                            wikiVisible = true;
+                        }
                         var filterText = textBefore.substring(bracketPos + 2);
                         showWikiMenu(filterText);
-                    } else {
+                    } else if (wikiVisible) {
                         hideWikiMenu();
                     }
                 }
+                // Mobile fallback: detectar / sem keydown (teclados virtuais)
+                if (editor && slashPos === null && slashEl.classList.contains("hidden")) {
+                    var $sl = editor.state.selection.$from;
+                    var txtBefore = $sl.parent.textBetween(0, $sl.parentOffset);
+                    if (txtBefore === "/") {
+                        slashPos = $sl.pos - 1;
+                        showSlashMenu(editor.view);
+                        slashFilterText = "";
+                    }
+                }
+
                 // Filtragem do slash menu enquanto digita
                 if (
                     !slashEl.classList.contains("hidden") &&
@@ -1370,7 +1393,15 @@
             slashEl.classList.remove("hidden");
             var mw = 224;
             var left = coords.left - 10;
-            var top = coords.bottom + 4;
+            // Mostrar antes do onUpdate reposicionar (precisa do offsetHeight)
+            var mh = slashEl.offsetHeight || 240;
+            var top;
+            var spaceBelow = window.innerHeight - coords.bottom - 8;
+            if (spaceBelow < mh && coords.top > mh + 8) {
+                top = coords.top - mh - 4;
+            } else {
+                top = coords.bottom + 4;
+            }
             if (left + mw > window.innerWidth - 8)
                 left = window.innerWidth - mw - 8;
             if (left < 8) left = 8;
