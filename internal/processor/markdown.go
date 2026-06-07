@@ -130,7 +130,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 		}
 	}
 
-	// Extract wikilinks
+	// Extract wikilinks e normaliza: notas markdown ganham prefixo notes/
 	linkMatches := wikilinkRegex.FindAllStringSubmatch(text, -1)
 	for _, m := range linkMatches {
 		if len(m) > 1 {
@@ -139,6 +139,10 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 				target = strings.ToLower(target)
 				if !strings.Contains(target, ".") {
 					target += ".md"
+				}
+				// Normaliza: se for .md sem path, adiciona prefixo notes/
+				if strings.HasSuffix(target, ".md") && !strings.Contains(target, "/") {
+					target = "notes/" + target
 				}
 				links = append(links, target)
 			}
@@ -318,7 +322,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 		}
 	}
 
-	// Extract wikilinks
+	// Extract wikilinks e normaliza: notas markdown ganham prefixo notes/
 	linkMatches := wikilinkRegex.FindAllStringSubmatch(text, -1)
 	for _, m := range linkMatches {
 		if len(m) > 1 {
@@ -327,6 +331,10 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				target = strings.ToLower(target)
 				if !strings.Contains(target, ".") {
 					target += ".md"
+				}
+				// Normaliza: se for .md sem path, adiciona prefixo notes/
+				if strings.HasSuffix(target, ".md") && !strings.Contains(target, "/") {
+					target = "notes/" + target
 				}
 				links = append(links, target)
 			}

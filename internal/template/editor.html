@@ -68,6 +68,29 @@
         </div>
     </div>
 
+    {{if .Backlinks}}
+    {{$l1 := .Backlinks.Level1}}
+    {{$l2 := .Backlinks.Level2}}
+    {{if $l1}}
+    <div id="backlinks-area" class="mb-3">
+        <div class="flex items-center gap-1.5 mb-1.5">
+            <span class="text-[10px] font-mono text-zinc-600">🔗 BACKLINKS</span>
+        </div>
+        <div class="bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2 text-[12px] text-zinc-400 leading-relaxed">
+            Ligada a
+            {{range $i, $name := $l1}}
+                {{if $i}}, {{end}}<a href="/editor?file={{$name}}" class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{{displayName $name}}</a>
+            {{end -}}
+            {{if $l2}}.
+            E essas notas também ligam para
+            {{range $i, $name := $l2}}
+                {{if $i}}, {{end}}<a href="/editor?file={{$name}}" class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{{displayName $name}}</a>
+            {{- end -}}{{- end -}}.
+        </div>
+    </div>
+    {{end}}
+    {{end}}
+
     <!-- Wikilink autocomplete -->
     <div
         id="wikilink-menu"

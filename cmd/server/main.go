@@ -58,6 +58,13 @@ func main() {
 			parts := strings.Split(s, "/")
 			return parts[len(parts)-1]
 		},
+		"displayName": func(name string) string {
+			base := name
+			if idx := strings.LastIndex(name, "/"); idx >= 0 {
+				base = name[idx+1:]
+			}
+			return strings.TrimSuffix(base, ".md")
+		},
 		"noteIcon": func(arquivo string, tags []string) string {
 			isPdf := strings.HasPrefix(arquivo, "pdfs/")
 			isAttach := strings.HasPrefix(arquivo, "attachments/")

@@ -100,3 +100,40 @@ func (s *Store) ClearLinks(fromFile string) error {
 	_, err := s.DB.Exec("DELETE FROM links WHERE from_file = ?", fromFile)
 	return err
 }
+
+// GetLinksByFiles returns all unique files that the given files link TO.
+// It excludes any files listed in the exclude set (used to avoid self-references).
+func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]string, error) {
+	if len(fromFiles) == 0 {
+		return nil, nil
+	}
+	query := "SELECT DISTINCT to_file FROM links WHERE from_file IN ("
+	args := make([]interface{}, 0, len(fromFiles))
+	for i, f := range fromFiles {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args = append(args, f)
+	}
+	query += ") ORDER BY to_file"
+
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var links []string
+	for rows.Next() {
+		var to string
+		if err := rows.Scan(&to); err != nil {
+			return nil, err
+		}
+		if exclude != nil && exclude[to] {
+			continue
+		}
+		links = append(links, to)
+	}
+	return links, rows.Err()
+}

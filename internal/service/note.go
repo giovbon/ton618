@@ -175,6 +175,41 @@ type NoteItem struct {
 	Keywords []string `json:"keywords"`
 }
 
+// BacklinksResult contém os dois níveis de backlinks para uma nota.
+type BacklinksResult struct {
+	// Level1 são notas que linkam PARA esta nota.
+	Level1 []string `json:"level1"`
+	// Level2 são notas para as quais as Level1 também linkam (excluindo a própria nota).
+	Level2 []string `json:"level2"`
+}
+
+// GetBacklinks retorna os backlinks de 2 níveis para uma nota.
+// Nível 1: notas que linkam PARA esta nota.
+// Nível 2: notas que as notas de nível 1 linkam (excluindo a nota atual).
+func (s *NoteService) GetBacklinks(filename string) (*BacklinksResult, error) {
+	// Nível 1: quem linka PARA esta nota
+	level1, err := s.links.GetBacklinks(filename)
+	if err != nil {
+		return nil, fmt.Errorf("get backlinks: %w", err)
+	}
+
+	if len(level1) == 0 {
+		return &BacklinksResult{}, nil
+	}
+
+	// Nível 2: para quem as Level1 linkam (excluindo a nota atual)
+	exclude := map[string]bool{filename: true}
+	level2, err := s.links.GetLinksByFiles(level1, exclude)
+	if err != nil {
+		return nil, fmt.Errorf("get links by files: %w", err)
+	}
+
+	return &BacklinksResult{
+		Level1: level1,
+		Level2: level2,
+	}, nil
+}
+
 // ── privado ──
 
 func (s *NoteService) reindex(filename, content string, modTime time.Time) error {

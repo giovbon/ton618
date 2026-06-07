@@ -42,6 +42,9 @@ type TagStore interface {
 type LinkStore interface {
 	AddLink(fromFile, toFile string) error
 	ClearLinks(fromFile string) error
+	GetBacklinks(toFile string) ([]string, error)
+	GetLinks(fromFile string) ([]string, error)
+	GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]string, error)
 }
 
 // ── Keywords ──

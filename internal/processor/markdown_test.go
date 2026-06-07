@@ -102,7 +102,7 @@ func TestProcessMarkdown_Wikilinks(t *testing.T) {
 	if len(links) != 2 {
 		t.Fatalf("esperado 2 wikilinks, got %d: %v", len(links), links)
 	}
-	if links[0] != "outra-nota.md" || links[1] != "nota-complexa.md" {
+	if links[0] != "notes/outra-nota.md" || links[1] != "notes/nota-complexa.md" {
 		t.Errorf("wikilinks errados: %v", links)
 	}
 }

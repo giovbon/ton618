@@ -12,6 +12,7 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/processor"
+	"ton618/internal/service"
 	"ton618/internal/template"
 )
 
@@ -67,6 +68,13 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		allTags = nil
 	}
 
+	// Busca backlinks de 2 níveis
+	backlinks, err := ctx.Notes.GetBacklinks(filename)
+	if err != nil {
+		slog.Error("get backlinks", "file", filename, "error", err)
+		backlinks = &service.BacklinksResult{}
+	}
+
 	data := map[string]interface{}{
 		"Title":        "Editor - " + filename,
 		"Filename":     filename,
@@ -74,6 +82,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		"Content":      content,
 		"Tags":         tags,
 		"AllTags":      allTags,
+		"Backlinks":    backlinks,
 		"LoadTipTap":   true,
 		"ContentBlock": "editorContent",
 	}
