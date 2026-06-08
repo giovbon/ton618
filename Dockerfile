@@ -8,7 +8,7 @@ COPY web/ .
 RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
-FROM golang:1.24 AS builder
+FROM golang:1.25 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
