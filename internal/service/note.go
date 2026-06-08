@@ -92,6 +92,7 @@ func (s *NoteService) Delete(filename string) error {
 	s.fileMod.DeleteFileMod(filename)
 	s.pop.ResetPopularity(filename)
 	s.tags.SetFileTags(filename, nil)
+	s.links.ClearLinks(filename)
 
 	os.Remove(filepath.Join(s.docsDir, filename))
 
@@ -127,6 +128,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 	s.fileMod.DeleteFileMod(oldName)
 	s.pop.ResetPopularity(oldName)
 	s.tags.SetFileTags(oldName, nil)
+	s.links.ClearLinks(oldName)
 
 	content, err := s.notes.GetNote(newName)
 	if err == nil && content != "" {

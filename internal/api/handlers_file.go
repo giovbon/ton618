@@ -229,6 +229,7 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	ctx.Store.DeleteFileMod(filename)
 	ctx.Store.ResetPopularity(filename)
 	ctx.Store.SetFileTags(filename, nil)
+	ctx.Store.ClearLinks(filename)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -315,6 +316,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		ctx.Store.DeleteFileMod(oldName)
 		ctx.Store.ResetPopularity(oldName)
 		ctx.Store.SetFileTags(oldName, nil)
+		ctx.Store.ClearLinks(oldName)
 		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 		info, err := os.Stat(newPath)
 		if err == nil {
@@ -614,6 +616,7 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 		ctx.Store.DeleteFileMod(filename)
 		ctx.Store.ResetPopularity(filename)
 		ctx.Store.SetFileTags(filename, nil)
+		ctx.Store.ClearLinks(filename)
 
 		removed = append(removed, name)
 	}

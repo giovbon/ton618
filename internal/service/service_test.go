@@ -150,6 +150,82 @@ func TestNoteService_Delete(t *testing.T) {
 	}
 }
 
+func TestNoteService_Delete_ClearsBacklinks(t *testing.T) {
+	svc, _, _, cleanup := newTestService(t)
+	defer cleanup()
+
+	// Cria note1
+	err := svc.Save("note1", "Eu sou a note1", nil)
+	if err != nil {
+		t.Fatalf("Save note1: %v", err)
+	}
+
+	// Cria note2 que linka para note1
+	err = svc.Save("note2", "Link para [[note1]]", nil)
+	if err != nil {
+		t.Fatalf("Save note2: %v", err)
+	}
+
+	// Verifica se o backlink aparece em note1
+	backlinks, err := svc.GetBacklinks("notes/note1.md")
+	if err != nil {
+		t.Fatalf("GetBacklinks falhou: %v", err)
+	}
+	if len(backlinks.Level1) != 1 || backlinks.Level1[0] != "notes/note2.md" {
+		t.Fatalf("esperava backlink notes/note2.md, got %v", backlinks.Level1)
+	}
+
+	// Deleta note2
+	err = svc.Delete("notes/note2.md")
+	if err != nil {
+		t.Fatalf("Delete note2: %v", err)
+	}
+
+	// Verifica se o backlink sumiu de note1
+	backlinks, err = svc.GetBacklinks("notes/note1.md")
+	if err != nil {
+		t.Fatalf("GetBacklinks falhou: %v", err)
+	}
+	if len(backlinks.Level1) != 0 {
+		t.Fatalf("esperava 0 backlinks em note1 após deletar note2, got %v", backlinks.Level1)
+	}
+}
+
+func TestNoteService_Rename_ClearsOldLinks(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	// Cria note1
+	svc.Save("note1", "Eu sou a note1", nil)
+
+	// Cria note2 que linka para note1
+	svc.Save("note2", "Link para [[note1]]", nil)
+
+	// Renomeia note2 para note3
+	err := svc.Rename("note2", "note3")
+	if err != nil {
+		t.Fatalf("Rename note2 para note3 falhou: %v", err)
+	}
+
+	// Verifica se os links originados de note2 (oldName) foram limpos
+	links, err := store.GetLinks("notes/note2.md")
+	if err != nil {
+		t.Fatalf("GetLinks note2 falhou: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("esperava 0 links originados de note2, got %v", links)
+	}
+
+	// Verifica se o backlink em note1 agora aponta para note3
+	backlinks, err := svc.GetBacklinks("notes/note1.md")
+	if err != nil {
+		t.Fatalf("GetBacklinks note1 falhou: %v", err)
+	}
+	if len(backlinks.Level1) != 1 || backlinks.Level1[0] != "notes/note3.md" {
+		t.Fatalf("esperava backlink de notes/note3.md, got %v", backlinks.Level1)
+	}
+}
+
 func TestNoteService_Rename(t *testing.T) {
 	svc, _, store, cleanup := newTestService(t)
 	defer cleanup()

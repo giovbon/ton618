@@ -465,6 +465,7 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)
+		ctx.Store.ClearLinks(arquivo)
 
 		deleted++
 	}
@@ -569,6 +570,7 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)
+		ctx.Store.ClearLinks(arquivo)
 
 		archivedFiles = append(archivedFiles, arquivo)
 	}
@@ -770,6 +772,7 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 	ctx.Store.DeleteFTSByFile("archives/" + archiveName)
 	ctx.Store.DeleteFileMod("archives/" + archiveName)
 	ctx.Store.SetFileTags("archives/"+archiveName, nil)
+	ctx.Store.ClearLinks("archives/" + archiveName)
 	os.Remove(archivePath)
 
 	slog.Info("Archive restaurado", "archive", archiveName, "arquivos", len(restoredFiles))

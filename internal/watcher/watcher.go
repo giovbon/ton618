@@ -196,6 +196,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		store.DeleteFileMod(filename)
 		store.ResetPopularity(filename)
 		store.SetFileTags(filename, nil) // limpa tags
+		store.ClearLinks(filename)       // limpa links
 		slog.Info("Arquivo removido do índice", "file", filename)
 		return nil
 	}
