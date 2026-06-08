@@ -1039,6 +1039,12 @@ templ editorContent(data EditorData) {
                     return false;
                 },
                 handleKeyDown: function (view, event) {
+                    // Tab dentro de code block: insere indentação
+                    if (event.key === "Tab" && view.state.selection.$from.parent.type.name === "codeBlock") {
+                        event.preventDefault();
+                        view.dispatch(view.state.tr.insertText("    "));
+                        return true;
+                    }
                     if (
                         event.key === "Backspace" &&
                         !slashEl.classList.contains("hidden")

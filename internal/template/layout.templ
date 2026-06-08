@@ -372,6 +372,10 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                     class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
                     🔖 Marcadores
                 </button>
+                <button data-tab="sincronizar" onclick="switchSettingsTab('sincronizar')"
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    🔁 Sincronizar
+                </button>
             </div>
 
             <!-- Tab Content -->
@@ -645,6 +649,20 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                             ↩ Restaurar padrão
                         </button>
                     </div>
+                </div>
+
+                <!-- Sincronizar Tab -->
+                <div id="tab-sincronizar" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Reindexa todas as notas, recria os índices FTS, backlinks e tags.
+                        Isto é seguro — notas antigas que não foram processadas corretamente
+                        serão atualizadas.
+                    </p>
+                    <button id="sync-btn" onclick="runSync()"
+                        class="px-5 py-2.5 text-[13px] font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition-all">
+                        🔁 Reindexar todas as notas
+                    </button>
+                    <span id="sync-status" class="text-xs text-zinc-500"></span>
                 </div>
             </div>
         </div>
@@ -1553,10 +1571,10 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             if (!response.ok) return;
             const data = await response.json();
             const count = data.todos ? data.todos.length : 0;
-            
+
             const navTodos = document.getElementById("nav-todos");
             const mobileNavTodos = document.getElementById("mobile-nav-todos");
-            
+
             if (navTodos) {
                 navTodos.textContent = count > 0 ? `🎯TODOs ${count}` : `🎯TODOs`;
             }
@@ -1566,6 +1584,26 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
         } catch (e) {
             console.error("Error updating todos count:", e);
         }
+    }
+
+    async function runSync() {
+        var btn = document.getElementById("sync-btn");
+        var statusEl = document.getElementById("sync-status");
+        btn.disabled = true;
+        btn.textContent = "⏳ Reindexando...";
+        statusEl.textContent = "Processando notas...";
+        try {
+            var resp = await fetch("/api/sync", { method: "POST" });
+            if (resp.ok) {
+                statusEl.textContent = "✓ Concluído! " + (await resp.text());
+            } else {
+                statusEl.textContent = "✗ Erro: " + resp.status;
+            }
+        } catch (e) {
+            statusEl.textContent = "✗ Erro: " + e.message;
+        }
+        btn.disabled = false;
+        btn.textContent = "🔁 Reindexar todas as notas";
     }
 
     document.addEventListener("DOMContentLoaded", function () {
