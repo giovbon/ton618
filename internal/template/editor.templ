@@ -71,7 +71,7 @@ templ editorContent(data EditorData) {
         </div>
     </div>
 
-    
+
     if data.Backlinks != nil {
         if len(data.Backlinks.Level1) > 0 {
             <div id="backlinks-area" class="mb-3">
@@ -535,6 +535,7 @@ templ editorContent(data EditorData) {
         var frontmatterVisible = false;
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
         var autoDetectTimer = null;
+        var isInitialLoad = true;
 
         // ── Parse frontmatter do raw content ──
         var bodyContent = raw;
@@ -952,6 +953,11 @@ templ editorContent(data EditorData) {
                 updateBubble();
             },
             onUpdate: function () {
+                // Pula o primeiro onUpdate (disparado ao carregar o conteudo)
+                if (isInitialLoad) {
+                    isInitialLoad = false;
+                    return;
+                }
                 setStatus("dirty");
                 if (saveTimer) clearTimeout(saveTimer);
                 saveTimer = setTimeout(doSave, 2000);
