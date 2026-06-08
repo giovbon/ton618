@@ -1,5 +1,7 @@
 package db
 
+import "strings"
+
 // ---------------------------------------------------------------------------
 // links
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ func (s *Store) GetLinkCount(fromFile string) int {
 // GetBacklinks returns all files that link to the given file.
 func (s *Store) GetBacklinks(toFile string) ([]string, error) {
 	rows, err := s.DB.Query(
-		"SELECT from_file FROM links WHERE to_file = ? ORDER BY from_file", toFile,
+		"SELECT from_file FROM links WHERE to_file = ? ORDER BY from_file", strings.ToLower(toFile),
 	)
 	if err != nil {
 		return nil, err
@@ -72,7 +74,7 @@ func (s *Store) GetBacklinks(toFile string) ([]string, error) {
 // GetBacklinkCount returns the number of files that link to the given file.
 func (s *Store) GetBacklinkCount(toFile string) int {
 	var count int
-	s.DB.QueryRow("SELECT COUNT(*) FROM links WHERE to_file = ?", toFile).Scan(&count)
+	s.DB.QueryRow("SELECT COUNT(*) FROM links WHERE to_file = ?", strings.ToLower(toFile)).Scan(&count)
 	return count
 }
 
@@ -107,6 +109,11 @@ func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]
 	if len(fromFiles) == 0 {
 		return nil, nil
 	}
+	// Normaliza exclude keys para lowercase
+	normExclude := make(map[string]bool, len(exclude))
+	for k, v := range exclude {
+		normExclude[strings.ToLower(k)] = v
+	}
 	query := "SELECT DISTINCT to_file FROM links WHERE from_file IN ("
 	args := make([]interface{}, 0, len(fromFiles))
 	for i, f := range fromFiles {
@@ -130,7 +137,7 @@ func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]
 		if err := rows.Scan(&to); err != nil {
 			return nil, err
 		}
-		if exclude != nil && exclude[to] {
+		if exclude != nil && normExclude[to] {
 			continue
 		}
 		links = append(links, to)
