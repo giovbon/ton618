@@ -1,10 +1,11 @@
 module ton618
 
-go 1.24.1
+go 1.25.0
 
 require (
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
+	github.com/a-h/templ v0.3.1020
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	gopkg.in/yaml.v3 v3.0.1
@@ -23,9 +24,9 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.49.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

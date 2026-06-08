@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"text/template"
 	"time"
 
 	"ton618/internal/config"
@@ -16,7 +15,6 @@ type HandlerContext struct {
 	Cfg       *config.AppConfig
 	Store     *db.Store
 	Watcher   *watcher.Watcher
-	Templates *template.Template
 
 	// Serviços (lógica de negócio separada dos handlers HTTP)
 	Backup *service.BackupService

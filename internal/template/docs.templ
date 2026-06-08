@@ -1,4 +1,10 @@
-{{template "layout" .}} {{define "helpContent"}}
+package template
+
+templ Docs(title string) {
+    @Layout(title, false, helpContent())
+}
+
+templ helpContent() {
 <div class="max-w-3xl mx-auto">
     <div class="flex items-center gap-3 mb-6">
         <span class="text-2xl">📖</span>
@@ -139,4 +145,4 @@
         }
     }
 </script>
-{{end}}
+}

@@ -20,6 +20,9 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download && go mod tidy
 
+# Instalar templ e dependências
+RUN go install github.com/a-h/templ/cmd/templ@latest
+
 ARG TARGETARCH
 COPY . .
 
@@ -27,7 +30,11 @@ COPY . .
 COPY --from=web-builder /web/static/editor.js web/static/editor.js
 COPY --from=web-builder /web/static/editor.js.gz web/static/editor.js.gz
 
+# Gerar código do templ antes de compilar
+RUN templ generate
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -tags sqlite_fts5 \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
 

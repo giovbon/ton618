@@ -8,14 +8,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"text/template"
 	"time"
 
 	"ton618/internal/api"
 	"ton618/internal/config"
 	"ton618/internal/db"
 	"ton618/internal/processor"
-	internalTpl "ton618/internal/template"
+
 	"ton618/internal/watcher"
 )
 
@@ -48,54 +47,7 @@ func main() {
 		slog.Info("Notas migradas do disco para o SQLite", "count", imported)
 	}
 
-	// 3. Templates
-	funcMap := template.FuncMap{
-		"hasPrefix": strings.HasPrefix,
-		"baseName": func(s string) string {
-			if s == "" {
-				return ""
-			}
-			parts := strings.Split(s, "/")
-			return parts[len(parts)-1]
-		},
-		"displayName": func(name string) string {
-			base := name
-			if idx := strings.LastIndex(name, "/"); idx >= 0 {
-				base = name[idx+1:]
-			}
-			return strings.TrimSuffix(base, ".md")
-		},
-		"noteIcon": func(arquivo string, tags []string) string {
-			isPdf := strings.HasPrefix(arquivo, "pdfs/")
-			isAttach := strings.HasPrefix(arquivo, "attachments/")
-			hasTag := func(tag string) bool {
-				for _, t := range tags {
-					if t == tag {
-						return true
-					}
-				}
-				return false
-			}
-			if isPdf {
-				return "📕"
-			} else if hasTag("youtube") {
-				return "🎬"
-			} else if hasTag("artigo") {
-				return "📰"
-			} else if hasTag("captura") {
-				return "🌐"
-			} else if isAttach {
-				return "📦"
-			}
-			return "📝"
-		},
-	}
-	var parseErr error
-	tpl, parseErr := internalTpl.LoadTemplates(funcMap)
-	if parseErr != nil {
-		slog.Error("carregar templates", "error", parseErr)
-		os.Exit(1)
-	}
+	// 3. Templates (Agora usando a-h/templ, sem text/template)
 	slog.Info("Templates carregados")
 
 	// 3.5. Carrega stopwords personalizadas do usuário
@@ -127,9 +79,7 @@ func main() {
 	w.PollAll()
 	slog.Info("Indexação inicial concluída")
 
-	// 5. API context
 	apiCtx := api.NewHandlerContext(cfg, store, w)
-	apiCtx.SetTemplates(tpl)
 
 	mux := http.NewServeMux()
 	apiCtx.SetupRoutes(mux)

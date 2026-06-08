@@ -75,9 +75,6 @@ func TestNewHandlerContext(t *testing.T) {
 	if hc.Watcher != ctx.Watcher {
 		t.Error("Watcher nao foi definido corretamente")
 	}
-	if hc.Templates != nil {
-		t.Error("Templates deveria ser nil inicialmente")
-	}
 }
 
 func TestSetupRoutes_StaticFiles(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 	"ton618/internal/db"
 	"ton618/internal/processor"
 	"ton618/internal/search"
+	"ton618/internal/template"
 	"ton618/internal/watcher"
 )
 
@@ -210,19 +211,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Build template data
-	type resultItem struct {
-		ID        string
-		Arquivo   string
-		Secao     string
-		Tags      []string
-		Snippet   string
-		Score     float64
-		Tipo      string
-		Timestamp string
-		Line      int
-	}
-
-	var items []resultItem
+	var items []template.SearchResultItem
 	for _, hit := range results.Hits {
 		// Clean snippet: strip HTML, show context around query
 		snippet := hit.Doc.Texto
@@ -267,28 +256,26 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		// Compute line number: find first line in the note that matches the query
 		line := findQueryLine(ctx, hit.Doc.Arquivo, query)
 
-		items = append(items, resultItem{
-			ID:        hit.Doc.ID,
+		items = append(items, template.SearchResultItem{
 			Arquivo:   hit.Doc.Arquivo,
 			Secao:     hit.Doc.Secao,
 			Tags:      tags,
 			Snippet:   snippet,
-			Score:     hit.FinalScore,
 			Tipo:      hit.Doc.Tipo,
 			Timestamp: hit.Doc.Timestamp,
 			Line:      line,
 		})
 	}
 
-	data := map[string]interface{}{
-		"Query":   query,
-		"Results": items,
-		"Total":   results.Total,
+	data := template.SearchResultsData{
+		Query:   query,
+		Results: items,
+		Total:   results.Total,
 	}
 
 	// HTMX: return only the results partial
 	w.Header().Set("Content-Type", "text/html")
-	ctx.renderPartial(w, "search_results.html", data)
+	template.SearchResults(data).Render(r.Context(), w)
 }
 
 // findQueryLine encontra a primeira linha no conteúdo da nota que contém o termo buscado.

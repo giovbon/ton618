@@ -1,11 +1,13 @@
-{{define "layout"}}
+package template
+
+templ Layout(title string, loadTipTap bool, content templ.Component) {
 <!doctype html>
 <html lang="pt-BR" class="dark">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{.Title}}</title>
+    <title>{ title }</title>
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffffff' opacity='0.15'/%3E%3Ccircle cx='50' cy='50' r='26' fill='%23000'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23000'/%3E%3Cpath d='M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z' fill='%23fff' opacity='0.7'/%3E%3Cpath d='M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z' fill='%23e2e8f0' opacity='0.3' transform='rotate(120 50 50)'/%3E%3Cpath d='M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z' fill='%23fff' opacity='0.5' transform='rotate(240 50 50)'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,9 +35,9 @@
             },
         };
     </script>
-    {{if .LoadTipTap}}
+    if loadTipTap {
     <script src="/static/editor.js"></script>
-    {{end}}
+    }
     <style>
         * {
             -webkit-font-smoothing: antialiased;
@@ -318,13 +320,8 @@
         </div>
     </nav>
     <main class="max-w-4xl mx-auto px-4 py-6">
-        {{if eq .ContentBlock "indexContent"}}{{template "indexContent"
-        .}}{{end}} {{if eq .ContentBlock "editorContent"}}{{template
-        "editorContent" .}}{{end}} {{if eq .ContentBlock
-        "helpContent"}}{{template "helpContent" .}}{{end}} {{if eq
-        .ContentBlock "todosContent"}}{{template "todosContent"
-        .}}{{end}} {{if eq .ContentBlock "settingsContent"}}{{template
-        "settingsContent" .}}{{end}}
+
+        @content
     </main>
 
     <!-- Settings Modal -->
@@ -1666,4 +1663,4 @@
 </script>
 
 </html>
-{{end}}
+}

@@ -1,4 +1,10 @@
-{{template "layout" .}} {{define "todosContent"}}
+package template
+
+templ Todos(title string) {
+    @Layout(title, false, todosContent())
+}
+
+templ todosContent() {
 <div>
     <!-- Header with filters -->
     <div class="flex flex-col gap-4 mb-6">
@@ -697,4 +703,4 @@
         }
     })();
 </script>
-{{end}}
+}

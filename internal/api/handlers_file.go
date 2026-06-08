@@ -35,12 +35,6 @@ func noteFilename(name string) string {
 	return name
 }
 
-// displayName retorna apenas o nome do arquivo (sem diretorio e sem .md) para exibicao.
-func displayName(name string) string {
-	base := filepath.Base(name)
-	return strings.TrimSuffix(base, ".md")
-}
-
 // isNoteOrPdf checks if a file path belongs to a note, PDF or attachment document.
 func isNoteOrPdf(path string) bool {
 	return strings.HasPrefix(path, "notes/") || strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/")

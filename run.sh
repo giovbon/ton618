@@ -57,6 +57,7 @@ if [ -f "$BASE_DIR/web/package.json" ]; then
 fi
 
 echo "🔨 Compilando binário otimizado..."
+templ generate
 go build -tags sqlite_fts5 -ldflags="-s -w" -o ton618 ./cmd/server/
 
 if [ $? -eq 0 ]; then

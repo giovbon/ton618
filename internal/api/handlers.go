@@ -19,12 +19,7 @@ import (
 // ── Pages ──
 
 func (ctx *HandlerContext) HandleIndex(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":        "TON-618",
-		"Query":        r.URL.Query().Get("q"),
-		"ContentBlock": "indexContent",
-	}
-	ctx.render(w, "index.html", data)
+	template.Index("TON-618").Render(r.Context(), w)
 }
 
 func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) {
@@ -75,18 +70,16 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		backlinks = &service.BacklinksResult{}
 	}
 
-	data := map[string]interface{}{
-		"Title":        "Editor - " + filename,
-		"Filename":     filename,
-		"DisplayName":  displayName(filename),
-		"Content":      content,
-		"Tags":         tags,
-		"AllTags":      allTags,
-		"Backlinks":    backlinks,
-		"LoadTipTap":   true,
-		"ContentBlock": "editorContent",
+	data := template.EditorData{
+		Title:        "Editor - " + filename,
+		Filename:     filename,
+		DisplayName:  template.DisplayName(filename),
+		Content:      content,
+		Tags:         tags,
+		AllTags:      allTags,
+		Backlinks:    backlinks,
 	}
-	ctx.render(w, "editor.html", data)
+	template.Editor(data).Render(r.Context(), w)
 }
 
 // ── API ──
@@ -107,11 +100,7 @@ func (ctx *HandlerContext) HandleHealth(w http.ResponseWriter, r *http.Request) 
 // ── Help / Documentation ──
 
 func (ctx *HandlerContext) HandleHelp(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":        "Documentação — TON-618",
-		"ContentBlock": "helpContent",
-	}
-	ctx.render(w, "docs.html", data)
+	template.Docs("Documentação — TON-618").Render(r.Context(), w)
 }
 
 func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Request) {
@@ -272,11 +261,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 }
 
 func (ctx *HandlerContext) HandleTodosPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title":        "🎯 TODOs",
-		"ContentBlock": "todosContent",
-	}
-	ctx.render(w, "todos.html", data)
+	template.Todos("TODOs — TON-618").Render(r.Context(), w)
 }
 
 // ── Todo Marker Settings ──
@@ -365,7 +350,5 @@ func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Reque
 }
 
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	ctx.renderLogin(w, "login.html", map[string]interface{}{
-		"Title": "Login - TON-618",
-	})
+	template.Login().Render(r.Context(), w)
 }

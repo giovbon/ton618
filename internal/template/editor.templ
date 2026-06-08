@@ -1,18 +1,21 @@
-{{template "layout" .}} {{define "editorContent"}}
+package template
+
+templ Editor(data EditorData) {
+    @Layout(data.Title, true, editorContent(data))
+}
+
+templ editorContent(data EditorData) {
 <div class="editor-root">
     <div class="flex items-center gap-3 mb-4">
         <input
             id="file-name"
             type="text"
-            value="{{.DisplayName}}"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
             class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
             spellcheck="false"
         />
-        <span
-            id="editor-status"
-            class="text-base font-mono text-zinc-600 shrink-0"
-            >—</span
-        >
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
         <button
             id="save-btn"
             onclick="saveNow()"
@@ -68,28 +71,36 @@
         </div>
     </div>
 
-    {{if .Backlinks}}
-    {{$l1 := .Backlinks.Level1}}
-    {{$l2 := .Backlinks.Level2}}
-    {{if $l1}}
-    <div id="backlinks-area" class="mb-3">
-        <div class="flex items-center gap-1.5 mb-1.5">
-            <span class="text-[10px] font-mono text-zinc-600">🔗 BACKLINKS</span>
-        </div>
-        <div class="bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2 text-[12px] text-zinc-400 leading-relaxed">
-            Ligada a
-            {{range $i, $name := $l1}}
-                {{if $i}}, {{end}}<a href="/editor?file={{$name}}" class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{{displayName $name}}</a>
-            {{end -}}
-            {{if $l2}}.
-            E essas notas também ligam para
-            {{range $i, $name := $l2}}
-                {{if $i}}, {{end}}<a href="/editor?file={{$name}}" class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{{displayName $name}}</a>
-            {{- end -}}{{- end -}}.
-        </div>
-    </div>
-    {{end}}
-    {{end}}
+    
+    if data.Backlinks != nil {
+        if len(data.Backlinks.Level1) > 0 {
+            <div id="backlinks-area" class="mb-3">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                    <span class="text-[10px] font-mono text-zinc-600">🔗 BACKLINKS</span>
+                </div>
+                <div class="bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2 text-[12px] text-zinc-400 leading-relaxed">
+                    Ligada a
+                    for i, name := range data.Backlinks.Level1 {
+                        if i > 0 {
+                            { ", " }
+                        }
+                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
+                    }
+                    if len(data.Backlinks.Level2) > 0 {
+                        { ". E essas notas também ligam para " }
+                        for i, name := range data.Backlinks.Level2 {
+                            if i > 0 {
+                                { ", " }
+                            }
+                            <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
+                        }
+                        { "." }
+                    }
+                </div>
+            </div>
+        }
+    }
+
 
     <!-- Wikilink autocomplete -->
     <div
@@ -125,7 +136,7 @@
         <div class="py-0.5 max-h-60 overflow-y-auto" id="slash-items"></div>
     </div>
 
-    <textarea id="content-output" class="hidden">{{.Content}}</textarea>
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
     <input
         id="editor-image-input"
         type="file"
@@ -517,7 +528,7 @@
         var saveTimer = null;
         var currentStatus = "saved";
         var editor = null;
-        var originalFilename = "{{.Filename}}";
+        var originalFilename = filenameInput.dataset.filename;
         var originalDisplayName = filenameInput.value;
         var slashPos = null;
         var frontmatterText = "";
@@ -1888,4 +1899,4 @@
         window.deleteCurrentNote = deleteCurrentNote; // ← esta linha
     })();
 </script>
-{{end}}
+}
