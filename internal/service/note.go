@@ -200,15 +200,23 @@ func (s *NoteService) GetBacklinks(filename string) (*BacklinksResult, error) {
 	}
 
 	// Nível 2: para quem as Level1 linkam (excluindo a nota atual)
-	exclude := map[string]bool{filename: true}
-	level2, err := s.links.GetLinksByFiles(level1, exclude)
+	level2, err := s.links.GetLinksByFiles(level1, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get links by files: %w", err)
 	}
 
+	// Filtra a propria nota do nivel 2 (case-insensitive)
+	filenameLower := strings.ToLower(filename)
+	filtered := make([]string, 0, len(level2))
+	for _, l2 := range level2 {
+		if strings.ToLower(l2) != filenameLower {
+			filtered = append(filtered, l2)
+		}
+	}
+
 	return &BacklinksResult{
 		Level1: level1,
-		Level2: level2,
+		Level2: filtered,
 	}, nil
 }
 

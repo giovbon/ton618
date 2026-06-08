@@ -87,7 +87,11 @@ templ editorContent(data EditorData) {
                         <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
                     }
                     if len(data.Backlinks.Level2) > 0 {
-                        { ". E essas notas também ligam para " }
+                        if len(data.Backlinks.Level1) == 1 {
+                            { ". E esta nota tambem liga para " }
+                        } else {
+                            { ". E essas notas tambem ligam para " }
+                        }
                         for i, name := range data.Backlinks.Level2 {
                             if i > 0 {
                                 { ", " }
