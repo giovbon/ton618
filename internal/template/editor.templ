@@ -1027,6 +1027,22 @@ templ editorContent(data EditorData) {
             },
             editorProps: {
                 attributes: { spellcheck: "false" },
+                handleClick: function (view, pos, event) {
+                    // Navega em links na mesma aba
+                    var target = event.target;
+                    if (target && target.tagName === "A" && target.href) {
+                        // Ignora cliques com Ctrl/Meta (navegador ja abre em nova aba)
+                        if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                            // So navega se for link interno do editor
+                            if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/file/") !== -1) {
+                                event.preventDefault();
+                                window.location.href = target.href;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                },
                 handlePaste: function (view, event) {
                     var items =
                         event.clipboardData && event.clipboardData.items;
