@@ -19,6 +19,7 @@ import { Markdown } from "tiptap-markdown";
 import { marked } from "marked";
 import CodeBlockLowlightExt from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
+import Paragraph from "@tiptap/extension-paragraph";
 
 const lowlight = createLowlight(common);
 
@@ -46,6 +47,28 @@ const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
   },
 });
 
+// Custom Paragraph extension to serialize empty paragraphs as &nbsp;
+const CustomParagraph = Paragraph.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state, node) {
+          if (node.content.size === 0) {
+            state.write("&nbsp;");
+            state.closeBlock(node);
+          } else {
+            state.renderInline(node);
+            state.closeBlock(node);
+          }
+        },
+        parse: {
+          // handled by markdown-it
+        },
+      },
+    };
+  },
+});
+
 // Expõe no window para uso no editor.html
 window.TipTapEditor = {
   Editor,
@@ -69,4 +92,6 @@ window.TipTapEditor = {
   marked,
   CodeBlockLowlightExt: CodeBlockLangLabel,
   lowlight,
+  CustomParagraph,
 };
+

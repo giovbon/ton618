@@ -945,7 +945,9 @@ templ editorContent(data EditorData) {
                 T.StarterKit.configure({
                     heading: { levels: [1, 2, 3, 4, 5, 6] },
                     codeBlock: false,
+                    paragraph: false,
                 }),
+                T.CustomParagraph,
                 T.Placeholder.configure({
                     placeholder: "Pressione / para comandos...",
                 }),

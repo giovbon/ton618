@@ -47,7 +47,7 @@ func Layout(title string, loadTipTap bool, content templ.Component) templ.Compon
 			return templ_7745c5c3_Err
 		}
 		if loadTipTap {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script src=\"/static/editor.js\"></script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script src=\"/static/editor.js?v=2\"></script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

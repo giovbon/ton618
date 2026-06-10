@@ -100,6 +100,7 @@ func main() {
 				if _, err := os.Stat(gzPath); err == nil {
 					w.Header().Set("Content-Encoding", "gzip")
 					w.Header().Set("Content-Type", "application/javascript")
+					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 					http.ServeFile(w, r, gzPath)
 					return
 				}
