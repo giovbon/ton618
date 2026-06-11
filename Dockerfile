@@ -3,7 +3,7 @@ FROM node:20 AS web-builder
 
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 COPY web/ .
 RUN node build.js
 
