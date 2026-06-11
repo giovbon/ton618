@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -401,9 +402,10 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		if err != nil {
 			continue
 		}
-		fm, _, err := service.ParseFrontmatter(content)
+		fm, body, err := service.ParseFrontmatter(content)
 		if err != nil {
 			fm = make(map[string]interface{})
+			body = content
 		}
 
 		row := make(map[string]interface{})
@@ -419,12 +421,45 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		}
 
 		// Title logic
-		if t, ok := fm["title"]; ok {
+		if t, ok := fm["title"]; ok && t != "" {
 			row["titulo"] = t
-		} else if t, ok := fm["titulo"]; ok {
+		} else if t, ok := fm["titulo"]; ok && t != "" {
 			row["titulo"] = t
 		} else {
-			row["titulo"] = processor.ExtractTitle(content, n.Arquivo)
+			// Check if it's a spreadsheet
+			isSpreadsheet := false
+			if typeVal, ok := fm["type"]; ok && typeVal == "spreadsheet" {
+				isSpreadsheet = true
+			} else if tagsVal, ok := fm["tags"]; ok {
+				if tagsSlice, ok := tagsVal.([]interface{}); ok {
+					for _, tg := range tagsSlice {
+						if tgStr, ok := tg.(string); ok && tgStr == "spreadsheet" {
+							isSpreadsheet = true
+							break
+						}
+					}
+				}
+			}
+			for _, t := range n.Tags {
+				if t == "spreadsheet" {
+					isSpreadsheet = true
+					break
+				}
+			}
+
+			if isSpreadsheet || strings.HasPrefix(strings.TrimSpace(body), "{") {
+				parts := strings.Split(n.Arquivo, "/")
+				row["titulo"] = strings.TrimSuffix(parts[len(parts)-1], ".md")
+			} else {
+				t := processor.ExtractTitle(body, n.Arquivo)
+				// Remove wikilinks brackets [[title]] -> title
+				t = strings.ReplaceAll(t, "[[", "")
+				t = strings.ReplaceAll(t, "]]", "")
+				// Remove markdown links [title](url) -> title
+				re := regexp.MustCompile(`\[([^\]]+)\]\([^\)]+\)`)
+				t = re.ReplaceAllString(t, "$1")
+				row["titulo"] = strings.TrimSpace(t)
+			}
 		}
 
 		// Tags
@@ -434,17 +469,34 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			row["tags"] = ""
 		}
 
+		// Ensure all rows have a "type" field — default to "note" if not set in frontmatter
+		if _, hasType := row["type"]; !hasType {
+			// Infer type from path when not declared
+			arquivo := n.Arquivo
+			switch {
+			case strings.HasPrefix(arquivo, "pdfs/"):
+				row["type"] = "pdf"
+			case strings.HasPrefix(arquivo, "attachments/"):
+				row["type"] = "attachment"
+			default:
+				row["type"] = "note"
+			}
+		}
+		columnSet["type"] = true
+
 		data = append(data, row)
 	}
 
 	var columns []map[string]interface{}
 	// Enforce column order for base columns
+	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "headerSort": false, "width": 80, "hozAlign": "center"})
 	columns = append(columns, map[string]interface{}{"title": "Arquivo", "field": "arquivo", "visible": false})
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
-	
+	columns = append(columns, map[string]interface{}{"title": "Type", "field": "type", "editor": false, "width": 110})
+
 	for col := range columnSet {
-		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" {
+		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" && col != "type" {
 			columns = append(columns, map[string]interface{}{
 				"title":  strings.ToUpper(col[:1]) + col[1:], // strings.Title is deprecated, simple inline title case
 				"field":  col,

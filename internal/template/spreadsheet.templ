@@ -198,6 +198,108 @@ templ spreadsheetContent(data EditorData) {
                 });
         }
 
+        async function doRename() {
+            var newName = filenameInput.value.trim();
+            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
+            
+            var currentFilename = filenameInput.dataset.filename;
+            if (!currentFilename) {
+                currentFilename = filenameInput.value.trim();
+                if (!currentFilename.endsWith(".md")) currentFilename += ".md";
+                if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
+                filenameInput.dataset.filename = currentFilename;
+            }
+            
+            var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
+            
+            if (!newName || newName === currentDisplayName) return;
+            
+            if (saveTimer) clearTimeout(saveTimer);
+            
+            var fullNewName = "notes/" + newName + ".md";
+            
+            try {
+                setStatus("Renomeando...", "text-sky-400");
+                
+                // Obter conteúdo atual da planilha
+                if (!spreadsheetInstance) return;
+                var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+                if (!ws || !ws.getData) return;
+
+                var rows = ws.getData();
+                var widths = [];
+                if (typeof ws.getWidth === "function") {
+                    try {
+                        var allWidths = ws.getWidth();
+                        if (Array.isArray(allWidths) && allWidths.length > 0) {
+                            widths = allWidths;
+                        }
+                    } catch (e) {
+                        console.error("Erro ao obter widths do ws:", e);
+                    }
+                    
+                    if (widths.length === 0) {
+                        var colCount = (rows && rows[0]) ? rows[0].length : (ws.options && ws.options.columns ? ws.options.columns.length : 26);
+                        for (var i = 0; i < colCount; i++) {
+                            try {
+                                widths.push(ws.getWidth(i));
+                            } catch (e) {
+                                widths.push(100);
+                            }
+                        }
+                    }
+                }
+
+                var payload = {
+                    data: rows,
+                    widths: widths
+                };
+                var fullContent = initialFrontmatter + JSON.stringify(payload);
+
+                // 1. Salvar no novo nome
+                var saveFd = new FormData();
+                saveFd.append("filename", fullNewName);
+                saveFd.append("content", fullContent);
+                saveFd.append("tags", "spreadsheet");
+
+                var saveResp = await fetch("/api/note/save", {
+                    method: "POST",
+                    body: saveFd
+                });
+                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
+
+                // 2. Deletar o arquivo antigo
+                if (currentFilename !== fullNewName) {
+                    var deleteFd = new FormData();
+                    deleteFd.append("filename", currentFilename);
+                    await fetch("/file/delete", {
+                        method: "POST",
+                        body: deleteFd
+                    });
+                }
+
+                // 3. Atualizar e redirecionar
+                filenameInput.dataset.filename = fullNewName;
+                window.location.href = "/spreadsheet?file=" + encodeURIComponent(fullNewName);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao renomear planilha.");
+                filenameInput.value = currentDisplayName;
+                setStatus("Erro ao renomear", "text-red-500");
+            }
+        }
+
+        filenameInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                doRename();
+                filenameInput.blur();
+            }
+        });
+        filenameInput.addEventListener("blur", function () {
+            doRename();
+        });
+
         // Ctrl+S
         document.addEventListener("keydown", function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {

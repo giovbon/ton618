@@ -194,40 +194,65 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 <span
                     class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
             </a>
-            <div class="hidden md:flex items-center gap-5 text-[11px] font-bold tracking-wide uppercase">
-                <a href="#" onclick="return createNewNote();"
-                    class="text-zinc-400 hover:text-white transition-colors">📄 +NOTA</a>
-                <a href="/spreadsheet"
-                    class="text-zinc-400 hover:text-white transition-colors">📊 +PLANILHA</a>
-                <a href="#" id="pdf-upload-link" onclick="
-                            activePdfUploadButton = this;
-                            document.getElementById('pdf-file-input').click();
-                            return false;
-                        " class="text-zinc-400 hover:text-sky-400 transition-colors">📕 +PDF</a>
-                <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
-                <a href="#" id="zip-upload-link" onclick="
-                            document.getElementById('zip-file-input').click();
-                            return false;
-                        " class="text-zinc-400 hover:text-amber-400 transition-colors">📦 +ANEXO</a>
-                <input id="zip-file-input" type="file" multiple class="hidden" />
-                <button id="capture-link" onclick="return promptCapture(this);"
-                    class="text-zinc-400 hover:text-emerald-400 transition-colors">
-                    🌐 +CAPTURA
-                </button>
+            <!-- ── hidden file inputs (always present) ── -->
+            <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
+            <input id="zip-file-input" type="file" multiple class="hidden" />
 
-                <a id="nav-todos" href="/todos" class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯TODOs</a>
-                <a href="/database" class="text-zinc-400 hover:text-white transition-colors" title="Banco de Dados">🗃️ BANCO</a>
+            <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
 
-                <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Documentação">❓</a>
+                <!-- ＋ CRIAR dropdown -->
+                <div class="relative" id="criar-dropdown-wrapper">
+                    <button id="criar-btn"
+                        onclick="toggleCriarMenu(event)"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                        Criar
+                    </button>
+                    <div id="criar-menu"
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 hidden">
+                        <a href="#" onclick="closeCriarMenu(); return createNewNote();"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            📄 <span>Nova Nota</span>
+                        </a>
+                        <a href="/spreadsheet"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            📊 <span>Nova Planilha</span>
+                        </a>
+                        <div class="border-t border-zinc-800 my-0.5"></div>
+                        <a href="#" id="pdf-upload-link" onclick="
+                                closeCriarMenu();
+                                activePdfUploadButton = this;
+                                document.getElementById('pdf-file-input').click();
+                                return false;"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
+                            📕 <span>Upload PDF</span>
+                        </a>
+                        <a href="#" id="zip-upload-link" onclick="
+                                closeCriarMenu();
+                                document.getElementById('zip-file-input').click();
+                                return false;"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
+                            📦 <span>Upload Anexo</span>
+                        </a>
+                        <a href="#" id="capture-link" onclick="closeCriarMenu(); return promptCapture(this);"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
+                            🌐 <span>Web Capture</span>
+                        </a>
+                    </div>
+                </div>
 
-                <button onclick="openSettings()" class="text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                    title="Configurações">
-                    ⚙️
-                </button>
-                <button onclick="logout()" class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
-                    title="Sair">
-                    ➜]
-                </button>
+                <!-- Nav links — icon + label only for key destinations -->
+                <a id="nav-todos" href="/todos"
+                    class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯 TODOs</a>
+                <a href="/database"
+                    class="text-zinc-400 hover:text-white transition-colors" title="Banco de Dados">🗃️ Banco</a>
+
+                <!-- Utility icons (icon only + tooltip) -->
+                <a href="/help" class="text-zinc-500 hover:text-sky-400 transition-colors text-base" title="Ajuda">❓</a>
+                <button onclick="openSettings()"
+                    class="text-zinc-500 hover:text-white transition-colors cursor-pointer text-base" title="Configurações">⚙️</button>
+                <button onclick="logout()"
+                    class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer text-base" title="Sair">➜]</button>
             </div>
             <button id="mobile-menu-toggle"
                 class="md:hidden text-zinc-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
@@ -800,6 +825,23 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
         document.cookie = "ton_auth=;path=/;max-age=0";
         window.location.href = "/login";
     }
+
+
+    // ── + Criar Dropdown ──
+    function toggleCriarMenu(e) {
+        e.stopPropagation();
+        const menu = document.getElementById('criar-menu');
+        menu.classList.toggle('hidden');
+    }
+    function closeCriarMenu() {
+        document.getElementById('criar-menu').classList.add('hidden');
+    }
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('criar-dropdown-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            closeCriarMenu();
+        }
+    });
 
     // ── Configurações (⚙️ Settings Modal) ──
     function openSettings() {
