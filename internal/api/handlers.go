@@ -61,16 +61,23 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		tags = fileTags
 	}
 
-	// Redireciona planilhas para o editor de planilhas
+	// Redireciona planilhas ou desenhos para seus respectivos editores
 	isSpreadsheet := false
+	isDrawing := false
 	for _, t := range tags {
 		if t == "spreadsheet" {
 			isSpreadsheet = true
-			break
+		}
+		if t == "drawing" {
+			isDrawing = true
 		}
 	}
 	if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
 		http.Redirect(w, r, "/spreadsheet?file="+url.QueryEscape(filename), http.StatusFound)
+		return
+	}
+	if isDrawing || strings.Contains(content, "type: drawing") {
+		http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
 		return
 	}
 
@@ -123,14 +130,21 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 		tags = fileTags
 	}
 
-	// Se a nota existe e NÃO for planilha, redireciona para o editor de texto
+	// Se a nota existe e NÃO for planilha, redireciona para o editor correto
 	if content != "" {
 		isSpreadsheet := false
+		isDrawing := false
 		for _, t := range tags {
 			if t == "spreadsheet" {
 				isSpreadsheet = true
-				break
 			}
+			if t == "drawing" {
+				isDrawing = true
+			}
+		}
+		if isDrawing || strings.Contains(content, "type: drawing") {
+			http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
+			return
 		}
 		if !isSpreadsheet && !strings.Contains(content, "type: spreadsheet") {
 			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusFound)
@@ -156,6 +170,73 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 		Backlinks:    backlinks,
 	}
 	template.Spreadsheet(data).Render(r.Context(), w)
+}
+
+func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("file")
+	if filename == "" {
+		filename = "notes/" + processor.GenerateCUID2() + ".md"
+	}
+
+	sanitized := noteFilename(filename)
+	if sanitized != filename {
+		canonical := "/drawing?file=" + url.QueryEscape(sanitized)
+		http.Redirect(w, r, canonical, http.StatusFound)
+		return
+	}
+
+	var content string
+	var tags []string
+
+	if data, err := ctx.Store.GetNote(filename); err == nil && data != "" {
+		content = data
+		ctx.Store.IncrementPopularity(filename)
+	}
+	fileTags, err := ctx.Store.GetFileTags(filename)
+	if err == nil {
+		tags = fileTags
+	}
+
+	// Se a nota existe e NÃO for desenho, redireciona para o editor correto
+	if content != "" {
+		isDrawing := false
+		isSpreadsheet := false
+		for _, t := range tags {
+			if t == "drawing" {
+				isDrawing = true
+			}
+			if t == "spreadsheet" {
+				isSpreadsheet = true
+			}
+		}
+		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
+			http.Redirect(w, r, "/spreadsheet?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if !isDrawing && !strings.Contains(content, "type: drawing") {
+			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+	}
+	allTags, err := ctx.Store.GetAllTags()
+	if err != nil {
+		allTags = nil
+	}
+	backlinks, err := ctx.Notes.GetBacklinks(filename)
+	if err != nil {
+		backlinks = &service.BacklinksResult{}
+	}
+
+	data := template.EditorData{
+		Title:        "Desenho - " + filename,
+		Filename:     filename,
+		DisplayName:  template.DisplayName(filename),
+		Content:      content,
+		Tags:         tags,
+		AllTags:      allTags,
+		Backlinks:    backlinks,
+	}
+	template.Drawing(data).Render(r.Context(), w)
 }
 
 // ── API ──

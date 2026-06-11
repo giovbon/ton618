@@ -3,7 +3,7 @@ import { gzipSync } from "zlib";
 import { readFileSync, writeFileSync } from "fs";
 
 await esbuild.build({
-  entryPoints: ["src/editor.js", "src/spreadsheet.js"],
+  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx"],
   bundle: true,
   minify: true,
   outdir: "static",
@@ -26,3 +26,14 @@ writeFileSync("static/spreadsheet.js.gz", compressedSheet);
 console.log(
   `spreadsheet.js: ${(dataSheet.length / 1024).toFixed(1)}KB → ${(compressedSheet.length / 1024).toFixed(1)}KB gzip`,
 );
+
+try {
+  const dataDrawing = readFileSync("static/drawing.js");
+  const compressedDrawing = gzipSync(dataDrawing, { level: 9 });
+  writeFileSync("static/drawing.js.gz", compressedDrawing);
+  console.log(
+    `drawing.js: ${(dataDrawing.length / 1024).toFixed(1)}KB → ${(compressedDrawing.length / 1024).toFixed(1)}KB gzip`,
+  );
+} catch (e) {
+  console.warn("Aviso: static/drawing.js não pôde ser lido ou comprimido.", e.message);
+}

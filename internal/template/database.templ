@@ -131,6 +131,7 @@ templ databaseContent() {
                             var file = rowData.arquivo || "";
                             var tags = rowData.tags || "";
                             var isSpreadsheet = tags.includes("spreadsheet") || file.includes("sheet") || (rowData.type === "spreadsheet");
+                            var isDrawing = tags.includes("drawing") || file.includes("drawing") || (rowData.type === "drawing");
                             var isPdf = file.startsWith("pdfs/");
                             var isZip = file.startsWith("attachments/");
                             
@@ -145,6 +146,9 @@ templ databaseContent() {
                             } else if (isSpreadsheet) {
                                 url = "/spreadsheet?file=" + encodeURIComponent(file);
                                 icon = "📊";
+                            } else if (isDrawing) {
+                                url = "/drawing?file=" + encodeURIComponent(file);
+                                icon = "🎨";
                             } else {
                                 url = "/editor?file=" + encodeURIComponent(file);
                                 icon = "📝";

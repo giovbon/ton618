@@ -43,6 +43,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", ctx.HandleIndex)
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
 	mux.HandleFunc("GET /spreadsheet", ctx.HandleSpreadsheet)
+	mux.HandleFunc("GET /drawing", ctx.HandleDrawing)
 	mux.HandleFunc("GET /todos", ctx.HandleTodosPage)
 	mux.HandleFunc("GET /database", ctx.HandleDatabasePage)
 	mux.HandleFunc("GET /help", ctx.HandleHelp)

@@ -218,6 +218,10 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             📊 <span>Nova Planilha</span>
                         </a>
+                        <a href="/drawing"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            🎨 <span>Novo Desenho</span>
+                        </a>
                         <div class="border-t border-zinc-800 my-0.5"></div>
                         <a href="#" id="pdf-upload-link" onclick="
                                 closeCriarMenu();
@@ -277,6 +281,9 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             <a href="/spreadsheet"
                 class="block rounded-lg px-3 py-2 text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900 transition-colors">📊
                 +PLANILHA</a>
+            <a href="/drawing"
+                class="block rounded-lg px-3 py-2 text-sky-400 hover:text-sky-300 hover:bg-zinc-900 transition-colors">🎨
+                +DESENHO</a>
             <a href="#" id="mobile-pdf-link" onclick="
                         activePdfUploadButton = this;
                         document

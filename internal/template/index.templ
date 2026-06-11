@@ -433,6 +433,7 @@ templ indexContent() {
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
             var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1;
+            var isDrawing = (n.tags || []).indexOf("drawing") !== -1 || (n.type === "drawing");
 
             // Determine icon based on note type
             var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
@@ -442,6 +443,8 @@ templ indexContent() {
                 noteIcon = "\uD83D\uDCE6"; // 📦 ZIP
             } else if (isSpreadsheet) {
                 noteIcon = "\uD83D\uDCCA"; // 📊 planilha
+            } else if (isDrawing) {
+                noteIcon = "🎨"; // 🎨 desenho
             } else if (isYoutube) {
                 noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
             } else if (isArticle) {
@@ -461,7 +464,9 @@ templ indexContent() {
                       ? "/file/download?name=" + encodeURIComponent(n.arquivo)
                       : isSpreadsheet
                         ? "/spreadsheet?file=" + encodeURIComponent(n.arquivo)
-                        : "/editor?file=" + encodeURIComponent(n.arquivo)) +
+                        : isDrawing
+                          ? "/drawing?file=" + encodeURIComponent(n.arquivo)
+                          : "/editor?file=" + encodeURIComponent(n.arquivo)) +
                 '" target="' +
                 (isPdf || isZip ? "_blank" : "") +
                 '" class="block">' +
