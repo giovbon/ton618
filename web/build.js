@@ -3,19 +3,26 @@ import { gzipSync } from "zlib";
 import { readFileSync, writeFileSync } from "fs";
 
 await esbuild.build({
-  entryPoints: ["src/editor.js"],
+  entryPoints: ["src/editor.js", "src/spreadsheet.js"],
   bundle: true,
   minify: true,
-  outfile: "static/editor.js",
+  outdir: "static",
   format: "iife",
   sourcemap: false,
   target: "es2020",
 });
 
 // Gera versão .gz para servir com Content-Encoding: gzip
-const data = readFileSync("static/editor.js");
-const compressed = gzipSync(data, { level: 9 });
-writeFileSync("static/editor.js.gz", compressed);
+const dataEditor = readFileSync("static/editor.js");
+const compressedEditor = gzipSync(dataEditor, { level: 9 });
+writeFileSync("static/editor.js.gz", compressedEditor);
 console.log(
-  `editor.js: ${(data.length / 1024).toFixed(1)}KB → ${(compressed.length / 1024).toFixed(1)}KB gzip`,
+  `editor.js: ${(dataEditor.length / 1024).toFixed(1)}KB → ${(compressedEditor.length / 1024).toFixed(1)}KB gzip`,
+);
+
+const dataSheet = readFileSync("static/spreadsheet.js");
+const compressedSheet = gzipSync(dataSheet, { level: 9 });
+writeFileSync("static/spreadsheet.js.gz", compressedSheet);
+console.log(
+  `spreadsheet.js: ${(dataSheet.length / 1024).toFixed(1)}KB → ${(compressedSheet.length / 1024).toFixed(1)}KB gzip`,
 );

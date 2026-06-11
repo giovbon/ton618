@@ -228,11 +228,16 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 	s.store.DeleteDocumentsByFile(filename)
 	s.store.DeleteFTSByFile(filename)
 
-	fullPath := filepath.Join(s.docsDir, filename)
-	docs, links, fileTags := processor.ProcessMarkdownContent(
-		[]byte(content), filename, modTime, creationTime,
-	)
-	if len(docs) == 0 {
+	var docs []processor.Document
+	var links []string
+	var fileTags []string
+
+	if content != "" {
+		docs, links, fileTags = processor.ProcessMarkdownContent(
+			[]byte(content), filename, modTime, creationTime,
+		)
+	} else {
+		fullPath := filepath.Join(s.docsDir, filename)
 		docs, links, fileTags = processor.ProcessMarkdown(
 			fullPath, filename, modTime, creationTime,
 		)

@@ -429,9 +429,10 @@ templ indexContent() {
                         after;
                 }
             }
-            var safeName = n.arquivo.replace(/'/g, "\\'");
+            var encodedName = encodeURIComponent(n.arquivo);
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
+            var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1;
 
             // Determine icon based on note type
             var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
@@ -439,6 +440,8 @@ templ indexContent() {
                 noteIcon = "\uD83D\uDCD5"; // 📕 PDF
             } else if (isZip) {
                 noteIcon = "\uD83D\uDCE6"; // 📦 ZIP
+            } else if (isSpreadsheet) {
+                noteIcon = "\uD83D\uDCCA"; // 📊 planilha
             } else if (isYoutube) {
                 noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
             } else if (isArticle) {
@@ -456,7 +459,9 @@ templ indexContent() {
                     ? "/file?name=" + encodeURIComponent(n.arquivo)
                     : isZip
                       ? "/file/download?name=" + encodeURIComponent(n.arquivo)
-                      : "/editor?file=" + encodeURIComponent(n.arquivo)) +
+                      : isSpreadsheet
+                        ? "/spreadsheet?file=" + encodeURIComponent(n.arquivo)
+                        : "/editor?file=" + encodeURIComponent(n.arquivo)) +
                 '" target="' +
                 (isPdf || isZip ? "_blank" : "") +
                 '" class="block">' +
@@ -514,13 +519,13 @@ templ indexContent() {
                 html += "</div>";
             }
             html +=
-                "<button onclick=\"renameNote('" +
-                safeName +
-                '\')" class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs max-sm:text-lg max-sm:px-2 max-sm:py-1" title="Editar titulo">\u270E</button>';
+                "<button onclick=\"renameNote(decodeURIComponent('" +
+                encodedName +
+                '\'))" class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs max-sm:text-lg max-sm:px-2 max-sm:py-1" title="Editar titulo">\u270E</button>';
             html +=
-                "<button onclick=\"deleteNote('" +
-                safeName +
-                '\')" class="text-zinc-600 hover:text-red-400 text-sm font-semibold transition-colors shrink-0 px-2 py-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">\u2715</button>';
+                "<button onclick=\"deleteNote(decodeURIComponent('" +
+                encodedName +
+                '\'))" class="text-zinc-600 hover:text-red-400 text-sm font-semibold transition-colors shrink-0 px-2 py-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">\u2715</button>';
             html += "</div>";
             return html;
         });

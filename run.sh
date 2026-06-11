@@ -46,6 +46,7 @@ touch "$LOG_FILE"
 
 echo "📦 Baixando dependências..."
 cd "$BASE_DIR"
+export PATH=$PATH:/usr/local/go/bin:/home/giobon/go/bin
 go mod tidy
 
 # Build do bundle web (TipTap) se o diretório web existir
@@ -57,7 +58,8 @@ if [ -f "$BASE_DIR/web/package.json" ]; then
 fi
 
 echo "🔨 Compilando binário otimizado..."
-templ generate
+export PATH=$PATH:/usr/local/go/bin:/home/giobon/go/bin
+go run github.com/a-h/templ/cmd/templ@latest generate
 go build -tags sqlite_fts5 -ldflags="-s -w" -o ton618 ./cmd/server/
 
 if [ $? -eq 0 ]; then

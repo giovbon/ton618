@@ -42,6 +42,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	// Páginas HTML (server-side rendered)
 	mux.HandleFunc("GET /", ctx.HandleIndex)
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
+	mux.HandleFunc("GET /spreadsheet", ctx.HandleSpreadsheet)
 	mux.HandleFunc("GET /todos", ctx.HandleTodosPage)
 	mux.HandleFunc("GET /help", ctx.HandleHelp)
 
@@ -55,6 +56,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /file", ctx.HandleFile)
 	mux.HandleFunc("GET /file/download", ctx.HandleFileDownload)
 	mux.HandleFunc("POST /file/save", ctx.HandleFileSave)
+	mux.HandleFunc("POST /api/note/save", ctx.HandleNoteSaveJSON)
 	mux.HandleFunc("POST /file/delete", ctx.HandleFileDelete)
 	mux.HandleFunc("POST /file/rename", ctx.HandleFileRename)
 	mux.HandleFunc("POST /upload", ctx.HandleUpload)

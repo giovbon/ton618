@@ -1,0 +1,251 @@
+package template
+
+templ Spreadsheet(data EditorData) {
+    @Layout(data.Title, true, spreadsheetContent(data))
+}
+
+templ spreadsheetContent(data EditorData) {
+<div class="editor-root flex flex-col" id="sheet-root" style="height: calc(100vh - 90px);">
+    <div class="flex items-center gap-3 mb-3 shrink-0" id="sheet-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        <button
+            id="save-btn"
+            onclick="saveSpreadsheet()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar"
+        >
+            💾
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta planilha"
+        >
+            🗑️
+        </button>
+    </div>
+    <!-- placeholders para compatibilidade com layout.templ -->
+    <div id="frontmatter-area" class="hidden"></div>
+    <div id="tag-suggestions" class="hidden mt-2">
+        <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- O container expande usando flex-1. Invert filter cria o modo escuro perfeito -->
+    <div id="spreadsheet-container" class="flex-1 overflow-auto rounded-lg" style="filter: invert(0.85) hue-rotate(180deg) contrast(1.1); background-color: #fdfdfd;"></div>
+
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+    <input id="editor-image-input" type="file" accept="image/*" class="hidden" />
+</div>
+
+<!-- Jspreadsheet CSS e JS -->
+<link rel="stylesheet" href="/static/spreadsheet.css" />
+<script src="/static/spreadsheet.js"></script>
+<style>
+    /* Estilos globais para dropdowns e menus flutuantes que são renderizados no body (não afetados pelo filter invert) */
+    .jss_contextmenu, .jcalendar, .jdropdown {
+        filter: invert(0.85) hue-rotate(180deg) contrast(1.1);
+    }
+
+    #spreadsheet-container {
+        width: 100vw;
+        position: relative;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
+        border-radius: 0 !important;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        var el = document.getElementById("spreadsheet-container");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+        var rawContent = document.getElementById("content-output").value;
+        var sheetData = null;
+        var dataToLoad = null;
+        var savedWidths = null;
+        var spreadsheetInstance = null;
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var initialFrontmatter = "---\ntype: spreadsheet\n---\n";
+
+
+        // Extrai dados JSON do frontmatter
+        var fmMatch = rawContent.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            initialFrontmatter = "---\n" + fmMatch[1] + "\n---\n";
+            try {
+                sheetData = JSON.parse(fmMatch[2].trim());
+                if (sheetData) {
+                    if (Array.isArray(sheetData)) {
+                        dataToLoad = sheetData;
+                    } else if (sheetData.data) {
+                        dataToLoad = sheetData.data;
+                        savedWidths = sheetData.widths;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Salvar
+        var saveTimer = null;
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(doSave, 800);
+        }
+
+        function setStatus(text, cls) {
+            statusEl.textContent = text;
+            statusEl.className = "text-base font-mono shrink-0 " + cls;
+        }
+
+        function doSave() {
+            if (!spreadsheetInstance) return;
+            var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+            if (!ws || !ws.getData) return;
+
+            var btn = document.getElementById("save-btn");
+            btn.textContent = "⏳";
+
+            var rows = ws.getData();
+            var widths = [];
+            if (typeof ws.getWidth === "function") {
+                try {
+                    var allWidths = ws.getWidth();
+                    if (Array.isArray(allWidths) && allWidths.length > 0) {
+                        widths = allWidths;
+                    }
+                } catch (e) {
+                    console.error("Erro ao obter widths do ws:", e);
+                }
+                
+                if (widths.length === 0) {
+                    var colCount = (rows && rows[0]) ? rows[0].length : (ws.options && ws.options.columns ? ws.options.columns.length : 26);
+                    for (var i = 0; i < colCount; i++) {
+                        try {
+                            widths.push(ws.getWidth(i));
+                        } catch (e) {
+                            widths.push(100);
+                        }
+                    }
+                }
+            }
+
+            var payload = {
+                data: rows,
+                widths: widths
+            };
+            var fullContent = initialFrontmatter + JSON.stringify(payload);
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", fullContent);
+            fd.append("tags", "spreadsheet");
+
+            fetch("/api/note/save", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    setStatus("Salvo", "text-zinc-600");
+                    btn.textContent = "💾";
+                    filenameInput.dataset.filename = filename;
+                    var params = new URLSearchParams(window.location.search);
+                    params.set("file", filename);
+                    window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+                })
+                .catch(function (e) {
+                    setStatus("Erro!", "text-red-500");
+                    btn.textContent = "💾";
+                    console.error("Erro ao salvar:", e);
+                });
+        }
+
+        function handleChange() {
+            setStatus("Modificado", "text-amber-500");
+            scheduleSave();
+        }
+
+        function deleteCurrentNote() {
+            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+            if (!filename) return;
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fetch("/file/delete", { method: "POST", body: fd })
+                .then(function () {
+                    window.location.href = "/";
+                })
+                .catch(function () {
+                    window.location.href = "/";
+                });
+        }
+
+        // Ctrl+S
+        document.addEventListener("keydown", function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                doSave();
+            }
+        });
+
+        try {
+            var ctor = window.JspreadsheetCE;
+            if (ctor && typeof ctor !== "function" && typeof ctor.default === "function") {
+                ctor = ctor.default;
+            }
+            if (typeof ctor !== "function") {
+                throw new Error("JspreadsheetCE não carregou (" + (typeof ctor) + ")");
+            }
+
+            var worksheetCfg = {
+                minDimensions: [26, 50],
+                tableOverflow: true,
+            };
+
+            if (dataToLoad) {
+                worksheetCfg.data = dataToLoad;
+            }
+            if (savedWidths && Array.isArray(savedWidths)) {
+                worksheetCfg.columns = savedWidths.map(function(w) {
+                    return { width: w };
+                });
+            }
+
+            // Inicialização simples e robusta (v5 API)
+            spreadsheetInstance = ctor(el, {
+                worksheets: [worksheetCfg],
+                onchange: handleChange,
+                onresizecolumn: handleChange,
+                onevent: function(event) {
+                    if (event === "onchange" || event === "onresizecolumn") handleChange();
+                }
+            });
+
+        } catch (err) {
+            console.error("Erro planilha:", err);
+            el.innerHTML = "<div style='padding:16px;color:#f87171;font-family:monospace;font-size:12px;white-space:pre-wrap'>Erro: " + err.message + "\n\n" + err.stack + "</div>";
+        }
+
+        window.saveSpreadsheet = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+    })();
+</script>
+}

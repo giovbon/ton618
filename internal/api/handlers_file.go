@@ -175,6 +175,38 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
 }
 
+// HandleNoteSaveJSON salva uma nota e retorna JSON (para chamadas via fetch/XHR).
+func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	raw := r.FormValue("filename")
+	content := r.FormValue("content")
+	tags := r.FormValue("tags")
+
+	if raw == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "filename required"})
+		return
+	}
+
+	filename := noteFilename(raw)
+	tagList := strings.Split(tags, ",")
+	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
+		slog.Error("save note json", "file", filename, "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "file": filename})
+}
+
 func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

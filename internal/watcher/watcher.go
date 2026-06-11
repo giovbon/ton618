@@ -535,6 +535,11 @@ func (w *Watcher) pollAll() {
 	dbFiles, _ := w.store.GetAllFileMods()
 	for filename := range dbFiles {
 		if !diskFiles[filename] {
+			// Pula arquivos que não têm extensão monitorada pelo watcher
+			ext := strings.ToLower(filepath.Ext(filename))
+			if _, ok := supportedExts[ext]; !ok {
+				continue
+			}
 			// Pula arquivos processados recentemente pelo HTTP handler
 			// (ex: upload de ZIP onde o pollAll escaneou antes do arquivo
 			// terminar de ser escrito, mas o registro no DB já foi feito).

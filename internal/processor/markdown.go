@@ -97,6 +97,23 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					}
 					metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
 				}
+
+				// Se for planilha, esvaziamos o texto para não indexar o JSON na busca global
+				if tRaw, ok := fm["type"]; ok && tRaw == "spreadsheet" {
+					text = ""
+					metaParts = nil // limpa também o frontmatter
+					// Garante a tag "spreadsheet"
+					hasSpreadsheetTag := false
+					for _, tag := range fileTags {
+						if tag == "spreadsheet" {
+							hasSpreadsheetTag = true
+							break
+						}
+					}
+					if !hasSpreadsheetTag {
+						fileTags = append(fileTags, "spreadsheet")
+					}
+				}
 			}
 			afterFrontmatter := endIdx + 4
 			if afterFrontmatter < len(text) && text[afterFrontmatter] == '\n' {
@@ -288,6 +305,23 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 						continue
 					}
 					metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
+				}
+
+				// Se for planilha, esvaziamos o texto para não indexar o JSON na busca global
+				if tRaw, ok := fm["type"]; ok && tRaw == "spreadsheet" {
+					text = ""
+					metaParts = nil // limpa também o frontmatter
+					// Garante a tag "spreadsheet"
+					hasSpreadsheetTag := false
+					for _, tag := range fileTags {
+						if tag == "spreadsheet" {
+							hasSpreadsheetTag = true
+							break
+						}
+					}
+					if !hasSpreadsheetTag {
+						fileTags = append(fileTags, "spreadsheet")
+					}
 				}
 			}
 			afterFrontmatter := endIdx + 4
