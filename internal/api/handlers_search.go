@@ -256,13 +256,18 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		// Compute line number: find first line in the note that matches the query
 		line := findQueryLine(ctx, hit.Doc.Arquivo, query)
 
+		displayTime := hit.Doc.Timestamp
+		if t, err := time.Parse(time.RFC3339, hit.Doc.Timestamp); err == nil {
+			displayTime = t.Local().Format("2006-01-02 15:04:05")
+		}
+
 		items = append(items, template.SearchResultItem{
 			Arquivo:   hit.Doc.Arquivo,
 			Secao:     hit.Doc.Secao,
 			Tags:      tags,
 			Snippet:   snippet,
 			Tipo:      hit.Doc.Tipo,
-			Timestamp: hit.Doc.Timestamp,
+			Timestamp: displayTime,
 			Line:      line,
 		})
 	}

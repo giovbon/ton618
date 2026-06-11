@@ -5,7 +5,7 @@ templ Spreadsheet(data EditorData) {
 }
 
 templ spreadsheetContent(data EditorData) {
-<div class="editor-root flex flex-col" id="sheet-root" style="height: calc(100vh - 90px);">
+<div class="editor-root flex flex-col" id="sheet-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
     <div class="flex items-center gap-3 mb-3 shrink-0" id="sheet-topbar">
         <input
             id="file-name"
@@ -56,19 +56,61 @@ templ spreadsheetContent(data EditorData) {
     }
 
     #spreadsheet-container {
-        width: 100vw;
-        position: relative;
-        left: 50%;
-        right: 50%;
-        margin-left: -50vw;
-        margin-right: -50vw;
+        width: 100%;
         border-radius: 0 !important;
+    }
+
+    /* Menu de contexto em tema escuro premium */
+    .jcontextmenu {
+        background-color: #18181b !important; /* zinc-900 */
+        color: #f4f4f5 !important;           /* zinc-100 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        border-radius: 8px !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5) !important;
+        font-family: 'Inter', system-ui, sans-serif !important;
+        padding: 4px 0 !important;
+        z-index: 9999 !important;
+    }
+
+    .jcontextmenu > div {
+        color: #e4e4e7 !important; /* zinc-200 */
+        padding: 8px 16px !important;
+        font-size: 13px !important;
+        transition: background-color 0.15s, color 0.15s !important;
+    }
+
+    .jcontextmenu > div:hover {
+        background-color: #27272a !important; /* zinc-800 */
+        color: #ffffff !important;
+    }
+
+    .jcontextmenu hr {
+        border: none !important;
+        border-top: 1px solid #27272a !important; /* zinc-800 */
+        margin: 4px 0 !important;
     }
 </style>
 
 <script>
     (function () {
         "use strict";
+
+        if (window.jSuites && typeof window.jSuites.setDictionary === "function") {
+            window.jSuites.setDictionary({
+                'Insert a new row before': 'Inserir linha antes',
+                'Insert a new row after': 'Inserir linha depois',
+                'Delete selected rows': 'Excluir linhas selecionadas',
+                'Add comments': 'Adicionar comentário',
+                'Copy...': 'Copiar...',
+                'Paste...': 'Colar...',
+                'Save as...': 'Salvar como...',
+                'About': 'Sobre',
+                'Insert a new column before': 'Inserir coluna antes',
+                'Insert a new column after': 'Inserir coluna depois',
+                'Delete selected columns': 'Excluir colunas selecionadas',
+                'Rename this column': 'Renomear esta coluna'
+            });
+        }
 
         var el = document.getElementById("spreadsheet-container");
         var statusEl = document.getElementById("editor-status");
@@ -77,6 +119,7 @@ templ spreadsheetContent(data EditorData) {
         var sheetData = null;
         var dataToLoad = null;
         var savedWidths = null;
+        var currentStatus = "saved";
         var spreadsheetInstance = null;
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
         var initialFrontmatter = "---\ntype: spreadsheet\n---\n";
@@ -106,18 +149,27 @@ templ spreadsheetContent(data EditorData) {
             saveTimer = setTimeout(doSave, 800);
         }
 
-        function setStatus(text, cls) {
-            statusEl.textContent = text;
-            statusEl.className = "text-base font-mono shrink-0 " + cls;
+        function setStatus(s) {
+            currentStatus = s;
+            if (s === "saved") {
+                statusEl.textContent = "\u2713";
+                statusEl.className = "text-base font-mono text-emerald-500 shrink-0";
+            } else if (s === "saving") {
+                statusEl.textContent = "\u27F3";
+                statusEl.className = "text-base font-mono text-sky-400 shrink-0";
+            } else {
+                statusEl.textContent = "\u25CF";
+                statusEl.className = "text-base font-mono text-amber-500 shrink-0";
+            }
         }
 
         function doSave() {
-            if (!spreadsheetInstance) return;
+            if (!spreadsheetInstance || currentStatus === "saving") return;
             var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
             if (!ws || !ws.getData) return;
 
+            setStatus("saving");
             var btn = document.getElementById("save-btn");
-            btn.textContent = "⏳";
 
             var rows = ws.getData();
             var widths = [];
@@ -161,22 +213,20 @@ templ spreadsheetContent(data EditorData) {
             fetch("/api/note/save", { method: "POST", body: fd })
                 .then(function (r) {
                     if (!r.ok) throw new Error("HTTP " + r.status);
-                    setStatus("Salvo", "text-zinc-600");
-                    btn.textContent = "💾";
+                    setStatus("saved");
                     filenameInput.dataset.filename = filename;
                     var params = new URLSearchParams(window.location.search);
                     params.set("file", filename);
                     window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
                 })
                 .catch(function (e) {
-                    setStatus("Erro!", "text-red-500");
-                    btn.textContent = "💾";
+                    setStatus("dirty");
                     console.error("Erro ao salvar:", e);
                 });
         }
 
         function handleChange() {
-            setStatus("Modificado", "text-amber-500");
+            setStatus("dirty");
             scheduleSave();
         }
 
@@ -219,7 +269,7 @@ templ spreadsheetContent(data EditorData) {
             var fullNewName = "notes/" + newName + ".md";
             
             try {
-                setStatus("Renomeando...", "text-sky-400");
+                setStatus("saving");
                 
                 // Obter conteúdo atual da planilha
                 if (!spreadsheetInstance) return;
@@ -285,7 +335,7 @@ templ spreadsheetContent(data EditorData) {
                 console.error(e);
                 alert("Erro ao renomear planilha.");
                 filenameInput.value = currentDisplayName;
-                setStatus("Erro ao renomear", "text-red-500");
+                setStatus("dirty");
             }
         }
 

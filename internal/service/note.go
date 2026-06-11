@@ -131,8 +131,33 @@ func (s *NoteService) Rename(oldName, newName string) error {
 	s.tags.SetFileTags(oldName, nil)
 	s.links.ClearLinks(oldName)
 
-	content, err := s.notes.GetNote(newName)
-	if err == nil && content != "" {
+	newPath := filepath.Join(s.docsDir, newName)
+	var content string
+
+	if data, err := os.ReadFile(newPath); err == nil {
+		content = string(data)
+		parts := strings.Split(newName, "/")
+		base := parts[len(parts)-1]
+		newTitle := strings.TrimSuffix(base, ".md")
+
+		// Atualiza a propriedade 'title' no frontmatter da nota física
+		if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+			content = newContent
+			if err := os.WriteFile(newPath, []byte(newContent), 0644); err != nil {
+				slog.Error("write updated frontmatter after rename", "file", newName, "error", err)
+			}
+			// Atualiza também o registro correspondente no banco de dados SQLite
+			mtimeStr := time.Now().UTC().Format(time.RFC3339)
+			if err := s.notes.SaveNote(newName, newContent, mtimeStr); err != nil {
+				slog.Error("save updated note content to sqlite after rename", "file", newName, "error", err)
+			}
+		}
+	} else {
+		// Fallback para o conteúdo indexado antigo caso a leitura física falhe
+		content, _ = s.notes.GetNote(newName)
+	}
+
+	if content != "" {
 		s.store.DeleteDocumentsByFile(oldName)
 		s.store.DeleteFTSByFile(oldName)
 		if err := s.reindex(newName, content, time.Now().UTC()); err != nil {

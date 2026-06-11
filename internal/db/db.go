@@ -92,6 +92,8 @@ func initSchema(database *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
 	CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_links_to_file ON links(to_file);
+	CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 
 	CREATE TABLE IF NOT EXISTS todo_markers (
 		marker TEXT PRIMARY KEY,

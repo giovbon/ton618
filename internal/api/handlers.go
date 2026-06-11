@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"ton618/internal/processor"
 	"ton618/internal/service"
 	"ton618/internal/template"
+	"ton618/internal/watcher"
 )
 
 // ── Pages ──
@@ -402,15 +404,19 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		if err != nil {
 			continue
 		}
-		fm, body, err := service.ParseFrontmatter(content)
+		fm, _, err := service.ParseFrontmatter(content)
 		if err != nil {
 			fm = make(map[string]interface{})
-			body = content
 		}
 
 		row := make(map[string]interface{})
 		row["arquivo"] = n.Arquivo
-		row["mtime"] = n.Mtime
+		
+		displayMtime := n.Mtime
+		if t, err := time.Parse(time.RFC3339, n.Mtime); err == nil {
+			displayMtime = t.Local().Format("2006-01-02 15:04:05")
+		}
+		row["mtime"] = displayMtime
 		
 		// Map parsed frontmatter
 		for k, v := range fm {
@@ -420,47 +426,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		}
 
-		// Title logic
-		if t, ok := fm["title"]; ok && t != "" {
-			row["titulo"] = t
-		} else if t, ok := fm["titulo"]; ok && t != "" {
-			row["titulo"] = t
-		} else {
-			// Check if it's a spreadsheet
-			isSpreadsheet := false
-			if typeVal, ok := fm["type"]; ok && typeVal == "spreadsheet" {
-				isSpreadsheet = true
-			} else if tagsVal, ok := fm["tags"]; ok {
-				if tagsSlice, ok := tagsVal.([]interface{}); ok {
-					for _, tg := range tagsSlice {
-						if tgStr, ok := tg.(string); ok && tgStr == "spreadsheet" {
-							isSpreadsheet = true
-							break
-						}
-					}
-				}
-			}
-			for _, t := range n.Tags {
-				if t == "spreadsheet" {
-					isSpreadsheet = true
-					break
-				}
-			}
-
-			if isSpreadsheet || strings.HasPrefix(strings.TrimSpace(body), "{") {
-				parts := strings.Split(n.Arquivo, "/")
-				row["titulo"] = strings.TrimSuffix(parts[len(parts)-1], ".md")
-			} else {
-				t := processor.ExtractTitle(body, n.Arquivo)
-				// Remove wikilinks brackets [[title]] -> title
-				t = strings.ReplaceAll(t, "[[", "")
-				t = strings.ReplaceAll(t, "]]", "")
-				// Remove markdown links [title](url) -> title
-				re := regexp.MustCompile(`\[([^\]]+)\]\([^\)]+\)`)
-				t = re.ReplaceAllString(t, "$1")
-				row["titulo"] = strings.TrimSpace(t)
-			}
-		}
+		// Title logic: o título é o nome da nota (o nome do arquivo com a extensão .md)
+		parts := strings.Split(n.Arquivo, "/")
+		row["titulo"] = parts[len(parts)-1]
 
 		// Tags
 		if len(n.Tags) > 0 {
@@ -532,15 +500,100 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Se for renomeação de título (nome do arquivo)
+	if req.Key == "titulo" {
+		newValStr, ok := req.Value.(string)
+		if !ok || newValStr == "" {
+			http.Error(w, "invalid title value", http.StatusBadRequest)
+			return
+		}
+
+		rawOld := req.File
+		rawNew := newValStr
+
+		ext := strings.ToLower(filepath.Ext(rawOld))
+		isPdf := ext == ".pdf"
+		isZip := ext == ".zip"
+
+		var oldName, newName string
+
+		if isPdf {
+			basename := filepath.Base(rawOld)
+			newBasename := filepath.Base(rawNew)
+			if !strings.HasSuffix(strings.ToLower(newBasename), ".pdf") {
+				newBasename += ".pdf"
+			}
+
+			subdirs := []string{"pdfs", "notes"}
+			found := false
+			for _, sd := range subdirs {
+				testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+				if _, err := os.Stat(testPath); err == nil {
+					oldName = sd + "/" + basename
+					newName = sd + "/" + newBasename
+					oldPath := testPath
+					newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+					if err := os.Rename(oldPath, newPath); err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				http.Error(w, "file not found", http.StatusNotFound)
+				return
+			}
+		} else if isZip {
+			basename := filepath.Base(rawOld)
+			newBasename := filepath.Base(rawNew)
+			if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
+				newBasename += ".zip"
+			}
+			oldName = "attachments/" + basename
+			newName = "attachments/" + newBasename
+			oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
+			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+			if err := os.Rename(oldPath, newPath); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Note: delega para o NoteService
+			if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			newName = noteFilename(rawNew)
+			oldName = noteFilename(rawOld)
+		}
+
+		// Update DB: delete old indexes for PDF/ZIP
+		if isPdf || isZip {
+			ctx.Store.DeleteDocumentsByFile(oldName)
+			ctx.Store.DeleteFTSByFile(oldName)
+			ctx.Store.DeleteFileMod(oldName)
+			ctx.Store.ResetPopularity(oldName)
+			ctx.Store.SetFileTags(oldName, nil)
+			ctx.Store.ClearLinks(oldName)
+			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+			info, err := os.Stat(newPath)
+			if err == nil {
+				watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+					Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
+				})
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	content, err := ctx.Store.GetNote(req.File)
 	if err != nil {
 		http.Error(w, "note not found", http.StatusNotFound)
 		return
-	}
-
-	// For standard properties, map appropriately
-	if req.Key == "titulo" {
-		req.Key = "title" // internally save as title
 	}
 
 	newContent, err := service.UpdateFrontmatterProperty(content, req.Key, req.Value)

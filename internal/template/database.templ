@@ -211,6 +211,22 @@ templ databaseContent() {
                             alert("Erro ao salvar propriedade no arquivo.");
                             // Revert value
                             cell.restoreOldValue();
+                            return;
+                        }
+
+                        // Se a coluna editada foi o título, atualiza o campo oculto 'arquivo' da linha
+                        if (field === "titulo") {
+                            var newFileName = newVal.trim();
+                            if (!newFileName.endsWith(".md")) {
+                                newFileName += ".md";
+                            }
+                            if (!newFileName.startsWith("notes/")) {
+                                newFileName = "notes/" + newFileName;
+                            }
+                            cell.getRow().update({
+                                arquivo: newFileName
+                            });
+                            cell.getRow().reformat();
                         }
                     }).catch(err => {
                         alert("Erro de conexão ao salvar.");
@@ -218,18 +234,75 @@ templ databaseContent() {
                     });
                 });
 
+                function parseSearchQuery(query) {
+                    var filters = [];
+                    var generalTerms = [];
+                    var regex = /([a-zA-ZÀ-ÿ0-9_\-]+)\s*:\s*("([^"]+)"|([^\s]+))/g;
+                    var strippedQuery = query;
+                    var match;
+                    
+                    while ((match = regex.exec(query)) !== null) {
+                        var key = match[1].toLowerCase();
+                        var val = match[3] || match[4];
+                        
+                        if (key === "título" || key === "titulo" || key === "title") {
+                            key = "titulo";
+                        } else if (key === "file" || key === "arquivo") {
+                            key = "arquivo";
+                        } else if (key === "tipo" || key === "type") {
+                            key = "type";
+                        } else if (key === "mtime" || key === "modificacao" || key === "modificação" || key === "date" || key === "data") {
+                            key = "mtime";
+                        } else if (key === "tags" || key === "tag") {
+                            key = "tags";
+                        }
+                        
+                        filters.push({ key: key, value: val.toLowerCase() });
+                        strippedQuery = strippedQuery.replace(match[0], " ");
+                    }
+                    
+                    var words = strippedQuery.split(/\s+/);
+                    for (var i = 0; i < words.length; i++) {
+                        var w = words[i].trim().toLowerCase();
+                        if (w) {
+                            generalTerms.push(w);
+                        }
+                    }
+                    
+                    return { filters: filters, generalTerms: generalTerms };
+                }
+
                 // Global Search
                 document.getElementById("db-search").addEventListener("input", function(e){
                     table.setFilter(function(data, filterParams){
-                        var val = e.target.value.toLowerCase();
+                        var val = e.target.value.trim();
                         if(!val) return true;
                         
-                        // Search in all properties
-                        for(var key in data) {
-                            if(data[key] && String(data[key]).toLowerCase().includes(val)) {
-                                return true;
+                        var parsed = parseSearchQuery(val);
+                        if (parsed.filters.length === 0 && parsed.generalTerms.length === 0) {
+                            return true;
+                        }
+                        
+                        // OR condition across all filters and general terms
+                        for (var i = 0; i < parsed.filters.length; i++) {
+                            var f = parsed.filters[i];
+                            var cellVal = data[f.key];
+                            if (cellVal !== undefined && cellVal !== null) {
+                                if (String(cellVal).toLowerCase().includes(f.value)) {
+                                    return true;
+                                }
                             }
                         }
+                        
+                        for (var j = 0; j < parsed.generalTerms.length; j++) {
+                            var term = parsed.generalTerms[j];
+                            for (var key in data) {
+                                if (data[key] && String(data[key]).toLowerCase().includes(term)) {
+                                    return true;
+                                }
+                            }
+                        }
+                        
                         return false;
                     });
                 });
