@@ -258,6 +258,7 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	// Remove from DB (common cleanup for all types)
 	ctx.Store.DeleteDocumentsByFile(filename)
 	ctx.Store.DeleteFTSByFile(filename)
+	ctx.Store.DeleteTodosByFile(filename)
 	ctx.Store.DeleteFileMod(filename)
 	ctx.Store.ResetPopularity(filename)
 	ctx.Store.SetFileTags(filename, nil)

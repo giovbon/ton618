@@ -89,6 +89,7 @@ func (s *NoteService) Delete(filename string) error {
 	s.notes.DeleteNote(filename)
 	s.store.DeleteDocumentsByFile(filename)
 	s.store.DeleteFTSByFile(filename)
+	s.store.DeleteTodosByFile(filename)
 	s.fileMod.DeleteFileMod(filename)
 	s.pop.ResetPopularity(filename)
 	s.tags.SetFileTags(filename, nil)

@@ -462,6 +462,7 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
+		ctx.Store.DeleteTodosByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)
@@ -567,6 +568,7 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
 		ctx.Store.DeleteFTSByFile(arquivo)
+		ctx.Store.DeleteTodosByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)

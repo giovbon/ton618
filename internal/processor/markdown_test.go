@@ -215,9 +215,10 @@ func TestExtractTitle_Normal(t *testing.T) {
 }
 
 func TestExtractTitle_SemHeader(t *testing.T) {
+	// Sem heading markdown, deve retornar o nome do arquivo sem extensão
 	title := ExtractTitle("conteudo direto", "notes/direto.md")
-	if title != "conteudo direto" {
-		t.Fatalf("esperado 'conteudo direto', got %q", title)
+	if title != "direto" {
+		t.Fatalf("esperado 'direto' (nome do arquivo), got %q", title)
 	}
 }
 

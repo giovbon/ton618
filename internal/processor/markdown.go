@@ -474,15 +474,21 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	return docs, links, fileTags
 }
 
-// ExtractTitle extrai o título da primeira linha não-vazia do conteúdo.
+// ExtractTitle extrai o título do primeiro heading markdown (linha iniciada com #).
+// Se não houver heading, retorna o nome do arquivo sem extensão.
 func ExtractTitle(content, filename string) string {
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
-		clean := strings.TrimSpace(strings.TrimLeft(line, "# "))
-		if clean != "" {
-			return clean
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			// É um heading markdown; remove os # e espaços iniciais
+			clean := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if clean != "" {
+				return clean
+			}
 		}
 	}
+	// Nenhum heading encontrado: usa o nome do arquivo
 	parts := strings.Split(filename, "/")
 	return strings.TrimSuffix(parts[len(parts)-1], ".md")
 }

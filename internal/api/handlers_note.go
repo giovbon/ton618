@@ -9,7 +9,7 @@ import (
 )
 
 // reindexNote processes a note's content through the markdown processor
-// and updates all related indexes (documents, FTS, links, tags, file_mods).
+// and updates all related indexes (documents, FTS, links, tags, file_mods, todos).
 func (ctx *HandlerContext) reindexNote(filename string, content string, modTime time.Time) error {
 	store := ctx.Store
 
@@ -59,6 +59,21 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 
 	// Track file mod
 	store.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
+
+	// Extrai e persiste TODOs estruturados
+	activeMarkers, err := store.GetActiveTodoMarkers()
+	if err == nil {
+		var markers []string
+		for _, m := range activeMarkers {
+			markers = append(markers, m.Marker)
+		}
+		todos := processor.ExtractTodos(content, filename, modTime, markers)
+		if err := store.SaveFileTodos(filename, todos); err != nil {
+			slog.Error("save todos", "file", filename, "error", err)
+		}
+	} else {
+		slog.Error("get active todo markers", "error", err)
+	}
 
 	// Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
 	if processor.HasKeywords(fileTags) {
