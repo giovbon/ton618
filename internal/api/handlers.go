@@ -671,6 +671,31 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Guard: ZIPs e PDFs não são notas — nunca devem ser processados como markdown.
+	// Editar propriedades como "tags" neles via Notes.Save causaria a criação de um
+	// registro "notes/attachments/xxx.zip.md" no banco, corrompendo a listagem.
+	ext := strings.ToLower(filepath.Ext(req.File))
+	if ext == ".zip" || ext == ".pdf" {
+		// Para não-notas, só permitimos atualização de tags via SetFileTags.
+		if req.Key == "tags" {
+			rawVal, _ := req.Value.(string)
+			var tagList []string
+			for _, t := range strings.Split(rawVal, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					tagList = append(tagList, t)
+				}
+			}
+			if err := ctx.Store.SetFileTags(req.File, tagList); err != nil {
+				http.Error(w, "error updating tags", http.StatusInternalServerError)
+				return
+			}
+		}
+		// Outros campos (frontmatter) não se aplicam a ZIPs/PDFs — silenciosamente ignora.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	content, err := ctx.Store.GetNote(req.File)
 	if err != nil {
 		http.Error(w, "note not found", http.StatusNotFound)
