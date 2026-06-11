@@ -155,10 +155,26 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 		}
 	}
 
+	allTags, err := s.store.GetAllFileTags()
+	if err != nil {
+		allTags = make(map[string][]string)
+	}
+
+	allKeywords, err := s.store.GetAllNotesKeywords()
+	if err != nil {
+		allKeywords = make(map[string][]string)
+	}
+
 	var items []NoteItem
 	for arquivo, mtime := range mods {
-		tags, _ := s.tags.GetFileTags(arquivo)
-		keywords, _ := s.store.GetNoteKeywords(arquivo)
+		tags := allTags[arquivo]
+		keywords := allKeywords[arquivo]
+		if tags == nil {
+			tags = []string{}
+		}
+		if keywords == nil {
+			keywords = []string{}
+		}
 		items = append(items, NoteItem{
 			Arquivo:  arquivo,
 			Tags:     tags,
@@ -277,6 +293,28 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 		s.tags.SetFileTags(filename, cleanTags)
 	} else {
 		s.tags.SetFileTags(filename, nil)
+	}
+
+	// Extrai e persiste TODOs estruturados
+	activeMarkers, err := s.store.GetActiveTodoMarkers()
+	if err == nil {
+		var markers []string
+		for _, m := range activeMarkers {
+			markers = append(markers, m.Marker)
+		}
+		var todos []processor.TodoItem
+		if content != "" {
+			todos = processor.ExtractTodos(content, filename, modTime, markers)
+		} else {
+			if contentBytes, err := os.ReadFile(filepath.Join(s.docsDir, filename)); err == nil {
+				todos = processor.ExtractTodos(string(contentBytes), filename, modTime, markers)
+			}
+		}
+		if err := s.store.SaveFileTodos(filename, todos); err != nil {
+			slog.Error("save todos", "file", filename, "error", err)
+		}
+	} else {
+		slog.Error("get active todo markers", "error", err)
 	}
 
 	s.fileMod.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))

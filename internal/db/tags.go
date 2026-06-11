@@ -50,6 +50,26 @@ func (s *Store) GetFileTags(arquivo string) ([]string, error) {
 	return tags, rows.Err()
 }
 
+// GetAllFileTags returns a map of all files to their list of tags.
+func (s *Store) GetAllFileTags() (map[string][]string, error) {
+	rows, err := s.DB.Query("SELECT arquivo, tag FROM tags ORDER BY arquivo, tag")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var arquivo, tag string
+		if err := rows.Scan(&arquivo, &tag); err != nil {
+			return nil, err
+		}
+		result[arquivo] = append(result[arquivo], tag)
+	}
+	return result, rows.Err()
+}
+
+
 // GetAllTags returns every distinct tag present in the database.
 func (s *Store) GetAllTags() ([]string, error) {
 	rows, err := s.DB.Query("SELECT DISTINCT tag FROM tags ORDER BY tag")

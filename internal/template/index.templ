@@ -531,6 +531,28 @@ templ indexContent() {
         });
     }
 
+    var currentRenderBatch = 0;
+    var currentNotesToRender = [];
+    var BATCH_SIZE = 50;
+
+    var loadMoreObserver = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting) {
+            renderNextBatch();
+        }
+    }, { rootMargin: "500px" });
+
+    function renderNextBatch() {
+        if (!currentNotesToRender || currentRenderBatch * BATCH_SIZE >= currentNotesToRender.length) return;
+        
+        var container = document.getElementById("notesContainer");
+        if (!container) return;
+
+        var batch = currentNotesToRender.slice(currentRenderBatch * BATCH_SIZE, (currentRenderBatch + 1) * BATCH_SIZE);
+        container.insertAdjacentHTML('beforeend', buildNoteRows(batch).join(""));
+        
+        currentRenderBatch++;
+    }
+
     function renderCompactNotes(notes) {
         var el = document.getElementById("contentArea");
         if (!notes || notes.length === 0) {
@@ -538,7 +560,16 @@ templ indexContent() {
                 '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p></div>';
             return;
         }
-        el.innerHTML = buildNoteRows(notes).join("");
+        currentNotesToRender = notes;
+        currentRenderBatch = 0;
+        
+        el.innerHTML = '<div id="notesContainer"></div><div id="scrollSentinel" style="height: 10px;"></div>';
+        
+        var sentinel = document.getElementById("scrollSentinel");
+        loadMoreObserver.disconnect();
+        loadMoreObserver.observe(sentinel);
+        
+        renderNextBatch();
     }
 
     // ── Keyboard navigation for tag autocomplete ──
@@ -607,6 +638,9 @@ templ indexContent() {
                         return n.arquivo !== filename;
                     });
                     renderCompactNotes(allNotes);
+                    try {
+                        localStorage.setItem("ton618_cached_notes", JSON.stringify(allNotes));
+                    } catch (e) {}
                 }
             });
     }
@@ -647,6 +681,9 @@ templ indexContent() {
             })
             .then(function (data) {
                 allNotes = data.notes || [];
+                try {
+                    localStorage.setItem("ton618_cached_notes", JSON.stringify(allNotes));
+                } catch (e) {}
                 var filter = document.getElementById("search-input").value;
                 onSearchInput(filter);
             })
@@ -668,23 +705,46 @@ templ indexContent() {
             })
             .catch(function () {});
 
+        // Try to load from cache first
+        try {
+            var cachedNotes = localStorage.getItem("ton618_cached_notes");
+            if (cachedNotes) {
+                allNotes = JSON.parse(cachedNotes);
+                if (allNotes.length) {
+                    renderCompactNotes(allNotes);
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao ler notas do cache", e);
+        }
+
         // Load notes (padrão)
         fetch("/api/notes")
             .then(function (r) {
                 return r.json();
             })
             .then(function (data) {
-                allNotes = data.notes || [];
-                if (allNotes.length) {
-                    renderCompactNotes(allNotes);
-                } else {
-                    document.getElementById("contentArea").innerHTML =
-                        '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p></div>';
+                var newNotes = data.notes || [];
+                var notesChanged = JSON.stringify(newNotes) !== JSON.stringify(allNotes);
+                allNotes = newNotes;
+                try {
+                    localStorage.setItem("ton618_cached_notes", JSON.stringify(allNotes));
+                } catch (e) {}
+
+                if (notesChanged || !document.getElementById("contentArea").children.length || document.getElementById("contentArea").innerHTML.indexOf("Nenhuma nota encontrada") !== -1) {
+                    if (allNotes.length) {
+                        renderCompactNotes(allNotes);
+                    } else {
+                        document.getElementById("contentArea").innerHTML =
+                            '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p></div>';
+                    }
                 }
             })
             .catch(function () {
-                document.getElementById("contentArea").innerHTML =
-                    '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Erro ao carregar notas.</p></div>';
+                if (!allNotes || !allNotes.length) {
+                    document.getElementById("contentArea").innerHTML =
+                        '<div class="text-center py-16"><p class="text-zinc-600 text-sm">Erro ao carregar notas.</p></div>';
+                }
             });
     });
 </script>

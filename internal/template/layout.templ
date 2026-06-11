@@ -198,7 +198,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 <a href="#" onclick="return createNewNote();"
                     class="text-zinc-400 hover:text-white transition-colors">📄 +NOTA</a>
                 <a href="/spreadsheet"
-                    class="text-emerald-400 hover:text-emerald-300 transition-colors">📊 +PLANILHA</a>
+                    class="text-zinc-400 hover:text-white transition-colors">📊 +PLANILHA</a>
                 <a href="#" id="pdf-upload-link" onclick="
                             activePdfUploadButton = this;
                             document.getElementById('pdf-file-input').click();
@@ -216,6 +216,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 </button>
 
                 <a id="nav-todos" href="/todos" class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯TODOs</a>
+                <a href="/database" class="text-zinc-400 hover:text-white transition-colors" title="Banco de Dados">🗃️ BANCO</a>
 
                 <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Documentação">❓</a>
 
@@ -293,6 +294,15 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                     "
                 class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors">
                 🎯 TODOs
+            </a>
+            
+            <a href="/database" onclick="
+                        document
+                            .getElementById('mobile-menu')
+                            .classList.add('hidden')
+                    "
+                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">
+                🗃️ Banco de Dados
             </a>
 
             <a href="/help" onclick="

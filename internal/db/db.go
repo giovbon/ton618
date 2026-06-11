@@ -19,7 +19,8 @@ func NewStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("db open: %w", err)
 	}
 
-	database.SetMaxOpenConns(1) // SQLite serialized
+	database.SetMaxOpenConns(16) // SQLite concurrent reads with WAL
+	database.SetMaxIdleConns(4)
 
 	if err := initSchema(database); err != nil {
 		database.Close()
@@ -97,6 +98,18 @@ func initSchema(database *sql.DB) error {
 		color  TEXT DEFAULT '#3b82f6',
 		active INTEGER DEFAULT 1
 	);
+
+	CREATE TABLE IF NOT EXISTS todos (
+		id TEXT PRIMARY KEY,
+		file TEXT NOT NULL,
+		section TEXT DEFAULT '',
+		type TEXT DEFAULT '',
+		status TEXT DEFAULT '',
+		text TEXT DEFAULT '',
+		line INTEGER DEFAULT 0,
+		created_at TEXT DEFAULT ''
+	);
+	CREATE INDEX IF NOT EXISTS idx_todos_file ON todos(file);
 	`
 
 	_, err := database.Exec(schema)

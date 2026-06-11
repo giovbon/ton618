@@ -122,6 +122,28 @@ func (s *Store) GetNoteKeywords(filename string) ([]string, error) {
 	return strings.Split(kw, ","), nil
 }
 
+// GetAllNotesKeywords returns a map of all note filenames to their list of keywords.
+func (s *Store) GetAllNotesKeywords() (map[string][]string, error) {
+	rows, err := s.DB.Query("SELECT filename, keywords FROM notes WHERE keywords IS NOT NULL AND keywords != ''")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var filename, keywords string
+		if err := rows.Scan(&filename, &keywords); err != nil {
+			return nil, err
+		}
+		if keywords != "" {
+			result[filename] = strings.Split(keywords, ",")
+		}
+	}
+	return result, rows.Err()
+}
+
+
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
 // It skips files that already exist in the DB (by filename).
 // Returns the count of imported notes.

@@ -239,12 +239,9 @@ func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Requ
 }
 
 func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Request) {
-	// Query parameters: type (all|todo|fixme|bug|task - comma-separated for multiple), status (all|pending|completed)
 	rawType := strings.ToUpper(r.URL.Query().Get("type"))
 	typeFilter := map[string]bool{}
-	if rawType == "" || rawType == "ALL" {
-		typeFilter["ALL"] = true
-	} else {
+	if rawType != "" && rawType != "ALL" {
 		for _, t := range strings.Split(rawType, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
@@ -257,73 +254,24 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 		statusFilter = "all"
 	}
 
-	// Get all notes
-	notes, err := ctx.Notes.GetMany()
+	todos, err := ctx.Store.GetTodosFiltered(typeFilter, statusFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var allTodos []map[string]interface{}
-
-	// Get active markers from DB
-	activeMarkers, _ := ctx.Store.GetActiveTodoMarkers()
-	markerWords := make([]string, 0, len(activeMarkers))
-	for _, m := range activeMarkers {
-		markerWords = append(markerWords, m.Marker)
-	}
-
-	// Extract TODOs from each note
-	for _, note := range notes {
-		content, err := ctx.Store.GetNote(note.Arquivo)
-		if err != nil || content == "" {
-			continue
-		}
-
-		mtime, err := time.Parse(time.RFC3339, note.Mtime)
-		if err != nil {
-			mtime = time.Now()
-		}
-
-		todos := processor.ExtractTodos(content, note.Arquivo, mtime, markerWords)
-
-		for _, todo := range todos {
-			// Apply type filter
-			if !typeFilter["ALL"] && !typeFilter[todo.Type] {
-				continue
-			}
-			// Apply status filter
-			if statusFilter != "all" && todo.Status != statusFilter {
-				continue
-			}
-
-			allTodos = append(allTodos, map[string]interface{}{
-				"id":      todo.ID,
-				"file":    todo.File,
-				"section": todo.Section,
-				"type":    todo.Type,
-				"status":  todo.Status,
-				"text":    todo.Text,
-				"line":    todo.Line,
-				"created": todo.Created.Format(time.RFC3339),
-			})
-		}
-	}
-
-	// Sort by file, then by line (preserves document order, sections appear by appearance)
-	sort.Slice(allTodos, func(i, j int) bool {
-		iFile := allTodos[i]["file"].(string)
-		jFile := allTodos[j]["file"].(string)
-		if iFile != jFile {
-			return iFile < jFile
-		}
-		iLine := allTodos[i]["line"].(int)
-		jLine := allTodos[j]["line"].(int)
-		return iLine < jLine
-	})
-
-	if allTodos == nil {
-		allTodos = []map[string]interface{}{}
+	for _, todo := range todos {
+		allTodos = append(allTodos, map[string]interface{}{
+			"id":      todo.ID,
+			"file":    todo.File,
+			"section": todo.Section,
+			"type":    todo.Type,
+			"status":  todo.Status,
+			"text":    todo.Text,
+			"line":    todo.Line,
+			"created": todo.Created.Format(time.RFC3339),
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -424,4 +372,136 @@ func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Reque
 
 func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	template.Login().Render(r.Context(), w)
+}
+
+// ── Tabulator Database Handlers ──
+
+func (ctx *HandlerContext) HandleDatabasePage(w http.ResponseWriter, r *http.Request) {
+	template.Database("Banco de Dados — TON-618").Render(r.Context(), w)
+}
+
+func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.Request) {
+	notes, err := ctx.Notes.GetMany()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var data []map[string]interface{}
+	columnSet := make(map[string]bool)
+
+	// Built-in columns
+	columnSet["arquivo"] = true
+	columnSet["titulo"] = true
+	columnSet["mtime"] = true
+	columnSet["tags"] = true
+
+	for _, n := range notes {
+		content, err := ctx.Store.GetNote(n.Arquivo)
+		if err != nil {
+			continue
+		}
+		fm, _, err := service.ParseFrontmatter(content)
+		if err != nil {
+			fm = make(map[string]interface{})
+		}
+
+		row := make(map[string]interface{})
+		row["arquivo"] = n.Arquivo
+		row["mtime"] = n.Mtime
+		
+		// Map parsed frontmatter
+		for k, v := range fm {
+			if k != "tags" && k != "title" && k != "titulo" {
+				columnSet[k] = true
+				row[k] = v
+			}
+		}
+
+		// Title logic
+		if t, ok := fm["title"]; ok {
+			row["titulo"] = t
+		} else if t, ok := fm["titulo"]; ok {
+			row["titulo"] = t
+		} else {
+			row["titulo"] = processor.ExtractTitle(content, n.Arquivo)
+		}
+
+		// Tags
+		if len(n.Tags) > 0 {
+			row["tags"] = strings.Join(n.Tags, ", ")
+		} else {
+			row["tags"] = ""
+		}
+
+		data = append(data, row)
+	}
+
+	var columns []map[string]interface{}
+	// Enforce column order for base columns
+	columns = append(columns, map[string]interface{}{"title": "Arquivo", "field": "arquivo", "visible": false})
+	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
+	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
+	
+	for col := range columnSet {
+		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" {
+			columns = append(columns, map[string]interface{}{
+				"title":  strings.ToUpper(col[:1]) + col[1:], // strings.Title is deprecated, simple inline title case
+				"field":  col,
+				"editor": "input",
+			})
+		}
+	}
+	// mtime at the end
+	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"columns": columns,
+		"data":    data,
+	})
+}
+
+type UpdatePropertyRequest struct {
+	File  string      `json:"file"`
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
+}
+
+func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *http.Request) {
+	var req UpdatePropertyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.File == "" || req.Key == "" {
+		http.Error(w, "file and key are required", http.StatusBadRequest)
+		return
+	}
+
+	content, err := ctx.Store.GetNote(req.File)
+	if err != nil {
+		http.Error(w, "note not found", http.StatusNotFound)
+		return
+	}
+
+	// For standard properties, map appropriately
+	if req.Key == "titulo" {
+		req.Key = "title" // internally save as title
+	}
+
+	newContent, err := service.UpdateFrontmatterProperty(content, req.Key, req.Value)
+	if err != nil {
+		http.Error(w, "error updating frontmatter", http.StatusInternalServerError)
+		return
+	}
+
+	// Resave to trigger reindex
+	if err := ctx.Notes.Save(req.File, newContent, nil); err != nil {
+		http.Error(w, "error saving note", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

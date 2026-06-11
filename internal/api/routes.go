@@ -44,6 +44,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /editor", ctx.HandleEditor)
 	mux.HandleFunc("GET /spreadsheet", ctx.HandleSpreadsheet)
 	mux.HandleFunc("GET /todos", ctx.HandleTodosPage)
+	mux.HandleFunc("GET /database", ctx.HandleDatabasePage)
 	mux.HandleFunc("GET /help", ctx.HandleHelp)
 
 	mux.HandleFunc("GET /login", ctx.HandleLogin)
@@ -79,6 +80,8 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
+	mux.HandleFunc("GET /api/notes/database", ctx.HandleGetDatabaseData)
+	mux.HandleFunc("POST /api/notes/update-property", ctx.HandleUpdateNoteProperty)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
 	mux.HandleFunc("POST /api/bulk-delete", ctx.HandleBulkDelete)
 	mux.HandleFunc("POST /api/bulk-archive", ctx.HandleBulkArchive)
