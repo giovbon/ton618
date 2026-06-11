@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Tldraw } from 'tldraw';
+import { Tldraw, exportToBlob } from 'tldraw';
 import 'tldraw/tldraw.css';
 
 // Gerenciador de assets customizado para fazer upload no servidor em vez de usar base64 inline
@@ -8,21 +8,21 @@ const customAssetStore = {
     async upload(asset, file) {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         const response = await fetch('/api/upload-image', {
             method: 'POST',
             body: formData,
         });
-        
+
         if (!response.ok) {
             throw new Error(`Erro no upload: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
         if (!data.ok) {
             throw new Error(`Erro no upload: ${data.error || 'Erro desconhecido'}`);
         }
-        
+
         return { src: data.url };
     },
     resolve(asset) {
@@ -30,17 +30,16 @@ const customAssetStore = {
     }
 };
 
-// Componente React que renderiza o canvas do tldraw
+// Componente React que renderiza o canvas do tldraw v2
 function DrawingEditor({ initialState, onChange, onReady }) {
     return (
         <div className="tldraw-editor-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
             <Tldraw
                 autoFocus={true}
                 assets={customAssetStore}
+                // tldraw v2: usar darkMode prop (não user preferences)
+                darkMode={true}
                 onMount={(editor) => {
-                    // Configura tema escuro para combinar com o visual premium do TON-618
-                    editor.user.updateUserPreferences({ colorScheme: 'dark' });
-                    
                     if (initialState) {
                         try {
                             editor.loadSnapshot(initialState);

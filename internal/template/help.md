@@ -7,3 +7,5 @@
 - jspreadsheet (editor de planilhas) - https://jspreadsheet.com/
 - Tabulator (editor de dados tabulares) - https://tabulator.info/
 - Tldraw (editor de desenho) - https://tldraw.dev/
+
+Fórmulas possíveis: https://jspreadsheet.com/docs/formulas/functions
