@@ -121,9 +121,9 @@ func TestProcessPDF_CriaStub(t *testing.T) {
 	if len(links) != 0 {
 		t.Errorf("links inesperados: %v", links)
 	}
-	// PDF tag é esperada
-	if len(tags) != 1 || tags[0] != "pdf" {
-		t.Logf("tags do PDF: %v", tags)
+	// PDF tag não deve mais existir
+	if len(tags) != 0 {
+		t.Errorf("esperado 0 tags, got %d", len(tags))
 	}
 }
 

@@ -25,8 +25,8 @@ func TestProcessPDF_ArquivoInexistente_AindaCriaStub(t *testing.T) {
 	if links != nil {
 		t.Fatalf("esperado nil links, got %v", links)
 	}
-	if tags == nil || len(tags) != 1 || tags[0] != "pdf" {
-		t.Fatalf("tags esperado ['pdf'], got %v", tags)
+	if len(tags) != 0 {
+		t.Fatalf("tags esperado vazio, got %v", tags)
 	}
 }
 
@@ -70,14 +70,14 @@ func TestProcessPDF_DocumentoValido(t *testing.T) {
 	if doc.Hash == "" {
 		t.Fatal("hash nao deveria ser vazio")
 	}
-	if len(doc.Tags) != 1 || doc.Tags[0] != "pdf" {
-		t.Fatalf("tags esperado ['pdf'], got %v", doc.Tags)
+	if len(doc.Tags) != 0 {
+		t.Fatalf("tags esperado vazio, got %v", doc.Tags)
 	}
 	if links != nil {
 		t.Fatalf("esperado nil links para PDF, got %v", links)
 	}
-	if tags == nil || len(tags) != 1 || tags[0] != "pdf" {
-		t.Fatalf("tags esperado ['pdf'], got %v", tags)
+	if len(tags) != 0 {
+		t.Fatalf("tags esperado vazio, got %v", tags)
 	}
 }
 

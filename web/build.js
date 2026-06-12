@@ -10,6 +10,12 @@ await esbuild.build({
   format: "iife",
   sourcemap: false,
   target: "es2020",
+  loader: {
+    ".woff2": "dataurl",
+    ".woff": "dataurl",
+    ".ttf": "dataurl",
+    ".svg": "dataurl"
+  },
 });
 
 // Gera versão .gz para servir com Content-Encoding: gzip

@@ -389,10 +389,10 @@ func TestProcessFile_AttachmentRecovery(t *testing.T) {
 		t.Errorf("expected 1 recovered document, got %d", count)
 	}
 
-	// Verify the tag was set
+	// Verify no tags are set
 	tags, _ := store.GetFileTags(filename)
-	if len(tags) != 1 || tags[0] != "zip" {
-		t.Errorf("expected [zip] tags for recovered attachment, got %v", tags)
+	if len(tags) != 0 {
+		t.Errorf("expected no tags for recovered attachment, got %v", tags)
 	}
 }
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"ton618/internal/config"
@@ -9,6 +10,12 @@ import (
 	"ton618/internal/service"
 	"ton618/internal/watcher"
 )
+
+// dbCacheEntry guarda a linha pré-formatada do banco de dados para evitar ler e parsear a nota repetidamente.
+type dbCacheEntry struct {
+	Mtime string
+	Row   map[string]interface{}
+}
 
 // HandlerContext agrega todas as dependências dos handlers.
 type HandlerContext struct {
@@ -19,6 +26,10 @@ type HandlerContext struct {
 	// Serviços (lógica de negócio separada dos handlers HTTP)
 	Backup *service.BackupService
 	Notes  *service.NoteService
+
+	// Cache do banco de dados de notas (/database)
+	dbCache   map[string]dbCacheEntry
+	dbCacheMu sync.RWMutex
 }
 
 // NewHandlerContext cria o contexto.
@@ -28,8 +39,9 @@ func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watche
 		Store:   store,
 		Watcher: w,
 		// Backup e Notes são injetados depois (possuem dependências cíclicas)
-		Backup: service.NewBackupService(store, store, cfg.DocsDir),
-		Notes:  service.NewNoteService(store, store, store, store, store, store, cfg.DocsDir),
+		Backup:  service.NewBackupService(store, store, cfg.DocsDir),
+		Notes:   service.NewNoteService(store, store, store, store, store, store, cfg.DocsDir),
+		dbCache: make(map[string]dbCacheEntry),
 	}
 }
 

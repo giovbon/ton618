@@ -230,8 +230,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 						Hash:      processor.CalculateHash("att", basename, nil),
 					}
 					store.InsertDocument(doc)
-					store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "zip")
-					store.SetFileTags(filename, []string{"zip"})
+					store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 					slog.Info("Documento de anexo recriado pelo watcher", "file", filename)
 				}
 			}

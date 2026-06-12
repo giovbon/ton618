@@ -481,54 +481,139 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columnSet["tags"] = true
 
 	for _, n := range notes {
-		content, err := ctx.Store.GetNote(n.Arquivo)
-		if err != nil {
-			continue
-		}
-		fm, _, err := service.ParseFrontmatter(content)
-		if err != nil {
-			fm = make(map[string]interface{})
-		}
+		var row map[string]interface{}
 
-		row := make(map[string]interface{})
-		row["arquivo"] = n.Arquivo
-		
-		displayMtime := n.Mtime
-		if t, err := time.Parse(time.RFC3339, n.Mtime); err == nil {
-			displayMtime = t.Local().Format("2006-01-02 15:04:05")
-		}
-		row["mtime"] = displayMtime
-		
-		// Map parsed frontmatter
-		for k, v := range fm {
-			if k != "tags" && k != "title" && k != "titulo" {
-				columnSet[k] = true
+		// 1. Tentar obter do cache se a modificação for igual
+		ctx.dbCacheMu.RLock()
+		cached, exists := ctx.dbCache[n.Arquivo]
+		ctx.dbCacheMu.RUnlock()
+
+		if exists && cached.Mtime == n.Mtime {
+			// Copia rasa do map para evitar problemas de concorrência ou mutações inesperadas
+			row = make(map[string]interface{})
+			for k, v := range cached.Row {
 				row[k] = v
 			}
-		}
-
-		// Title logic: o título é o nome da nota (o nome do arquivo com a extensão .md)
-		parts := strings.Split(n.Arquivo, "/")
-		row["titulo"] = parts[len(parts)-1]
-
-		// Tags
-		if len(n.Tags) > 0 {
-			row["tags"] = strings.Join(n.Tags, ", ")
 		} else {
-			row["tags"] = ""
+			// 2. Cache miss: busca e processa o arquivo
+			content, err := ctx.Store.GetNote(n.Arquivo)
+			if err != nil {
+				continue
+			}
+			fm, _, err := service.ParseFrontmatter(content)
+			if err != nil {
+				fm = make(map[string]interface{})
+			}
+
+			row = make(map[string]interface{})
+			row["arquivo"] = n.Arquivo
+
+			displayMtime := n.Mtime
+			if t, err := time.Parse(time.RFC3339, n.Mtime); err == nil {
+				displayMtime = t.Local().Format("2006-01-02 15:04:05")
+			}
+			row["mtime"] = displayMtime
+
+			// Map parsed frontmatter
+			for k, v := range fm {
+				if k != "tags" && k != "title" && k != "titulo" {
+					row[k] = v
+				}
+			}
+
+			// Title logic: o título é o nome da nota (o nome do arquivo com a extensão .md)
+			parts := strings.Split(n.Arquivo, "/")
+			row["titulo"] = parts[len(parts)-1]
+
+			// Tags
+			if len(n.Tags) > 0 {
+				row["tags"] = strings.Join(n.Tags, ", ")
+			} else {
+				row["tags"] = ""
+			}
+
+			// Infer robust type for drawings and spreadsheets
+			isDrawing := false
+			isSpreadsheet := false
+			for _, t := range n.Tags {
+				lowerT := strings.ToLower(t)
+				if lowerT == "drawing" {
+					isDrawing = true
+				}
+				if lowerT == "spreadsheet" {
+					isSpreadsheet = true
+				}
+			}
+
+			lowerContent := strings.ToLower(content)
+			lowerArquivo := strings.ToLower(n.Arquivo)
+
+			if !isDrawing && (strings.Contains(lowerArquivo, "drawing") || strings.Contains(lowerContent, "type: drawing") || strings.Contains(lowerContent, `"type":"excalidraw"`) || strings.Contains(lowerContent, "page:page")) {
+				isDrawing = true
+			}
+			if !isSpreadsheet && (strings.Contains(lowerArquivo, "sheet") || strings.Contains(lowerContent, "type: spreadsheet") || strings.Contains(lowerContent, `"widths"`)) {
+				isSpreadsheet = true
+			}
+
+			// Check if frontmatter specified type/Type explicitly
+			if !isDrawing && !isSpreadsheet {
+				for _, key := range []string{"type", "Type"} {
+					if val, ok := fm[key]; ok {
+						if strVal, isStr := val.(string); isStr {
+							lowerVal := strings.ToLower(strVal)
+							if lowerVal == "drawing" {
+								isDrawing = true
+								break
+							} else if lowerVal == "spreadsheet" {
+								isSpreadsheet = true
+								break
+							}
+						}
+					}
+				}
+			}
+
+			if isDrawing {
+				row["type"] = "drawing"
+				row["Type"] = "drawing"
+			} else if isSpreadsheet {
+				row["type"] = "spreadsheet"
+				row["Type"] = "spreadsheet"
+			} else {
+				// Check if we have Type (capital T) in row
+				if capType, hasCapType := row["Type"]; hasCapType {
+					row["type"] = capType
+				} else if lowType, hasLowType := row["type"]; hasLowType {
+					row["Type"] = lowType
+				} else {
+					arquivo := n.Arquivo
+					switch {
+					case strings.HasPrefix(arquivo, "pdfs/"):
+						row["type"] = "pdf"
+						row["Type"] = "pdf"
+					case strings.HasPrefix(arquivo, "attachments/"):
+						row["type"] = "attachment"
+						row["Type"] = "attachment"
+					default:
+						row["type"] = "note"
+						row["Type"] = "note"
+					}
+				}
+			}
+
+			// Salvar no cache
+			ctx.dbCacheMu.Lock()
+			ctx.dbCache[n.Arquivo] = dbCacheEntry{
+				Mtime: n.Mtime,
+				Row:   row,
+			}
+			ctx.dbCacheMu.Unlock()
 		}
 
-		// Ensure all rows have a "type" field — default to "note" if not set in frontmatter
-		if _, hasType := row["type"]; !hasType {
-			// Infer type from path when not declared
-			arquivo := n.Arquivo
-			switch {
-			case strings.HasPrefix(arquivo, "pdfs/"):
-				row["type"] = "pdf"
-			case strings.HasPrefix(arquivo, "attachments/"):
-				row["type"] = "attachment"
-			default:
-				row["type"] = "note"
+		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global
+		for k := range row {
+			if k != "tags" && k != "title" && k != "titulo" {
+				columnSet[k] = true
 			}
 		}
 		columnSet["type"] = true
@@ -545,7 +630,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Type", "field": "type", "editor": false, "width": 110})
 
 	for col := range columnSet {
-		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" && col != "type" {
+		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" && col != "type" && strings.ToLower(col) != "type" {
 			columns = append(columns, map[string]interface{}{
 				"title":  strings.ToUpper(col[:1]) + col[1:], // strings.Title is deprecated, simple inline title case
 				"field":  col,
@@ -554,7 +639,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		}
 	}
 	// mtime at the end
-	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false})
+	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false, "visible": false})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

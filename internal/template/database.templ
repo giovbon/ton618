@@ -95,6 +95,60 @@ templ databaseContent() {
         margin-right: 4px;
         margin-bottom: 2px;
     }
+    
+    /* Premium Dark Mode Footer & Pagination styling */
+    .tabulator-footer {
+        background-color: #09090b !important; /* zinc-950 */
+        border-top: 1px solid #27272a !important; /* zinc-800 */
+        color: #a1a1aa !important; /* zinc-400 */
+        padding: 10px 16px !important;
+    }
+    .tabulator-footer .tabulator-paginator {
+        color: #a1a1aa !important;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .tabulator-footer select {
+        background-color: #18181b !important; /* zinc-900 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        color: #d4d4d8 !important; /* zinc-300 */
+        border-radius: 6px;
+        padding: 4px 8px !important;
+        font-weight: 500;
+        outline: none;
+        cursor: pointer;
+    }
+    .tabulator-footer select:focus {
+        border-color: #0ea5e9 !important; /* sky-500 */
+    }
+    .tabulator-footer .tabulator-page {
+        background-color: #18181b !important; /* zinc-900 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        color: #a1a1aa !important; /* zinc-400 */
+        border-radius: 6px;
+        padding: 4px 10px !important;
+        font-weight: 600;
+        font-family: inherit;
+        transition: all 0.15s ease;
+    }
+    .tabulator-footer .tabulator-page:hover:not(.disabled) {
+        background-color: #27272a !important; /* zinc-800 */
+        color: #ffffff !important;
+        border-color: #3f3f46 !important;
+    }
+    .tabulator-footer .tabulator-page.active {
+        background-color: rgba(14, 165, 233, 0.15) !important; /* sky-500/15 */
+        border-color: rgba(14, 165, 233, 0.4) !important; /* sky-500/40 */
+        color: #38bdf8 !important; /* sky-400 */
+        font-weight: 700;
+    }
+    .tabulator-footer .tabulator-page.disabled {
+        opacity: 0.3;
+        background-color: transparent !important;
+        border-color: transparent !important;
+        cursor: not-allowed;
+    }
 </style>
 
 <script>
@@ -129,11 +183,14 @@ templ databaseContent() {
                         c.formatter = function(cell) {
                             var rowData = cell.getRow().getData();
                             var file = rowData.arquivo || "";
-                            var tags = rowData.tags || "";
-                            var isSpreadsheet = tags.includes("spreadsheet") || file.includes("sheet") || (rowData.type === "spreadsheet");
-                            var isDrawing = tags.includes("drawing") || file.includes("drawing") || (rowData.type === "drawing");
-                            var isPdf = file.startsWith("pdfs/");
-                            var isZip = file.startsWith("attachments/");
+                            var tagsStr = String(rowData.tags || "").toLowerCase();
+                            var fileStr = String(file).toLowerCase();
+                            var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
+                            
+                            var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
+                            var isDrawing = tagsStr.includes("drawing") || fileStr.includes("drawing") || (typeStr === "drawing");
+                            var isPdf = fileStr.startsWith("pdfs/");
+                            var isZip = fileStr.startsWith("attachments/");
                             
                             var url = "";
                             var icon = "📝";
@@ -181,8 +238,8 @@ templ databaseContent() {
                     layout: "fitColumns",
                     responsiveLayout: "collapse",
                     pagination: "local",
-                    paginationSize: 50,
-                    paginationSizeSelector: [50, 100, 500, true],
+                    paginationSize: 100,
+                    paginationSizeSelector: [100, 200, 500, true],
                     placeholder: "Nenhuma nota encontrada no banco de dados.",
                     initialSort: [
                         {column: "mtime", dir: "desc"}

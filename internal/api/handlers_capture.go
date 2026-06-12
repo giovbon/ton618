@@ -176,8 +176,7 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 		}
 
 		finalMarkdown = fmt.Sprintf(`---
-title: "%s"
-tags: [captura, keywords]
+tags: [keywords]
 ---
 
 # %s
@@ -190,7 +189,7 @@ tags: [captura, keywords]
 
 ---
 
-*Capturado em %s*`, title, title, req.URL, transcript, formatCaptureTimestamp(time.Now()))
+*Capturado em %s*`, title, req.URL, transcript, formatCaptureTimestamp(time.Now()))
 	} else {
 		article, err := readability.FromURL(req.URL, 20*time.Second)
 		if err != nil {
@@ -226,8 +225,7 @@ tags: [captura, keywords]
 		mdContent = cleanupMarkdown(mdContent)
 
 		finalMarkdown = fmt.Sprintf(`---
-title: "%s"
-tags: [captura, keywords]
+tags: [keywords]
 ---
 
 # %s
@@ -238,7 +236,7 @@ tags: [captura, keywords]
 
 ---
 
-*Capturado em %s*`, title, title, req.URL, req.URL, mdContent, formatCaptureTimestamp(time.Now()))
+*Capturado em %s*`, title, req.URL, req.URL, mdContent, formatCaptureTimestamp(time.Now()))
 	}
 
 	slug := slugifyFilename(title)

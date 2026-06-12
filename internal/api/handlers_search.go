@@ -587,7 +587,6 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 	// Registra o archive no file_mods (para aparecer na busca compacta)
 	// mas NÃO cria documento FTS — archives não têm conteúdo pesquisável.
 	ctx.Store.SetFileMod("archives/"+archiveName, time.Now().UTC().Format(time.RFC3339))
-	ctx.Store.SetFileTags("archives/"+archiveName, []string{"arquivo"})
 
 	slog.Info("Archive criado", "archive", archiveName, "arquivos", len(archivedFiles))
 
