@@ -86,38 +86,38 @@ templ editorContent(data EditorData) {
 	    if data.Backlinks != nil {
 	        if len(data.Backlinks.Level1) > 0 {
 	            <div id="backlinks-area" class="mb-3">
-	                <div class="flex items-center gap-1.5 mb-1.5">
-	                    <svg class="w-3 h-3 transition-transform text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-	                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" transform="rotate(90)"/>
+	                <button id="toggle-backlinks-btn" onclick="toggleBacklinks()" class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors">
+	                    <svg id="backlinks-arrow" class="w-3 h-3 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
 	                    </svg>
-	                    <span class="text-[10px] font-mono text-zinc-600">BACKLINKS</span>
+	                    BACKLINKS
+	                </button>
+	                <div id="backlinks-content" class="mt-2 text-[12px] text-zinc-400 leading-relaxed">
+	                    Citada por:
+	                    for i, name := range data.Backlinks.Level1 {
+	                        if i > 0 {
+	                            { ", " }
+	                        }
+	                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
+	                    }
+	                    if len(data.Backlinks.Level2) > 0 {
+	                        if len(data.Backlinks.Level1) == 1 {
+	                            { ". E esta nota tambem cita " }
+	                        } else {
+	                            { ". E essas notas tambem citam " }
+	                        }
+	                        for i, name := range data.Backlinks.Level2 {
+	                            if i > 0 {
+	                                { ", " }
+	                            }
+	                            <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
+	                        }
+	                        { "." }
+	                    }
 	                </div>
-	                <div class="ml-5 px-3 py-2 text-[12px] text-zinc-400 leading-relaxed">
-                    Ligada a
-                    for i, name := range data.Backlinks.Level1 {
-                        if i > 0 {
-                            { ", " }
-                        }
-                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
-                    }
-                    if len(data.Backlinks.Level2) > 0 {
-                        if len(data.Backlinks.Level1) == 1 {
-                            { ". E esta nota tambem liga para " }
-                        } else {
-                            { ". E essas notas tambem ligam para " }
-                        }
-                        for i, name := range data.Backlinks.Level2 {
-                            if i > 0 {
-                                { ", " }
-                            }
-                            <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ DisplayName(name) }</a>
-                        }
-                        { "." }
-                    }
-                </div>
-            </div>
-        }
-    }
+	            </div>
+	        }
+	    }
 
 
     <!-- Wikilink autocomplete -->
@@ -1680,6 +1680,16 @@ templ editorContent(data EditorData) {
             if (tocVisible) updateToc();
         }
 
+        // ── Backlinks ──
+        var backlinksVisible = true;
+        function toggleBacklinks() {
+            backlinksVisible = !backlinksVisible;
+            var el = document.getElementById("backlinks-content");
+            var arrow = document.getElementById("backlinks-arrow");
+            if (el) el.classList.toggle("hidden", !backlinksVisible);
+            if (arrow) arrow.classList.toggle("rotate-90", backlinksVisible);
+        }
+
         function updateToc() {
             if (!editor || editor.isDestroyed) return;
             var headings = [];
@@ -1820,28 +1830,65 @@ templ editorContent(data EditorData) {
         function addTagToFrontmatter(tag) {
             var fm = document.getElementById("frontmatter-area");
             var val = fm.value;
-            // Check if tags: already exists
-            var tagsMatch = val.match(/^(tags:\s*\[)([^\]]*)(\])$/m);
-            if (tagsMatch) {
-                // tags: [existing1, existing2]
-                var existing = tagsMatch[2].trim();
-                var newTags = existing ? existing + ", " + tag : tag;
-                var newVal = val.replace(
-                    /^tags:\s*\[[^\]]*\]$/m,
-                    "tags: [" + newTags + "]",
-                );
+            
+            // 1. Tenta encontrar tags no formato flow style: tags: [tag1, tag2]
+            var flowMatch = val.match(/^tags:\s*\[([^\]]*)\]/m);
+            if (flowMatch) {
+                var existing = flowMatch[1].trim();
+                var tags = existing ? existing.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+                if (!tags.includes(tag)) {
+                    tags.push(tag);
+                }
+                var newVal = val.replace(/^tags:\s*\[[^\]]*\]/m, "tags: [" + tags.join(", ") + "]");
                 fm.value = newVal;
-            } else if (val.trim() && !val.includes("tags:")) {
-                // Add tags: [tag] at the end
-                fm.value = val + "\ntags: [" + tag + "]";
-            } else if (!val.trim()) {
-                fm.value = "tags: [" + tag + "]";
-            } else {
-                fm.value = val + ", " + tag;
+                triggerFmInput(fm);
+                return;
             }
-            // Trigger input event
+            
+            // 2. Tenta encontrar tags no formato block style (ex: tags:\n  - tag1\n  - tag2)
+            var lines = val.split('\n');
+            var tagsIndex = -1;
+            for (var i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === 'tags:') {
+                    tagsIndex = i;
+                    break;
+                }
+            }
+            if (tagsIndex !== -1) {
+                var tags = [];
+                var lastIndex = tagsIndex;
+                for (var j = tagsIndex + 1; j < lines.length; j++) {
+                    var line = lines[j];
+                    var match = line.match(/^\s*-\s*(.+)$/);
+                    if (match) {
+                        tags.push(match[1].trim());
+                        lastIndex = j;
+                    } else if (line.trim() !== "" && !line.startsWith(" ")) {
+                        break;
+                    }
+                }
+                if (!tags.includes(tag)) {
+                    tags.push(tag);
+                }
+                // Substitui o bloco por flow style de tags
+                lines.splice(tagsIndex, (lastIndex - tagsIndex) + 1, "tags: [" + tags.join(", ") + "]");
+                fm.value = lines.join('\n');
+                triggerFmInput(fm);
+                return;
+            }
+            
+            // 3. Se tags: não existir no frontmatter, adiciona tags: [tag]
+            if (val.trim()) {
+                fm.value = val.trim() + "\ntags: [" + tag + "]\n";
+            } else {
+                fm.value = "tags: [" + tag + "]\n";
+            }
+            triggerFmInput(fm);
+        }
+
+        function triggerFmInput(el) {
             var evt = new Event("input", { bubbles: true });
-            fm.dispatchEvent(evt);
+            el.dispatchEvent(evt);
         }
 
         document.addEventListener("input", function (e) {
@@ -2086,6 +2133,7 @@ templ editorContent(data EditorData) {
         setStatus("saved");
         window.deleteCurrentNote = deleteCurrentNote;
         window.toggleToc = toggleToc;
+        window.toggleBacklinks = toggleBacklinks;
         window.updateToc = updateToc;
         window.applyToc = applyToc;
     })();

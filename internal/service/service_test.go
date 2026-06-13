@@ -444,3 +444,32 @@ func TestNoteService_GetMany_Vazio(t *testing.T) {
 		t.Errorf("esperava 0 itens, got %d", len(items))
 	}
 }
+
+func TestUpdateFrontmatterProperty_FlowStyleTags(t *testing.T) {
+	content := "---\ntype: note\ntags: [golang, programacao]\n---\n# Corpo da nota"
+	updated, err := UpdateFrontmatterProperty(content, "tags", "golang, programacao, teste")
+	if err != nil {
+		t.Fatalf("UpdateFrontmatterProperty: %v", err)
+	}
+
+	// Note: YAML encoding order might vary (e.g. tags could be sorted or keys could be sorted),
+	// but the output should have flow style tags: [golang, programacao, teste].
+	if !bytes.Contains([]byte(updated), []byte("tags: [golang, programacao, teste]")) {
+		t.Errorf("esperava que o conteudo contivesse 'tags: [golang, programacao, teste]', got:\n%q", updated)
+	}
+}
+
+func TestUpdateFrontmatterProperty_CaseInsensitiveTagsAndString(t *testing.T) {
+	content := "---\ntype: note\nTags: golang, programacao\n---\n# Corpo da nota"
+	updated, err := UpdateFrontmatterProperty(content, "tags", "golang, programacao, teste")
+	if err != nil {
+		t.Fatalf("UpdateFrontmatterProperty: %v", err)
+	}
+
+	if !bytes.Contains([]byte(updated), []byte("tags: [golang, programacao, teste]")) {
+		t.Errorf("esperava que o conteudo contivesse 'tags: [golang, programacao, teste]', got:\n%q", updated)
+	}
+	if bytes.Contains([]byte(updated), []byte("Tags:")) {
+		t.Error("esperava que a chave duplicada 'Tags:' fosse removida")
+	}
+}

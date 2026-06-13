@@ -91,11 +91,20 @@ templ drawingContent(data EditorData) {
             }
         }
 
-        // Salvar com Debounce
+        // Salvar com Debounce e Fila para evitar Race Condition
         var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+
         function scheduleSave() {
             clearTimeout(saveTimer);
-            saveTimer = setTimeout(doSave, 1500); // 1.5 segundos de inatividade para auto-save
+            saveTimer = setTimeout(function() {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1500); // 1.5 segundos de inatividade para auto-save
         }
 
         function setStatus(s) {
@@ -113,8 +122,10 @@ templ drawingContent(data EditorData) {
         }
 
         function doSave() {
-            if (!currentSnapshot || currentStatus === "saving") return;
+            if (!currentSnapshot || saveInProgress) return;
 
+            saveInProgress = true;
+            savePending = false;
             setStatus("saving");
 
             var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot);
@@ -131,15 +142,24 @@ templ drawingContent(data EditorData) {
             fetch("/api/note/save", { method: "POST", body: fd })
                 .then(function (r) {
                     if (!r.ok) throw new Error("HTTP " + r.status);
+                    saveInProgress = false;
                     setStatus("saved");
                     filenameInput.dataset.filename = filename;
                     var params = new URLSearchParams(window.location.search);
                     params.set("file", filename);
                     window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+                    
+                    if (savePending) {
+                        doSave();
+                    }
                 })
                 .catch(function (e) {
+                    saveInProgress = false;
                     setStatus("dirty");
                     console.error("Erro ao salvar desenho:", e);
+                    if (savePending) {
+                        scheduleSave();
+                    }
                 });
         }
 

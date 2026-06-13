@@ -40,6 +40,35 @@ func ParseFrontmatter(content string) (map[string]interface{}, string, error) {
 	return fm, body, nil
 }
 
+func toFlowStyleNode(val interface{}) interface{} {
+	var list []string
+
+	switch v := val.(type) {
+	case []string:
+		list = v
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				list = append(list, s)
+			}
+		}
+	default:
+		return val
+	}
+
+	node := &yaml.Node{
+		Kind:  yaml.SequenceNode,
+		Style: yaml.FlowStyle,
+	}
+	for _, s := range list {
+		node.Content = append(node.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: s,
+		})
+	}
+	return node
+}
+
 // UpdateFrontmatterProperty altera ou insere uma chave no YAML do Markdown
 // preservando o corpo da nota intacto.
 func UpdateFrontmatterProperty(content string, key string, value interface{}) (string, error) {
@@ -49,6 +78,15 @@ func UpdateFrontmatterProperty(content string, key string, value interface{}) (s
 	}
 	if fm == nil {
 		fm = make(map[string]interface{})
+	}
+
+	// Normalize keys to lowercase to avoid duplicate keys (e.g. tags vs Tags)
+	normalizedKey := strings.ToLower(key)
+	for k, v := range fm {
+		if strings.ToLower(k) == normalizedKey {
+			delete(fm, k)
+			fm[normalizedKey] = v
+		}
 	}
 
 	// Se o valor for vazio ou nil, podemos considerar remover a chave (opcional)
@@ -80,6 +118,11 @@ func UpdateFrontmatterProperty(content string, key string, value interface{}) (s
 	// Se o map ficou vazio após remoções, podemos até remover o bloco
 	if len(fm) == 0 {
 		return strings.TrimLeft(body, " \t\r\n"), nil
+	}
+
+	// Força o campo tags a usar formato de lista flow (inline) [tag1, tag2]
+	if tagsVal, ok := fm["tags"]; ok {
+		fm["tags"] = toFlowStyleNode(tagsVal)
 	}
 
 	var yamlBuf strings.Builder

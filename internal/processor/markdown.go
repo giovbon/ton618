@@ -76,6 +76,13 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 			yamlContent := text[4:endIdx]
 			var fm map[string]interface{}
 			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
+				// Normalize keys to lowercase to allow case-insensitive frontmatter keys
+				cleanFm := make(map[string]interface{})
+				for k, v := range fm {
+					cleanFm[strings.ToLower(k)] = v
+				}
+				fm = cleanFm
+
 				if tRaw, ok := fm["tags"]; ok {
 					if tList, ok := tRaw.([]interface{}); ok {
 						for _, t := range tList {
@@ -84,6 +91,13 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 								if cleanTag != "" {
 									fileTags = append(fileTags, cleanTag)
 								}
+							}
+						}
+					} else if ts, ok := tRaw.(string); ok {
+						for _, t := range strings.Split(ts, ",") {
+							cleanTag := strings.ToLower(strings.TrimSpace(t))
+							if cleanTag != "" {
+								fileTags = append(fileTags, cleanTag)
 							}
 						}
 					}
@@ -285,6 +299,13 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 			yamlContent := text[4:endIdx]
 			var fm map[string]interface{}
 			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
+				// Normalize keys to lowercase to allow case-insensitive frontmatter keys
+				cleanFm := make(map[string]interface{})
+				for k, v := range fm {
+					cleanFm[strings.ToLower(k)] = v
+				}
+				fm = cleanFm
+
 				if tRaw, ok := fm["tags"]; ok {
 					if tList, ok := tRaw.([]interface{}); ok {
 						for _, t := range tList {
@@ -293,6 +314,13 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 								if cleanTag != "" {
 									fileTags = append(fileTags, cleanTag)
 								}
+							}
+						}
+					} else if ts, ok := tRaw.(string); ok {
+						for _, t := range strings.Split(ts, ",") {
+							cleanTag := strings.ToLower(strings.TrimSpace(t))
+							if cleanTag != "" {
+								fileTags = append(fileTags, cleanTag)
 							}
 						}
 					}

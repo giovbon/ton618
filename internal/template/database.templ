@@ -298,35 +298,88 @@ templ databaseContent() {
                 function parseSearchQuery(query) {
                     var filters = [];
                     var generalTerms = [];
-                    var regex = /([a-zA-ZÀ-ÿ0-9_\-]+)\s*:\s*("([^"]+)"|([^\s]+))/g;
-                    var strippedQuery = query;
-                    var match;
                     
-                    while ((match = regex.exec(query)) !== null) {
-                        var key = match[1].toLowerCase();
-                        var val = match[3] || match[4];
-                        
-                        if (key === "título" || key === "titulo" || key === "title") {
-                            key = "titulo";
-                        } else if (key === "file" || key === "arquivo") {
-                            key = "arquivo";
-                        } else if (key === "tipo" || key === "type") {
-                            key = "type";
-                        } else if (key === "mtime" || key === "modificacao" || key === "modificação" || key === "date" || key === "data") {
-                            key = "mtime";
-                        } else if (key === "tags" || key === "tag") {
-                            key = "tags";
+                    var i = 0;
+                    var len = query.length;
+                    
+                    function skipWhitespace() {
+                        while (i < len && /\s/.test(query[i])) {
+                            i++;
                         }
-                        
-                        filters.push({ key: key, value: val.toLowerCase() });
-                        strippedQuery = strippedQuery.replace(match[0], " ");
                     }
                     
-                    var words = strippedQuery.split(/\s+/);
-                    for (var i = 0; i < words.length; i++) {
-                        var w = words[i].trim().toLowerCase();
-                        if (w) {
-                            generalTerms.push(w);
+                    while (i < len) {
+                        skipWhitespace();
+                        if (i >= len) break;
+                        
+                        // Check if we have a key pattern at the start of current position
+                        var keyMatch = query.slice(i).match(/^([a-zA-ZÀ-ÿ0-9_\-]+)\s*:/);
+                        if (keyMatch) {
+                            var rawKey = keyMatch[1];
+                            var key = rawKey.toLowerCase();
+                            
+                            // Map keys
+                            if (key === "título" || key === "titulo" || key === "title") {
+                                key = "titulo";
+                            } else if (key === "file" || key === "arquivo") {
+                                key = "arquivo";
+                            } else if (key === "tipo" || key === "type") {
+                                key = "type";
+                            } else if (key === "mtime" || key === "modificacao" || key === "modificação" || key === "date" || key === "data") {
+                                key = "mtime";
+                            } else if (key === "tags" || key === "tag") {
+                                key = "tags";
+                            }
+                            
+                            // Move pointer past the key and colon
+                            i += keyMatch[0].length;
+                            skipWhitespace();
+                            
+                            // Parse value
+                            var val = "";
+                            if (i < len && (query[i] === '"' || query[i] === "'")) {
+                                var quoteChar = query[i];
+                                i++; // skip quote
+                                while (i < len && query[i] !== quoteChar) {
+                                    val += query[i];
+                                    i++;
+                                }
+                                if (i < len) i++; // skip closing quote
+                            } else {
+                                // Read unquoted value until a whitespace followed by another key: pattern or end of string
+                                while (i < len) {
+                                    var nextKeyMatch = query.slice(i).match(/^\s+([a-zA-ZÀ-ÿ0-9_\-]+)\s*:/);
+                                    if (nextKeyMatch) {
+                                        break;
+                                    }
+                                    val += query[i];
+                                    i++;
+                                }
+                                val = val.trim();
+                            }
+                            
+                            filters.push({ key: key, value: val });
+                        } else {
+                            // General term
+                            var term = "";
+                            if (query[i] === '"' || query[i] === "'") {
+                                var quoteChar = query[i];
+                                i++; // skip quote
+                                while (i < len && query[i] !== quoteChar) {
+                                    term += query[i];
+                                    i++;
+                                }
+                                if (i < len) i++; // skip closing quote
+                            } else {
+                                while (i < len && !/\s/.test(query[i])) {
+                                    term += query[i];
+                                    i++;
+                                }
+                            }
+                            term = term.trim();
+                            if (term) {
+                                generalTerms.push(term.toLowerCase());
+                            }
                         }
                     }
                     
@@ -344,27 +397,53 @@ templ databaseContent() {
                             return true;
                         }
                         
-                        // OR condition across all filters and general terms
+                        // AND condition across all filters
                         for (var i = 0; i < parsed.filters.length; i++) {
                             var f = parsed.filters[i];
                             var cellVal = data[f.key];
-                            if (cellVal !== undefined && cellVal !== null) {
-                                if (String(cellVal).toLowerCase().includes(f.value)) {
-                                    return true;
+                            if (cellVal === undefined || cellVal === null) {
+                                return false; // Key doesn't exist, filter fails
+                            }
+                            
+                            var cellStr = String(cellVal).toLowerCase();
+                            var filterVal = f.value.toLowerCase();
+                            
+                            if (f.key === "tags") {
+                                var searchTags = filterVal.split(",").map(function(t) { return t.trim(); }).filter(Boolean);
+                                var noteTags = cellStr.split(",").map(function(t) { return t.trim(); }).filter(Boolean);
+                                
+                                var anyTagMatched = searchTags.some(function(sTag) {
+                                    return noteTags.some(function(nTag) {
+                                        return nTag.includes(sTag);
+                                    });
+                                });
+                                
+                                if (!anyTagMatched) {
+                                    return false;
+                                }
+                            } else {
+                                if (!cellStr.includes(filterVal)) {
+                                    return false;
                                 }
                             }
                         }
                         
+                        // AND condition across all general terms
                         for (var j = 0; j < parsed.generalTerms.length; j++) {
                             var term = parsed.generalTerms[j];
+                            var termFound = false;
                             for (var key in data) {
                                 if (data[key] && String(data[key]).toLowerCase().includes(term)) {
-                                    return true;
+                                    termFound = true;
+                                    break;
                                 }
+                            }
+                            if (!termFound) {
+                                return false;
                             }
                         }
                         
-                        return false;
+                        return true;
                     });
                 });
 

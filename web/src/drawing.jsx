@@ -1,23 +1,19 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Excalidraw, serializeAsJSON, restore } from '@excalidraw/excalidraw';
+import { Excalidraw, serializeAsJSON, restore, getSceneVersion } from '@excalidraw/excalidraw';
 import '../node_modules/@excalidraw/excalidraw/dist/prod/index.css';
+
+const safeGetSceneVersion = (elements) => {
+    if (typeof getSceneVersion === 'function') {
+        return getSceneVersion(elements);
+    }
+    return (elements || []).reduce((acc, el) => acc + (el.version || 0), 0) + (elements || []).length;
+};
 
 function DrawingEditor({ initialState, onChange, onReady }) {
     const excalidrawRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
-
-    const handleChange = useCallback((elements, appState, files) => {
-        if (!onChangeRef.current) return;
-        try {
-            const json = serializeAsJSON(elements, appState, files, 'local');
-            const snapshot = JSON.parse(json);
-            onChangeRef.current(snapshot);
-        } catch (e) {
-            console.error('Erro ao serializar Excalidraw:', e);
-        }
-    }, []);
 
     // Parse do estado inicial (pode ser string JSON ou objeto já parseado)
     let initialData = null;
@@ -32,6 +28,41 @@ function DrawingEditor({ initialState, onChange, onReady }) {
             console.error('Erro ao restaurar estado do Excalidraw:', e);
         }
     }
+
+    const initialElements = initialData?.elements || [];
+    const initialFiles = initialData?.files || {};
+
+    const lastVersionRef = useRef(null);
+    const lastFilesCountRef = useRef(null);
+
+    if (lastVersionRef.current === null) {
+        lastVersionRef.current = safeGetSceneVersion(initialElements);
+    }
+    if (lastFilesCountRef.current === null) {
+        lastFilesCountRef.current = Object.keys(initialFiles).length;
+    }
+
+    const handleChange = useCallback((elements, appState, files) => {
+        if (!onChangeRef.current) return;
+
+        const currentVersion = safeGetSceneVersion(elements);
+        const currentFilesCount = Object.keys(files || {}).length;
+
+        if (currentVersion === lastVersionRef.current && currentFilesCount === lastFilesCountRef.current) {
+            return;
+        }
+
+        lastVersionRef.current = currentVersion;
+        lastFilesCountRef.current = currentFilesCount;
+
+        try {
+            const json = serializeAsJSON(elements, appState, files, 'local');
+            const snapshot = JSON.parse(json);
+            onChangeRef.current(snapshot);
+        } catch (e) {
+            console.error('Erro ao serializar Excalidraw:', e);
+        }
+    }, []);
 
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
