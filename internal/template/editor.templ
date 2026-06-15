@@ -2007,7 +2007,28 @@ templ editorContent(data EditorData) {
                 "[[$1]]",
             );
 
-            // 1. Salva no novo nome (servidor sanitiza: remove subdiretorio, adiciona notes/)
+            // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
+            if (originalFilename !== "notes/" + newName) {
+                var renameFd = new FormData();
+                renameFd.append("old", originalFilename);
+                renameFd.append("new", "notes/" + newName);
+                try {
+                    var renameResp = await fetch("/file/rename", {
+                        method: "POST",
+                        body: renameFd,
+                    });
+                    if (!renameResp.ok) {
+                        throw new Error("Erro ao renomear no servidor");
+                    }
+                } catch (err) {
+                    setStatus("dirty");
+                    console.error("Rename failed:", err);
+                    alert("Erro ao renomear nota: " + err.message);
+                    return;
+                }
+            }
+
+            // 2. Salva o conteúdo final com o novo nome
             var fd = new FormData();
             fd.append("filename", newName);
             fd.append("content", finalContent);
@@ -2017,20 +2038,16 @@ templ editorContent(data EditorData) {
                     method: "POST",
                     body: fd,
                 });
-
-                // 2. Deleta o arquivo antigo (se o nome realmente mudou)
-                if (originalFilename !== "notes/" + newName) {
-                    var deleteFd = new FormData();
-                    deleteFd.append("filename", originalFilename);
-                    await fetch("/file/delete", {
-                        method: "POST",
-                        body: deleteFd,
-                    });
+                if (saveResp.ok || saveResp.status === 303) {
+                    setStatus("saved");
+                } else {
+                    setStatus("dirty");
+                    console.error("Save failed:", saveResp.status);
                 }
 
-                // 3. Atualiza e redireciona para a URL canonica (com notes/)
+                // 3. Atualiza referências locais e redireciona
                 originalFilename = "notes/" + newName;
-                originalDisplayName = newName;
+                originalDisplayName = newName.replace(/\.md$/, "");
                 window.location.href =
                     "/editor?file=" + encodeURIComponent("notes/" + newName);
             } catch (e) {

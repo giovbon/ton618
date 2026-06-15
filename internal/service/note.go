@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -119,6 +120,12 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return nil
 	}
 
+	// Obtém os backlinks antes de qualquer alteração no banco
+	backlinks, err := s.links.GetBacklinks(oldName)
+	if err != nil {
+		slog.Error("get backlinks for rename", "oldName", oldName, "error", err)
+	}
+
 	if err := s.notes.RenameNote(oldName, newName); err != nil {
 		return fmt.Errorf("rename note: %w", err)
 	}
@@ -162,6 +169,51 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		s.store.DeleteFTSByFile(oldName)
 		if err := s.reindex(newName, content, time.Now().UTC()); err != nil {
 			slog.Error("reindex after rename", "file", newName, "error", err)
+		}
+	}
+
+	// Atualiza os wikilinks nos arquivos que referenciavam a nota antiga
+	if len(backlinks) > 0 {
+		newTitle := strings.TrimSuffix(filepath.Base(newName), ".md")
+		wikilinkRegex := regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+
+		for _, refFile := range backlinks {
+			if refFile == oldName || refFile == newName {
+				continue
+			}
+			refContent, err := s.notes.GetNote(refFile)
+			if err != nil || refContent == "" {
+				continue
+			}
+
+			updatedContent := wikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
+				submatches := wikilinkRegex.FindStringSubmatch(match)
+				if len(submatches) > 1 {
+					target := strings.TrimSpace(submatches[1])
+					if target == "" {
+						return match
+					}
+					normTarget := strings.ToLower(target)
+					if !strings.Contains(normTarget, ".") {
+						normTarget += ".md"
+					}
+					if strings.HasSuffix(normTarget, ".md") && !strings.Contains(normTarget, "/") {
+						normTarget = "notes/" + normTarget
+					}
+
+					if normTarget == strings.ToLower(oldName) {
+						return strings.Replace(match, target, newTitle, 1)
+					}
+				}
+				return match
+			})
+
+			if updatedContent != refContent {
+				// s.Save processa tags, links e salva tanto no DB quanto no disco
+				if err := s.Save(refFile, updatedContent, nil); err != nil {
+					slog.Error("update referring note during rename", "refFile", refFile, "error", err)
+				}
+			}
 		}
 	}
 

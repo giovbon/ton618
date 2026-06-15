@@ -226,6 +226,47 @@ func TestNoteService_Rename_ClearsOldLinks(t *testing.T) {
 	}
 }
 
+func TestNoteService_Rename_UpdatesWikilinks(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	// 1. Cria a nota alvo
+	svc.Save("alvo", "Eu sou a nota alvo", nil)
+
+	// 2. Cria notas que referenciam a nota alvo de diferentes formas
+	contentRef1 := "Link simples: [[alvo]] e outro no final [[alvo]]"
+	contentRef2 := "Link com alias: [[alvo|meu texto]]"
+	contentRef3 := "Link com seção e alias: [[alvo#Secao 1|texto longo]]"
+	contentRef4 := "Link case-insensitive: [[ALVO]]"
+
+	svc.Save("ref1", contentRef1, nil)
+	svc.Save("ref2", contentRef2, nil)
+	svc.Save("ref3", contentRef3, nil)
+	svc.Save("ref4", contentRef4, nil)
+
+	// 3. Renomeia a nota alvo
+	err := svc.Rename("alvo", "novo-alvo")
+	if err != nil {
+		t.Fatalf("Rename falhou: %v", err)
+	}
+
+	// 4. Verifica o conteúdo atualizado das notas
+	validaNota := func(nomeNota, conteudoEsperado string) {
+		content, err := store.GetNote("notes/" + nomeNota + ".md")
+		if err != nil {
+			t.Fatalf("Erro ao ler nota %s: %v", nomeNota, err)
+		}
+		if content != conteudoEsperado {
+			t.Errorf("Conteúdo de %s incorreto.\nEsperado: %s\nObtido: %s", nomeNota, conteudoEsperado, content)
+		}
+	}
+
+	validaNota("ref1", "Link simples: [[novo-alvo]] e outro no final [[novo-alvo]]")
+	validaNota("ref2", "Link com alias: [[novo-alvo|meu texto]]")
+	validaNota("ref3", "Link com seção e alias: [[novo-alvo#Secao 1|texto longo]]")
+	validaNota("ref4", "Link case-insensitive: [[novo-alvo]]") // Note que a caixa mudará para a do newTitle (novo-alvo)
+}
+
 func TestNoteService_Rename(t *testing.T) {
 	svc, _, store, cleanup := newTestService(t)
 	defer cleanup()
