@@ -432,8 +432,8 @@ templ indexContent() {
             var encodedName = encodeURIComponent(n.arquivo);
             var isYoutube = (n.tags || []).indexOf("youtube") !== -1;
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
-            var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1;
-            var isDrawing = (n.tags || []).indexOf("drawing") !== -1 || (n.type === "drawing");
+            var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1 || (n.type === "spreadsheet") || (n.type === "planilha");
+            var isDrawing = (n.tags || []).indexOf("drawing") !== -1 || (n.type === "drawing") || (n.type === "desenho");
 
             // Determine icon based on note type
             var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
@@ -475,43 +475,11 @@ templ indexContent() {
                 " " +
                 displayName +
                 "</span>";
-            // Keywords no lugar do texto "notes" (abaixo do título)
-            var kws = n.keywords || [];
-            if (kws.length) {
-                html += '<div class="flex flex-wrap gap-x-2 mt-0.5">';
-                kws.forEach(function (kw) {
-                    var displayKw = kw;
-                    if (nameFilter) {
-                        var kwIdx = kw
-                            .toLowerCase()
-                            .indexOf(nameFilter.toLowerCase());
-                        if (kwIdx !== -1) {
-                            var before = kw.slice(0, kwIdx);
-                            var match = kw.slice(
-                                kwIdx,
-                                kwIdx + nameFilter.length,
-                            );
-                            var after = kw.slice(kwIdx + nameFilter.length);
-                            displayKw =
-                                before +
-                                '<span class="search-highlight">' +
-                                match +
-                                "</span>" +
-                                after;
-                        }
-                    }
-                    html +=
-                        '<span class="text-[10px] text-zinc-600 italic leading-tight">' +
-                        displayKw +
-                        "</span>";
-                });
-                html += "</div>";
-            } else if (folder) {
-                html +=
-                    '<div class="flex flex-wrap gap-x-2 mt-0.5"><span class="text-[10px] text-zinc-700">' +
-                    folder +
-                    "</span></div>";
-            }
+            var displayType = n.type || "nota";
+            html +=
+                '<div class="flex flex-wrap gap-x-2 mt-0.5"><span class="text-[10px] text-zinc-700">' +
+                displayType +
+                "</span></div>";
             html += "</a></div>";
             if (tags.length) {
                 html += '<div class="hidden sm:flex gap-1 shrink-0">';

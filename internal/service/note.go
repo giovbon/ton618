@@ -186,26 +186,55 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 		allTags = make(map[string][]string)
 	}
 
-	allKeywords, err := s.store.GetAllNotesKeywords()
-	if err != nil {
-		allKeywords = make(map[string][]string)
-	}
-
 	var items []NoteItem
 	for arquivo, mtime := range mods {
 		tags := allTags[arquivo]
-		keywords := allKeywords[arquivo]
 		if tags == nil {
 			tags = []string{}
 		}
-		if keywords == nil {
-			keywords = []string{}
+
+		noteType := "nota"
+		isDrawing := false
+		isSpreadsheet := false
+		isYoutube := false
+		isArticle := false
+		isCapture := false
+		for _, t := range tags {
+			lowerT := strings.ToLower(t)
+			switch lowerT {
+			case "drawing":
+				isDrawing = true
+			case "spreadsheet":
+				isSpreadsheet = true
+			case "youtube":
+				isYoutube = true
+			case "artigo", "article":
+				isArticle = true
+			case "captura", "capture":
+				isCapture = true
+			}
 		}
+		if isDrawing {
+			noteType = "desenho"
+		} else if isSpreadsheet {
+			noteType = "planilha"
+		} else if isYoutube {
+			noteType = "youtube"
+		} else if isArticle {
+			noteType = "artigo"
+		} else if isCapture {
+			noteType = "captura"
+		} else if strings.HasPrefix(arquivo, "pdfs/") {
+			noteType = "pdf"
+		} else if strings.HasPrefix(arquivo, "attachments/") {
+			noteType = "anexo"
+		}
+
 		items = append(items, NoteItem{
 			Arquivo:  arquivo,
 			Tags:     tags,
 			Mtime:    mtime,
-			Keywords: keywords,
+			Type:     noteType,
 		})
 	}
 	return items, nil
@@ -216,7 +245,7 @@ type NoteItem struct {
 	Arquivo  string   `json:"arquivo"`
 	Tags     []string `json:"tags"`
 	Mtime    string   `json:"mtime"`
-	Keywords []string `json:"keywords"`
+	Type     string   `json:"type"`
 }
 
 // BacklinksResult contém os dois níveis de backlinks para uma nota.
@@ -346,17 +375,35 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 	s.fileMod.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
 
 	// Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
+	var newContent = content
 	if processor.HasKeywords(fileTags) {
 		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
 		if len(keywords) > 0 {
 			if err := s.store.SetNoteKeywords(filename, keywords); err != nil {
 				slog.Error("set keywords", "file", filename, "error", err)
 			}
+			updated, err := UpdateFrontmatterProperty(newContent, "keywords", strings.Join(keywords, ", "))
+			if err == nil {
+				newContent = updated
+			}
 		} else {
 			s.store.SetNoteKeywords(filename, nil)
+			updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil)
+			if err == nil {
+				newContent = updated
+			}
 		}
 	} else {
 		s.store.SetNoteKeywords(filename, nil)
+		updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil)
+		if err == nil {
+			newContent = updated
+		}
+	}
+
+	if newContent != content && content != "" {
+		mtimeStr := modTime.UTC().Format(time.RFC3339)
+		s.notes.SaveNote(filename, newContent, mtimeStr)
 	}
 
 	return nil

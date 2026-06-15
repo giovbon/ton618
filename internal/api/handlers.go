@@ -283,15 +283,15 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 }
 
 func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Request) {
-	notes, err := ctx.Notes.GetMany()
+	allKeywords, err := ctx.Store.GetAllNotesKeywords()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	freq := make(map[string]int)
-	for _, n := range notes {
-		for _, kw := range n.Keywords {
+	for _, keywords := range allKeywords {
+		for _, kw := range keywords {
 			freq[kw]++
 		}
 	}
@@ -561,10 +561,10 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					if val, ok := fm[key]; ok {
 						if strVal, isStr := val.(string); isStr {
 							lowerVal := strings.ToLower(strVal)
-							if lowerVal == "drawing" {
+							if lowerVal == "drawing" || lowerVal == "desenho" {
 								isDrawing = true
 								break
-							} else if lowerVal == "spreadsheet" {
+							} else if lowerVal == "spreadsheet" || lowerVal == "planilha" {
 								isSpreadsheet = true
 								break
 							}
@@ -574,17 +574,41 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 
 			if isDrawing {
-				row["type"] = "drawing"
-				row["Type"] = "drawing"
+				row["type"] = "desenho"
+				row["Type"] = "desenho"
 			} else if isSpreadsheet {
-				row["type"] = "spreadsheet"
-				row["Type"] = "spreadsheet"
+				row["type"] = "planilha"
+				row["Type"] = "planilha"
 			} else {
 				// Check if we have Type (capital T) in row
-				if capType, hasCapType := row["Type"]; hasCapType {
-					row["type"] = capType
-				} else if lowType, hasLowType := row["type"]; hasLowType {
-					row["Type"] = lowType
+				var rawType string
+				if capType, ok := row["Type"].(string); ok {
+					rawType = capType
+				} else if lowType, ok := row["type"].(string); ok {
+					rawType = lowType
+				}
+
+				if rawType != "" {
+					switch strings.ToLower(rawType) {
+					case "drawing", "desenho":
+						row["type"] = "desenho"
+						row["Type"] = "desenho"
+					case "spreadsheet", "planilha":
+						row["type"] = "planilha"
+						row["Type"] = "planilha"
+					case "pdf":
+						row["type"] = "pdf"
+						row["Type"] = "pdf"
+					case "attachment", "anexo":
+						row["type"] = "anexo"
+						row["Type"] = "anexo"
+					case "note", "nota":
+						row["type"] = "nota"
+						row["Type"] = "nota"
+					default:
+						row["type"] = rawType
+						row["Type"] = rawType
+					}
 				} else {
 					arquivo := n.Arquivo
 					switch {
@@ -592,11 +616,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 						row["type"] = "pdf"
 						row["Type"] = "pdf"
 					case strings.HasPrefix(arquivo, "attachments/"):
-						row["type"] = "attachment"
-						row["Type"] = "attachment"
+						row["type"] = "anexo"
+						row["Type"] = "anexo"
 					default:
-						row["type"] = "note"
-						row["Type"] = "note"
+						row["type"] = "nota"
+						row["Type"] = "nota"
 					}
 				}
 			}
@@ -627,7 +651,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Arquivo", "field": "arquivo", "visible": false})
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
-	columns = append(columns, map[string]interface{}{"title": "Type", "field": "type", "editor": false, "width": 110})
+	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
 
 	for col := range columnSet {
 		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" && col != "type" && strings.ToLower(col) != "type" {

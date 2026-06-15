@@ -2,10 +2,12 @@ package api
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"ton618/internal/db"
 	"ton618/internal/processor"
+	"ton618/internal/service"
 )
 
 // reindexNote processes a note's content through the markdown processor
@@ -76,17 +78,34 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 	}
 
 	// Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
+	var newContent = content
 	if processor.HasKeywords(fileTags) {
 		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
 		if len(keywords) > 0 {
 			if err := store.SetNoteKeywords(filename, keywords); err != nil {
 				slog.Error("set keywords", "file", filename, "error", err)
 			}
+			updated, err := service.UpdateFrontmatterProperty(newContent, "keywords", strings.Join(keywords, ", "))
+			if err == nil {
+				newContent = updated
+			}
 		} else {
 			store.SetNoteKeywords(filename, nil)
+			updated, err := service.UpdateFrontmatterProperty(newContent, "keywords", nil)
+			if err == nil {
+				newContent = updated
+			}
 		}
 	} else {
 		store.SetNoteKeywords(filename, nil)
+		updated, err := service.UpdateFrontmatterProperty(newContent, "keywords", nil)
+		if err == nil {
+			newContent = updated
+		}
+	}
+
+	if newContent != content {
+		store.SaveNote(filename, newContent, modTime.UTC().Format(time.RFC3339))
 	}
 
 	return nil
