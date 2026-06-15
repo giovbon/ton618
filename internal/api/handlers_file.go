@@ -172,6 +172,10 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
+
 	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
 }
 
@@ -202,6 +206,10 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
+
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "file": filename})
@@ -263,6 +271,10 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	ctx.Store.ResetPopularity(filename)
 	ctx.Store.SetFileTags(filename, nil)
 	ctx.Store.ClearLinks(filename)
+
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -359,6 +371,19 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, rawOld)
+	delete(ctx.dbCache, rawNew)
+	delete(ctx.dbCache, noteFilename(rawOld))
+	delete(ctx.dbCache, noteFilename(rawNew))
+	if oldName != "" {
+		delete(ctx.dbCache, oldName)
+	}
+	if newName != "" {
+		delete(ctx.dbCache, newName)
+	}
+	ctx.dbCacheMu.Unlock()
+
 	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
 	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }
@@ -448,6 +473,10 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
 
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
+
 	slog.Info("Anexo ZIP criado", "file", filename, "arquivos", len(files), "tamanho", filepath.Base(zipPath))
 
 	// Redireciona pra lista compacta (mesmo comportamento do upload de PDF)
@@ -513,6 +542,10 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
 	})
 
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
+
 	// Redireciona para a pagina inicial (modo compacto)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -575,6 +608,10 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
 	})
+
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, filename)
+	ctx.dbCacheMu.Unlock()
 
 	imageURL := "/file?name=" + url.QueryEscape(filename)
 
@@ -649,6 +686,10 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 		ctx.Store.ResetPopularity(filename)
 		ctx.Store.SetFileTags(filename, nil)
 		ctx.Store.ClearLinks(filename)
+
+		ctx.dbCacheMu.Lock()
+		delete(ctx.dbCache, filename)
+		ctx.dbCacheMu.Unlock()
 
 		removed = append(removed, name)
 	}

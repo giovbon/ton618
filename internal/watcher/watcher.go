@@ -285,14 +285,15 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		store.AddLink(filename, link)
 	}
 
-	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo
-	// Filtra o sentinel __no_keywords__ antes de persistir
-	cleanTags := processor.FilterKeywords(fileTags)
-	if len(cleanTags) > 0 {
-		store.SetFileTags(filename, cleanTags)
-	} else {
-		// Se o arquivo não tem tags, limpa as tags existentes
-		store.SetFileTags(filename, nil)
+	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo (apenas para markdown)
+	if tipo == "markdown" {
+		cleanTags := processor.FilterKeywords(fileTags)
+		if len(cleanTags) > 0 {
+			store.SetFileTags(filename, cleanTags)
+		} else {
+			// Se o arquivo não tem tags, limpa as tags existentes
+			store.SetFileTags(filename, nil)
+		}
 	}
 
 	// Track file mod

@@ -776,6 +776,14 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			}
 		}
 
+		// Invalidate cache
+		ctx.dbCacheMu.Lock()
+		delete(ctx.dbCache, req.File)
+		if newName != "" {
+			delete(ctx.dbCache, newName)
+		}
+		ctx.dbCacheMu.Unlock()
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -801,6 +809,11 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			}
 		}
 		// Outros campos (frontmatter) não se aplicam a ZIPs/PDFs — silenciosamente ignora.
+		// Invalidate cache
+		ctx.dbCacheMu.Lock()
+		delete(ctx.dbCache, req.File)
+		ctx.dbCacheMu.Unlock()
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -822,6 +835,11 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		http.Error(w, "error saving note", http.StatusInternalServerError)
 		return
 	}
+
+	// Invalidate cache
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, req.File)
+	ctx.dbCacheMu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 }
