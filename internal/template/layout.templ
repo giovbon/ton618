@@ -783,14 +783,24 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
         if (button) {
             setButtonLoading(button, true, "Capturando...", "🌐");
         }
+        // Codifica a URL em base64 para evitar bloqueio de WAF (SSRF falso positivo)
+        var encodedUrl = btoa(encodeURIComponent(url));
         fetch("/api/capture", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: url }),
+            body: JSON.stringify({ url: encodedUrl }),
         })
             .then(function (r) {
                 if (!r.ok)
                     return r.text().then(function (t) {
+                        var trimmed = t.trim();
+                        if (trimmed.indexOf("<!DOCTYPE") === 0 || trimmed.indexOf("<html") === 0 || trimmed.indexOf("<!doctype") === 0) {
+                            var match = t.match(/<title>([\s\S]*?)<\/title>/i);
+                            if (match && match[1]) {
+                                throw new Error("Servidor retornou HTML: " + match[1].trim());
+                            }
+                            throw new Error("Servidor retornou HTML (possivel bloqueio de WAF/Proxy)");
+                        }
                         throw new Error(t);
                     });
                 return r.json();

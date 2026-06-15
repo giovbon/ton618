@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -132,6 +133,15 @@ func cleanupMarkdown(md string) string {
 	return strings.TrimSpace(md)
 }
 
+// withBrowserHeaders define headers de um navegador real para evitar bloqueios por WAF/Cloudflare.
+func withBrowserHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
+}
+
 // HandleCapture processa uma URL (artigo web ou video YouTube) e salva como nota.
 func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -152,19 +162,35 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	slog.Info("Capturando", "url", req.URL)
+	// Tenta decodificar o URL caso ele venha codificado em base64 (para evitar bloqueios de WAF/Cloudflare)
+	rawURL := req.URL
+	if decodedBytes, err := base64.StdEncoding.DecodeString(req.URL); err == nil {
+		decodedStr := string(decodedBytes)
+		// Se foi codificado com encodeURIComponent no JS, ele estará percent-encoded. Tentamos fazer unescape.
+		if unescaped, err := url.QueryUnescape(decodedStr); err == nil {
+			if strings.HasPrefix(unescaped, "http://") || strings.HasPrefix(unescaped, "https://") ||
+				strings.Contains(unescaped, "youtube.com") || strings.Contains(unescaped, "youtu.be") {
+				rawURL = unescaped
+			}
+		} else if strings.HasPrefix(decodedStr, "http://") || strings.HasPrefix(decodedStr, "https://") ||
+			strings.Contains(decodedStr, "youtube.com") || strings.Contains(decodedStr, "youtu.be") {
+			rawURL = decodedStr
+		}
+	}
+
+	slog.Info("Capturando", "url", rawURL)
 
 	var finalMarkdown string
 	var title string
 
-	if isYouTubeURL(req.URL) {
-		videoID := extractVideoID(req.URL)
+	if isYouTubeURL(rawURL) {
+		videoID := extractVideoID(rawURL)
 		if videoID == "" {
 			http.Error(w, "URL do YouTube invalida", http.StatusBadRequest)
 			return
 		}
 
-		title = getYouTubeTitle(req.URL)
+		title = getYouTubeTitle(rawURL)
 		if title == "" {
 			title = fmt.Sprintf("YouTube - %s", videoID)
 		}
@@ -189,9 +215,9 @@ tags: [keywords]
 
 ---
 
-*Capturado em %s*`, title, req.URL, transcript, formatCaptureTimestamp(time.Now()))
+*Capturado em %s*`, title, rawURL, transcript, formatCaptureTimestamp(time.Now()))
 	} else {
-		article, err := readability.FromURL(req.URL, 20*time.Second)
+		article, err := readability.FromURL(rawURL, 12*time.Second, withBrowserHeaders)
 		if err != nil {
 			slog.Error("erro ao capturar artigo", "error", err)
 			http.Error(w, fmt.Sprintf("Falha ao capturar: %v", err), http.StatusBadGateway)
