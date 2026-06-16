@@ -75,6 +75,15 @@ templ drawingContent(data EditorData) {
         var currentSnapshot = null;
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
         var initialFrontmatter = "---\ntype: drawing\ntags: [drawing]\n---\n";
+        var lastSavedHash = null;
+
+        async function generateHash(text) {
+            var encoder = new TextEncoder();
+            var data = encoder.encode(text);
+            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+        }
 
         // Extrai dados JSON do frontmatter
         var fmMatch = rawContent.match(FRONTMATTER_REGEX);
@@ -121,7 +130,7 @@ templ drawingContent(data EditorData) {
             }
         }
 
-        function doSave() {
+        async function doSave() {
             if (!currentSnapshot || saveInProgress) return;
 
             saveInProgress = true;
@@ -129,6 +138,14 @@ templ drawingContent(data EditorData) {
             setStatus("saving");
 
             var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot);
+            var currentHash = await generateHash(fullContent);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
 
             var filename = filenameInput.value.trim();
             if (!filename.endsWith(".md")) filename += ".md";
@@ -139,28 +156,28 @@ templ drawingContent(data EditorData) {
             fd.append("content", fullContent);
             fd.append("tags", "drawing");
 
-            fetch("/api/note/save", { method: "POST", body: fd })
-                .then(function (r) {
-                    if (!r.ok) throw new Error("HTTP " + r.status);
-                    saveInProgress = false;
-                    setStatus("saved");
-                    filenameInput.dataset.filename = filename;
-                    var params = new URLSearchParams(window.location.search);
-                    params.set("file", filename);
-                    window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
-                    
-                    if (savePending) {
-                        doSave();
-                    }
-                })
-                .catch(function (e) {
-                    saveInProgress = false;
-                    setStatus("dirty");
-                    console.error("Erro ao salvar desenho:", e);
-                    if (savePending) {
-                        scheduleSave();
-                    }
-                });
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+                
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar desenho:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
         }
 
         function handleDrawingChange(snapshot) {
@@ -223,6 +240,8 @@ templ drawingContent(data EditorData) {
                     body: saveFd
                 });
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
+                
+                lastSavedHash = await generateHash(fullContent);
 
                 // 2. Deletar o arquivo antigo
                 if (currentFilename !== fullNewName) {
@@ -277,6 +296,11 @@ templ drawingContent(data EditorData) {
             console.error("Função initDrawing não encontrada no window. Verifique se drawing.js foi carregado.");
             el.innerHTML = "<div style='padding:20px;color:#f87171;'>Erro: Módulo de desenho não carregado.</div>";
         }
+
+        setTimeout(async function() {
+            var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot || {});
+            lastSavedHash = await generateHash(fullContent);
+        }, 800);
 
         window.saveDrawing = doSave;
         window.deleteCurrentNote = deleteCurrentNote;

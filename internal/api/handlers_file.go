@@ -164,6 +164,14 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 
 	filename := noteFilename(raw)
 
+	// Otimização: verifica se o conteúdo enviado é igual ao atual para evitar I/O
+	if currentContent, err := ctx.Store.GetNote(filename); err == nil {
+		if currentContent == content {
+			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
+			return
+		}
+	}
+
 	// Delega para o NoteService (salva + reindexa + tags + links)
 	tagList := strings.Split(tags, ",")
 	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
@@ -198,6 +206,16 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 	}
 
 	filename := noteFilename(raw)
+
+	// Otimização: verifica se o conteúdo enviado é igual ao atual para evitar I/O
+	if currentContent, err := ctx.Store.GetNote(filename); err == nil {
+		if currentContent == content {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "file": filename})
+			return
+		}
+	}
+
 	tagList := strings.Split(tags, ",")
 	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
 		slog.Error("save note json", "file", filename, "error", err)

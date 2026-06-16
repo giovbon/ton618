@@ -554,6 +554,15 @@ templ editorContent(data EditorData) {
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
         var autoDetectTimer = null;
         var isInitialLoad = true;
+        var lastSavedHash = null;
+
+        async function generateHash(text) {
+            var encoder = new TextEncoder();
+            var data = encoder.encode(text);
+            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+        }
 
         // ── Parse frontmatter do raw content ──
         var bodyContent = raw;
@@ -1245,6 +1254,16 @@ templ editorContent(data EditorData) {
                     if (html !== editor.getHTML()) {
                         editor.commands.setContent(html);
                     }
+                    // Calcula o hash inicial baseado na serializacao do editor
+                    setTimeout(async function() {
+                        var md = "";
+                        try { md = editor.storage.markdown.getMarkdown(); } catch(e) { md = editor.getHTML(); }
+                        var fm = document.getElementById("frontmatter-area").value.trim();
+                        var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g, "[[$1]]");
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g, "[[$1]]");
+                        lastSavedHash = await generateHash(finalContent);
+                    }, 500);
                 }, 100);
             },
         });
@@ -1945,6 +1964,13 @@ templ editorContent(data EditorData) {
                 /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
                 "[[$1]]",
             );
+
+            var currentHash = await generateHash(finalContent);
+            if (currentHash === lastSavedHash) {
+                setStatus("saved");
+                return;
+            }
+
             var fd = new FormData();
             fd.append("filename", filenameInput.value);
             fd.append("content", finalContent);
@@ -1956,6 +1982,7 @@ templ editorContent(data EditorData) {
                 });
                 if (resp.ok || resp.status === 303) {
                     setStatus("saved");
+                    lastSavedHash = currentHash;
                 } else {
                     var errText = await resp.text().catch(function () {
                         return "";
@@ -2040,6 +2067,8 @@ templ editorContent(data EditorData) {
                 });
                 if (saveResp.ok || saveResp.status === 303) {
                     setStatus("saved");
+                    var newHash = await generateHash(finalContent);
+                    lastSavedHash = newHash;
                 } else {
                     setStatus("dirty");
                     console.error("Save failed:", saveResp.status);
