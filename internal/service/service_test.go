@@ -329,6 +329,32 @@ func TestNoteService_GetMany(t *testing.T) {
 	}
 }
 
+func TestNoteService_GetMany_ArchivesType(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	// Simulando um arquivo registrado em archives/
+	store.SetFileMod("archives/my-note.zip", time.Now().UTC().Format(time.RFC3339))
+
+	items, err := svc.GetMany()
+	if err != nil {
+		t.Fatalf("GetMany: %v", err)
+	}
+
+	found := false
+	for _, item := range items {
+		if item.Arquivo == "archives/my-note.zip" {
+			found = true
+			if item.Type != "arquivo" {
+				t.Errorf("esperava tipo 'arquivo', got %q", item.Type)
+			}
+		}
+	}
+	if !found {
+		t.Error("arquivo de archives/ não encontrado no GetMany")
+	}
+}
+
 // ── BackupService Tests ──
 
 func TestBackupService_Create_Vazio(t *testing.T) {

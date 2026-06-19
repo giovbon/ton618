@@ -602,6 +602,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					case "attachment", "anexo":
 						row["type"] = "anexo"
 						row["Type"] = "anexo"
+					case "archive", "arquivo":
+						row["type"] = "arquivo"
+						row["Type"] = "arquivo"
 					case "note", "nota":
 						row["type"] = "nota"
 						row["Type"] = "nota"
@@ -618,6 +621,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					case strings.HasPrefix(arquivo, "attachments/"):
 						row["type"] = "anexo"
 						row["Type"] = "anexo"
+					case strings.HasPrefix(arquivo, "archives/"):
+						row["type"] = "arquivo"
+						row["Type"] = "arquivo"
 					default:
 						row["type"] = "nota"
 						row["Type"] = "nota"
@@ -741,8 +747,18 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
 				newBasename += ".zip"
 			}
-			oldName = "attachments/" + basename
-			newName = "attachments/" + newBasename
+			sd := "attachments"
+			if strings.HasPrefix(rawOld, "archives/") {
+				sd = "archives"
+			} else if strings.HasPrefix(rawOld, "attachments/") {
+				sd = "attachments"
+			} else {
+				if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "archives", basename)); err == nil {
+					sd = "archives"
+				}
+			}
+			oldName = sd + "/" + basename
+			newName = sd + "/" + newBasename
 			oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
 			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 			if err := os.Rename(oldPath, newPath); err != nil {

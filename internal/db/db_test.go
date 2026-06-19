@@ -1,8 +1,10 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -651,5 +653,50 @@ func TestGetAllDocumentsByFile(t *testing.T) {
 	}
 	if len(byFile["notes/x.md"]) != 2 {
 		t.Fatalf("esperado 2 documentos para notes/x.md, got %d", len(byFile["notes/x.md"]))
+	}
+}
+
+// ── Concurrency ────────────────────────────────────────────────
+
+func TestConcurrentWrites(t *testing.T) {
+	s := newTestStore(t)
+	const numGoroutines = 50
+	const numWrites = 10
+
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(gID int) {
+			defer wg.Done()
+			for j := 0; j < numWrites; j++ {
+				// Insert document
+				id := fmt.Sprintf("doc-%d-%d", gID, j)
+				doc := Document{
+					ID:        id,
+					Texto:     "concurrent write test",
+					Timestamp: "t1",
+				}
+				if err := s.InsertDocument(doc); err != nil {
+					t.Errorf("InsertDocument error: %v", err)
+				}
+				// Also update popularity to mix queries
+				if err := s.IncrementPopularity("concurrent.md"); err != nil {
+					t.Errorf("IncrementPopularity error: %v", err)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all writes succeeded
+	count := s.GetDocumentCount()
+	if count != numGoroutines*numWrites {
+		t.Fatalf("Expected %d documents, got %d", numGoroutines*numWrites, count)
+	}
+	pop := s.GetPopularity("concurrent.md")
+	if pop != numGoroutines*numWrites {
+		t.Fatalf("Expected popularity %d, got %d", numGoroutines*numWrites, pop)
 	}
 }

@@ -541,3 +541,33 @@ func readArchiveDir(t *testing.T, ctx *HandlerContext) []os.DirEntry {
 	}
 	return entries
 }
+
+func TestHandleFileRename_ArchiveSuccess(t *testing.T) {
+	ctx := newTestContext(t)
+	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
+	os.MkdirAll(archiveDir, 0755)
+
+	oldPath := filepath.Join(archiveDir, "old-archive.zip")
+	os.WriteFile(oldPath, []byte("fake zip"), 0644)
+	ctx.Store.SetFileMod("archives/old-archive.zip", "2026-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=archives/old-archive.zip&new=archives/new-archive.zip")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	// Rename redireciona (303 See Other)
+	if rec.Code != 303 {
+		t.Errorf("esperado 303, got %d", rec.Code)
+	}
+
+	newPath := filepath.Join(archiveDir, "new-archive.zip")
+	if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		t.Error("new archive should exist on disk")
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("old archive should be deleted from disk")
+	}
+}

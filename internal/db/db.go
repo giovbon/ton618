@@ -3,13 +3,15 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
-	DB *sql.DB
+	DB      *sql.DB
+	WriteMu sync.Mutex
 }
 
 // NewStore abre (ou cria) o banco e inicializa o schema.
@@ -226,6 +228,8 @@ func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
 
 // SaveTodoMarkers substitui todos os marcadores pelos fornecidos.
 func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err

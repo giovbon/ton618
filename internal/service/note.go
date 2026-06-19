@@ -280,6 +280,8 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 			noteType = "pdf"
 		} else if strings.HasPrefix(arquivo, "attachments/") {
 			noteType = "anexo"
+		} else if strings.HasPrefix(arquivo, "archives/") {
+			noteType = "arquivo"
 		}
 
 		items = append(items, NoteItem{

@@ -107,7 +107,9 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		score, details := scoreFragment(&hit, heuristicTerms, cleanedQuery, pop, linkCount)
 		hit.FinalScore = score
 		hit.ScoreDetails = details
-		hit.Highlight = buildHighlight(doc.Texto, heuristicTerms)
+		if r.Snippet != "" {
+			hit.Highlight = map[string][]string{"texto": {r.Snippet}}
+		}
 
 		hits = append(hits, hit)
 	}
@@ -321,35 +323,4 @@ func extractTags(raw string) (tags []string, remaining string) {
 	return tags, remaining
 }
 
-// buildHighlight gera fragmentos de destaque (simplificado).
-// Termos com espacos (frases exatas) sao buscados como bloco unico.
-func buildHighlight(text string, terms []string) map[string][]string {
-	if len(terms) == 0 {
-		return nil
-	}
-	lower := strings.ToLower(text)
-	var fragments []string
-	for _, term := range terms {
-		termLower := strings.ToLower(term)
-		idx := strings.Index(lower, termLower)
-		if idx >= 0 {
-			start := idx - 40
-			if start < 0 {
-				start = 0
-			}
-			end := idx + len(termLower) + 40
-			if end > len(text) {
-				end = len(text)
-			}
-			if start > 0 {
-				fragments = append(fragments, "..."+text[start:end]+"...")
-			} else {
-				fragments = append(fragments, text[start:end])
-			}
-		}
-	}
-	if len(fragments) > 0 {
-		return map[string][]string{"texto": fragments}
-	}
-	return nil
-}
+

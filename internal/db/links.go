@@ -8,6 +8,8 @@ import "strings"
 
 // AddLink creates a directed link from one file to another.
 func (s *Store) AddLink(fromFile, toFile string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(
 		"INSERT OR IGNORE INTO links (from_file, to_file) VALUES (?, ?)", fromFile, toFile,
 	)
@@ -16,6 +18,8 @@ func (s *Store) AddLink(fromFile, toFile string) error {
 
 // RemoveLink deletes a directed link between two files.
 func (s *Store) RemoveLink(fromFile, toFile string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(
 		"DELETE FROM links WHERE from_file = ? AND to_file = ?", fromFile, toFile,
 	)
@@ -99,6 +103,8 @@ func (s *Store) GetAllLinks() (map[string][]string, error) {
 
 // ClearLinks removes all links originating from a file.
 func (s *Store) ClearLinks(fromFile string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM links WHERE from_file = ?", fromFile)
 	return err
 }

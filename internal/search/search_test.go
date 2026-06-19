@@ -188,61 +188,7 @@ func TestExtractTags_NoTags(t *testing.T) {
 	}
 }
 
-// ── buildHighlight ──────────────────────────────────────────────
 
-func TestBuildHighlight_TermFound(t *testing.T) {
-	text := "Este é um texto sobre concorrencia em Go com goroutines e channels."
-	result := buildHighlight(text, []string{"concorrencia"})
-	if result == nil {
-		t.Fatal("esperado mapa de highlight, got nil")
-	}
-	frags := result["texto"]
-	if len(frags) == 0 {
-		t.Fatal("esperado fragmentos, got vazio")
-	}
-	if !contains(frags[0], "concorrencia") {
-		t.Errorf("fragmento deveria conter o termo, got %q", frags[0])
-	}
-}
-
-func TestBuildHighlight_TermNotFound(t *testing.T) {
-	text := "Este é um texto sobre programação."
-	result := buildHighlight(text, []string{"golang"})
-	if result != nil {
-		t.Errorf("esperado nil para termo não encontrado, got %v", result)
-	}
-}
-
-func TestBuildHighlight_EmptyTerms(t *testing.T) {
-	result := buildHighlight("algum texto", nil)
-	if result != nil {
-		t.Errorf("esperado nil para terms vazio, got %v", result)
-	}
-}
-
-func TestBuildHighlight_MultipleTerms(t *testing.T) {
-	text := "Golang é ótimo para concorrencia. Rust também é rápido."
-	result := buildHighlight(text, []string{"golang", "rust"})
-	if result == nil {
-		t.Fatal("esperado highlight, got nil")
-	}
-	frags := result["texto"]
-	if len(frags) != 2 {
-		t.Errorf("esperado 2 fragmentos (um por termo), got %d", len(frags))
-	}
-}
-
-func TestBuildHighlight_ContextAroundTerm(t *testing.T) {
-	text := "INICIO " + strings.Repeat("palavra ", 50) + "TERMO_BUSCADO " + strings.Repeat("palavra ", 50) + "FIM"
-	result := buildHighlight(text, []string{"TERMO_BUSCADO"})
-	if result == nil {
-		t.Fatal("esperado highlight, got nil")
-	}
-	frag := result["texto"][0]
-	if !contains(frag, "TERMO_BUSCADO") {
-		t.Errorf("fragmento deveria conter o termo, got %q", frag)
-	}
-}
 
 // ── scoreTitle ─────────────────────────────────────────────────
 
@@ -644,37 +590,7 @@ func TestExtractTerms_EmptyQuote_Ignored(t *testing.T) {
 	}
 }
 
-// ── buildHighlight (phrase) ────────────────────────────────────
 
-func TestBuildHighlight_PhraseExata(t *testing.T) {
-	text := "Este documento fala sobre parcialmente artigo e outros assuntos."
-	result := buildHighlight(text, []string{"parcialmente artigo"})
-	if result == nil {
-		t.Fatal("esperado highlight para frase exata, got nil")
-	}
-	frags := result["texto"]
-	if len(frags) == 0 {
-		t.Fatal("esperado fragmentos, got vazio")
-	}
-	if !contains(frags[0], "parcialmente artigo") {
-		t.Errorf("fragmento deveria conter a frase, got %q", frags[0])
-	}
-}
-
-func TestBuildHighlight_PhraseNaoAdjacente_AindaDestaca(t *testing.T) {
-	text := "parcialmente um artigo interessante"
-	result := buildHighlight(text, []string{"parcialmente", "artigo"})
-	if result == nil {
-		t.Fatal("esperado highlight para palavras individuais, got nil")
-	}
-	frags := result["texto"]
-	if len(frags) == 0 {
-		t.Fatal("esperado fragmentos, got vazio")
-	}
-	if !contains(frags[0], "parcialmente") {
-		t.Errorf("fragmento deveria conter 'parcialmente', got %q", frags[0])
-	}
-}
 
 // ── buildFTSQuery edge cases ──────────────────────────────────
 

@@ -17,6 +17,8 @@ func (s *Store) GetFileMod(arquivo string) (string, error) {
 
 // SetFileMod inserts or updates the modification time for a file.
 func (s *Store) SetFileMod(arquivo, mtime string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(
 		"INSERT OR REPLACE INTO file_mods (arquivo, mtime) VALUES (?, ?)", arquivo, mtime,
 	)
@@ -25,6 +27,8 @@ func (s *Store) SetFileMod(arquivo, mtime string) error {
 
 // DeleteFileMod removes the modification-time record for a file.
 func (s *Store) DeleteFileMod(arquivo string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM file_mods WHERE arquivo = ?", arquivo)
 	return err
 }

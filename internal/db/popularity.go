@@ -13,6 +13,8 @@ func (s *Store) GetPopularity(arquivo string) int {
 
 // IncrementPopularity increases the access count for a file by 1.
 func (s *Store) IncrementPopularity(arquivo string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(`
 		INSERT INTO popularity (arquivo, count) VALUES (?, 1)
 		ON CONFLICT(arquivo) DO UPDATE SET count = count + 1`, arquivo)
@@ -41,6 +43,8 @@ func (s *Store) GetAllPopularity() (map[string]int, error) {
 
 // ResetPopularity deletes the popularity record for a file.
 func (s *Store) ResetPopularity(arquivo string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM popularity WHERE arquivo = ?", arquivo)
 	return err
 }

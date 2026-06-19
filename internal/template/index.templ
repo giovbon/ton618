@@ -440,7 +440,11 @@ templ indexContent() {
             if (isPdf) {
                 noteIcon = "\uD83D\uDCD5"; // 📕 PDF
             } else if (isZip) {
-                noteIcon = "\uD83D\uDCE6"; // 📦 ZIP
+                if (n.arquivo && n.arquivo.indexOf("archives/") === 0) {
+                    noteIcon = "💾"; // 💾 arquivo
+                } else {
+                    noteIcon = "\uD83D\uDCE6"; // 📦 ZIP
+                }
             } else if (isSpreadsheet) {
                 noteIcon = "\uD83D\uDCCA"; // 📊 planilha
             } else if (isDrawing) {

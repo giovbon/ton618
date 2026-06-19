@@ -50,6 +50,8 @@ func SliceToTags(tags []string) string {
 
 // InsertDocument inserts a new document or replaces an existing one with the same ID.
 func (s *Store) InsertDocument(doc Document) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(`
 		INSERT OR REPLACE INTO documents
 		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash)
@@ -62,12 +64,16 @@ func (s *Store) InsertDocument(doc Document) error {
 
 // DeleteDocument removes a single document by ID.
 func (s *Store) DeleteDocument(id string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM documents WHERE id = ?", id)
 	return err
 }
 
 // DeleteDocumentsByFile removes all documents associated with a given file path.
 func (s *Store) DeleteDocumentsByFile(arquivo string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM documents WHERE arquivo = ?", arquivo)
 	return err
 }

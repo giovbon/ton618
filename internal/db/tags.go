@@ -6,6 +6,8 @@ package db
 
 // SetFileTags replaces the entire set of tags for a file atomically.
 func (s *Store) SetFileTags(arquivo string, tags []string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -110,6 +112,8 @@ func (s *Store) GetFilesByTag(tag string) ([]string, error) {
 
 // AddTagToFile adds a single tag to a file (no-op if already present).
 func (s *Store) AddTagToFile(arquivo, tag string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(
 		"INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)", arquivo, tag,
 	)
@@ -118,6 +122,8 @@ func (s *Store) AddTagToFile(arquivo, tag string) error {
 
 // RemoveTagFromFile removes a single tag from a file.
 func (s *Store) RemoveTagFromFile(arquivo, tag string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM tags WHERE arquivo = ? AND tag = ?", arquivo, tag)
 	return err
 }

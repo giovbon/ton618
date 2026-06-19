@@ -15,12 +15,15 @@ type FTSResult struct {
 	Texto   string
 	Tags    string
 	Rank    float64
+	Snippet string
 }
 
 // IndexFTS inserts or updates a document in the FTS5 index.
 // It first deletes any existing entry for the same doc_id to avoid duplicates.
 func (s *Store) IndexFTS(docID, tipo, arquivo, secao, texto, tags string) error {
-	s.DeleteFTS(docID)
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+	s.DB.Exec("DELETE FROM docs_fts WHERE doc_id = ?", docID)
 	_, err := s.DB.Exec(`
 		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags)
 		VALUES (?, ?, ?, ?, ?, ?)`,
@@ -31,12 +34,16 @@ func (s *Store) IndexFTS(docID, tipo, arquivo, secao, texto, tags string) error 
 
 // DeleteFTS removes a single document from the FTS5 index by doc_id.
 func (s *Store) DeleteFTS(docID string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM docs_fts WHERE doc_id = ?", docID)
 	return err
 }
 
 // DeleteFTSByFile removes all FTS5 entries for a given file path.
 func (s *Store) DeleteFTSByFile(arquivo string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM docs_fts WHERE arquivo = ?", arquivo)
 	return err
 }
@@ -68,13 +75,13 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 	var err error
 	if query == "" {
 		rows, err = s.DB.Query(`
-			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank
+			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 			FROM docs_fts
 			ORDER BY rowid DESC
 			LIMIT ? OFFSET ?`, size, from)
 	} else {
 		rows, err = s.DB.Query(`
-			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank
+			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, -1, '<b>', '</b>', '...', 64) as snippet_text
 			FROM docs_fts
 			WHERE docs_fts MATCH ?
 			ORDER BY rank
@@ -88,7 +95,7 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 	var results []FTSResult
 	for rows.Next() {
 		var r FTSResult
-		if err := rows.Scan(&r.DocID, &r.Tipo, &r.Arquivo, &r.Secao, &r.Texto, &r.Tags, &r.Rank); err != nil {
+		if err := rows.Scan(&r.DocID, &r.Tipo, &r.Arquivo, &r.Secao, &r.Texto, &r.Tags, &r.Rank, &r.Snippet); err != nil {
 			return nil, 0, err
 		}
 		results = append(results, r)
@@ -110,7 +117,7 @@ func (s *Store) SearchFTSLike(term string, from, size int) ([]FTSResult, int, er
 	).Scan(&total)
 
 	rows, err := s.DB.Query(`
-		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank
+		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 		FROM documents
 		WHERE LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?
 		LIMIT ? OFFSET ?`,
@@ -123,7 +130,7 @@ func (s *Store) SearchFTSLike(term string, from, size int) ([]FTSResult, int, er
 	var results []FTSResult
 	for rows.Next() {
 		var r FTSResult
-		if err := rows.Scan(&r.DocID, &r.Tipo, &r.Arquivo, &r.Secao, &r.Texto, &r.Tags, &r.Rank); err != nil {
+		if err := rows.Scan(&r.DocID, &r.Tipo, &r.Arquivo, &r.Secao, &r.Texto, &r.Tags, &r.Rank, &r.Snippet); err != nil {
 			return nil, 0, err
 		}
 		results = append(results, r)

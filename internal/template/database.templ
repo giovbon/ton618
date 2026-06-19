@@ -186,11 +186,11 @@ templ databaseContent() {
                             var tagsStr = String(rowData.tags || "").toLowerCase();
                             var fileStr = String(file).toLowerCase();
                             var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                            
-                            var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
+                                                     var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
                             var isDrawing = tagsStr.includes("drawing") || fileStr.includes("drawing") || (typeStr === "drawing");
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
+                            var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
                             
                             var url = "";
                             var icon = "📝";
@@ -200,6 +200,9 @@ templ databaseContent() {
                             } else if (isZip) {
                                 url = "/file/download?name=" + encodeURIComponent(file);
                                 icon = "📦";
+                            } else if (isArchive) {
+                                url = "/file/download?name=" + encodeURIComponent(file);
+                                icon = "💾";
                             } else if (isSpreadsheet) {
                                 url = "/spreadsheet?file=" + encodeURIComponent(file);
                                 icon = "📊";
@@ -210,7 +213,7 @@ templ databaseContent() {
                                 url = "/editor?file=" + encodeURIComponent(file);
                                 icon = "📝";
                             }
-                            var target = (isPdf || isZip) ? " target='_blank'" : "";
+                            var target = (isPdf || isZip || isArchive) ? " target='_blank'" : "";
                             return "<a href='" + url + "'" + target + " class='text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 justify-center' title='Abrir'>" + icon + " <span class='underline'>Abrir</span></a>";
                         };
                     }

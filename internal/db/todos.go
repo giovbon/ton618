@@ -8,12 +8,16 @@ import (
 
 // DeleteTodosByFile remove todos os TODOs associados a um arquivo específico.
 func (s *Store) DeleteTodosByFile(filename string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM todos WHERE file = ?", filename)
 	return err
 }
 
 // SaveFileTodos exclui os TODOs antigos de um arquivo e insere os novos em lote.
 func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err

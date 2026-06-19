@@ -349,14 +349,23 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else if isZip {
-		// Para Zips, busca em attachments/
 		basename := filepath.Base(rawOld)
 		newBasename := filepath.Base(rawNew)
 		if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
 			newBasename += ".zip"
 		}
-		oldName = "attachments/" + basename
-		newName = "attachments/" + newBasename
+		sd := "attachments"
+		if strings.HasPrefix(rawOld, "archives/") {
+			sd = "archives"
+		} else if strings.HasPrefix(rawOld, "attachments/") {
+			sd = "attachments"
+		} else {
+			if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "archives", basename)); err == nil {
+				sd = "archives"
+			}
+		}
+		oldName = sd + "/" + basename
+		newName = sd + "/" + newBasename
 		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
 		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 		if err := os.Rename(oldPath, newPath); err != nil {

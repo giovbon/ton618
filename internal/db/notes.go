@@ -20,6 +20,8 @@ func (s *Store) GetNote(filename string) (string, error) {
 
 // SaveNote inserts or updates a note's content and modification time.
 func (s *Store) SaveNote(filename, content, mtime string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec(
 		"INSERT OR REPLACE INTO notes (filename, content, mtime) VALUES (?, ?, ?)",
 		filename, content, mtime,
@@ -29,12 +31,16 @@ func (s *Store) SaveNote(filename, content, mtime string) error {
 
 // DeleteNote removes a note by filename.
 func (s *Store) DeleteNote(filename string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("DELETE FROM notes WHERE filename = ?", filename)
 	return err
 }
 
 // RenameNote renames a note from old to new filename.
 func (s *Store) RenameNote(old, new string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	_, err := s.DB.Exec("UPDATE notes SET filename = ? WHERE filename = ?", new, old)
 	return err
 }
@@ -100,6 +106,8 @@ func (s *Store) NoteExists(filename string) bool {
 
 // SetNoteKeywords atualiza as keywords extraídas de uma nota.
 func (s *Store) SetNoteKeywords(filename string, keywords []string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
 	kw := strings.Join(keywords, ",")
 	_, err := s.DB.Exec("UPDATE notes SET keywords = ? WHERE filename = ?", kw, filename)
 	return err

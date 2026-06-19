@@ -27,6 +27,7 @@ func DisplayName(name string) string {
 func NoteIcon(arquivo string, tags []string) string {
 	isPdf := strings.HasPrefix(arquivo, "pdfs/")
 	isAttach := strings.HasPrefix(arquivo, "attachments/")
+	isArchive := strings.HasPrefix(arquivo, "archives/")
 	hasTag := func(tag string) bool {
 		for _, t := range tags {
 			if t == tag {
@@ -45,6 +46,8 @@ func NoteIcon(arquivo string, tags []string) string {
 		return "🌐"
 	} else if isAttach {
 		return "📦"
+	} else if isArchive {
+		return "💾"
 	}
 	return "📝"
 }
