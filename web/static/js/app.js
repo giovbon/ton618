@@ -1,7 +1,7 @@
     // ── PDF Upload ──
     var activePdfUploadButton = null;
 
-    document.addEventListener("change", async function (e) {
+    document.addEventListener("change", function (e) {
         if (e.target && e.target.id === "pdf-file-input") {
             var file = e.target.files[0];
             if (!file) return;
@@ -9,23 +9,37 @@
                 activePdfUploadButton ||
                 document.getElementById("pdf-upload-link");
             setButtonLoading(link, true, "Processando...", "📕");
+            showProgressBar(0, false);
             var fd = new FormData();
             fd.append("file", file);
-            try {
-                var resp = await fetch("/upload", {
-                    method: "POST",
-                    body: fd,
-                });
-                if (resp.ok) {
-                    window.location.href = "/";
-                    return;
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/upload", true);
+            
+            xhr.upload.addEventListener("progress", function (evt) {
+                if (evt.lengthComputable) {
+                    var pct = Math.round((evt.loaded / evt.total) * 100);
+                    showProgressBar(pct, false);
                 }
+            });
+            
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    window.location.href = "/";
+                } else {
+                    setButtonLoading(link, false, "PDF", "📕");
+                    hideProgressBar();
+                    alert("Erro ao fazer upload do PDF.");
+                }
+            };
+            
+            xhr.onerror = function () {
                 setButtonLoading(link, false, "PDF", "📕");
+                hideProgressBar();
                 alert("Erro ao fazer upload do PDF.");
-            } catch (err) {
-                setButtonLoading(link, false, "PDF", "📕");
-                alert("Erro ao fazer upload do PDF.");
-            }
+            };
+            
+            xhr.send(fd);
             e.target.value = "";
         }
     });
@@ -33,7 +47,7 @@
     // ── ZIP Upload ──
     document
         .getElementById("zip-file-input")
-        .addEventListener("change", async function (e) {
+        .addEventListener("change", function (e) {
             var files = e.target.files;
             if (!files || files.length === 0) return;
             var fd = new FormData();
@@ -42,21 +56,35 @@
             }
             var link = document.getElementById("zip-upload-link");
             setButtonLoading(link, true, "ZIPando...", "📦");
-            try {
-                var resp = await fetch("/api/upload-attachment", {
-                    method: "POST",
-                    body: fd,
-                });
-                if (resp.ok) {
-                    window.location.href = "/";
-                    return;
+            showProgressBar(0, false);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/upload-attachment", true);
+            
+            xhr.upload.addEventListener("progress", function (evt) {
+                if (evt.lengthComputable) {
+                    var pct = Math.round((evt.loaded / evt.total) * 100);
+                    showProgressBar(pct, false);
                 }
+            });
+            
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    window.location.href = "/";
+                } else {
+                    setButtonLoading(link, false, "ANEXO", "📦");
+                    hideProgressBar();
+                    alert("Erro ao criar anexo.");
+                }
+            };
+            
+            xhr.onerror = function () {
                 setButtonLoading(link, false, "ANEXO", "📦");
-                alert("Erro ao criar anexo.");
-            } catch (err) {
-                setButtonLoading(link, false, "ANEXO", "📦");
+                hideProgressBar();
                 alert("Erro: " + err.message);
-            }
+            };
+            
+            xhr.send(fd);
         });
 
     document
@@ -82,7 +110,8 @@
         if (button) {
             setButtonLoading(button, true, "Capturando...", "🌐");
         }
-        // Codifica a URL em base64 para evitar bloqueio de WAF (SSRF falso positivo)
+        showProgressBar(100, true);
+        // Codifica a URL em base64 para evitar WAF (SSRF falso positivo)
         var encodedUrl = btoa(encodeURIComponent(url));
         fetch("/api/capture", {
             method: "POST",
@@ -112,6 +141,7 @@
                 if (button) {
                     setButtonLoading(button, false, "CAPTURA", "🌐");
                 }
+                hideProgressBar();
                 alert("Erro ao capturar: " + err.message);
             });
         return false;
@@ -126,6 +156,51 @@
             el.classList.remove("button-loading");
             el.innerHTML = icon ? icon + " " + text : text;
         }
+    }
+
+    function showProgressBar(pct, isIndeterminate) {
+        var container = document.getElementById("upload-progress-container");
+        var bar = document.getElementById("upload-progress-bar");
+        var glow = document.getElementById("upload-progress-glow");
+        if (!container || !bar || !glow) return;
+
+        container.classList.remove("opacity-0");
+        container.classList.add("opacity-100");
+
+        if (isIndeterminate) {
+            bar.style.width = "100%";
+            glow.classList.remove("hidden");
+        } else {
+            bar.style.width = pct + "%";
+            if (pct >= 100) {
+                glow.classList.remove("hidden");
+            } else {
+                glow.classList.add("hidden");
+            }
+        }
+        
+        // Desabilitar interações no body durante o carregamento
+        document.body.style.pointerEvents = "none";
+    }
+
+    function hideProgressBar() {
+        var container = document.getElementById("upload-progress-container");
+        var bar = document.getElementById("upload-progress-bar");
+        var glow = document.getElementById("upload-progress-glow");
+        if (!container || !bar || !glow) return;
+
+        container.classList.remove("opacity-100");
+        container.classList.add("opacity-0");
+        
+        // Habilitar novamente as interações no body
+        document.body.style.pointerEvents = "";
+
+        setTimeout(function () {
+            if (container.classList.contains("opacity-0")) {
+                bar.style.width = "0%";
+                glow.classList.add("hidden");
+            }
+        }, 300);
     }
 
     function createNewNote() {
