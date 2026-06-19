@@ -1,0 +1,10 @@
+.git
+.github
+web/node_modules
+ton618
+ton618.exe
+server
+data/
+*.db
+*.log
+tmp/

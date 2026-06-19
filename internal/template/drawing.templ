@@ -74,7 +74,7 @@ templ drawingContent(data EditorData) {
         var editorInstance = null;
         var currentSnapshot = null;
         var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-        var initialFrontmatter = "---\ntype: drawing\ntags: [drawing]\n---\n";
+        var initialFrontmatter = "---\ntype: drawing\n---\n";
         var lastSavedHash = null;
 
         async function generateHash(text) {
@@ -154,7 +154,7 @@ templ drawingContent(data EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             fd.append("content", fullContent);
-            fd.append("tags", "drawing");
+            fd.append("tags", "");
 
             try {
                 var r = await fetch("/api/note/save", { method: "POST", body: fd });
@@ -233,7 +233,7 @@ templ drawingContent(data EditorData) {
                 var saveFd = new FormData();
                 saveFd.append("filename", fullNewName);
                 saveFd.append("content", fullContent);
-                saveFd.append("tags", "drawing");
+                saveFd.append("tags", "");
 
                 var saveResp = await fetch("/api/note/save", {
                     method: "POST",

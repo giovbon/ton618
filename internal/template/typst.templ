@@ -1,0 +1,534 @@
+package template
+
+templ Typst(data EditorData) {
+    @Layout(data.Title, false, typstContent(data))
+}
+
+templ typstContent(data EditorData) {
+<div class="editor-root flex flex-col" id="typst-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+    <!-- Topbar -->
+    <div class="flex items-center gap-3 mb-3 shrink-0" id="typst-topbar">
+        <span class="text-zinc-600 font-bold shrink-0 text-sm select-none">📘 TYPST</span>
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        <button
+            id="save-btn"
+            onclick="saveTypst()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar (Ctrl+S)"
+        >
+            💾
+        </button>
+        <button
+            id="pdf-download-btn"
+            onclick="downloadPDF()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800"
+            title="Baixar PDF"
+        >
+            📥 PDF
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            🗑️
+        </button>
+    </div>
+
+    <!-- Layout Dividido (Split-Pane) -->
+    <div class="flex flex-1 gap-4 overflow-hidden min-h-0 relative">
+        <!-- Painel Esquerdo: Editor de Código -->
+        <div class="flex-1 flex flex-col min-w-0 relative">
+            <div class="flex-1 w-full relative min-h-0">
+                <pre
+                    id="highlight-pre"
+                    class="editor-highlight-pre absolute inset-0 overflow-hidden"
+                ><code id="highlight-code"></code></pre>
+                <textarea
+                    id="typst-textarea"
+                    class="editor-textarea absolute inset-0 w-full h-full resize-none focus:outline-none"
+                    placeholder="// Escreva seu código Typst aqui..."
+                    spellcheck="false"
+                >{ data.Content }</textarea>
+            </div>
+        </div>
+
+        <!-- Painel Direito: Visualizador de Preview -->
+        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0" id="preview-panel">
+            <!-- Spinner de Processamento -->
+            <div id="typst-compile-indicator" class="absolute top-4 right-4 hidden bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800">
+                ⚡ Compilando
+            </div>
+            
+            <!-- Banner de Erro -->
+            <div id="typst-error-banner" class="hidden w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap mb-4 shrink-0 overflow-x-auto"></div>
+
+            <!-- Páginas Renderizadas -->
+            <div id="typst-preview-container" class="flex flex-col items-center gap-6 w-full">
+                <div class="text-zinc-600 text-xs py-20 font-mono">
+                    Nenhum conteúdo renderizado.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Estilo de "folha de papel" para cada página SVG renderizada do Typst */
+    .typst-page {
+        background-color: #ffffff;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        max-width: 100%;
+        transition: transform 0.2s ease;
+    }
+    
+    .typst-page:hover {
+        transform: scale(1.005);
+    }
+
+    .typst-page svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    /* Consistência e alinhamento do editor com realce de sintaxe */
+    .editor-textarea, .editor-highlight-pre {
+        margin: 0 !important;
+        padding: 16px !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-size: 14px !important;
+        line-height: 1.625 !important;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        word-break: break-all !important;
+        box-sizing: border-box !important;
+        border-radius: 0.75rem; /* rounded-xl */
+        border: 1px solid #27272a !important; /* border-zinc-800 */
+        tab-size: 4;
+    }
+    
+    .editor-textarea {
+        color: transparent !important;
+        background: transparent !important;
+        caret-color: #38bdf8 !important;
+        z-index: 10;
+    }
+    
+    .editor-textarea:focus {
+        border-color: #3f3f46 !important;
+    }
+
+    .editor-highlight-pre {
+        background-color: #09090b !important;
+        color: #d4d4d8 !important;
+        z-index: 1;
+        pointer-events: none;
+    }
+    
+    .editor-highlight-pre::-webkit-scrollbar {
+        display: none;
+    }
+    .editor-highlight-pre {
+        scrollbar-width: none;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        var textarea = document.getElementById("typst-textarea");
+        var previewContainer = document.getElementById("typst-preview-container");
+        var errorBanner = document.getElementById("typst-error-banner");
+        var compileIndicator = document.getElementById("typst-compile-indicator");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+
+        var currentStatus = "saved";
+        var compileTimer = null;
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+        var lastSavedHash = null;
+
+        async function generateHash(text) {
+            var encoder = new TextEncoder();
+            var data = encoder.encode(text);
+            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+        }
+
+        // Suporte à tecla Tab e auto-pares no textarea
+        textarea.addEventListener("keydown", function (e) {
+            if (e.key === "Tab") {
+                e.preventDefault();
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+                var val = this.value;
+                this.value = val.substring(0, start) + "  " + val.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+                handleChange();
+            }
+        });
+
+        var highlightPre = document.getElementById("highlight-pre");
+        var highlightCode = document.getElementById("highlight-code");
+
+        function highlightTypst(code) {
+            var html = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            var tokens = [];
+            var id = 0;
+            var tokenPrefix = "TK" + Math.random().toString(36).substring(2) + "X";
+            function addToken(text, className) {
+                var tokenPlace = tokenPrefix + (id++);
+                tokens.push({ id: tokenPlace, html: '<span class="' + className + '">' + text + '</span>' });
+                return tokenPlace;
+            }
+
+            // 1. Comments block /* ... */
+            html = html.replace(/\/\*[\s\S]*?\*\//g, function(match) {
+                return addToken(match, "text-zinc-500 italic");
+            });
+
+            // 2. Comments line // ...
+            html = html.replace(/\/\/.*/g, function(match) {
+                return addToken(match, "text-zinc-500 italic");
+            });
+
+            // 3. Triple backtick code blocks ``` ... ```
+            html = html.replace(/```[\s\S]*?```/g, function(match) {
+                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+            });
+
+            // 4. Single backtick code ` ... `
+            html = html.replace(/`[^`\n]+`/g, function(match) {
+                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+            });
+
+            // 5. String literals
+            html = html.replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, function(match) {
+                return addToken(match, "text-emerald-400");
+            });
+
+            // 6. Keywords/Commands starting with #
+            html = html.replace(/#[a-zA-Z_][a-zA-Z0-9_.-]*/g, function(match) {
+                return addToken(match, "text-sky-400 font-bold");
+            });
+
+            // 7. Headings (=, ==, === etc) at start of line
+            html = html.replace(/^={1,6}\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-white font-black");
+            });
+
+            // 8. Math formulas $...$
+            html = html.replace(/\$[^\$\n]+\$/g, function(match) {
+                return addToken(match, "text-purple-400 font-semibold");
+            });
+
+            // 9. Bold *text*
+            html = html.replace(/\*[^*\n]+\*/g, function(match) {
+                return addToken(match, "font-bold text-zinc-100");
+            });
+
+            // 10. Italic _text_
+            html = html.replace(/_[^_\n]+_/g, function(match) {
+                return addToken(match, "italic text-zinc-100");
+            });
+
+            // Restore tokens
+            for (var i = tokens.length - 1; i >= 0; i--) {
+                html = html.replace(tokens[i].id, tokens[i].html);
+            }
+
+            if (code.endsWith("\n")) {
+                html += " ";
+            }
+            return html;
+        }
+
+        function updateHighlight() {
+            if (highlightCode) {
+                highlightCode.innerHTML = highlightTypst(textarea.value);
+            }
+        }
+
+        textarea.addEventListener("scroll", function () {
+            if (highlightPre) {
+                highlightPre.scrollTop = textarea.scrollTop;
+                highlightPre.scrollLeft = textarea.scrollLeft;
+            }
+        });
+
+        function setStatus(s) {
+            currentStatus = s;
+            if (s === "saved") {
+                statusEl.textContent = "\u2713";
+                statusEl.className = "text-base font-mono text-emerald-500 shrink-0";
+            } else if (s === "saving") {
+                statusEl.textContent = "\u27F3";
+                statusEl.className = "text-base font-mono text-sky-400 shrink-0";
+            } else {
+                statusEl.textContent = "\u25CF";
+                statusEl.className = "text-base font-mono text-amber-500 shrink-0";
+            }
+        }
+
+        function handleChange() {
+            setStatus("dirty");
+            updateHighlight();
+            scheduleCompile();
+            scheduleSave();
+        }
+
+        textarea.addEventListener("input", handleChange);
+
+        function scheduleCompile() {
+            clearTimeout(compileTimer);
+            compileTimer = setTimeout(doCompile, 300);
+        }
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1200);
+        }
+
+        async function doCompile() {
+            var content = textarea.value;
+            compileIndicator.classList.remove("hidden");
+
+            var fd = new FormData();
+            fd.append("content", content);
+
+            try {
+                var r = await fetch("/api/notes/render-typst", {
+                    method: "POST",
+                    body: fd
+                });
+                if (!r.ok) throw new Error("Erro na rede: HTTP " + r.status);
+                var data = await r.json();
+
+                if (data.status === "success") {
+                    errorBanner.classList.add("hidden");
+                    errorBanner.textContent = "";
+                    
+                    var html = "";
+                    (data.pages || []).forEach(function (pageSvg) {
+                        html += '<div class="typst-page">' + pageSvg + '</div>';
+                    });
+                    
+                    if (html === "") {
+                        previewContainer.innerHTML = '<div class="text-zinc-600 text-xs py-20 font-mono">Sem páginas geradas.</div>';
+                    } else {
+                        previewContainer.innerHTML = html;
+                    }
+                } else {
+                    // Erro do compilador
+                    errorBanner.textContent = data.error || "Erro de compilação desconhecido.";
+                    errorBanner.classList.remove("hidden");
+                }
+            } catch (err) {
+                errorBanner.textContent = "Erro ao comunicar com o compilador: " + err.message;
+                errorBanner.classList.remove("hidden");
+            } finally {
+                compileIndicator.classList.add("hidden");
+            }
+        }
+
+        async function doSave() {
+            if (saveInProgress) return;
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var content = textarea.value;
+            var currentHash = await generateHash(content);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", content);
+            fd.append("tags", "");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        async function doRename() {
+            var newName = filenameInput.value.trim();
+            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
+            
+            var currentFilename = filenameInput.dataset.filename;
+            if (!currentFilename) {
+                currentFilename = filenameInput.value.trim();
+                if (!currentFilename.endsWith(".md")) currentFilename += ".md";
+                if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
+                filenameInput.dataset.filename = currentFilename;
+            }
+            
+            var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
+            
+            if (!newName || newName === currentDisplayName) return;
+            
+            if (saveTimer) clearTimeout(saveTimer);
+            
+            var fullNewName = "notes/" + newName + ".md";
+            
+            try {
+                setStatus("saving");
+                var content = textarea.value;
+
+                // 1. Salva a nota no novo nome
+                var saveFd = new FormData();
+                saveFd.append("filename", fullNewName);
+                saveFd.append("content", content);
+                saveFd.append("tags", "");
+
+                var saveResp = await fetch("/api/note/save", {
+                    method: "POST",
+                    body: saveFd
+                });
+                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
+                
+                lastSavedHash = await generateHash(content);
+
+                // 2. Exclui a nota antiga no disco e no banco
+                if (currentFilename !== fullNewName) {
+                    var deleteFd = new FormData();
+                    deleteFd.append("filename", currentFilename);
+                    await fetch("/file/delete", {
+                        method: "POST",
+                        body: deleteFd
+                    });
+                }
+
+                // 3. Atualiza local de exibição e recarrega
+                filenameInput.dataset.filename = fullNewName;
+                window.location.href = "/typst?file=" + encodeURIComponent(fullNewName);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao renomear nota Typst.");
+                filenameInput.value = currentDisplayName;
+                setStatus("dirty");
+            }
+        }
+
+        function deleteCurrentNote() {
+            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+            if (!filename) return;
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            if (!confirm('Excluir definitivamente esta nota "' + filename + '"?')) return;
+            
+            var fd = new FormData();
+            fd.append("filename", filename);
+            
+            fetch("/file/delete", { method: "POST", body: fd })
+                .then(function () {
+                    window.location.href = "/";
+                })
+                .catch(function () {
+                    window.location.href = "/";
+                });
+        }
+
+        filenameInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                doRename();
+                filenameInput.blur();
+            }
+        });
+        filenameInput.addEventListener("blur", function () {
+            doRename();
+        });
+
+        // Event listener Ctrl+S para salvar manualmente
+        document.addEventListener("keydown", function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                doSave();
+            }
+        });
+
+        // Inicialização
+        (async function () {
+            setStatus("saved");
+            updateHighlight();
+            lastSavedHash = await generateHash(textarea.value);
+            doCompile();
+        })();
+
+        async function downloadPDF() {
+            await doSave();
+            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+            window.open("/api/notes/download-typst-pdf?file=" + encodeURIComponent(filename), "_blank");
+        }
+
+        window.saveTypst = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.downloadPDF = downloadPDF;
+    })();
+</script>
+}

@@ -12,7 +12,7 @@ func TestScoreFragment_Base(t *testing.T) {
 		Doc: db.Document{
 			Texto:   "golang é uma linguagem de programação compilada",
 			Arquivo: "notes/golang.md",
-			Secao:   "📝 Golang",
+			Secao:   "📄 Golang",
 		},
 		Score: -1.0,
 	}
@@ -23,28 +23,28 @@ func TestScoreFragment_Base(t *testing.T) {
 }
 
 func TestScoreTitle_Partial(t *testing.T) {
-	b := scoreTitle("📝 Aprendendo Programacao", []string{"programa"})
+	b := scoreTitle("📄 Aprendendo Programacao", []string{"programa"})
 	if b <= 0 {
 		t.Fatalf("esperado boost > 0 para match parcial, got %f", b)
 	}
 }
 
 func TestScoreTitle_SemMatch(t *testing.T) {
-	b := scoreTitle("📝 Matematica", []string{"fisica"})
+	b := scoreTitle("📄 Matematica", []string{"fisica"})
 	if b != 0 {
 		t.Fatalf("esperado 0 sem match, got %f", b)
 	}
 }
 
 func TestScoreTitle_StopwordIgnorada(t *testing.T) {
-	b := scoreTitle("📝 O Artigo Definido", []string{"o"})
+	b := scoreTitle("📄 O Artigo Definido", []string{"o"})
 	if b != 0 {
 		t.Fatalf("stopword nao deveria dar boost, got %f", b)
 	}
 }
 
 func TestScoreTitle_TermoCurtoIgnorado(t *testing.T) {
-	b := scoreTitle("📝 Curso de Go", []string{"go"})
+	b := scoreTitle("📄 Curso de Go", []string{"go"})
 	if b != 0 {
 		t.Fatalf("termo com menos de 3 chars nao deveria dar boost, got %f", b)
 	}

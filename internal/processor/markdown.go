@@ -128,6 +128,34 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 						fileTags = append(fileTags, "spreadsheet")
 					}
 				}
+
+				// Se for typst, garante a tag "typst" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+					hasTypstTag := false
+					for _, tag := range fileTags {
+						if tag == "typst" {
+							hasTypstTag = true
+							break
+						}
+					}
+					if !hasTypstTag {
+						fileTags = append(fileTags, "typst")
+					}
+				}
+
+				// Se for desenho, garante a tag "drawing" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
+					hasDrawingTag := false
+					for _, tag := range fileTags {
+						if tag == "drawing" {
+							hasDrawingTag = true
+							break
+						}
+					}
+					if !hasDrawingTag {
+						fileTags = append(fileTags, "drawing")
+					}
+				}
 			}
 			afterFrontmatter := endIdx + 4
 			if afterFrontmatter < len(text) && text[afterFrontmatter] == '\n' {
@@ -349,6 +377,34 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					}
 					if !hasSpreadsheetTag {
 						fileTags = append(fileTags, "spreadsheet")
+					}
+				}
+
+				// Se for typst, garante a tag "typst" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+					hasTypstTag := false
+					for _, tag := range fileTags {
+						if tag == "typst" {
+							hasTypstTag = true
+							break
+						}
+					}
+					if !hasTypstTag {
+						fileTags = append(fileTags, "typst")
+					}
+				}
+
+				// Se for desenho, garante a tag "drawing" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
+					hasDrawingTag := false
+					for _, tag := range fileTags {
+						if tag == "drawing" {
+							hasDrawingTag = true
+							break
+						}
+					}
+					if !hasDrawingTag {
+						fileTags = append(fileTags, "drawing")
 					}
 				}
 			}

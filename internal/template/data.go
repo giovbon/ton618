@@ -38,6 +38,12 @@ func NoteIcon(arquivo string, tags []string) string {
 	}
 	if isPdf {
 		return "📕"
+	} else if hasTag("typst") {
+		return "📘"
+	} else if hasTag("drawing") {
+		return "🎨"
+	} else if hasTag("spreadsheet") {
+		return "📊"
 	} else if hasTag("youtube") {
 		return "🎬"
 	} else if hasTag("artigo") {
@@ -49,5 +55,5 @@ func NoteIcon(arquivo string, tags []string) string {
 	} else if isArchive {
 		return "💾"
 	}
-	return "📝"
+	return "📄"
 }

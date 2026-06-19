@@ -61,15 +61,19 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		tags = fileTags
 	}
 
-	// Redireciona planilhas ou desenhos para seus respectivos editores
+	// Redireciona planilhas, desenhos ou typst para seus respectivos editores
 	isSpreadsheet := false
 	isDrawing := false
-	for _, t := range tags {
+	isTypst := false
+	for _, t := range fileTags {
 		if t == "spreadsheet" {
 			isSpreadsheet = true
 		}
 		if t == "drawing" {
 			isDrawing = true
+		}
+		if t == "typst" {
+			isTypst = true
 		}
 	}
 	if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -80,6 +84,20 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
 		return
 	}
+	if isTypst || strings.Contains(content, "type: typst") {
+		http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
+		return
+	}
+
+	// Filtra as tags internas para não mostrar na UI do editor
+	var userTags []string
+	for _, t := range fileTags {
+		lt := strings.ToLower(t)
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+			userTags = append(userTags, t)
+		}
+	}
+	tags = userTags
 
 	allTags, err := ctx.Store.GetAllTags()
 	if err != nil {
@@ -134,16 +152,24 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 	if content != "" {
 		isSpreadsheet := false
 		isDrawing := false
-		for _, t := range tags {
+		isTypst := false
+		for _, t := range fileTags {
 			if t == "spreadsheet" {
 				isSpreadsheet = true
 			}
 			if t == "drawing" {
 				isDrawing = true
 			}
+			if t == "typst" {
+				isTypst = true
+			}
 		}
 		if isDrawing || strings.Contains(content, "type: drawing") {
 			http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if isTypst || strings.Contains(content, "type: typst") {
+			http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
 		if !isSpreadsheet && !strings.Contains(content, "type: spreadsheet") {
@@ -151,6 +177,16 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
+
+	// Filtra as tags internas para não mostrar na UI
+	var userTags []string
+	for _, t := range fileTags {
+		lt := strings.ToLower(t)
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+			userTags = append(userTags, t)
+		}
+	}
+	tags = userTags
 	allTags, err := ctx.Store.GetAllTags()
 	if err != nil {
 		allTags = nil
@@ -201,16 +237,24 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 	if content != "" {
 		isDrawing := false
 		isSpreadsheet := false
-		for _, t := range tags {
+		isTypst := false
+		for _, t := range fileTags {
 			if t == "drawing" {
 				isDrawing = true
 			}
 			if t == "spreadsheet" {
 				isSpreadsheet = true
 			}
+			if t == "typst" {
+				isTypst = true
+			}
 		}
 		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
 			http.Redirect(w, r, "/spreadsheet?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if isTypst || strings.Contains(content, "type: typst") {
+			http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
 		if !isDrawing && !strings.Contains(content, "type: drawing") {
@@ -218,6 +262,16 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
+
+	// Filtra as tags internas para não mostrar na UI
+	var userTags []string
+	for _, t := range fileTags {
+		lt := strings.ToLower(t)
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+			userTags = append(userTags, t)
+		}
+	}
+	tags = userTags
 	allTags, err := ctx.Store.GetAllTags()
 	if err != nil {
 		allTags = nil
@@ -277,8 +331,15 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		tags = nil
 	}
+	var filtered []string
+	for _, t := range tags {
+		lt := strings.ToLower(t)
+		if lt != "typst" && lt != "drawing" && lt != "spreadsheet" {
+			filtered = append(filtered, t)
+		}
+	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"tags": tags,
+		"tags": filtered,
 	})
 }
 
@@ -532,9 +593,10 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				row["tags"] = ""
 			}
 
-			// Infer robust type for drawings and spreadsheets
+			// Infer robust type for drawings, spreadsheets and typst
 			isDrawing := false
 			isSpreadsheet := false
+			isTypst := false
 			for _, t := range n.Tags {
 				lowerT := strings.ToLower(t)
 				if lowerT == "drawing" {
@@ -542,6 +604,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 				if lowerT == "spreadsheet" {
 					isSpreadsheet = true
+				}
+				if lowerT == "typst" {
+					isTypst = true
 				}
 			}
 
@@ -554,9 +619,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			if !isSpreadsheet && (strings.Contains(lowerArquivo, "sheet") || strings.Contains(lowerContent, "type: spreadsheet") || strings.Contains(lowerContent, `"widths"`)) {
 				isSpreadsheet = true
 			}
+			if !isTypst && (strings.Contains(lowerArquivo, "typst") || strings.Contains(lowerContent, "type: typst")) {
+				isTypst = true
+			}
 
 			// Check if frontmatter specified type/Type explicitly
-			if !isDrawing && !isSpreadsheet {
+			if !isDrawing && !isSpreadsheet && !isTypst {
 				for _, key := range []string{"type", "Type"} {
 					if val, ok := fm[key]; ok {
 						if strVal, isStr := val.(string); isStr {
@@ -566,6 +634,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 								break
 							} else if lowerVal == "spreadsheet" || lowerVal == "planilha" {
 								isSpreadsheet = true
+								break
+							} else if lowerVal == "typst" {
+								isTypst = true
 								break
 							}
 						}
@@ -579,6 +650,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			} else if isSpreadsheet {
 				row["type"] = "planilha"
 				row["Type"] = "planilha"
+			} else if isTypst {
+				row["type"] = "typst"
+				row["Type"] = "typst"
 			} else {
 				// Check if we have Type (capital T) in row
 				var rawType string
@@ -596,6 +670,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					case "spreadsheet", "planilha":
 						row["type"] = "planilha"
 						row["Type"] = "planilha"
+					case "typst":
+						row["type"] = "typst"
+						row["Type"] = "typst"
 					case "pdf":
 						row["type"] = "pdf"
 						row["Type"] = "pdf"

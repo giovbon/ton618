@@ -64,7 +64,7 @@ go build -tags sqlite_fts5 -ldflags="-s -w" -o ton618 ./cmd/server/
 
 if [ $? -eq 0 ]; then
     echo "🚀 Servidor rodando em http://localhost:$PORT"
-    echo "📝 Logs em: $LOG_FILE"
+    echo "📄 Logs em: $LOG_FILE"
     ./ton618 2>&1 | tee -a "$LOG_FILE"
 else
     echo "❌ Erro na compilação. Abortando."

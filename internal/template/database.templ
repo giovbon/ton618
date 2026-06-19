@@ -163,7 +163,8 @@ templ databaseContent() {
             var html = "";
             tags.forEach(function(t){
                 var trimmed = t.trim();
-                if(trimmed) {
+                var lt = trimmed.toLowerCase();
+                if(trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet") {
                     html += "<span class='tag-pill'>#" + trimmed + "</span>";
                 }
             });
@@ -186,14 +187,15 @@ templ databaseContent() {
                             var tagsStr = String(rowData.tags || "").toLowerCase();
                             var fileStr = String(file).toLowerCase();
                             var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                                                     var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
+                            var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
                             var isDrawing = tagsStr.includes("drawing") || fileStr.includes("drawing") || (typeStr === "drawing");
+                            var isTypst = tagsStr.includes("typst") || (typeStr === "typst");
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
                             var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
                             
                             var url = "";
-                            var icon = "📝";
+                            var icon = "📄";
                             if (isPdf) {
                                 url = "/file?name=" + encodeURIComponent(file);
                                 icon = "📕";
@@ -209,9 +211,12 @@ templ databaseContent() {
                             } else if (isDrawing) {
                                 url = "/drawing?file=" + encodeURIComponent(file);
                                 icon = "🎨";
+                            } else if (isTypst) {
+                                url = "/typst?file=" + encodeURIComponent(file);
+                                icon = "📘";
                             } else {
                                 url = "/editor?file=" + encodeURIComponent(file);
-                                icon = "📝";
+                                icon = "📄";
                             }
                             var target = (isPdf || isZip || isArchive) ? " target='_blank'" : "";
                             return "<a href='" + url + "'" + target + " class='text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 justify-center' title='Abrir'>" + icon + " <span class='underline'>Abrir</span></a>";

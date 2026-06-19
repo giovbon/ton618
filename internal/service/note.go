@@ -248,6 +248,7 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 		noteType := "nota"
 		isDrawing := false
 		isSpreadsheet := false
+		isTypst := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -258,6 +259,8 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 				isDrawing = true
 			case "spreadsheet":
 				isSpreadsheet = true
+			case "typst":
+				isTypst = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -270,6 +273,8 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 			noteType = "desenho"
 		} else if isSpreadsheet {
 			noteType = "planilha"
+		} else if isTypst {
+			noteType = "typst"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {
@@ -284,9 +289,18 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 			noteType = "arquivo"
 		}
 
+		// Filtra tags de tipo de nota para ocultá-las da interface do usuário
+		var userTags []string
+		for _, t := range tags {
+			lowerT := strings.ToLower(t)
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" {
+				userTags = append(userTags, t)
+			}
+		}
+
 		items = append(items, NoteItem{
 			Arquivo:  arquivo,
-			Tags:     tags,
+			Tags:     userTags,
 			Mtime:    mtime,
 			Type:     noteType,
 		})

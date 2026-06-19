@@ -434,9 +434,10 @@ templ indexContent() {
             var isArticle = (n.tags || []).indexOf("artigo") !== -1;
             var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1 || (n.type === "spreadsheet") || (n.type === "planilha");
             var isDrawing = (n.tags || []).indexOf("drawing") !== -1 || (n.type === "drawing") || (n.type === "desenho");
+            var isTypst = (n.tags || []).indexOf("typst") !== -1 || (n.type === "typst");
 
             // Determine icon based on note type
-            var noteIcon = "\uD83D\uDCDD"; // 📝 nota normal
+            var noteIcon = "\uD83D\uDCDD"; // 📄 nota normal
             if (isPdf) {
                 noteIcon = "\uD83D\uDCD5"; // 📕 PDF
             } else if (isZip) {
@@ -449,6 +450,8 @@ templ indexContent() {
                 noteIcon = "\uD83D\uDCCA"; // 📊 planilha
             } else if (isDrawing) {
                 noteIcon = "🎨"; // 🎨 desenho
+            } else if (isTypst) {
+                noteIcon = "📘"; // 📘 typst
             } else if (isYoutube) {
                 noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
             } else if (isArticle) {
@@ -470,7 +473,9 @@ templ indexContent() {
                         ? "/spreadsheet?file=" + encodeURIComponent(n.arquivo)
                         : isDrawing
                           ? "/drawing?file=" + encodeURIComponent(n.arquivo)
-                          : "/editor?file=" + encodeURIComponent(n.arquivo)) +
+                          : isTypst
+                            ? "/typst?file=" + encodeURIComponent(n.arquivo)
+                            : "/editor?file=" + encodeURIComponent(n.arquivo)) +
                 '" target="' +
                 (isPdf || isZip ? "_blank" : "") +
                 '" class="block">' +
@@ -486,14 +491,21 @@ templ indexContent() {
                 "</span></div>";
             html += "</a></div>";
             if (tags.length) {
-                html += '<div class="hidden sm:flex gap-1 shrink-0">';
+                var hasVisibleTags = false;
+                var tagsHtml = '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {
-                    html +=
-                        '<span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#' +
-                        t +
-                        "</span>";
+                    if (t !== "typst" && t !== "drawing" && t !== "spreadsheet") {
+                        tagsHtml +=
+                            '<span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#' +
+                            t +
+                            "</span>";
+                        hasVisibleTags = true;
+                    }
                 });
-                html += "</div>";
+                tagsHtml += "</div>";
+                if (hasVisibleTags) {
+                    html += tagsHtml;
+                }
             }
             html +=
                 "<button onclick=\"renameNote(decodeURIComponent('" +

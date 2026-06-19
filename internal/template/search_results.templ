@@ -9,6 +9,7 @@ type SearchResultItem struct {
 	Snippet   string
 	Timestamp string
 	Tags      []string
+	RawTags   []string
 	Line      int
 }
 
@@ -42,10 +43,22 @@ templ SearchResults(data SearchResultsData) {
 					<div class="relative z-10 px-1 pt-3">
 						<div class="flex items-center gap-2 min-w-0 mb-2">
 							<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0">
-								{ NoteIcon(res.Arquivo, res.Tags) } { res.Tipo }
+								{ NoteIcon(res.Arquivo, res.RawTags) } { res.Tipo }
 							</span>
 							if res.Tipo == "pdf" {
 								<a href={ templ.SafeURL("/file?name=" + res.Arquivo) } target="_blank" class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-orange-400">
+									{ DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "planilha" || res.Tipo == "spreadsheet" {
+								<a href={ templ.SafeURL("/spreadsheet?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "desenho" || res.Tipo == "drawing" {
+								<a href={ templ.SafeURL("/drawing?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "typst" {
+								<a href={ templ.SafeURL("/typst?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
 									{ DisplayName(res.Arquivo) }
 								</a>
 							} else {

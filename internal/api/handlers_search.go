@@ -246,6 +246,59 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		// Extract multi-term context windows with ellipsis between distant terms
 		snippet = buildContextSnippet(query, snippet)
 		tags := db.TagsToSlice(hit.Doc.Tags)
+		// Filtra tags de tipo de nota para que não apareçam como tags comuns na interface do usuário
+		var userTags []string
+		for _, t := range tags {
+			lowerT := strings.ToLower(t)
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" {
+				userTags = append(userTags, t)
+			}
+		}
+
+		noteType := "nota"
+		isDrawing := false
+		isSpreadsheet := false
+		isTypst := false
+		isYoutube := false
+		isArticle := false
+		isCapture := false
+		for _, t := range tags {
+			lowerT := strings.ToLower(t)
+			switch lowerT {
+			case "drawing":
+				isDrawing = true
+			case "spreadsheet":
+				isSpreadsheet = true
+			case "typst":
+				isTypst = true
+			case "youtube":
+				isYoutube = true
+			case "artigo", "article":
+				isArticle = true
+			case "captura", "capture":
+				isCapture = true
+			}
+		}
+		if isDrawing {
+			noteType = "desenho"
+		} else if isSpreadsheet {
+			noteType = "planilha"
+		} else if isTypst {
+			noteType = "typst"
+		} else if isYoutube {
+			noteType = "youtube"
+		} else if isArticle {
+			noteType = "artigo"
+		} else if isCapture {
+			noteType = "captura"
+		} else if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") {
+			noteType = "pdf"
+		} else if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
+			noteType = "anexo"
+		} else if strings.HasPrefix(hit.Doc.Arquivo, "archives/") {
+			noteType = "arquivo"
+		}
+
 		// Pula PDFs e anexos na busca global (nao fazem sentido como resultado textual)
 		if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(hit.Doc.Arquivo), ".pdf") {
 			continue
@@ -264,9 +317,10 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		items = append(items, template.SearchResultItem{
 			Arquivo:   hit.Doc.Arquivo,
 			Secao:     hit.Doc.Secao,
-			Tags:      tags,
+			Tags:      userTags,
+			RawTags:   tags,
 			Snippet:   snippet,
-			Tipo:      hit.Doc.Tipo,
+			Tipo:      noteType,
 			Timestamp: displayTime,
 			Line:      line,
 		})
