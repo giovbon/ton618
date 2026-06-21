@@ -58,14 +58,14 @@ func typstContent(data EditorData) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"editor-root flex flex-col\" id=\"typst-root\" style=\"position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;\"><!-- Topbar --><div class=\"flex items-center gap-3 mb-3 shrink-0\" id=\"typst-topbar\"><span class=\"text-zinc-600 font-bold shrink-0 text-sm select-none\">📘 TYPST</span> <input id=\"file-name\" type=\"text\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"editor-root flex flex-col\" id=\"typst-root\" style=\"position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;\"><!-- Topbar --><div class=\"flex items-center gap-3 mb-3 shrink-0\" id=\"typst-topbar\"><input id=\"file-name\" type=\"text\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.DisplayName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 15, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 14, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -78,20 +78,20 @@ func typstContent(data EditorData) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.Filename)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 16, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 15, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate\" spellcheck=\"false\"> <span id=\"editor-status\" class=\"text-base font-mono text-zinc-600 shrink-0\">—</span> <button id=\"save-btn\" onclick=\"saveTypst()\" class=\"text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60\" title=\"Salvar (Ctrl+S)\">💾</button> <button id=\"pdf-download-btn\" onclick=\"downloadPDF()\" class=\"text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800\" title=\"Baixar PDF\">📥 PDF</button> <button id=\"delete-editor-btn\" onclick=\"deleteCurrentNote()\" class=\"text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60\" title=\"Excluir esta nota\">🗑️</button></div><!-- Layout Dividido (Split-Pane) --><div class=\"flex flex-col md:flex-row flex-1 gap-4 overflow-hidden min-h-0 relative\"><!-- Painel Esquerdo: Editor de Código --><div class=\"flex-1 flex flex-col min-w-0 relative\"><div class=\"flex-1 w-full relative min-h-0\"><pre id=\"highlight-pre\" class=\"editor-highlight-pre absolute inset-0 overflow-hidden\"><code id=\"highlight-code\"></code></pre><textarea id=\"typst-textarea\" class=\"editor-textarea absolute inset-0 w-full h-full resize-none focus:outline-none\" placeholder=\"// Escreva seu código Typst aqui...\" spellcheck=\"false\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" class=\"flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate\" spellcheck=\"false\"> <span id=\"editor-status\" class=\"text-base font-mono text-zinc-600 shrink-0\">—</span> <button id=\"save-btn\" onclick=\"saveTypst()\" class=\"text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60\" title=\"Salvar (Ctrl+S)\">💾</button> <button id=\"pdf-download-btn\" onclick=\"downloadPDF()\" class=\"text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800\" title=\"Baixar PDF\">📥 PDF</button> <button id=\"delete-editor-btn\" onclick=\"deleteCurrentNote()\" class=\"text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60\" title=\"Excluir esta nota\">🗑️</button></div><!-- Layout Dividido (Split-Pane) --><div class=\"flex flex-col md:flex-row flex-1 gap-4 overflow-hidden min-h-0 relative\"><!-- Painel Esquerdo: Editor de Código --><div class=\"flex-1 flex flex-col min-w-0 relative\"><div class=\"flex-1 w-full relative min-h-0\"><pre id=\"highlight-pre\" class=\"editor-highlight-pre absolute inset-0 overflow-hidden\"><code id=\"highlight-code\"></code></pre><textarea id=\"typst-textarea\" class=\"editor-textarea absolute inset-0 w-full h-full resize-none focus:outline-none\" placeholder=\"// Escreva seu código Typst aqui...\" spellcheck=\"false\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(data.Content)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 61, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/template/typst.templ`, Line: 60, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {

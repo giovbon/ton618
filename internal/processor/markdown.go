@@ -66,6 +66,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	var docs []Document
 	var fileTags []string
 	var links []string
+	isTypst := false
 
 	// Parse frontmatter
 	var metaParts []string
@@ -131,6 +132,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 
 				// Se for typst, garante a tag "typst" indexada
 				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+					isTypst = true
 					hasTypstTag := false
 					for _, tag := range fileTags {
 						if tag == "typst" {
@@ -172,19 +174,21 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	}
 
 	// Extract hashtags from body
-	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range tagMatches {
-		if len(m) > 1 {
-			tag := strings.ToLower(m[1])
-			exists := false
-			for _, existing := range fileTags {
-				if existing == tag {
-					exists = true
-					break
+	if !isTypst {
+		tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
+		for _, m := range tagMatches {
+			if len(m) > 1 {
+				tag := strings.ToLower(m[1])
+				exists := false
+				for _, existing := range fileTags {
+					if existing == tag {
+						exists = true
+						break
+					}
 				}
-			}
-			if !exists && tag != "" {
-				fileTags = append(fileTags, tag)
+				if !exists && tag != "" {
+					fileTags = append(fileTags, tag)
+				}
 			}
 		}
 	}
@@ -317,6 +321,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	var docs []Document
 	var fileTags []string
 	var links []string
+	isTypst := false
 
 	// Parse frontmatter
 	var metaParts []string
@@ -382,6 +387,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 
 				// Se for typst, garante a tag "typst" indexada
 				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+					isTypst = true
 					hasTypstTag := false
 					for _, tag := range fileTags {
 						if tag == "typst" {
@@ -423,19 +429,21 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract hashtags from body
-	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range tagMatches {
-		if len(m) > 1 {
-			tag := strings.ToLower(m[1])
-			exists := false
-			for _, existing := range fileTags {
-				if existing == tag {
-					exists = true
-					break
+	if !isTypst {
+		tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
+		for _, m := range tagMatches {
+			if len(m) > 1 {
+				tag := strings.ToLower(m[1])
+				exists := false
+				for _, existing := range fileTags {
+					if existing == tag {
+						exists = true
+						break
+					}
 				}
-			}
-			if !exists && tag != "" {
-				fileTags = append(fileTags, tag)
+				if !exists && tag != "" {
+					fileTags = append(fileTags, tag)
+				}
 			}
 		}
 	}

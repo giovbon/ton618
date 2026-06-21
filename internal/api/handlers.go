@@ -327,6 +327,7 @@ func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Req
 
 func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	tags, err := ctx.Store.GetAllTags()
 	if err != nil {
 		tags = nil
@@ -478,6 +479,7 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 	})
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"notes": notes,
 		"total": len(notes),

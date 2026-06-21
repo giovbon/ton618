@@ -2,15 +2,19 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"ton618/internal/processor"
 	"ton618/internal/service"
@@ -153,6 +157,9 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 	// Garante A4 como padrão no compilador sem sujar o código da nota com regras #set
 	compileBody = "#set page(paper: \"a4\")\n" + compileBody
 
+	// Pre-processa as imagens do documento que sao URLs remotas
+	compileBody = preprocessTypstImages(compileBody, tmpDir)
+
 	// 3. Grava o código Typst em um arquivo temporário
 	tmpFile := filepath.Join(tmpDir, "main.typ")
 	if err := os.WriteFile(tmpFile, []byte(compileBody), 0644); err != nil {
@@ -249,6 +256,9 @@ func (ctx *HandlerContext) HandleTypstPDF(w http.ResponseWriter, r *http.Request
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// Pre-processa as imagens do documento que sao URLs remotas
+	compileBody = preprocessTypstImages(compileBody, tmpDir)
+
 	// 4. Grava o código Typst em um arquivo temporário
 	tmpFile := filepath.Join(tmpDir, "main.typ")
 	if err := os.WriteFile(tmpFile, []byte(compileBody), 0644); err != nil {
@@ -286,4 +296,96 @@ func (ctx *HandlerContext) HandleTypstPDF(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", strings.ReplaceAll(pdfName, "\"", "\\\"")))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(pdfBytes)))
 	w.Write(pdfBytes)
+}
+
+// preprocessTypstImages localiza URLs de imagens no conteúdo e baixa-as no diretório temporário,
+// substituindo as URLs pelos nomes dos arquivos locais gerados.
+func preprocessTypstImages(content string, tmpDir string) string {
+	re := regexp.MustCompile(`image\(\s*["'](https?://[^"']+)["']`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return content
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	downloaded := make(map[string]string)
+
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		urlStr := match[1]
+		if _, exists := downloaded[urlStr]; exists {
+			continue
+		}
+
+		hash := sha256.Sum256([]byte(urlStr))
+		hashHex := fmt.Sprintf("%x", hash)
+
+		resp, err := client.Get(urlStr)
+		if err != nil {
+			slog.Warn("falha ao baixar imagem remota para o typst", "url", urlStr, "error", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			slog.Warn("imagem remota retornou status nao-OK para o typst", "url", urlStr, "status", resp.Status)
+			continue
+		}
+
+		ext := ".png"
+		contentType := resp.Header.Get("Content-Type")
+		switch {
+		case strings.Contains(contentType, "image/jpeg") || strings.Contains(contentType, "image/jpg"):
+			ext = ".jpg"
+		case strings.Contains(contentType, "image/png"):
+			ext = ".png"
+		case strings.Contains(contentType, "image/gif"):
+			ext = ".gif"
+		case strings.Contains(contentType, "image/svg+xml"):
+			ext = ".svg"
+		default:
+			if urlExt := filepath.Ext(urlStr); urlExt != "" {
+				if idx := strings.Index(urlExt, "?"); idx != -1 {
+					urlExt = urlExt[:idx]
+				}
+				if idx := strings.Index(urlExt, "#"); idx != -1 {
+					urlExt = urlExt[:idx]
+				}
+				if len(urlExt) <= 5 {
+					ext = urlExt
+				}
+			}
+		}
+
+		localName := hashHex + ext
+		localPath := filepath.Join(tmpDir, localName)
+
+		out, err := os.Create(localPath)
+		if err != nil {
+			slog.Error("falha ao criar arquivo local para imagem do typst", "path", localPath, "error", err)
+			continue
+		}
+
+		_, err = io.Copy(out, resp.Body)
+		out.Close()
+		if err != nil {
+			slog.Error("falha ao gravar imagem baixada para o typst", "url", urlStr, "error", err)
+			os.Remove(localPath)
+			continue
+		}
+
+		downloaded[urlStr] = localName
+	}
+
+	newContent := content
+	for urlStr, localName := range downloaded {
+		newContent = strings.ReplaceAll(newContent, urlStr, localName)
+	}
+
+	return newContent
 }

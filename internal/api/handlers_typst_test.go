@@ -1,11 +1,15 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,5 +120,53 @@ func TestHandleTypstPDF(t *testing.T) {
 		if rr2.Code != http.StatusInternalServerError {
 			t.Errorf("Esperado status %d (Internal Server Error) sem typst instalado, obtido %d", http.StatusInternalServerError, rr2.Code)
 		}
+	}
+}
+
+func TestPreprocessTypstImages(t *testing.T) {
+	// 1. Cria um servidor HTTP de teste para simular uma imagem remota
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("fake-image-bytes"))
+	}))
+	defer ts.Close()
+
+	// 2. Prepara um diretório temporário para a compilação
+	tmpDir, err := os.MkdirTemp("", "test-preprocess-*")
+	if err != nil {
+		t.Fatalf("erro ao criar dir temporario: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 3. Monta o conteúdo Typst usando a URL do servidor de teste
+	imageURL := ts.URL + "/test.png"
+	content := `= Titulo
+Aqui esta uma imagem: #image("` + imageURL + `", width: 50%)
+E outra chamada de imagem simples: image('` + imageURL + `')`
+
+	// 4. Executa o pré-processamento
+	newContent := preprocessTypstImages(content, tmpDir)
+
+	// 5. Verifica se as URLs foram substituídas por nomes de arquivos locais relativos
+	if strings.Contains(newContent, imageURL) {
+		t.Errorf("A URL da imagem nao deveria mais estar no conteudo. Conteudo obtido: %s", newContent)
+	}
+
+	// 6. Verifica se o arquivo correspondente foi gravado no diretório temporário
+	hash := sha256.Sum256([]byte(imageURL))
+	expectedFilename := fmt.Sprintf("%x.png", hash)
+	localPath := filepath.Join(tmpDir, expectedFilename)
+
+	if _, err := os.Stat(localPath); os.IsNotExist(err) {
+		t.Errorf("O arquivo local %s nao foi criado no diretorio temporario", localPath)
+	}
+
+	// Lê e verifica o conteúdo do arquivo local
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		t.Fatalf("erro ao ler arquivo local: %v", err)
+	}
+	if string(data) != "fake-image-bytes" {
+		t.Errorf("Esperado conteudo do arquivo 'fake-image-bytes', obtido '%s'", string(data))
 	}
 }

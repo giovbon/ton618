@@ -287,3 +287,40 @@ tags: [python]
 		t.Error("hashtag #django nao encontrada")
 	}
 }
+
+func TestProcessMarkdown_TypstNoHashtags(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "typst_note.md")
+	content := `---
+type: typst
+tags: [relatorio]
+---
+#set page(paper: "a4")
+#let x = 5
+#align(center)[
+  = Titulo
+]
+Este e um documento #typst.
+`
+	os.WriteFile(fp, []byte(content), 0644)
+
+	now := time.Now()
+	_, _, tags := ProcessMarkdown(fp, "notes/typst_note.md", now, now)
+
+	// Espera-se apenas a tag "typst" (inserida automaticamente) e "relatorio" (do frontmatter).
+	// Não devem ser extraídas diretivas sintáticas do typst como "set", "let", "align", etc.
+	expectedTags := map[string]bool{
+		"typst":     true,
+		"relatorio": true,
+	}
+
+	for _, tag := range tags {
+		if !expectedTags[tag] {
+			t.Errorf("Tag inesperada extraída do documento Typst: %q (não deve extrair diretivas como hashtags)", tag)
+		}
+	}
+
+	if len(tags) != 2 {
+		t.Errorf("Esperado exatamente 2 tags (typst, relatorio), obteve %d: %v", len(tags), tags)
+	}
+}
