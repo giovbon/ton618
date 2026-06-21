@@ -115,11 +115,32 @@ templ typstContent(data EditorData) {
         line-height: 1.625 !important;
         white-space: pre-wrap !important;
         word-wrap: break-word !important;
-        word-break: break-all !important;
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
         box-sizing: border-box !important;
         border-radius: 0.75rem; /* rounded-xl */
         border: 1px solid #27272a !important; /* border-zinc-800 */
         tab-size: 4;
+        scrollbar-gutter: stable !important;
+        overflow-y: auto !important;
+    }
+    
+    #highlight-code {
+        font-family: inherit !important;
+        font-size: inherit !important;
+        line-height: inherit !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        background: none !important;
+        white-space: inherit !important;
+        word-break: inherit !important;
+        overflow-wrap: inherit !important;
+    }
+    
+    .editor-highlight-pre * {
+        font-weight: normal !important;
+        font-style: normal !important;
     }
     
     .editor-textarea {
@@ -127,6 +148,16 @@ templ typstContent(data EditorData) {
         background: transparent !important;
         caret-color: #38bdf8 !important;
         z-index: 10;
+    }
+    
+    .editor-textarea::selection {
+        color: transparent !important;
+        background: rgba(56, 189, 248, 0.3) !important;
+    }
+    
+    .editor-textarea::-moz-selection {
+        color: transparent !important;
+        background: rgba(56, 189, 248, 0.3) !important;
     }
     
     .editor-textarea:focus {
@@ -140,11 +171,38 @@ templ typstContent(data EditorData) {
         pointer-events: none;
     }
     
+    /* Estilização customizada de scrollbar para manter larguras de layout idênticas */
+    .editor-textarea::-webkit-scrollbar,
     .editor-highlight-pre::-webkit-scrollbar {
-        display: none;
+        width: 10px !important;
+        height: 10px !important;
+        background: transparent !important;
     }
+
+    .editor-textarea::-webkit-scrollbar-track,
+    .editor-highlight-pre::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    .editor-textarea::-webkit-scrollbar-thumb {
+        background-color: #27272a !important; /* zinc-800 */
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
+    .editor-highlight-pre::-webkit-scrollbar-thumb {
+        background-color: transparent !important;
+    }
+
+    /* Firefox scrollbars */
+    .editor-textarea {
+        scrollbar-width: thin !important;
+        scrollbar-color: #27272a transparent !important;
+    }
+
     .editor-highlight-pre {
-        scrollbar-width: none;
+        scrollbar-width: thin !important;
+        scrollbar-color: transparent transparent !important;
     }
 </style>
 
