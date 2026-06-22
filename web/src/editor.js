@@ -14,6 +14,10 @@ import { FontFamily } from "@tiptap/extension-font-family";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import Mention from "@tiptap/extension-mention";
+
+const CustomLink = Link.extend({
+  inclusive: false,
+});
 import Suggestion from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { marked } from "marked";
@@ -85,7 +89,7 @@ window.TipTapEditor = {
   TextStyle,
   FontFamily,
   Highlight,
-  Link,
+  Link: CustomLink,
   Mention,
   Suggestion,
   Markdown,

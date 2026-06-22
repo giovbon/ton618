@@ -361,7 +361,7 @@ func TestBackupService_Create_Vazio(t *testing.T) {
 	_, bkSvc, _, cleanup := newTestService(t)
 	defer cleanup()
 
-	data, err := bkSvc.Create()
+	data, err := bkSvc.Create(true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestBackupService_Create_ComNotas(t *testing.T) {
 
 	svc.Save("backup-nota", "# Backup\n\nEsta nota deve aparecer no ZIP.", nil)
 
-	data, err := bkSvc.Create()
+	data, err := bkSvc.Create(true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestBackupService_Create_PulaArchives(t *testing.T) {
 
 	svc.Save("nota-normal", "conteudo normal", nil)
 
-	data, err := bkSvc.Create()
+	data, err := bkSvc.Create(true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestBackupService_Create_ComPDFs(t *testing.T) {
 	_ = docsDir
 	svc.Save("com-pdf", "nota referenciando PDF", nil)
 
-	data, err := bkSvc.Create()
+	data, err := bkSvc.Create(true)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

@@ -24,8 +24,8 @@ func NewBackupService(notes repository.NoteStore, fm repository.FileModStore, do
 	return &BackupService{notes: notes, fileMod: fm, docsDir: docsDir}
 }
 
-// Create gera um ZIP com todas as notas, PDFs e anexos.
-func (s *BackupService) Create() ([]byte, error) {
+// Create gera um ZIP com todas as notas, PDFs e anexos (se full for verdadeiro).
+func (s *BackupService) Create(full bool) ([]byte, error) {
 	allNotes, _ := s.notes.GetAllNotes()
 	allMods, _ := s.fileMod.GetAllFileMods()
 
@@ -51,17 +51,19 @@ func (s *BackupService) Create() ([]byte, error) {
 	}
 
 	// 2. Arquivos do disco (PDFs, attachments, notas sem conteúdo no DB)
-	for filename := range allMods {
-		if strings.HasPrefix(filename, "archives/") || seen[filename] {
-			continue
+	if full {
+		for filename := range allMods {
+			if strings.HasPrefix(filename, "archives/") || seen[filename] {
+				continue
+			}
+			fullPath := filepath.Join(s.docsDir, filename)
+			data, err := os.ReadFile(fullPath)
+			if err != nil {
+				continue
+			}
+			mtimeStr, _ := s.fileMod.GetFileMod(filename)
+			addToZip(zw, filename, data, repository.ParseMtime(mtimeStr))
 		}
-		fullPath := filepath.Join(s.docsDir, filename)
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-		mtimeStr, _ := s.fileMod.GetFileMod(filename)
-		addToZip(zw, filename, data, repository.ParseMtime(mtimeStr))
 	}
 
 	if err := zw.Close(); err != nil {

@@ -15,8 +15,77 @@ import (
 
 	"ton618/internal/db"
 	"ton618/internal/processor"
+	"ton618/internal/service"
 	"ton618/internal/watcher"
 )
+
+var compressedExts = map[string]bool{
+	// Archives / Compression
+	".zip":   true,
+	".rar":   true,
+	".7z":    true,
+	".tar":   true,
+	".gz":    true,
+	".tgz":   true,
+	".bz2":   true,
+	".tbz2":  true,
+	".xz":    true,
+	".txz":   true,
+	".lzma":  true,
+	".tlz":   true,
+	".z":     true,
+	".zst":   true,
+	".lz":    true,
+	".apk":   true,
+	".jar":   true,
+	".war":   true,
+	".ear":   true,
+	// Images
+	".png":   true,
+	".jpg":   true,
+	".jpeg":  true,
+	".gif":   true,
+	".webp":  true,
+	".heic":  true,
+	".heif":  true,
+	".tiff":  true,
+	".tif":   true,
+	".ico":   true,
+	// Audio
+	".mp3":   true,
+	".m4a":   true,
+	".aac":   true,
+	".flac":  true,
+	".ogg":   true,
+	".opus":  true,
+	".wav":   true,
+	".wma":   true,
+	// Video
+	".mp4":   true,
+	".mkv":   true,
+	".avi":   true,
+	".mov":   true,
+	".webm":  true,
+	".flv":   true,
+	".wmv":   true,
+	".mpeg":  true,
+	".mpg":   true,
+	".m4v":   true,
+	".3gp":   true,
+	// Disk Images / Binaries / Documents
+	".iso":   true,
+	".img":   true,
+	".dmg":   true,
+	".bin":   true,
+	".exe":   true,
+	".dll":   true,
+	".so":    true,
+	".dylib": true,
+	".deb":   true,
+	".rpm":   true,
+	".pdf":   true,
+	".epub":  true,
+}
 
 // ── Helpers de normalizacao ──
 
@@ -421,7 +490,7 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := r.ParseMultipartForm(50 << 20); err != nil { // 50MB
+	if err := r.ParseMultipartForm(126 << 20); err != nil { // 126MB
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -456,7 +525,21 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 		if err != nil {
 			continue
 		}
-		w, err := zw.Create(fh.Filename)
+		
+		// Determina o método de compressão: usa Store (sem compressão) para arquivos já compactados
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+		var method uint16 = zip.Deflate
+		if compressedExts[ext] {
+			method = zip.Store
+		}
+
+		header := &zip.FileHeader{
+			Name:   fh.Filename,
+			Method: method,
+		}
+		header.Modified = time.Now()
+
+		w, err := zw.CreateHeader(header)
 		if err != nil {
 			src.Close()
 			continue
@@ -734,17 +817,191 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 
 // ── Backup ──
 
-// HandleBackup baixa um ZIP com todas as notas (markdown), PDFs e anexos,
+// HandleBackup baixa um ZIP com todas as notas (markdown), e opcionalmente PDFs e anexos,
 // excluindo a pasta archives/.
 func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) {
-	data, err := ctx.Backup.Create()
+	full := r.URL.Query().Get("full") == "true"
+	data, err := ctx.Backup.Create(full)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	filename := "ton618-backup-notas-" + processor.GenerateCUID2() + ".zip"
+	if full {
+		filename = "ton618-backup-completo-" + processor.GenerateCUID2() + ".zip"
+	}
+
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, processor.GenerateCUID2()+".zip"))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Write(data)
+}
+
+// HandleDuplicateNote duplicates an existing note or file, prefixing the name with "copia-".
+func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	raw := r.FormValue("filename")
+	if raw == "" {
+		http.Error(w, "filename required", http.StatusBadRequest)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(raw))
+	var oldFilename, newFilename string
+	var isZip, isPdf bool
+
+	if ext == ".pdf" {
+		isPdf = true
+		basename := filepath.Base(raw)
+		subdirs := []string{"pdfs", "notes"}
+		found := false
+		for _, sd := range subdirs {
+			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+			if _, err := os.Stat(testPath); err == nil {
+				oldFilename = sd + "/" + basename
+				newFilename = sd + "/copia-" + basename
+				
+				src, err := os.Open(testPath)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				defer src.Close()
+
+				dstPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
+				if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				dst, err := os.Create(dstPath)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				defer dst.Close()
+
+				if _, err := io.Copy(dst, src); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+	} else if ext == ".zip" {
+		isZip = true
+		basename := filepath.Base(raw)
+		oldFilename = "attachments/" + basename
+		newFilename = "attachments/copia-" + basename
+		oldPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
+		newPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", "copia-"+basename)
+
+		src, err := os.Open(oldPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer src.Close()
+
+		if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		dst, err := os.Create(newPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, src); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		oldFilename = noteFilename(raw)
+		dir := filepath.Dir(oldFilename)
+		base := filepath.Base(oldFilename)
+		newFilename = filepath.ToSlash(filepath.Join(dir, "copia-"+base))
+
+		content, err := ctx.Store.GetNote(oldFilename)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if content == "" {
+			http.Error(w, "note content not found", http.StatusNotFound)
+			return
+		}
+
+		// Update title in frontmatter if present
+		fm, _, err := service.ParseFrontmatter(content)
+		if err == nil && fm != nil {
+			if titleVal, ok := fm["title"]; ok {
+				if titleStr, ok := titleVal.(string); ok {
+					newContent, err := service.UpdateFrontmatterProperty(content, "title", "copia-"+titleStr)
+					if err == nil {
+						content = newContent
+					}
+				}
+			} else if titleVal, ok := fm["titulo"]; ok {
+				if titleStr, ok := titleVal.(string); ok {
+					newContent, err := service.UpdateFrontmatterProperty(content, "titulo", "copia-"+titleStr)
+					if err == nil {
+						content = newContent
+					}
+				}
+			}
+		}
+
+		mtime := time.Now().UTC().Format(time.RFC3339)
+		if err := ctx.Store.SaveNote(newFilename, content, mtime); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Copy tags
+		tags, err := ctx.Store.GetFileTags(oldFilename)
+		if err == nil && len(tags) > 0 {
+			ctx.Store.SetFileTags(newFilename, tags)
+		}
+	}
+
+	// Index/Process new file
+	if isPdf || isZip {
+		newPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
+		info, err := os.Stat(newPath)
+		if err == nil {
+			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+				Path: newPath, Filename: newFilename, ModTime: info.ModTime(), Type: "create",
+			})
+		}
+	} else {
+		content, _ := ctx.Store.GetNote(newFilename)
+		if err := ctx.reindexNote(newFilename, content, time.Now()); err != nil {
+			watcher.MarkRecentlyProcessed(newFilename)
+			slog.Error("reindex duplicated note", "file", newFilename, "error", err)
+		}
+	}
+
+	ctx.dbCacheMu.Lock()
+	delete(ctx.dbCache, newFilename)
+	ctx.dbCacheMu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":           true,
+		"new_filename": newFilename,
+	})
 }

@@ -95,6 +95,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings", ctx.HandleTodoSettingsPage)
 
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
+	mux.HandleFunc("POST /api/note/duplicate", ctx.HandleDuplicateNote)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
 	mux.HandleFunc("GET /api/notes/database", ctx.HandleGetDatabaseData)
 	mux.HandleFunc("POST /api/notes/update-property", ctx.HandleUpdateNoteProperty)

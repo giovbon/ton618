@@ -34,6 +34,14 @@ templ typstContent(data EditorData) {
             📥 PDF
         </button>
         <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta nota"
+        >
+            ⧉
+        </button>
+        <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
             class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
@@ -549,6 +557,34 @@ templ typstContent(data EditorData) {
                 });
         }
 
+        function duplicateCurrentNote() {
+            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+            if (!filename) return;
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            if (!confirm('Duplicar esta nota "' + filename + '"?')) return;
+            
+            var fd = new FormData();
+            fd.append("filename", filename);
+            
+            fetch("/api/note/duplicate", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (!r.ok) {
+                        return r.text().then(function (t) { throw new Error(t); });
+                    }
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.new_filename) {
+                        window.location.href = "/typst?file=" + encodeURIComponent(data.new_filename);
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro ao duplicar nota Typst: " + err.message);
+                });
+        }
+
         filenameInput.addEventListener("keydown", function (e) {
             if (e.key === "Enter") {
                 e.preventDefault();
@@ -586,6 +622,7 @@ templ typstContent(data EditorData) {
 
         window.saveTypst = doSave;
         window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
         window.downloadPDF = downloadPDF;
     })();
 </script>

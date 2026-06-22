@@ -575,42 +575,72 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 <!-- Backup Tab -->
                 <div id="tab-backup" class="settings-tab hidden space-y-6">
                     <p class="text-sm text-zinc-400">
-                        Baixe todas as suas notas (markdown), PDFs e anexos
-                        em um único arquivo ZIP. Arquivos da pasta
+                        Escolha o tipo de backup ideal para você. O backup rápido contém apenas as notas (incluindo desenhos e planilhas). O completo inclui também arquivos pesados.
+                        Arquivos da pasta
                         <code class="text-zinc-500">archives/</code> não são
                         incluídos.
                     </p>
 
-                    <div class="bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 text-center">
-                        <div class="text-4xl mb-3">💾</div>
-                        <p class="text-sm text-zinc-300 font-semibold mb-1">
-                            Backup completo dos dados
-                        </p>
-                        <p class="text-xs text-zinc-500 mb-4">
-                            Notas, PDFs e attachments
-                        </p>
-                        <a id="backup-download-btn" href="/api/backup" download
-                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors"
-                            onclick="
-                                    this.classList.add(
-                                        'opacity-50',
-                                        'pointer-events-none',
-                                    );
-                                    this.textContent = '⏳ Gerando...';
-                                ">
-                            ⬇️ Baixar ZIP
-                        </a>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Apenas Notas -->
+                        <div class="bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 flex flex-col justify-between text-center">
+                            <div>
+                                <div class="text-4xl mb-3">📄</div>
+                                <p class="text-sm text-zinc-300 font-bold mb-1">
+                                    Apenas Notas (Rápido)
+                                </p>
+                                <p class="text-xs text-zinc-500 mb-4">
+                                    Textos em markdown, meta-dados, dados estruturados.
+                                </p>
+                            </div>
+                            <a id="backup-download-notas-btn" href="/api/backup?full=false" download
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors w-full mt-2"
+                                onclick="
+                                        this.classList.add('opacity-50', 'pointer-events-none');
+                                        let originalText = this.innerHTML;
+                                        this.innerHTML = '⏳ Gerando...';
+                                        setTimeout(() => {
+                                            this.classList.remove('opacity-50', 'pointer-events-none');
+                                            this.innerHTML = originalText;
+                                        }, 3000);
+                                    ">
+                                ⬇️ Baixar Rápido
+                            </a>
+                        </div>
+
+                        <!-- Backup Completo -->
+                        <div class="bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 flex flex-col justify-between text-center">
+                            <div>
+                                <div class="text-4xl mb-3">💾</div>
+                                <p class="text-sm text-zinc-300 font-bold mb-1">
+                                    Backup Completo
+                                </p>
+                                <p class="text-xs text-zinc-500 mb-4">
+                                    Tudo: notas e os arquivos/anexos pesados em disco.
+                                </p>
+                            </div>
+                            <a id="backup-download-full-btn" href="/api/backup?full=true" download
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors w-full mt-2"
+                                onclick="
+                                        this.classList.add('opacity-50', 'pointer-events-none');
+                                        let originalText = this.innerHTML;
+                                        this.innerHTML = '⏳ Gerando...';
+                                        setTimeout(() => {
+                                            this.classList.remove('opacity-50', 'pointer-events-none');
+                                            this.innerHTML = originalText;
+                                        }, 10000);
+                                    ">
+                                ⬇️ Baixar Completo
+                            </a>
+                        </div>
                     </div>
 
                     <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
                         <p class="text-xs text-zinc-500 leading-relaxed">
-                            <strong class="text-zinc-400">O que é incluído:</strong><br />
-                            📄 Notas markdown da tabela
-                            <code class="text-zinc-500">notes</code><br />
-                            📕 PDFs da pasta
-                            <code class="text-zinc-500">pdfs/</code><br />
-                            📦 Anexos da pasta
-                            <code class="text-zinc-500">attachments/</code>
+                            <strong class="text-zinc-400">O que é incluído no Completo:</strong><br />
+                            Além das notas (<code class="text-zinc-500">notes</code>):<br />
+                            📕 PDFs da pasta <code class="text-zinc-500">pdfs/</code><br />
+                            📦 Anexos da pasta <code class="text-zinc-500">attachments/</code>
                         </p>
                     </div>
                 </div>
