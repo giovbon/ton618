@@ -308,6 +308,38 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 	return items, nil
 }
 
+// SyncDatabase garante que todas as notas da tabela 'notes' estejam devidamente indexadas no FTS e na tabela de tags.
+func (s *NoteService) SyncDatabase() error {
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		return err
+	}
+
+	for filename, mtimeStr := range allNotes {
+		existingMod, err := s.fileMod.GetFileMod(filename)
+		if err != nil {
+			continue
+		}
+
+		// Se a nota não estiver indexada na tabela file_mods, fazemos o reindex
+		if existingMod == "" {
+			content, err := s.notes.GetNote(filename)
+			if err != nil || content == "" {
+				continue
+			}
+			mtime, err := time.Parse(time.RFC3339, mtimeStr)
+			if err != nil {
+				mtime = time.Now()
+			}
+			slog.Info("Auto-reindexando nota no banco", "file", filename)
+			if err := s.reindex(filename, content, mtime); err != nil {
+				slog.Error("erro ao auto-reindexar nota", "file", filename, "error", err)
+			}
+		}
+	}
+	return nil
+}
+
 // NoteItem é o formato de listagem compacta.
 type NoteItem struct {
 	Arquivo  string   `json:"arquivo"`

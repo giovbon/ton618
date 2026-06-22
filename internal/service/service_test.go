@@ -540,3 +540,49 @@ func TestUpdateFrontmatterProperty_CaseInsensitiveTagsAndString(t *testing.T) {
 		t.Error("esperava que a chave duplicada 'Tags:' fosse removida")
 	}
 }
+
+func TestNoteService_SyncDatabase(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	// 1. Salva nota diretamente no banco SQLite (simulando inserção direta de outra instância)
+	// sem preencher file_mods, tags, etc.
+	filename := "notes/nota-importada.md"
+	content := "---\ntags: [importada, teste]\n---\n# Nota Importada\nConteudo da nota importada."
+	mtimeStr := time.Now().UTC().Format(time.RFC3339)
+
+	if err := store.SaveNote(filename, content, mtimeStr); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+
+	// Verifica que não há registros de tags na tabela tags
+	tags, err := store.GetFileTags(filename)
+	if err != nil {
+		t.Fatalf("GetFileTags: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Fatalf("esperava 0 tags na tabela antes da sincronizacao, got %v", tags)
+	}
+
+	// 2. Executa a sincronização do banco
+	if err := svc.SyncDatabase(); err != nil {
+		t.Fatalf("SyncDatabase: %v", err)
+	}
+
+	// 3. Verifica se as tags foram extraídas e salvas na tabela tags
+	tags, err = store.GetFileTags(filename)
+	if err != nil {
+		t.Fatalf("GetFileTags after sync: %v", err)
+	}
+	if len(tags) != 2 {
+		t.Fatalf("esperava 2 tags na tabela após sincronizacao, got %v", tags)
+	}
+
+	expectedTags := map[string]bool{"importada": true, "teste": true}
+	for _, tag := range tags {
+		if !expectedTags[tag] {
+			t.Errorf("tag inesperada: %s", tag)
+		}
+	}
+}
+

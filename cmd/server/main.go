@@ -81,6 +81,11 @@ func main() {
 
 	apiCtx := api.NewHandlerContext(cfg, store, w)
 
+	slog.Info("Sincronizando notas do banco de dados...")
+	if err := apiCtx.Notes.SyncDatabase(); err != nil {
+		slog.Error("erro ao sincronizar banco de dados", "error", err)
+	}
+
 	mux := http.NewServeMux()
 	apiCtx.SetupRoutes(mux)
 
