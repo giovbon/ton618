@@ -52,7 +52,7 @@ var stopwords = map[string]bool{
 	"e": true, "the": true, "and": true, "or": true, "of": true, "to": true, "in": true,
 }
 
-func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getLinkCount func(string) int, getPopularity func(string) int) (*SearchResults, error) {
+func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getBacklinkCount func(string) int, getSynapticWeight func(string) float64) (*SearchResults, error) {
 	if rawQuery == "" || rawQuery == "*" {
 		return listAll(store, from, size)
 	}
@@ -101,10 +101,10 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 			Doc:   *doc,
 		}
 
-		pop := getPopularity(doc.Arquivo)
-		linkCount := getLinkCount(strings.ToLower(doc.Arquivo))
+		weight := getSynapticWeight(doc.Arquivo)
+		backlinkCount := getBacklinkCount(strings.ToLower(doc.Arquivo))
 
-		score, details := scoreFragment(&hit, heuristicTerms, cleanedQuery, pop, linkCount)
+		score, details := scoreFragment(&hit, heuristicTerms, cleanedQuery, weight, backlinkCount)
 		hit.FinalScore = score
 		hit.ScoreDetails = details
 		if r.Snippet != "" {

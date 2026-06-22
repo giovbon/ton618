@@ -203,7 +203,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	results, err := search.Search(rCtx, ctx.Store, query, from, size,
-		ctx.Store.GetLinkCount, ctx.Store.GetPopularity)
+		ctx.Store.GetBacklinkCount, ctx.Store.GetSynapticWeight)
 	if err != nil {
 		slog.Error("search error", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -253,6 +253,14 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" {
 				userTags = append(userTags, t)
 			}
+		}
+
+		// Injeção de tags dinâmicas baseadas no decaimento sináptico
+		weight := ctx.Store.GetSynapticWeight(hit.Doc.Arquivo)
+		if weight <= 0.105 {
+			userTags = append(userTags, "esquecida")
+		} else if weight <= 0.25 {
+			userTags = append(userTags, "fria")
 		}
 
 		noteType := "nota"

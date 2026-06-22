@@ -1,17 +1,16 @@
 package search
 
 import (
+	"math"
 	"strings"
 	"time"
 )
 
 // scoreFragment recalcula o score de um hit com pesos relativos ao BM25.
 // BM25 é convertido para positivo e usado como base. Os bônus são frações
-// do BM25 ou pequenos valores aditivos. Tudo é capado em 5× o BM25 base.
-func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, popularity int, linkCount int) (float64, map[string]float64) {
+// do BM25 ou pequenos valores aditivos.
+func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, synapticWeight float64, backlinkCount int) (float64, map[string]float64) {
 	details := make(map[string]float64)
-	_ = popularity // removido do re-ranker (já refletido no FTS5 via popularidade de acesso)
-	_ = linkCount  // removido do re-ranker (sinal global, não relacionado à consulta)
 
 	// BM25 base: converte rank negativo em positivo
 	baseScore := -hit.Score
@@ -49,11 +48,29 @@ func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, pop
 		details["recencia"] = b
 	}
 
-	// ── CAP: no máximo 5× o BM25 base ──
+	// ── CAP: no máximo 5× o BM25 base antes do RLHF ──
 	if score > baseScore*5.0 {
 		score = baseScore * 5.0
-		details["capped"] = score
+		details["capped_base"] = score
 	}
+
+	// ── INTEGRAÇÃO RLHF + GRAFO (Backlinks) ──
+	// Se o peso sináptico for inválido ou zero (ex: em testes antigos), assume 1.0
+	if synapticWeight <= 0 {
+		synapticWeight = 1.0
+	}
+
+	// Transclusão: Cada backlink que aponta para esta nota dá +0.5 no multiplicador (capado em +3.0)
+	structuralBonus := math.Min(3.0, float64(backlinkCount)*0.5)
+	
+	// Peso Combinado = Peso Dinâmico + Bônus do Grafo
+	finalWeight := synapticWeight + structuralBonus
+
+	// Multiplica o score final (BM25 + Heurísticas textuais) pelo peso acumulado
+	score = score * finalWeight
+
+	details["rlhf_weight"] = finalWeight
+	details["backlinks"] = float64(backlinkCount)
 
 	return score, details
 }

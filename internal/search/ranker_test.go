@@ -16,7 +16,7 @@ func TestScoreFragment_Base(t *testing.T) {
 		},
 		Score: -1.0,
 	}
-	score, _ := scoreFragment(hit, []string{"golang"}, "golang", 0, 0)
+	score, _ := scoreFragment(hit, []string{"golang"}, "golang", 0.0, 0)
 	if score <= 0 {
 		t.Fatalf("score deveria ser > 0, got %f", score)
 	}
@@ -117,7 +117,7 @@ func TestScoreFragment_ScoresNaoNegativos(t *testing.T) {
 		},
 		Score: 0.0,
 	}
-	score, details := scoreFragment(hit, []string{"texto"}, "texto", 0, 0)
+	score, details := scoreFragment(hit, []string{"texto"}, "texto", 0.0, 0)
 	if score < 0 {
 		t.Fatalf("score nao pode ser negativo, got %f", score)
 	}

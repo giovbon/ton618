@@ -142,6 +142,14 @@ func migrate(database *sql.DB) {
 	if _, err := database.Exec("ALTER TABLE notes ADD COLUMN keywords TEXT DEFAULT ''"); err != nil {
 		// coluna já existe — ignorado
 	}
+
+	// v2: adiciona campos RLHF na tabela popularity
+	if _, err := database.Exec("ALTER TABLE popularity ADD COLUMN weight REAL DEFAULT 1.0"); err != nil {
+		// coluna já existe — ignorado
+	}
+	if _, err := database.Exec("ALTER TABLE popularity ADD COLUMN last_interacted_at TEXT DEFAULT ''"); err != nil {
+		// coluna já existe — ignorado
+	}
 }
 
 // seedDefaultMarkers insere marcadores padrão se a tabela estiver vazia.

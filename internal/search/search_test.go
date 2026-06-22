@@ -323,14 +323,14 @@ func makeHit(texto, arquivo, secao, timestamp string, tags []string) *SearchHit 
 
 func TestScoreFragment_TituloExato(t *testing.T) {
 	hit := makeHit("texto qualquer", "nota.md", "Instalação", "", nil)
-	score, details := scoreFragment(hit, []string{"instalação"}, "instalação", 0, 0)
+	score, details := scoreFragment(hit, []string{"instalação"}, "instalação", 0.0, 0)
 
 	if details["titulo"] == 0 {
 		t.Error("match exato no titulo deveria gerar bonus de titulo")
 	}
 
 	hit2 := makeHit("texto qualquer", "nota.md", "Configuração", "", nil)
-	score2, _ := scoreFragment(hit2, []string{"instalação"}, "instalação", 0, 0)
+	score2, _ := scoreFragment(hit2, []string{"instalação"}, "instalação", 0.0, 0)
 
 	if score2 >= score {
 		t.Error("hit sem match no titulo deveria ter score menor que hit com match")
@@ -343,7 +343,7 @@ func TestScoreFragment_FraseExata(t *testing.T) {
 		"nota.md", "Go Lang", "",
 		nil,
 	)
-	score, details := scoreFragment(hit, []string{"goroutines", "channels"}, "goroutines channels", 0, 0)
+	score, details := scoreFragment(hit, []string{"goroutines", "channels"}, "goroutines channels", 0.0, 0)
 
 	if details["frase_exata"] == 0 {
 		t.Error("frase exata no texto deveria gerar bonus de frase_exata")
@@ -354,7 +354,7 @@ func TestScoreFragment_FraseExata(t *testing.T) {
 		"nota.md", "Go Lang", "",
 		nil,
 	)
-	score2, _ := scoreFragment(hit2, []string{"goroutines", "channels"}, "goroutines channels", 0, 0)
+	score2, _ := scoreFragment(hit2, []string{"goroutines", "channels"}, "goroutines channels", 0.0, 0)
 
 	if score2 >= score {
 		t.Error("hit com frase exata deveria ter score maior")
@@ -363,14 +363,14 @@ func TestScoreFragment_FraseExata(t *testing.T) {
 
 func TestScoreFragment_CaminhoMatch(t *testing.T) {
 	hit := makeHit("conteudo generico", "notas/golang-dicas.md", "Go", "", nil)
-	score, details := scoreFragment(hit, []string{"golang"}, "golang", 0, 0)
+	score, details := scoreFragment(hit, []string{"golang"}, "golang", 0.0, 0)
 
 	if details["caminho"] == 0 {
 		t.Error("match no nome do arquivo deveria gerar bonus de caminho")
 	}
 
 	hit2 := makeHit("conteudo generico", "notas/outra-coisa.md", "Go", "", nil)
-	score2, _ := scoreFragment(hit2, []string{"golang"}, "golang", 0, 0)
+	score2, _ := scoreFragment(hit2, []string{"golang"}, "golang", 0.0, 0)
 
 	if score2 >= score {
 		t.Error("hit com match no caminho deveria ter score maior")
@@ -384,8 +384,8 @@ func TestScoreFragment_Recencia(t *testing.T) {
 	hitRecente := makeHit("texto", "nota.md", "", agora, nil)
 	hitAntigo := makeHit("texto", "nota.md", "", mesPassado, nil)
 
-	scoreRec, _ := scoreFragment(hitRecente, []string{"texto"}, "texto", 0, 0)
-	scoreAnt, _ := scoreFragment(hitAntigo, []string{"texto"}, "texto", 0, 0)
+	scoreRec, _ := scoreFragment(hitRecente, []string{"texto"}, "texto", 0.0, 0)
+	scoreAnt, _ := scoreFragment(hitAntigo, []string{"texto"}, "texto", 0.0, 0)
 
 	if scoreRec <= scoreAnt {
 		t.Error("nota recente deveria ter score maior que nota de 30 dias atras")
@@ -400,8 +400,8 @@ func TestScoreFragment_BM25BaseEDominante(t *testing.T) {
 	hitFraco := makeHit("golang explicado em detalhes", "nota.md", "Golang", "", nil)
 	hitFraco.Score = -2.0 // BM25 fraco
 
-	scoreBom, _ := scoreFragment(hitBom, []string{"golang"}, "golang", 0, 0)
-	scoreFraco, _ := scoreFragment(hitFraco, []string{"golang"}, "golang", 0, 0)
+	scoreBom, _ := scoreFragment(hitBom, []string{"golang"}, "golang", 0.0, 0)
+	scoreFraco, _ := scoreFragment(hitFraco, []string{"golang"}, "golang", 0.0, 0)
 
 	if scoreBom <= scoreFraco {
 		t.Error("hit com BM25 forte (score -20) deveria ter score maior que hit com BM25 fraco (score -2)")
@@ -427,7 +427,7 @@ func TestSearch_ResultadosOrdenadosPorScore(t *testing.T) {
 
 	results, err := Search(context.Background(), store, "termo_de_busca", 0, 20,
 		func(s string) int { return 0 },
-		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
 	)
 	if err != nil {
 		t.Fatalf("Search() error: %v", err)
@@ -461,7 +461,7 @@ func TestSearch_NotaComTagVemPrimeiro(t *testing.T) {
 
 	results, err := Search(context.Background(), store, "urgente", 0, 20,
 		func(s string) int { return 0 },
-		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
 	)
 	if err != nil {
 		t.Fatalf("Search() error: %v", err)
