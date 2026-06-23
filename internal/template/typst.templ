@@ -56,17 +56,11 @@ templ typstContent(data EditorData) {
         <!-- Painel Esquerdo: Editor de Código -->
         <div class="flex-1 flex flex-col min-w-0 relative">
             <div class="flex-1 w-full relative min-h-0">
-                <pre
-                    id="highlight-pre"
-                    class="editor-highlight-pre absolute inset-0 overflow-hidden"
-                    inert
-                ><code id="highlight-code"></code></pre>
-                <textarea
-                    id="typst-textarea"
-                    class="editor-textarea absolute inset-0 w-full h-full resize-none focus:outline-none"
-                    placeholder="// Escreva seu código Typst aqui..."
+                <div
+                    id="typst-editor"
+                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
                     spellcheck="false"
-                >{ data.Content }</textarea>
+                >{ data.Content }</div>
             </div>
         </div>
 
@@ -115,8 +109,8 @@ templ typstContent(data EditorData) {
         display: block;
     }
 
-    /* Consistência e alinhamento do editor com realce de sintaxe */
-    .editor-textarea, .editor-highlight-pre {
+    /* Editor CodeJar */
+    .editor-codejar {
         margin: 0 !important;
         padding: 16px !important;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
@@ -129,97 +123,56 @@ templ typstContent(data EditorData) {
         box-sizing: border-box !important;
         border-radius: 0.75rem; /* rounded-xl */
         border: 1px solid #27272a !important; /* border-zinc-800 */
+        background-color: #09090b !important;
+        color: #d4d4d8 !important;
         tab-size: 4;
         scrollbar-gutter: stable !important;
         overflow-y: auto !important;
-    }
-    
-    #highlight-code {
-        font-family: inherit !important;
-        font-size: inherit !important;
-        line-height: inherit !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        background: none !important;
-        white-space: inherit !important;
-        word-break: inherit !important;
-        overflow-wrap: inherit !important;
-    }
-    
-    .editor-highlight-pre * {
-        font-weight: normal !important;
-        font-style: normal !important;
-    }
-    
-    .editor-textarea {
-        color: transparent !important;
-        background: transparent !important;
         caret-color: #38bdf8 !important;
         z-index: 10;
     }
     
-    .editor-textarea::selection {
-        color: transparent !important;
-        background: rgba(56, 189, 248, 0.3) !important;
-    }
-    
-    .editor-textarea::-moz-selection {
-        color: transparent !important;
-        background: rgba(56, 189, 248, 0.3) !important;
-    }
-    
-    .editor-textarea:focus {
+    .editor-codejar:focus {
         border-color: #3f3f46 !important;
     }
 
-    .editor-highlight-pre {
-        background-color: #09090b !important;
-        color: #d4d4d8 !important;
-        z-index: 1;
+    .editor-codejar:empty::before {
+        content: "// Escreva seu código Typst aqui...";
+        color: #52525b; /* zinc-600 */
         pointer-events: none;
     }
     
-    /* Estilização customizada de scrollbar para manter larguras de layout idênticas */
-    .editor-textarea::-webkit-scrollbar,
-    .editor-highlight-pre::-webkit-scrollbar {
+    /* Estilização customizada de scrollbar */
+    .editor-codejar::-webkit-scrollbar {
         width: 10px !important;
         height: 10px !important;
         background: transparent !important;
     }
 
-    .editor-textarea::-webkit-scrollbar-track,
-    .editor-highlight-pre::-webkit-scrollbar-track {
+    .editor-codejar::-webkit-scrollbar-track {
         background: transparent !important;
     }
 
-    .editor-textarea::-webkit-scrollbar-thumb {
+    .editor-codejar::-webkit-scrollbar-thumb {
         background-color: #27272a !important; /* zinc-800 */
         border-radius: 10px !important;
         border: 2px solid #09090b !important;
     }
 
-    .editor-highlight-pre::-webkit-scrollbar-thumb {
-        background-color: transparent !important;
-    }
-
     /* Firefox scrollbars */
-    .editor-textarea {
+    .editor-codejar {
         scrollbar-width: thin !important;
         scrollbar-color: #27272a transparent !important;
     }
-
-    .editor-highlight-pre {
-        scrollbar-width: thin !important;
-        scrollbar-color: transparent transparent !important;
-    }
 </style>
 
-<script>
+<script type="module">
+    import { CodeJar } from '/static/codejar.js';
+
     (function () {
         "use strict";
 
-        var textarea = document.getElementById("typst-textarea");
+        var editorEl = document.getElementById("typst-editor");
         var previewContainer = document.getElementById("typst-preview-container");
         var errorBanner = document.getElementById("typst-error-banner");
         var compileIndicator = document.getElementById("typst-compile-indicator");
@@ -240,22 +193,6 @@ templ typstContent(data EditorData) {
             var hashArray = Array.from(new Uint8Array(hashBuffer));
             return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
         }
-
-        // Suporte à tecla Tab e auto-pares no textarea
-        textarea.addEventListener("keydown", function (e) {
-            if (e.key === "Tab") {
-                e.preventDefault();
-                var start = this.selectionStart;
-                var end = this.selectionEnd;
-                var val = this.value;
-                this.value = val.substring(0, start) + "  " + val.substring(end);
-                this.selectionStart = this.selectionEnd = start + 2;
-                handleChange();
-            }
-        });
-
-        var highlightPre = document.getElementById("highlight-pre");
-        var highlightCode = document.getElementById("highlight-code");
 
         function highlightTypst(code) {
             var html = code
@@ -333,18 +270,11 @@ templ typstContent(data EditorData) {
             return html;
         }
 
-        function updateHighlight() {
-            if (highlightCode) {
-                highlightCode.innerHTML = highlightTypst(textarea.value);
-            }
-        }
+        const highlight = (editor) => {
+            editor.innerHTML = highlightTypst(editor.textContent);
+        };
 
-        textarea.addEventListener("scroll", function () {
-            if (highlightPre) {
-                highlightPre.scrollTop = textarea.scrollTop;
-                highlightPre.scrollLeft = textarea.scrollLeft;
-            }
-        });
+        const jar = CodeJar(editorEl, highlight, { tab: "  " });
 
         function setStatus(s) {
             currentStatus = s;
@@ -362,12 +292,11 @@ templ typstContent(data EditorData) {
 
         function handleChange() {
             setStatus("dirty");
-            updateHighlight();
             scheduleCompile();
             scheduleSave();
         }
 
-        textarea.addEventListener("input", handleChange);
+        jar.onUpdate(handleChange);
 
         function scheduleCompile() {
             clearTimeout(compileTimer);
@@ -386,7 +315,7 @@ templ typstContent(data EditorData) {
         }
 
         async function doCompile() {
-            var content = textarea.value;
+            var content = jar.toString();
             compileIndicator.classList.remove("hidden");
 
             var fd = new FormData();
@@ -433,7 +362,7 @@ templ typstContent(data EditorData) {
             savePending = false;
             setStatus("saving");
 
-            var content = textarea.value;
+            var content = jar.toString();
             var currentHash = await generateHash(content);
 
             if (currentHash === lastSavedHash) {
@@ -500,7 +429,7 @@ templ typstContent(data EditorData) {
             
             try {
                 setStatus("saving");
-                var content = textarea.value;
+                var content = jar.toString();
 
                 // 1. Salva a nota no novo nome
                 var saveFd = new FormData();
@@ -607,8 +536,7 @@ templ typstContent(data EditorData) {
         // Inicialização
         (async function () {
             setStatus("saved");
-            updateHighlight();
-            lastSavedHash = await generateHash(textarea.value);
+            lastSavedHash = await generateHash(jar.toString());
             doCompile();
         })();
 
