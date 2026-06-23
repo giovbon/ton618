@@ -132,26 +132,37 @@ func (s *NoteService) Rename(oldName, newName string) error {
 
 	os.Rename(filepath.Join(s.docsDir, oldName), filepath.Join(s.docsDir, newName))
 
-	// Remove registros antigos do DB (file_mods, popularidade, tags)
+	// Remove registros antigos do DB (file_mods, popularidade, tags, links, todos)
 	s.fileMod.DeleteFileMod(oldName)
 	s.pop.ResetPopularity(oldName)
 	s.tags.SetFileTags(oldName, nil)
 	s.links.ClearLinks(oldName)
+	s.store.DeleteTodosByFile(oldName)
 
 	newPath := filepath.Join(s.docsDir, newName)
 	var content string
+	hasPhysFile := false
 
 	if data, err := os.ReadFile(newPath); err == nil {
 		content = string(data)
+		hasPhysFile = true
+	} else {
+		// Fallback para o conteúdo indexado antigo caso a leitura física falhe
+		content, _ = s.notes.GetNote(newName)
+	}
+
+	if content != "" {
 		parts := strings.Split(newName, "/")
 		base := parts[len(parts)-1]
 		newTitle := strings.TrimSuffix(base, ".md")
 
-		// Atualiza a propriedade 'title' no frontmatter da nota física
+		// Atualiza a propriedade 'title' no frontmatter da nota (tanto físico quanto DB)
 		if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
 			content = newContent
-			if err := os.WriteFile(newPath, []byte(newContent), 0644); err != nil {
-				slog.Error("write updated frontmatter after rename", "file", newName, "error", err)
+			if hasPhysFile {
+				if err := os.WriteFile(newPath, []byte(newContent), 0644); err != nil {
+					slog.Error("write updated frontmatter after rename", "file", newName, "error", err)
+				}
 			}
 			// Atualiza também o registro correspondente no banco de dados SQLite
 			mtimeStr := time.Now().UTC().Format(time.RFC3339)
@@ -159,9 +170,6 @@ func (s *NoteService) Rename(oldName, newName string) error {
 				slog.Error("save updated note content to sqlite after rename", "file", newName, "error", err)
 			}
 		}
-	} else {
-		// Fallback para o conteúdo indexado antigo caso a leitura física falhe
-		content, _ = s.notes.GetNote(newName)
 	}
 
 	if content != "" {

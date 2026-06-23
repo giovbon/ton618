@@ -534,6 +534,14 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Pré-carrega o conteúdo de todas as notas em uma única query para evitar o problema N+1
+	notesContent, err := ctx.Store.GetAllNotesContent()
+	if err != nil {
+		slog.Error("erro ao pré-carregar conteúdo das notas", "error", err)
+		notesContent = make(map[string]string)
+	}
+
+	newCacheEntries := make(map[string]dbCacheEntry)
 	var data []map[string]interface{}
 	columnSet := make(map[string]bool)
 
@@ -558,11 +566,8 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				row[k] = v
 			}
 		} else {
-			// 2. Cache miss: busca e processa o arquivo
-			content, err := ctx.Store.GetNote(n.Arquivo)
-			if err != nil {
-				continue
-			}
+			// 2. Cache miss: busca no mapa pré-carregado em memória
+			content := notesContent[n.Arquivo]
 			fm, _, err := service.ParseFrontmatter(content)
 			if err != nil {
 				fm = make(map[string]interface{})
@@ -710,13 +715,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 			}
 
-			// Salvar no cache
-			ctx.dbCacheMu.Lock()
-			ctx.dbCache[n.Arquivo] = dbCacheEntry{
+			// Guardar no mapa temporário para atualizar o cache em lote depois
+			newCacheEntries[n.Arquivo] = dbCacheEntry{
 				Mtime: n.Mtime,
 				Row:   row,
 			}
-			ctx.dbCacheMu.Unlock()
 		}
 
 		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global
@@ -728,6 +731,15 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		columnSet["type"] = true
 
 		data = append(data, row)
+	}
+
+	// Atualiza o cache em lote fora do loop principal
+	if len(newCacheEntries) > 0 {
+		ctx.dbCacheMu.Lock()
+		for k, v := range newCacheEntries {
+			ctx.dbCache[k] = v
+		}
+		ctx.dbCacheMu.Unlock()
 	}
 
 	var columns []map[string]interface{}

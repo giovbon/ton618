@@ -286,7 +286,8 @@ func TestNoteService_Rename(t *testing.T) {
 	}
 
 	content, _ := store.GetNote("notes/new-name.md")
-	if content != "conteudo antigo" {
+	expected := "---\ntitle: new-name\n---\nconteudo antigo"
+	if content != expected {
 		t.Errorf("conteúdo errado: %q", content)
 	}
 }

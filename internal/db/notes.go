@@ -195,3 +195,22 @@ func (s *Store) MigrateNotesFromDisk(docsDir string) (int, error) {
 	}
 	return imported, nil
 }
+
+// GetAllNotesContent returns all note filenames and their content in a single query.
+func (s *Store) GetAllNotesContent() (map[string]string, error) {
+	rows, err := s.DB.Query("SELECT filename, content FROM notes")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]string)
+	for rows.Next() {
+		var filename, content string
+		if err := rows.Scan(&filename, &content); err != nil {
+			return nil, err
+		}
+		result[filename] = content
+	}
+	return result, rows.Err()
+}
+
