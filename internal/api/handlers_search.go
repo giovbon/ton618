@@ -250,7 +250,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" {
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" {
 				userTags = append(userTags, t)
 			}
 		}
@@ -267,6 +267,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		isDrawing := false
 		isSpreadsheet := false
 		isTypst := false
+		isMermaid := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -279,6 +280,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 				isSpreadsheet = true
 			case "typst":
 				isTypst = true
+			case "mermaid":
+				isMermaid = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -293,6 +296,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			noteType = "planilha"
 		} else if isTypst {
 			noteType = "typst"
+		} else if isMermaid {
+			noteType = "mermaid"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {

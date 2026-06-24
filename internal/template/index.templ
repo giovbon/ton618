@@ -435,6 +435,7 @@ templ indexContent() {
             var isSpreadsheet = (n.tags || []).indexOf("spreadsheet") !== -1 || (n.type === "spreadsheet") || (n.type === "planilha");
             var isDrawing = (n.tags || []).indexOf("drawing") !== -1 || (n.type === "drawing") || (n.type === "desenho");
             var isTypst = (n.tags || []).indexOf("typst") !== -1 || (n.type === "typst");
+            var isMermaid = (n.tags || []).indexOf("mermaid") !== -1 || (n.type === "mermaid");
 
             // Determine icon based on note type
             var noteIcon = "\uD83D\uDCDD"; // 📄 nota normal
@@ -452,6 +453,8 @@ templ indexContent() {
                 noteIcon = "🎨"; // 🎨 desenho
             } else if (isTypst) {
                 noteIcon = "📘"; // 📘 typst
+            } else if (isMermaid) {
+                noteIcon = "🧜"; // 🧜 mermaid
             } else if (isYoutube) {
                 noteIcon = "\uD83C\uDFAC"; // 🎬 YouTube
             } else if (isArticle) {
@@ -475,7 +478,9 @@ templ indexContent() {
                           ? "/drawing?file=" + encodeURIComponent(n.arquivo)
                           : isTypst
                             ? "/typst?file=" + encodeURIComponent(n.arquivo)
-                            : "/editor?file=" + encodeURIComponent(n.arquivo)) +
+                            : isMermaid
+                              ? "/mermaid?file=" + encodeURIComponent(n.arquivo)
+                              : "/editor?file=" + encodeURIComponent(n.arquivo)) +
                 '" target="' +
                 (isPdf || isZip ? "_blank" : "") +
                 '" class="block">' +
@@ -494,7 +499,7 @@ templ indexContent() {
                 var hasVisibleTags = false;
                 var tagsHtml = '<div class="hidden sm:flex gap-1 shrink-0">';
                 tags.forEach(function (t) {
-                    if (t !== "typst" && t !== "drawing" && t !== "spreadsheet") {
+                    if (t !== "typst" && t !== "drawing" && t !== "spreadsheet" && t !== "mermaid") {
                         tagsHtml +=
                             '<span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#' +
                             t +

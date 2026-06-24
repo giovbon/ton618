@@ -164,7 +164,7 @@ templ databaseContent() {
             tags.forEach(function(t){
                 var trimmed = t.trim();
                 var lt = trimmed.toLowerCase();
-                if(trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet") {
+                if(trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet" && lt !== "mermaid") {
                     html += "<span class='tag-pill'>#" + trimmed + "</span>";
                 }
             });
@@ -190,6 +190,7 @@ templ databaseContent() {
                             var isSpreadsheet = tagsStr.includes("spreadsheet") || fileStr.includes("sheet") || (typeStr === "spreadsheet");
                             var isDrawing = tagsStr.includes("drawing") || fileStr.includes("drawing") || (typeStr === "drawing");
                             var isTypst = tagsStr.includes("typst") || (typeStr === "typst");
+                            var isMermaid = tagsStr.includes("mermaid") || (typeStr === "mermaid");
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
                             var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
@@ -214,6 +215,9 @@ templ databaseContent() {
                             } else if (isTypst) {
                                 url = "/typst?file=" + encodeURIComponent(file);
                                 icon = "📘";
+                            } else if (isMermaid) {
+                                url = "/mermaid?file=" + encodeURIComponent(file);
+                                icon = "🧜";
                             } else {
                                 url = "/editor?file=" + encodeURIComponent(file);
                                 icon = "📄";

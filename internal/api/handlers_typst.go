@@ -51,11 +51,12 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 		tags = fileTags
 	}
 
-	// Redireciona planilhas ou desenhos para seus respectivos editores se esta nota mudou de tipo
+	// Redireciona planilhas, desenhos, mermaid ou editor para seus respectivos editores se esta nota mudou de tipo
 	if content != "" {
 		isTypst := false
 		isDrawing := false
 		isSpreadsheet := false
+		isMermaid := false
 		for _, t := range fileTags {
 			lowerT := strings.ToLower(t)
 			if lowerT == "typst" {
@@ -64,6 +65,8 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 				isDrawing = true
 			} else if lowerT == "spreadsheet" {
 				isSpreadsheet = true
+			} else if lowerT == "mermaid" {
+				isMermaid = true
 			}
 		}
 		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -72,6 +75,10 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 		}
 		if isDrawing || strings.Contains(content, "type: drawing") {
 			http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if isMermaid || strings.Contains(content, "type: mermaid") {
+			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
 		if !isTypst && !strings.Contains(content, "type: typst") {
@@ -84,7 +91,7 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
 			userTags = append(userTags, t)
 		}
 	}

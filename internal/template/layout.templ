@@ -34,6 +34,36 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 },
             },
         };
+
+        // Menus Dropdown (Inlined para evitar cache persistente de arquivo estático js)
+        window.toggleCriarMenu = function(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('criar-menu');
+            if (menu) menu.classList.toggle('hidden');
+        };
+        window.closeCriarMenu = function() {
+            const menu = document.getElementById('criar-menu');
+            if (menu) menu.classList.add('hidden');
+        };
+        window.toggleCapturaMenu = function(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('captura-menu');
+            if (menu) menu.classList.toggle('hidden');
+        };
+        window.closeCapturaMenu = function() {
+            const menu = document.getElementById('captura-menu');
+            if (menu) menu.classList.add('hidden');
+        };
+        document.addEventListener('click', function(e) {
+            const cWrapper = document.getElementById('criar-dropdown-wrapper');
+            if (cWrapper && !cWrapper.contains(e.target)) {
+                closeCriarMenu();
+            }
+            const capWrapper = document.getElementById('captura-dropdown-wrapper');
+            if (capWrapper && !capWrapper.contains(e.target)) {
+                closeCapturaMenu();
+            }
+        });
     </script>
     if loadTipTap {
     <script src="/static/editor.js?v=2"></script>
@@ -232,23 +262,39 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                         class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 hidden">
                         <a href="#" onclick="closeCriarMenu(); return createNewNote();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📄 <span>Nova Nota</span>
+                            📄 <span>+ Nota</span>
                         </a>
                         <a href="/spreadsheet"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📊 <span>Nova Planilha</span>
+                            📊 <span>+ Planilha</span>
                         </a>
                         <a href="/drawing"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            🎨 <span>Novo Desenho</span>
+                            🎨 <span>+ Desenho</span>
                         </a>
                         <a href="/typst"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📘 <span>Nova Nota Typst</span>
+                            📘 <span>+ Typst</span>
                         </a>
-                        <div class="border-t border-zinc-800 my-0.5"></div>
+                        <a href="/mermaid"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            🧜‍♀️ <span>+ Mermaid</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 🌐 CAPTURA dropdown -->
+                <div class="relative" id="captura-dropdown-wrapper">
+                    <button id="captura-btn"
+                        onclick="toggleCapturaMenu(event)"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Captura
+                    </button>
+                    <div id="captura-menu"
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 hidden">
                         <a href="#" id="pdf-upload-link" onclick="
-                                closeCriarMenu();
+                                closeCapturaMenu();
                                 activePdfUploadButton = this;
                                 document.getElementById('pdf-file-input').click();
                                 return false;"
@@ -256,13 +302,13 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                             📕 <span>Upload PDF</span>
                         </a>
                         <a href="#" id="zip-upload-link" onclick="
-                                closeCriarMenu();
+                                closeCapturaMenu();
                                 document.getElementById('zip-file-input').click();
                                 return false;"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
                             📦 <span>Upload Anexo</span>
                         </a>
-                        <a href="#" id="capture-link" onclick="closeCriarMenu(); return promptCapture(this);"
+                        <a href="#" id="capture-link" onclick="closeCapturaMenu(); return promptCapture(this);"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
                             🌐 <span>Web Capture</span>
                         </a>
@@ -293,104 +339,127 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             </button>
         </div>
         <div id="mobile-menu"
-            class="md:hidden hidden border-t border-zinc-900/50 bg-zinc-950/95 px-4 pb-3 pt-2 space-y-2 text-[12px] font-bold tracking-wide uppercase">
-            <a href="#" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        return createNewNote();
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">📄
-                +NOTA</a>
-            <a href="/spreadsheet"
-                class="block rounded-lg px-3 py-2 text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900 transition-colors">📊
-                +PLANILHA</a>
-            <a href="/drawing"
-                class="block rounded-lg px-3 py-2 text-sky-400 hover:text-sky-300 hover:bg-zinc-900 transition-colors">🎨
-                +DESENHO</a>
-            <a href="/typst"
-                class="block rounded-lg px-3 py-2 text-sky-400 hover:text-sky-300 hover:bg-zinc-900 transition-colors">📘
-                +TYPST</a>
-            <a href="#" id="mobile-pdf-link" onclick="
-                        activePdfUploadButton = this;
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        document
-                            .getElementById('mobile-menu-toggle')
-                            .setAttribute('aria-expanded', 'false');
-                        document.getElementById('pdf-file-input').click();
-                        return false;
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors">📕
-                +PDF</a>
-            <a href="#" id="mobile-zip-link" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        document
-                            .getElementById('mobile-menu-toggle')
-                            .setAttribute('aria-expanded', 'false');
-                        document.getElementById('zip-file-input').click();
-                        return false;
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors">📦
-                +ANEXO</a>
-            <button id="mobile-capture-link" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        return promptCapture(this);
-                    "
-                class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 transition-colors">
-                🌐 +CAPTURA
-            </button>
+            class="md:hidden hidden border-t border-zinc-900/50 bg-zinc-950/98 px-4 py-3.5 space-y-3.5">
+            <!-- Seção: Criar -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Criar</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <a href="#" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                return createNewNote();
+                            "
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📄</span>
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Nota</span>
+                    </a>
+                    <a href="/spreadsheet"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📊</span>
+                        <span class="text-[11px] font-semibold text-emerald-400/90">+ Planilha</span>
+                    </a>
+                    <a href="/drawing"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
+                        <span class="text-sm">🎨</span>
+                        <span class="text-[11px] font-semibold text-sky-400/90">+ Desenho</span>
+                    </a>
+                    <a href="/typst"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📘</span>
+                        <span class="text-[11px] font-semibold text-sky-400/90">+ Typst</span>
+                    </a>
+                    <a href="/mermaid"
+                        class="col-span-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
+                        <span class="text-sm">🧜‍♀️</span>
+                        <span class="text-[11px] font-semibold text-sky-400/90">+ Mermaid</span>
+                    </a>
+                </div>
+            </div>
 
-            <a id="mobile-nav-todos" href="/todos" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden')
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-900 transition-colors">
-                🎯 TODOs
-            </a>
-            
-            <a href="/database" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden')
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">
-                🗃️ Banco de Dados
-            </a>
+            <!-- Seção: Capturar -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Capturar</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <a href="#" id="mobile-pdf-link" onclick="
+                                activePdfUploadButton = this;
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
+                                document.getElementById('pdf-file-input').click();
+                                return false;
+                            "
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📕</span>
+                        <span class="text-[11px] font-semibold text-zinc-300">+ PDF</span>
+                    </a>
+                    <a href="#" id="mobile-zip-link" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
+                                document.getElementById('zip-file-input').click();
+                                return false;
+                            "
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📦</span>
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
+                    </a>
+                    <button id="mobile-capture-link" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                return promptCapture(this);
+                            "
+                        class="col-span-2 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
+                        <span class="text-sm">🌐</span>
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>
+                    </button>
+                </div>
+            </div>
 
-            <a href="/help" onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden')
-                    "
-                class="block rounded-lg px-3 py-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-900 transition-colors">
-                📖 Tutorial
-            </a>
+            <!-- Seção: Navegação / Ações -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Navegação</div>
+                <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
+                    <a id="mobile-nav-todos" href="/todos" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden')
+                            "
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
+                        <span class="text-sm">🎯</span>
+                        <span class="text-[11px] font-bold tracking-wider">TODOS</span>
+                    </a>
+                    
+                    <a href="/database" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden')
+                            "
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors">
+                        <span class="text-sm">🗃️</span>
+                        <span class="text-[11px] font-bold tracking-wider">BANCO DE DADOS</span>
+                    </a>
 
-            <button onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        openSettings();
-                    "
-                class="w-full text-left rounded-lg px-3 py-2 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors">
-                ⚙️ Config
-            </button>
-            <button onclick="
-                        document
-                            .getElementById('mobile-menu')
-                            .classList.add('hidden');
-                        logout();
-                    "
-                class="w-full text-left rounded-lg px-3 py-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-900 transition-colors">
-                Sair
-            </button>
+                    <a href="/help" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden')
+                            "
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
+                        <span class="text-sm">📖</span>
+                        <span class="text-[11px] font-bold tracking-wider">TUTORIAL</span>
+                    </a>
+
+                    <button onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                openSettings();
+                            "
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        <span class="text-sm">⚙️</span>
+                        <span class="text-[11px] font-bold tracking-wider">CONFIGURAÇÕES</span>
+                    </button>
+                    
+                    <div class="border-t border-zinc-800/80 my-1"></div>
+                    
+                    <button onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden');
+                                logout();
+                            "
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        <span class="text-sm">➜]</span>
+                        <span class="text-[11px] font-bold tracking-wider">SAIR</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </nav>
     <main class="max-w-4xl mx-auto px-4 py-6">
@@ -755,7 +824,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     </div>
 </body>
 
-<script src="/static/js/app.js" defer></script>
+<script src="/static/js/app.js?v=3" defer></script>
 
 </html>
 }

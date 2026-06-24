@@ -227,10 +227,24 @@
     function closeCriarMenu() {
         document.getElementById('criar-menu').classList.add('hidden');
     }
+    // ── + Captura Dropdown ──
+    function toggleCapturaMenu(e) {
+        e.stopPropagation();
+        const menu = document.getElementById('captura-menu');
+        if (menu) menu.classList.toggle('hidden');
+    }
+    function closeCapturaMenu() {
+        const menu = document.getElementById('captura-menu');
+        if (menu) menu.classList.add('hidden');
+    }
     document.addEventListener('click', function(e) {
         const wrapper = document.getElementById('criar-dropdown-wrapper');
         if (wrapper && !wrapper.contains(e.target)) {
             closeCriarMenu();
+        }
+        const capWrapper = document.getElementById('captura-dropdown-wrapper');
+        if (capWrapper && !capWrapper.contains(e.target)) {
+            closeCapturaMenu();
         }
     });
 

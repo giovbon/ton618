@@ -257,6 +257,7 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 		isDrawing := false
 		isSpreadsheet := false
 		isTypst := false
+		isMermaid := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -269,6 +270,8 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 				isSpreadsheet = true
 			case "typst":
 				isTypst = true
+			case "mermaid":
+				isMermaid = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -283,6 +286,8 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 			noteType = "planilha"
 		} else if isTypst {
 			noteType = "typst"
+		} else if isMermaid {
+			noteType = "mermaid"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {
@@ -301,7 +306,7 @@ func (s *NoteService) GetMany() ([]NoteItem, error) {
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" {
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" {
 				userTags = append(userTags, t)
 			}
 		}

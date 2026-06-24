@@ -145,6 +145,20 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					}
 				}
 
+				// Se for mermaid, garante a tag "mermaid" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "mermaid" {
+					hasMermaidTag := false
+					for _, tag := range fileTags {
+						if tag == "mermaid" {
+							hasMermaidTag = true
+							break
+						}
+					}
+					if !hasMermaidTag {
+						fileTags = append(fileTags, "mermaid")
+					}
+				}
+
 				// Se for desenho, garante a tag "drawing" indexada
 				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
 					hasDrawingTag := false
@@ -174,7 +188,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	}
 
 	// Extract hashtags from body
-	if !isTypst {
+	if !isTypst && !strings.Contains(strings.Join(fileTags, ","), "mermaid") {
 		tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
 		for _, m := range tagMatches {
 			if len(m) > 1 {
@@ -400,6 +414,20 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					}
 				}
 
+				// Se for mermaid, garante a tag "mermaid" indexada
+				if tRaw, ok := fm["type"]; ok && tRaw == "mermaid" {
+					hasMermaidTag := false
+					for _, tag := range fileTags {
+						if tag == "mermaid" {
+							hasMermaidTag = true
+							break
+						}
+					}
+					if !hasMermaidTag {
+						fileTags = append(fileTags, "mermaid")
+					}
+				}
+
 				// Se for desenho, garante a tag "drawing" indexada
 				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
 					hasDrawingTag := false
@@ -429,7 +457,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract hashtags from body
-	if !isTypst {
+	if !isTypst && !strings.Contains(strings.Join(fileTags, ","), "mermaid") {
 		tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
 		for _, m := range tagMatches {
 			if len(m) > 1 {

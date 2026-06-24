@@ -61,10 +61,11 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		tags = fileTags
 	}
 
-	// Redireciona planilhas, desenhos ou typst para seus respectivos editores
+	// Redireciona planilhas, desenhos, typst ou mermaid para seus respectivos editores
 	isSpreadsheet := false
 	isDrawing := false
 	isTypst := false
+	isMermaid := false
 	for _, t := range fileTags {
 		if t == "spreadsheet" {
 			isSpreadsheet = true
@@ -74,6 +75,9 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		}
 		if t == "typst" {
 			isTypst = true
+		}
+		if t == "mermaid" {
+			isMermaid = true
 		}
 	}
 	if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -88,12 +92,16 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
 		return
 	}
+	if isMermaid || strings.Contains(content, "type: mermaid") {
+		http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
+		return
+	}
 
 	// Filtra as tags internas para não mostrar na UI do editor
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -153,6 +161,7 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 		isSpreadsheet := false
 		isDrawing := false
 		isTypst := false
+		isMermaid := false
 		for _, t := range fileTags {
 			if t == "spreadsheet" {
 				isSpreadsheet = true
@@ -163,6 +172,9 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 			if t == "typst" {
 				isTypst = true
 			}
+			if t == "mermaid" {
+				isMermaid = true
+			}
 		}
 		if isDrawing || strings.Contains(content, "type: drawing") {
 			http.Redirect(w, r, "/drawing?file="+url.QueryEscape(filename), http.StatusFound)
@@ -170,6 +182,10 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 		}
 		if isTypst || strings.Contains(content, "type: typst") {
 			http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if isMermaid || strings.Contains(content, "type: mermaid") {
+			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
 		if !isSpreadsheet && !strings.Contains(content, "type: spreadsheet") {
@@ -182,7 +198,7 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -238,6 +254,7 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 		isDrawing := false
 		isSpreadsheet := false
 		isTypst := false
+		isMermaid := false
 		for _, t := range fileTags {
 			if t == "drawing" {
 				isDrawing = true
@@ -248,6 +265,9 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 			if t == "typst" {
 				isTypst = true
 			}
+			if t == "mermaid" {
+				isMermaid = true
+			}
 		}
 		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
 			http.Redirect(w, r, "/spreadsheet?file="+url.QueryEscape(filename), http.StatusFound)
@@ -255,6 +275,10 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 		}
 		if isTypst || strings.Contains(content, "type: typst") {
 			http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
+		if isMermaid || strings.Contains(content, "type: mermaid") {
+			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
 		if !isDrawing && !strings.Contains(content, "type: drawing") {
@@ -267,7 +291,7 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -335,7 +359,7 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	var filtered []string
 	for _, t := range tags {
 		lt := strings.ToLower(t)
-		if lt != "typst" && lt != "drawing" && lt != "spreadsheet" {
+		if lt != "typst" && lt != "drawing" && lt != "spreadsheet" && lt != "mermaid" {
 			filtered = append(filtered, t)
 		}
 	}
@@ -600,10 +624,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				row["tags"] = ""
 			}
 
-			// Infer robust type for drawings, spreadsheets and typst
+			// Infer robust type for drawings, spreadsheets, typst and mermaid
 			isDrawing := false
 			isSpreadsheet := false
 			isTypst := false
+			isMermaid := false
 			for _, t := range n.Tags {
 				lowerT := strings.ToLower(t)
 				if lowerT == "drawing" {
@@ -614,6 +639,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 				if lowerT == "typst" {
 					isTypst = true
+				}
+				if lowerT == "mermaid" {
+					isMermaid = true
 				}
 			}
 
@@ -629,9 +657,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			if !isTypst && (strings.Contains(lowerArquivo, "typst") || strings.Contains(lowerContent, "type: typst")) {
 				isTypst = true
 			}
+			if !isMermaid && (strings.Contains(lowerArquivo, "mermaid") || strings.Contains(lowerContent, "type: mermaid")) {
+				isMermaid = true
+			}
 
 			// Check if frontmatter specified type/Type explicitly
-			if !isDrawing && !isSpreadsheet && !isTypst {
+			if !isDrawing && !isSpreadsheet && !isTypst && !isMermaid {
 				for _, key := range []string{"type", "Type"} {
 					if val, ok := fm[key]; ok {
 						if strVal, isStr := val.(string); isStr {
@@ -644,6 +675,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 								break
 							} else if lowerVal == "typst" {
 								isTypst = true
+								break
+							} else if lowerVal == "mermaid" {
+								isMermaid = true
 								break
 							}
 						}
@@ -660,6 +694,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			} else if isTypst {
 				row["type"] = "typst"
 				row["Type"] = "typst"
+			} else if isMermaid {
+				row["type"] = "mermaid"
+				row["Type"] = "mermaid"
 			} else {
 				// Check if we have Type (capital T) in row
 				var rawType string
@@ -680,6 +717,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					case "typst":
 						row["type"] = "typst"
 						row["Type"] = "typst"
+					case "mermaid":
+						row["type"] = "mermaid"
+						row["Type"] = "mermaid"
 					case "pdf":
 						row["type"] = "pdf"
 						row["Type"] = "pdf"
