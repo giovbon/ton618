@@ -18,7 +18,7 @@ func (s *Store) SetFileTags(arquivo string, tags []string) error {
 		return err
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO tags (arquivo, tag) VALUES (?, ?)")
+	stmt, err := tx.Prepare("INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
 	if err != nil {
 		return err
 	}

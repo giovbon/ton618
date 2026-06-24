@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -54,9 +55,13 @@ func (ctx *HandlerContext) reindexNote(filename string, content string, modTime 
 	// Filtra o sentinel __no_keywords__ antes de persistir as tags
 	cleanTags := processor.FilterKeywords(fileTags)
 	if len(cleanTags) > 0 {
-		store.SetFileTags(filename, cleanTags)
+		if err := store.SetFileTags(filename, cleanTags); err != nil {
+			return fmt.Errorf("set file tags: %w", err)
+		}
 	} else {
-		store.SetFileTags(filename, nil)
+		if err := store.SetFileTags(filename, nil); err != nil {
+			return fmt.Errorf("clear file tags: %w", err)
+		}
 	}
 
 	// Track file mod

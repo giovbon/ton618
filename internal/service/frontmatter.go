@@ -92,26 +92,27 @@ func UpdateFrontmatterProperty(content string, key string, value interface{}) (s
 	// Se o valor for vazio ou nil, podemos considerar remover a chave (opcional)
 	// Para este contexto, vamos manter a lógica de definir o valor ou deletar se string vazia.
 	if strVal, isStr := value.(string); isStr && strVal == "" {
-		delete(fm, key)
+		delete(fm, normalizedKey)
 	} else if value == nil {
-		delete(fm, key)
+		delete(fm, normalizedKey)
 	} else {
 		// Se a chave for tags e o valor string, tentar separar por vírgula
-		if key == "tags" {
+		if normalizedKey == "tags" {
 			if s, ok := value.(string); ok {
 				var tags []string
 				for _, t := range strings.Split(s, ",") {
 					t = strings.TrimSpace(t)
+					t = strings.TrimPrefix(t, "#")
 					if t != "" {
 						tags = append(tags, t)
 					}
 				}
-				fm[key] = tags
+				fm[normalizedKey] = tags
 			} else {
-				fm[key] = value
+				fm[normalizedKey] = value
 			}
 		} else {
-			fm[key] = value
+			fm[normalizedKey] = value
 		}
 	}
 

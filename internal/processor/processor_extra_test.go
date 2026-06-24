@@ -193,3 +193,19 @@ func TestCalculateHash_ComTags(t *testing.T) {
 		t.Error("tags diferentes deveriam produzir hashes diferentes")
 	}
 }
+
+func TestProcessMarkdownContent_TrimsHashtagPrefix(t *testing.T) {
+	content := []byte("---\ntags: [\"#urgente\", \"#golang\", normal]\n---\n# Seção\n\nconteudo")
+	now := time.Now()
+	_, _, tags := ProcessMarkdownContent(content, "notes/fm.md", now, now)
+
+	if len(tags) != 3 {
+		t.Fatalf("esperado 3 tags, got %d: %v", len(tags), tags)
+	}
+	expected := []string{"urgente", "golang", "normal"}
+	for i, exp := range expected {
+		if tags[i] != exp {
+			t.Errorf("esperado %q na posicao %d, got %q", exp, i, tags[i])
+		}
+	}
+}

@@ -458,9 +458,13 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 	// Filtra o sentinel __no_keywords__ antes de persistir as tags
 	cleanTags := processor.FilterKeywords(fileTags)
 	if len(cleanTags) > 0 {
-		s.tags.SetFileTags(filename, cleanTags)
+		if err := s.tags.SetFileTags(filename, cleanTags); err != nil {
+			return fmt.Errorf("set file tags: %w", err)
+		}
 	} else {
-		s.tags.SetFileTags(filename, nil)
+		if err := s.tags.SetFileTags(filename, nil); err != nil {
+			return fmt.Errorf("clear file tags: %w", err)
+		}
 	}
 
 	// Extrai e persiste TODOs estruturados

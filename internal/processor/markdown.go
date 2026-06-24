@@ -89,6 +89,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 						for _, t := range tList {
 							if ts, ok := t.(string); ok {
 								cleanTag := strings.ToLower(strings.TrimSpace(ts))
+								cleanTag = strings.TrimPrefix(cleanTag, "#")
 								if cleanTag != "" {
 									fileTags = append(fileTags, cleanTag)
 								}
@@ -97,6 +98,7 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					} else if ts, ok := tRaw.(string); ok {
 						for _, t := range strings.Split(ts, ",") {
 							cleanTag := strings.ToLower(strings.TrimSpace(t))
+							cleanTag = strings.TrimPrefix(cleanTag, "#")
 							if cleanTag != "" {
 								fileTags = append(fileTags, cleanTag)
 							}
@@ -358,6 +360,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 						for _, t := range tList {
 							if ts, ok := t.(string); ok {
 								cleanTag := strings.ToLower(strings.TrimSpace(ts))
+								cleanTag = strings.TrimPrefix(cleanTag, "#")
 								if cleanTag != "" {
 									fileTags = append(fileTags, cleanTag)
 								}
@@ -366,6 +369,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					} else if ts, ok := tRaw.(string); ok {
 						for _, t := range strings.Split(ts, ",") {
 							cleanTag := strings.ToLower(strings.TrimSpace(t))
+							cleanTag = strings.TrimPrefix(cleanTag, "#")
 							if cleanTag != "" {
 								fileTags = append(fileTags, cleanTag)
 							}

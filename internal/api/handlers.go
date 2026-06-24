@@ -608,7 +608,8 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 
 			// Map parsed frontmatter
 			for k, v := range fm {
-				if k != "tags" && k != "title" && k != "titulo" {
+				lowerK := strings.ToLower(k)
+				if lowerK != "tags" && lowerK != "title" && lowerK != "titulo" {
 					row[k] = v
 				}
 			}
@@ -791,7 +792,8 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
 
 	for col := range columnSet {
-		if col != "arquivo" && col != "titulo" && col != "tags" && col != "mtime" && col != "type" && strings.ToLower(col) != "type" {
+		lowerCol := strings.ToLower(col)
+		if lowerCol != "arquivo" && lowerCol != "titulo" && lowerCol != "tags" && lowerCol != "mtime" && lowerCol != "type" {
 			columns = append(columns, map[string]interface{}{
 				"title":  strings.ToUpper(col[:1]) + col[1:], // strings.Title is deprecated, simple inline title case
 				"field":  col,
@@ -946,6 +948,7 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			var tagList []string
 			for _, t := range strings.Split(rawVal, ",") {
 				t = strings.TrimSpace(t)
+				t = strings.TrimPrefix(t, "#")
 				if t != "" {
 					tagList = append(tagList, t)
 				}
