@@ -40,8 +40,6 @@ docker buildx inspect --bootstrap
 # 3. Build + Push
 echo "🔨 Compilando para: $PLATFORMS"
 
-# IMPORTANTE: CGO_ENABLED=1 + cross-compilação com sqlite3
-# Usamos CC e PKG_CONFIG_SYSROOT_DIR para compatibilidade cross
 docker buildx build \
   --platform "${PLATFORMS}" \
   -t "${IMAGE_NAME}:${TAG}" \
