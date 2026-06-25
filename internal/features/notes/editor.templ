@@ -1,0 +1,2225 @@
+package notes
+
+import "ton618/web/layout"
+import "ton618/internal/core/domain"
+
+templ Editor(data domain.EditorData) {
+    @layout.Layout(data.Title, true, editorContent(data))
+}
+
+templ editorContent(data domain.EditorData) {
+<div class="editor-root">
+    <div class="flex items-center gap-3 mb-4">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        <button
+            id="save-btn"
+            onclick="saveNow()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar"
+        >
+            💾
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta nota"
+        >
+            ⧉
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            🗑️
+        </button>
+    </div>
+
+    <!-- Frontmatter toggle -->
+    <div class="mb-3">
+        <button
+            id="toggle-fm-btn"
+            class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors"
+        >
+            <svg
+                id="fm-arrow"
+                class="w-3 h-3 transition-transform"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.5"
+                    d="M9 5l7 7-7 7"
+                />
+            </svg>
+            FRONTMATTER
+        </button>
+        <textarea
+            id="frontmatter-area"
+            class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]"
+            placeholder="title: Titulo da Nota&#10;tags: [tag1, tag2]"
+            spellcheck="false"
+        ></textarea>
+        <!-- Tag suggestions (visible when frontmatter is open) -->
+        <div id="tag-suggestions" class="hidden mt-2">
+            <div class="text-[10px] font-mono text-zinc-600 mb-1.5">
+                TAGS DISPONÍVEIS
+            </div>
+            <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
+        </div>
+    </div>
+
+    <!-- TOC toggle -->
+    <div class="mb-3">
+        <button id="toggle-toc-btn" onclick="toggleToc()" class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors">
+            <svg id="toc-arrow" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+            </svg>
+            TOC
+        </button>
+        <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(navegue e edite a indentacao dos titulos)" spellcheck="false"></textarea>
+    </div>
+
+
+	    if data.Backlinks != nil {
+	        if len(data.Backlinks.Level1) > 0 {
+	            <div id="backlinks-area" class="mb-3">
+	                <button id="toggle-backlinks-btn" onclick="toggleBacklinks()" class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors">
+	                    <svg id="backlinks-arrow" class="w-3 h-3 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+	                    </svg>
+	                    BACKLINKS
+	                </button>
+	                <div id="backlinks-content" class="mt-2 text-[12px] text-zinc-400 leading-relaxed">
+	                    Citada por:
+	                    for i, name := range data.Backlinks.Level1 {
+	                        if i > 0 {
+	                            { ", " }
+	                        }
+	                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ domain.DisplayName(name) }</a>
+	                    }
+	                    if len(data.Backlinks.Level2) > 0 {
+	                        if len(data.Backlinks.Level1) == 1 {
+	                            { ". E esta nota tambem cita " }
+	                        } else {
+	                            { ". E essas notas tambem citam " }
+	                        }
+	                        for i, name := range data.Backlinks.Level2 {
+	                            if i > 0 {
+	                                { ", " }
+	                            }
+	                            <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ domain.DisplayName(name) }</a>
+	                        }
+	                        { "." }
+	                    }
+	                </div>
+	            </div>
+	        }
+	    }
+
+
+    <!-- Wikilink autocomplete -->
+    <div
+        id="wikilink-menu"
+        class="fixed hidden z-50 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
+        style="max-height: 240px"
+    >
+        <div class="py-1 overflow-y-auto" id="wikilink-items"></div>
+    </div>
+
+    <div id="editor-wrapper" class="">
+        <div id="editor-content" class="px-1 py-2 min-h-[500px]"></div>
+    </div>
+
+    <div
+        id="bubble-menu"
+        class="fixed hidden z-50 flex items-center gap-0.5 px-1.5 py-1 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl"
+    >
+        <button data-cmd="bold" class="bubble-btn"><b>B</b></button>
+        <button data-cmd="italic" class="bubble-btn"><i>I</i></button>
+        <button data-cmd="underline" class="bubble-btn"><u>U</u></button>
+        <button data-cmd="highlight" class="bubble-btn">⋮</button>
+        <button data-cmd="strike" class="bubble-btn"><s>S</s></button>
+        <div class="w-px h-4 bg-zinc-800 mx-1"></div>
+        <button data-cmd="code" class="bubble-btn">&lt;/&gt;</button>
+        <button id="bubble-link" class="bubble-btn">🔗</button>
+    </div>
+
+    <div
+        id="slash-menu"
+        class="fixed hidden z-50 min-w-[160px] max-w-[90vw] bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
+    >
+        <div class="py-0.5 max-h-60 overflow-y-auto" id="slash-items"></div>
+    </div>
+
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+    <input
+        id="editor-image-input"
+        type="file"
+        accept="image/*"
+        class="hidden"
+    />
+</div>
+
+<style>
+    .editor-root {
+        position: relative;
+    }
+    .bubble-btn {
+        padding: 3px 7px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.12s;
+    }
+    .bubble-btn:hover {
+        color: #e4e4e7;
+        background: rgba(255, 255, 255, 0.06);
+    }
+    .bubble-btn.is-active {
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+    }
+    .slash-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 12px;
+        font-size: 13px;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.1s;
+    }
+    .slash-item:hover,
+    .slash-item.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e4e4e7;
+    }
+    .slash-item .icon {
+        font-size: 16px;
+        width: 24px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .slash-item .label {
+        font-weight: 600;
+    }
+    .ProseMirror {
+        outline: none;
+        min-height: 480px;
+        color: #d4d4d8;
+    }
+    .ProseMirror p {
+        margin: 0.3em 0;
+        line-height: 1.7;
+        color: #a1a1aa;
+    }
+    .ProseMirror h1 {
+        color: #f4f4f5;
+        font-size: 1.6rem;
+        font-weight: 900;
+        margin: 1.2em 0 0.2em;
+        letter-spacing: -0.02em;
+    }
+    .ProseMirror h2 {
+        color: #e4e4e7;
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 1em 0 0.2em;
+    }
+    .ProseMirror h3 {
+        color: #d4d4d8;
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0.8em 0 0.2em;
+    }
+    .ProseMirror ul,
+    .ProseMirror ol {
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror li p {
+        margin: 0.2em 0;
+    }
+    .ProseMirror strong {
+        color: #e4e4e7;
+    }
+    .ProseMirror s {
+        color: #52525b;
+    }
+    .ProseMirror mark {
+        background: rgba(250, 204, 21, 0.25);
+        color: #fef08a;
+        border-radius: 2px;
+        padding: 0 2px;
+    }
+    .ProseMirror u {
+        text-decoration: underline;
+        text-decoration-color: #3f3f46;
+    }
+    .ProseMirror code {
+        background: #27272a;
+        color: #f472b6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+    .ProseMirror pre {
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 8px;
+        padding: 1em;
+        margin: 0.8em 0;
+        position: relative;
+    }
+    .ProseMirror pre code {
+        background: none;
+        padding: 0;
+        color: #a1a1aa;
+    }
+    /* Syntax highlighting – tema escuro lowlight/highlight.js */
+    .ProseMirror pre code .hljs-keyword,
+    .ProseMirror pre code .hljs-built_in,
+    .ProseMirror pre code .hljs-type {
+        color: #c792ea;
+    }
+    .ProseMirror pre code .hljs-string,
+    .ProseMirror pre code .hljs-addition {
+        color: #c3e88d;
+    }
+    .ProseMirror pre code .hljs-number,
+    .ProseMirror pre code .hljs-literal {
+        color: #f78c6c;
+    }
+    .ProseMirror pre code .hljs-comment,
+    .ProseMirror pre code .hljs-quote {
+        color: #546e7a;
+        font-style: italic;
+    }
+    .ProseMirror pre code .hljs-function,
+    .ProseMirror pre code .hljs-title {
+        color: #82aaff;
+    }
+    .ProseMirror pre code .hljs-params {
+        color: #eeffff;
+    }
+    .ProseMirror pre code .hljs-attr,
+    .ProseMirror pre code .hljs-attribute {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-selector-tag,
+    .ProseMirror pre code .hljs-selector-class {
+        color: #ffcb6b;
+    }
+    .ProseMirror pre code .hljs-regexp,
+    .ProseMirror pre code .hljs-symbol {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-variable,
+    .ProseMirror pre code .hljs-template-variable {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-tag {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-name {
+        color: #f07178;
+    }
+    .ProseMirror pre code .hljs-meta {
+        color: #89ddff;
+    }
+    .ProseMirror pre code .hljs-deletion {
+        color: #ff5370;
+    }
+    .ProseMirror pre code .hljs-section {
+        color: #82aaff;
+        font-weight: bold;
+    }
+    .ProseMirror pre code .hljs-link {
+        color: #c3e88d;
+        text-decoration: underline;
+    }
+    .ProseMirror pre code .hljs-emphasis {
+        font-style: italic;
+    }
+    .ProseMirror pre code .hljs-strong {
+        font-weight: bold;
+    }
+    .ProseMirror pre code .hljs-formula {
+        color: #eeffff;
+    }
+    /* Mostra linguagem detectada como pseudo-elemento no canto do bloco */
+    .ProseMirror pre[data-language]::before {
+        content: attr(data-language);
+        position: absolute;
+        top: 6px;
+        right: 10px;
+        font-size: 10px;
+        font-family: monospace;
+        color: #52525b;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        pointer-events: none;
+    }
+    .ProseMirror a {
+        color: #38bdf8 !important;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(56, 189, 248, 0.3);
+        cursor: pointer;
+        font-weight: 500;
+        transition: text-decoration-color 0.15s;
+    }
+    .ProseMirror a:hover {
+        text-decoration-color: #38bdf8;
+    }
+    .ProseMirror blockquote {
+        border-left: 3px solid #3f3f46;
+        padding-left: 1em;
+        color: #71717a;
+        margin: 0.6em 0;
+    }
+    .ProseMirror hr {
+        border: none;
+        border-top: 1px solid #27272a;
+        margin: 2em 0;
+    }
+    .ProseMirror ul {
+        list-style-type: disc;
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror ol {
+        list-style-type: decimal;
+        padding-left: 1.5em;
+        margin: 0.4em 0;
+    }
+    .ProseMirror li {
+        margin: 0.1em 0;
+    }
+    /* ── Tarefas (Task Lists) ── */
+    .ProseMirror li[data-checked] {
+        list-style: none;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0.75em;
+        align-items: flex-start;
+        margin: 0.3em 0;
+        padding-left: 0;
+    }
+    .ProseMirror li[data-checked] > div,
+    .ProseMirror li[data-checked] > label,
+    .ProseMirror li[data-checked] > span {
+        min-width: 0;
+        width: 100%;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"] {
+        margin-top: 0.25em;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        cursor: pointer;
+        accent-color: #3b82f6;
+        border: 2px solid #52525b;
+        border-radius: 4px;
+        background: #18181b;
+        transition: all 0.15s;
+        flex-shrink: 0;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"]:hover {
+        border-color: #71717a;
+    }
+    .ProseMirror li[data-checked] input[type="checkbox"]:checked {
+        background: #3b82f6;
+        border-color: #3b82f6;
+    }
+    .ProseMirror li[data-checked] p {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .ProseMirror li[data-checked="true"] > div p,
+    .ProseMirror li[data-checked="true"] p {
+        color: #71717a;
+        text-decoration: line-through;
+    }
+    /* ── Tabelas ── */
+    .ProseMirror table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.8em 0;
+        overflow: hidden;
+    }
+    .ProseMirror th,
+    .ProseMirror td {
+        border: 1px solid #3f3f46;
+        padding: 8px 12px;
+        vertical-align: top;
+        min-width: 80px;
+    }
+    .ProseMirror th {
+        background: #27272a;
+        color: #e4e4e7;
+        font-weight: 700;
+        text-align: left;
+    }
+    .ProseMirror td {
+        color: #a1a1aa;
+    }
+    .ProseMirror td p {
+        margin: 0;
+    }
+    .ProseMirror .selectedCell {
+        background: rgba(56, 189, 248, 0.08);
+    }
+    /* Grips de redimensionamento da tabela */
+    .ProseMirror .column-resize-handle {
+        background: #38bdf8;
+        width: 2px;
+        position: absolute;
+        right: -1px;
+        top: 0;
+        bottom: 0;
+        pointer-events: none;
+    }
+    .wikilink-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 7px 12px;
+        font-size: 12px;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.1s;
+    }
+    .wikilink-item:hover,
+    .wikilink-item.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e4e4e7;
+    }
+    .wikilink-item .wiki-icon {
+        color: #38bdf8;
+        font-weight: 700;
+        font-size: 10px;
+        opacity: 0.7;
+    }
+    .wikish-link {
+        color: #38bdf8 !important;
+        text-decoration: underline !important;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(56, 189, 248, 0.3) !important;
+        cursor: pointer !important;
+        font-weight: 500;
+    }
+    .wikish-link:hover {
+        text-decoration-color: #38bdf8 !important;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+        var T = window.TipTapEditor;
+        var el = document.getElementById("editor-content");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+        var bubbleEl = document.getElementById("bubble-menu");
+        var slashEl = document.getElementById("slash-menu");
+        var slashItems = document.getElementById("slash-items");
+
+        var raw = document.getElementById("content-output").value;
+        var saveTimer = null;
+        var currentStatus = "saved";
+        var editor = null;
+        var originalFilename = filenameInput.dataset.filename;
+        var originalDisplayName = filenameInput.value;
+        var slashPos = null;
+        var frontmatterText = "";
+        var frontmatterVisible = false;
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var autoDetectTimer = null;
+        var isInitialLoad = true;
+        var lastSavedHash = null;
+
+        async function generateHash(text) {
+            var encoder = new TextEncoder();
+            var data = encoder.encode(text);
+            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+        }
+
+        // ── Parse frontmatter do raw content ──
+        var bodyContent = raw;
+        var fmMatch = raw.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            frontmatterText = fmMatch[1];
+            bodyContent = fmMatch[2];
+        }
+
+        // ── Slash commands ──
+        var slashFilterText = "";
+
+        function makeSlashAction(cmd, attrs) {
+            return function () {
+                hideSlashMenu();
+                if (slashPos !== null && editor) {
+                    var $to = editor.state.selection.$from;
+                    editor
+                        .chain()
+                        .focus()
+                        .deleteRange({
+                            from: slashPos,
+                            to: $to.pos,
+                        })
+                        .run();
+                    slashPos = null;
+                    slashFilterText = "";
+                }
+                exec(cmd, attrs);
+            };
+        }
+
+        var SLASH_COMMANDS = [
+            {
+                id: "h1",
+                icon: "H1",
+                label: "Heading 1",
+                action: makeSlashAction("heading", { level: 1 }),
+            },
+            {
+                id: "h2",
+                icon: "H2",
+                label: "Heading 2",
+                action: makeSlashAction("heading", { level: 2 }),
+            },
+            {
+                id: "h3",
+                icon: "H3",
+                label: "Heading 3",
+                action: makeSlashAction("heading", { level: 3 }),
+            },
+            {
+                id: "bullet",
+                icon: "\u2022",
+                label: "Lista",
+                action: makeSlashAction("bulletList"),
+            },
+            {
+                id: "ordered",
+                icon: "1.",
+                label: "Lista numerada",
+                action: makeSlashAction("orderedList"),
+            },
+            {
+                id: "task",
+                icon: "\u2611",
+                label: "Checklist",
+                action: makeSlashAction("taskList"),
+            },
+            {
+                id: "quote",
+                icon: "\u275D",
+                label: "Citacao",
+                action: makeSlashAction("blockquote"),
+            },
+            {
+                id: "code",
+                icon: "\u2394",
+                label: "Bloco de codigo",
+                action: makeSlashAction("codeBlock"),
+            },
+            {
+                id: "table",
+                icon: "\u229E",
+                label: "Tabela",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({ from: slashPos, to: slashPos + 1 })
+                            .run();
+                        slashPos = null;
+                    }
+                    if (editor)
+                        editor
+                            .chain()
+                            .focus()
+                            .insertTable({
+                                rows: 3,
+                                cols: 3,
+                                withHeaderRow: true,
+                            })
+                            .run();
+                },
+            },
+            {
+                id: "hr",
+                icon: "\u2014",
+                label: "Linha horizontal",
+                action: makeSlashAction("horizontalRule"),
+            },
+            {
+                id: "image",
+                icon: "\uD83D\uDDBC",
+                label: "Imagem",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        var $to = editor.state.selection.$from;
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({ from: slashPos, to: $to.pos })
+                            .run();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    document.getElementById("editor-image-input").click();
+                },
+            },
+            {
+                id: "organize",
+                icon: "\u2630",
+                label: "Organizar titulos",
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        var $to = editor.state.selection.$from;
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({
+                                from: slashPos,
+                                to: $to.pos,
+                            })
+                            .run();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    organizeHeadings();
+                },
+            },
+        ];
+
+        // ── Wikilink Autocomplete ──
+        var wikiNotes = [];
+        var wikiVisible = false;
+        var wikiSelected = 0;
+
+        function loadWikiNotes() {
+            fetch("/api/notes")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    wikiNotes = (data.notes || []).map(function (n) {
+                        return {
+                            fullPath: n.arquivo,
+                            label: (
+                                n.arquivo.split("/").pop() || n.arquivo
+                            ).replace(/\.md$/i, ""),
+                            tags: n.tags || [],
+                        };
+                    });
+                })
+                .catch(function () {});
+        }
+
+        function showWikiMenu(filter) {
+            var f = filter.toLowerCase();
+            var items = wikiNotes.filter(function (n) {
+                return n.label.toLowerCase().indexOf(f) !== -1;
+            });
+            var el = document.getElementById("wikilink-menu");
+            var list = document.getElementById("wikilink-items");
+            if (items.length === 0) {
+                el.classList.add("hidden");
+                wikiVisible = false;
+                return;
+            }
+            wikiSelected = 0;
+            var html = "";
+            items.forEach(function (item, i) {
+                var name = item.label;
+                var idx = name.toLowerCase().indexOf(f);
+                var before = htmlEscape(name.substring(0, idx));
+                var match = htmlEscape(name.substring(idx, idx + f.length));
+                var after = htmlEscape(name.substring(idx + f.length));
+                var isSpreadsheet = (item.tags || []).indexOf("spreadsheet") !== -1;
+                html +=
+                    '<button class="wikilink-item' +
+                    (i === 0 ? " active" : "") +
+                    '" data-index="' +
+                    i +
+                    '" data-wiki-name="' +
+                    htmlEscape(name) +
+                    '" data-wiki-path="' +
+                    htmlEscape(item.fullPath) +
+                    '" data-wiki-is-spreadsheet="' +
+                    isSpreadsheet +
+                    '">';
+                html += '<span class="wiki-icon">[[]]</span>';
+                html +=
+                    "<span>" +
+                    before +
+                    "<strong>" +
+                    match +
+                    "</strong>" +
+                    after +
+                    "</span>";
+                html += "</button>";
+            });
+            list.innerHTML = html;
+            el.classList.remove("hidden");
+            wikiVisible = true;
+            var sel = window.getSelection();
+            if (sel.rangeCount) {
+                var range = sel.getRangeAt(0);
+                var rect = range.getBoundingClientRect();
+                var left = rect.left - 10;
+                var mh = el.offsetHeight || 240;
+                var spaceBelow = window.innerHeight - rect.bottom - 8;
+                var top;
+                if (spaceBelow < mh && rect.top > mh + 8) {
+                    top = rect.top - mh - 4;
+                } else {
+                    top = rect.bottom + 4;
+                }
+                el.style.left = left + "px";
+                el.style.top = top + "px";
+            }
+        }
+
+        function hideWikiMenu() {
+            document.getElementById("wikilink-menu").classList.add("hidden");
+            wikiVisible = false;
+        }
+
+        // Click delegation for wikilink items (evita escopo global do onclick)
+        document
+            .getElementById("wikilink-items")
+            .addEventListener("click", function (e) {
+                var btn = e.target.closest(".wikilink-item");
+                if (btn) {
+                    var name = btn.getAttribute("data-wiki-name");
+                    if (name) selectWiki(name);
+                }
+            });
+
+        function selectWiki(name) {
+            hideWikiMenu();
+            if (!editor) return;
+
+            // Get full path from the closest .wikilink-item
+            var btn = document.querySelector(".wikilink-item.active");
+            var fullPath = btn ? btn.getAttribute("data-wiki-path") : "";
+            var isSpreadsheet = btn ? btn.getAttribute("data-wiki-is-spreadsheet") === "true" : false;
+            if (!fullPath) {
+                fullPath = "notes/" + name + ".md";
+            }
+
+            // Build href based on file type
+            var ext = fullPath.split(".").pop().toLowerCase();
+            var href;
+            if (ext === "pdf") {
+                href =
+                    "/file/download?name=" + encodeURIComponent("pdfs/" + name);
+            } else if (ext === "zip") {
+                href =
+                    "/file/download?name=" +
+                    encodeURIComponent("attachments/" + name);
+            } else if (isSpreadsheet) {
+                href = "/spreadsheet?file=notes/" + encodeURIComponent(name) + ".md";
+            } else {
+                href = "/editor?file=notes/" + encodeURIComponent(name) + ".md";
+            }
+
+            var $from = editor.state.selection.$from;
+            var textBefore = $from.parent.textBetween(0, $from.parentOffset);
+            var bracketPos = textBefore.lastIndexOf("[[");
+            if (bracketPos !== -1) {
+                var deleteFrom = $from.pos - (textBefore.length - bracketPos);
+                var deleteTo = $from.pos;
+                editor
+                    .chain()
+                    .focus()
+                    .deleteRange({ from: deleteFrom, to: deleteTo })
+                    .setLink({ href: href })
+                    .insertContent(name)
+                    .run();
+            } else {
+                editor
+                    .chain()
+                    .focus()
+                    .setLink({ href: href })
+                    .insertContent(name)
+                    .run();
+            }
+        }
+
+        // ── Auto-detecção de linguagem em code blocks ──
+        function autoDetectCodeLanguage() {
+            if (!editor || editor.isDestroyed) return;
+            var doc = editor.state.doc;
+            var found = false;
+            doc.descendants(function (node, pos) {
+                if (found) return;
+                if (node.type.name === "codeBlock") {
+                    var lang = node.attrs.language;
+                    if (lang && lang !== "auto") return;
+                    var codeText = node.textContent;
+                    if (!codeText || codeText.length < 5) return;
+                    try {
+                        var result = T.lowlight.highlightAuto(codeText);
+                        if (result && result.language) {
+                            // Aplica sem mover o cursor do usuário
+                            var tr = editor.state.tr;
+                            tr.setNodeMarkup(pos, null, {
+                                language: result.language,
+                            });
+                            editor.view.dispatch(tr);
+                            found = true;
+                        }
+                    } catch (e) {
+                        // Silencia erros de detecção
+                    }
+                }
+            });
+        }
+
+        // ── Organizar títulos (corrige hierarquia bagunçada de colagens de IA) ──
+        function organizeHeadings() {
+            if (!editor || editor.isDestroyed) return;
+            var headings = [];
+            var doc = editor.state.doc;
+            doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") {
+                    headings.push({
+                        pos: pos,
+                        level: node.attrs.level,
+                        newLevel: node.attrs.level,
+                    });
+                }
+            });
+            if (headings.length < 2) return;
+            var baseLevel = headings[0].level;
+            var tr = editor.state.tr;
+            var modified = false;
+            for (var i = 0; i < headings.length; i++) {
+                var h = headings[i];
+                if (i > 0) {
+                    var prev = headings[i - 1];
+                    var origLevel = h.level;
+                    if (origLevel <= baseLevel) {
+                        // Mesmo nível ou acima → nova seção no nível base
+                        h.newLevel = baseLevel;
+                    } else {
+                        // Sub-título: calcula profundidade relativa ao base
+                        var depth = origLevel - baseLevel;
+                        var suggested = baseLevel + depth;
+                        // Evita saltos (ex: h2 → h4 vira h2 → h3)
+                        if (suggested > prev.newLevel + 1) {
+                            suggested = prev.newLevel + 1;
+                        }
+                        h.newLevel = Math.min(suggested, 6);
+                    }
+                    if (h.newLevel !== h.level) {
+                        tr.setNodeMarkup(h.pos, null, {
+                            level: h.newLevel,
+                        });
+                        modified = true;
+                    }
+                }
+            }
+            if (modified) {
+                editor.view.dispatch(tr);
+            }
+        }
+
+        // ── Editor ──
+        editor = new T.Editor({
+            element: el,
+            extensions: [
+                T.StarterKit.configure({
+                    heading: { levels: [1, 2, 3, 4, 5, 6] },
+                    codeBlock: false,
+                    paragraph: false,
+                }),
+                T.CustomParagraph,
+                T.Placeholder.configure({
+                    placeholder: "Pressione / para comandos...",
+                }),
+                T.Table.configure({ resizable: true }),
+                T.TableRow,
+                T.TableCell,
+                T.TableHeader,
+                T.TaskList,
+                T.TaskItem.configure({ nested: true }),
+                T.Underline,
+                T.Highlight,
+                T.ImageExt,
+                T.Link,
+                T.Markdown,
+                T.CodeBlockLowlightExt.configure({
+                    lowlight: T.lowlight,
+                    defaultLanguage: null,
+                }),
+            ],
+            content: bodyContent || "<p></p>",
+            onSelectionUpdate: function () {
+                if (!slashEl.classList.contains("hidden")) return;
+                updateBubble();
+            },
+            onUpdate: function () {
+                // Pula o primeiro onUpdate (disparado ao carregar o conteudo)
+                if (isInitialLoad) {
+                    isInitialLoad = false;
+                    return;
+                }
+                setStatus("dirty");
+                if (saveTimer) clearTimeout(saveTimer);
+                saveTimer = setTimeout(doSave, 2000);
+                // Auto-detecção de linguagem em code blocks (debounced)
+                if (autoDetectTimer) clearTimeout(autoDetectTimer);
+                autoDetectTimer = setTimeout(autoDetectCodeLanguage, 1500);
+                // TOC update
+                if (tocVisible) {
+                    if (tocUpdateTimer) clearTimeout(tocUpdateTimer);
+                    tocUpdateTimer = setTimeout(updateToc, 300);
+                }
+                // Wikilink detection (também funciona sem keydown, ex: mobile)
+                if (editor) {
+                    var $from = editor.state.selection.$from;
+                    var textBefore = $from.parent.textBetween(
+                        0,
+                        $from.parentOffset,
+                    );
+                    var bracketPos = textBefore.lastIndexOf("[[");
+                    if (bracketPos !== -1) {
+                        if (!wikiVisible) {
+                            wikiVisible = true;
+                        }
+                        var filterText = textBefore.substring(bracketPos + 2);
+                        showWikiMenu(filterText);
+                    } else if (wikiVisible) {
+                        hideWikiMenu();
+                    }
+                }
+                // Mobile fallback: detectar / sem keydown (teclados virtuais)
+                if (editor && slashPos === null && slashEl.classList.contains("hidden")) {
+                    var $sl = editor.state.selection.$from;
+                    var txtBefore = $sl.parent.textBetween(0, $sl.parentOffset);
+                    if (txtBefore === "/") {
+                        slashPos = $sl.pos - 1;
+                        showSlashMenu(editor.view);
+                        slashFilterText = "";
+                    }
+                }
+
+                // Filtragem do slash menu enquanto digita
+                if (
+                    !slashEl.classList.contains("hidden") &&
+                    slashPos !== null
+                ) {
+                    var $sel = editor.state.selection.$from;
+                    if ($sel.pos <= slashPos) {
+                        // Cursor antes ou no slash → fecha menu
+                        hideSlashMenu();
+                        slashPos = null;
+                        slashFilterText = "";
+                    } else {
+                        var typed = editor.state.doc.textBetween(
+                            slashPos,
+                            $sel.pos,
+                        );
+                        if (!typed.startsWith("/")) {
+                            // Barra foi apagada → fecha menu
+                            hideSlashMenu();
+                            slashPos = null;
+                            slashFilterText = "";
+                        } else {
+                            slashFilterText = typed.slice(1);
+                            renderSlashItems(slashFilterText);
+                        }
+                    }
+                }
+            },
+            editorProps: {
+                attributes: { spellcheck: "false" },
+                handleClick: function (view, pos, event) {
+                    // Navega em links na mesma aba
+                    var target = event.target;
+                    if (target && target.tagName === "A" && target.href) {
+                        // Ignora cliques com Ctrl/Meta (navegador ja abre em nova aba)
+                        if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                            // So navega se for link interno do editor
+                            if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/spreadsheet?file=") !== -1 || target.href.indexOf("/file/") !== -1) {
+                                event.preventDefault();
+                                window.location.href = target.href;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                },
+                handlePaste: function (view, event) {
+                    var items =
+                        event.clipboardData && event.clipboardData.items;
+                    if (!items) return false;
+                    for (var i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf("image") === 0) {
+                            event.preventDefault();
+                            var file = items[i].getAsFile();
+                            if (!file) return true;
+                            uploadAndInsertImage(file);
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                handleKeyDown: function (view, event) {
+                    // Tab dentro de code block: insere indentação
+                    if (event.key === "Tab" && view.state.selection.$from.parent.type.name === "codeBlock") {
+                        event.preventDefault();
+                        view.dispatch(view.state.tr.insertText("    "));
+                        return true;
+                    }
+                    if (
+                        event.key === "Backspace" &&
+                        !slashEl.classList.contains("hidden")
+                    ) {
+                        // Deixa o onUpdate refiltrar; se o texto acabar, o menu some
+                        return false;
+                    }
+                    if (event.key === "/" && !event.ctrlKey && !event.metaKey) {
+                        var $from = view.state.selection.$from;
+                        var textBefore = $from.parent.textBetween(
+                            0,
+                            $from.parentOffset,
+                        );
+                        if (textBefore === "") {
+                            slashPos = view.state.selection.from;
+                            setTimeout(function () {
+                                showSlashMenu(view);
+                            }, 10);
+                            return false;
+                        }
+                    }
+                    // Wikilink detection: [[ typing
+                    if (event.key === "[" && !event.ctrlKey && !event.metaKey) {
+                        var $from = view.state.selection.$from;
+                        var textBefore = $from.parent.textBetween(
+                            0,
+                            $from.parentOffset,
+                        );
+                        if (
+                            textBefore.length >= 1 &&
+                            textBefore.slice(-1) === "["
+                        ) {
+                            wikiVisible = true;
+                            setTimeout(function () {
+                                showWikiMenu("");
+                            }, 10);
+                            return false;
+                        }
+                    }
+                    if (wikiVisible) {
+                        if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items.length) {
+                                wikiSelected = Math.min(
+                                    wikiSelected + 1,
+                                    items.length - 1,
+                                );
+                                items.forEach(function (el, i) {
+                                    el.classList.toggle(
+                                        "active",
+                                        i === wikiSelected,
+                                    );
+                                });
+                            }
+                            return true;
+                        }
+                        if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items.length) {
+                                wikiSelected = Math.max(wikiSelected - 1, 0);
+                                items.forEach(function (el, i) {
+                                    el.classList.toggle(
+                                        "active",
+                                        i === wikiSelected,
+                                    );
+                                });
+                            }
+                            return true;
+                        }
+                        if (event.key === "Enter" || event.key === "Tab") {
+                            event.preventDefault();
+                            var items =
+                                document.querySelectorAll(".wikilink-item");
+                            if (items[wikiSelected])
+                                items[wikiSelected].click();
+                            return true;
+                        }
+                        if (event.key === "Escape") {
+                            hideWikiMenu();
+                            return true;
+                        }
+                    }
+                    if (event.key === "Escape") {
+                        hideSlashMenu();
+                        hideBubble();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    return false;
+                },
+            },
+            onCreate: function () {
+                // Set frontmatter textarea after editor is created
+                var fmArea = document.getElementById("frontmatter-area");
+                if (fmArea && frontmatterText) {
+                    fmArea.value = frontmatterText;
+                    // Ajusta altura do frontmatter
+                    fmArea.style.height = "auto";
+                    fmArea.style.height = fmArea.scrollHeight + "px";
+                }
+                // Auto-detectar linguagem em code blocks existentes
+                setTimeout(function () {
+                    autoDetectCodeLanguage();
+                }, 500);
+                // Convert existing [[wikilinks]] to clickable links in the content
+                setTimeout(function () {
+                    if (!editor) return;
+                    var html = editor.getHTML();
+                    // Match [[nota]] pattern and convert to links
+                    html = html.replace(
+                        /\[\[([^\]]+)\]\]/g,
+                        function (match, name) {
+                            var target = name.trim();
+                            var ext = target.includes(".")
+                                ? target.split(".").pop().toLowerCase()
+                                : "";
+                            var isMd =
+                                ext === "" ||
+                                ext === "md" ||
+                                ext === "markdown";
+                            if (isMd) {
+                                var noteName = target;
+                                if (!noteName.endsWith(".md"))
+                                    noteName += ".md";
+                                return (
+                                    '<a href="/editor?file=notes/' +
+                                    encodeURIComponent(noteName) +
+                                    '" class="wikish-link">' +
+                                    target +
+                                    "</a>"
+                                );
+                            } else {
+                                // Arquivo não-markdown (PDF, ZIP, etc.) → link de download
+                                var dir =
+                                    ext === "pdf" ? "pdfs" : "attachments";
+                                return (
+                                    '<a href="/file/download?name=' +
+                                    encodeURIComponent(dir + "/" + target) +
+                                    '" class="wikish-link" download>' +
+                                    target +
+                                    "</a>"
+                                );
+                            }
+                        },
+                    );
+                    if (html !== editor.getHTML()) {
+                        editor.commands.setContent(html);
+                    }
+                    // Calcula o hash inicial baseado na serializacao do editor
+                    setTimeout(async function() {
+                        var md = "";
+                        try { md = editor.storage.markdown.getMarkdown(); } catch(e) { md = editor.getHTML(); }
+                        var fm = document.getElementById("frontmatter-area").value.trim();
+                        var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g, "[[$1]]");
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g, "[[$1]]");
+                        lastSavedHash = await generateHash(finalContent);
+                    }, 500);
+                }, 100);
+            },
+        });
+
+        // ── Scroll to text or line from URL (ex: #line-42 or ?text=...) ──
+        (function () {
+            var hash = window.location.hash;
+            var urlParams = new URLSearchParams(window.location.search);
+            var searchText = urlParams.get("text");
+            var lineNum = hash && hash.startsWith("#line-") ? parseInt(hash.replace("#line-", ""), 10) : null;
+            if (!searchText && (!lineNum || isNaN(lineNum) || lineNum < 1)) return;
+
+            // Espera o editor renderizar e o onCreate terminar
+            var scrollAttempts = 0;
+            var scrollTimer = setInterval(function () {
+                scrollAttempts++;
+                if (!editor || editor.isDestroyed) {
+                    if (scrollAttempts > 25) clearInterval(scrollTimer);
+                    return;
+                }
+
+                var doc = editor.state.doc;
+                if (!doc || doc.content.size <= 2) {
+                    if (scrollAttempts > 25) clearInterval(scrollTimer);
+                    return;
+                }
+
+                var targetPos = -1;
+
+                // 1. Tenta buscar pelo texto exato
+                if (searchText) {
+                    var cleanSearch = searchText.trim().toLowerCase();
+                    // Remove formatacao markdown basica do termo de busca
+                    cleanSearch = cleanSearch.replace(/\*\*/g, '').replace(/\*/g, '').replace(/__/g, '').replace(/_/g, '').replace(/~~/g, '').replace(/`/g, '');
+                    console.log("[Scroll debug] Searching for:", cleanSearch);
+                    doc.descendants(function (node, pos) {
+                        if (targetPos !== -1) return false;
+                        console.log("[Scroll debug] Node name:", node.type.name, "text:", node.textContent);
+                        if (["paragraph", "taskItem", "heading", "listItem", "codeBlock"].includes(node.type.name)) {
+                            var nodeText = node.textContent.toLowerCase();
+                            if (nodeText.includes(cleanSearch)) {
+                                console.log("[Scroll debug] MATCH FOUND at pos:", pos);
+                                targetPos = pos;
+                            }
+                        }
+                    });
+                }
+
+                // Se encontramos por texto, ou se desistimos por tentativas e vamos tentar por linha
+                var shouldScroll = targetPos !== -1;
+                var forceFallback = !shouldScroll && scrollAttempts >= 15; // Tenta por linha após 1.5s se não achar o texto
+
+                if (forceFallback && lineNum && !isNaN(lineNum)) {
+                    // Usa o conteudo markdown original para achar a linha correta
+                    var rawContent = document.getElementById("content-output").value;
+                    if (rawContent) {
+                        var lines = rawContent.split("\n");
+                        if (lineNum >= 1 && lineNum <= lines.length) {
+                            var targetLineText = lines[lineNum - 1].trim();
+                            // Pula frontmatter se existir
+                            var fmEnd = 0;
+                            if (lines.length > 0 && lines[0].trim() === "---") {
+                                for (var fi = 1; fi < lines.length; fi++) {
+                                    if (lines[fi].trim() === "---") {
+                                        fmEnd = fi + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (fmEnd > 0 && lineNum <= fmEnd) {
+                                // TODO esta no frontmatter, nao faz sentido scrollar
+                            } else if (targetLineText) {
+                                // Tenta achar o texto da linha no documento ProseMirror
+                                var lineSearch = targetLineText.toLowerCase();
+                                // Remove marcadores TODO/FIXME/etc do inicio para achar mais facil
+                                lineSearch = lineSearch.replace(/^(todo|fixme|bug|task|note|hack|optimize|xxx|warning|change|review):\s*/i, '');
+                                // Remove formatacao markdown basica
+                                lineSearch = lineSearch.replace(/\*\*/g, '').replace(/\*/g, '').replace(/__/g, '').replace(/_/g, '').replace(/~~/g, '').replace(/`/g, '');
+                                doc.descendants(function (node, pos) {
+                                    if (targetPos !== -1) return false;
+                                    var nodeText = node.textContent.toLowerCase();
+                                    if (nodeText.includes(lineSearch)) {
+                                        targetPos = pos;
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    // Fallback final: se ainda nao achou, tenta a abordagem antiga
+                    if (targetPos === -1) {
+                        var currentLine = 0;
+                        doc.forEach(function (node, offset) {
+                            if (currentLine < lineNum - 1) {
+                                targetPos = offset + 1;
+                                currentLine++;
+                            }
+                        });
+                    }
+                    shouldScroll = targetPos !== -1;
+                }
+
+                if (shouldScroll) {
+                    clearInterval(scrollTimer);
+                    console.log("[Scroll debug] scrollTimer cleared. Target position:", targetPos);
+                    try {
+                        // Usa coordsAtPos para scroll preciso (mais confiável que domAtPos)
+                        try {
+                            var coords = editor.view.coordsAtPos(targetPos);
+                            if (coords && typeof coords.top === 'number') {
+                                var targetY = coords.top + window.scrollY - (window.innerHeight / 2);
+                                if (targetY >= 0) {
+                                    window.scrollTo({ top: targetY, behavior: "smooth" });
+                                    console.log("[Scroll debug] Scrolled to Y:", targetY, "based on coords");
+                                }
+                            }
+                        } catch (e2) {
+                            console.error("[Scroll debug] coordsAtPos failed:", e2);
+                        }
+
+                        // Destaca visualmente o item (precisa achar o DOM correspondente)
+                        setTimeout(function () {
+                            var sel = window.getSelection();
+                            if (sel && sel.rangeCount > 0) {
+                                var range = sel.getRangeAt(0);
+                                var highlightNode = range.startContainer;
+                                if (highlightNode) {
+                                    var el = highlightNode.nodeType === 3
+                                        ? highlightNode.parentElement
+                                        : highlightNode;
+                                    // Sobe ate encontrar um elemento de bloco viavel
+                                    while (el && el.classList && !el.classList.contains('ProseMirror')
+                                        && el.parentElement && !el.parentElement.classList.contains('ProseMirror')) {
+                                        el = el.parentElement;
+                                    }
+                                    if (el && el.style) {
+                                        console.log("[Scroll debug] Highlighting element:", el);
+                                        el.style.transition = "background-color 0.5s";
+                                        el.style.backgroundColor = "rgba(245, 158, 11, 0.25)";
+                                        setTimeout(function () {
+                                            el.style.backgroundColor = "";
+                                        }, 2500);
+                                    }
+                                }
+                            }
+                        }, 100);
+                    } catch (e) {
+                        console.error("[Scroll debug] Error in scrolling logic:", e);
+                    }
+                } else if (scrollAttempts > 25) {
+                    // Desiste após 2.5s
+                    clearInterval(scrollTimer);
+                }
+            }, 100);
+        })();
+
+        // Se nao tem hash #line- e nem texto de busca, vai para o inicio do documento
+        (function () {
+            var hash = window.location.hash;
+            var urlParams = new URLSearchParams(window.location.search);
+            if ((hash && hash.startsWith("#line-")) || urlParams.get("text")) return;
+            var attempts = 0;
+            var timer = setInterval(function () {
+                attempts++;
+                if (!editor || editor.isDestroyed) {
+                    if (attempts > 20) clearInterval(timer);
+                    return;
+                }
+                var doc = editor.state.doc;
+                if (!doc || doc.content.size === 0) {
+                    if (attempts > 20) clearInterval(timer);
+                    return;
+                }
+                clearInterval(timer);
+                editor.commands.setTextSelection(1);
+                editor.commands.scrollIntoView();
+            }, 100);
+        })();
+
+        // ── Bubble Menu ──
+        function updateBubble() {
+            if (!editor || editor.isDestroyed) {
+                hideBubble();
+                return;
+            }
+            var sel = window.getSelection();
+            if (!sel || sel.isCollapsed || !sel.rangeCount) {
+                hideBubble();
+                return;
+            }
+            var range = sel.getRangeAt(0);
+            var rect = range.getBoundingClientRect();
+            if (!rect || rect.width === 0) {
+                hideBubble();
+                return;
+            }
+            bubbleEl.classList.remove("hidden");
+            var bw = bubbleEl.offsetWidth;
+            var left = rect.left + rect.width / 2 - bw / 2;
+            var top = rect.top - 48;
+            if (top < 8) top = rect.bottom + 8;
+            if (left < 8) left = 8;
+            if (left + bw > window.innerWidth - 8)
+                left = window.innerWidth - bw - 8;
+            bubbleEl.style.left = left + "px";
+            bubbleEl.style.top = top + "px";
+            bubbleEl.querySelectorAll(".bubble-btn").forEach(function (btn) {
+                var cmd = btn.dataset.cmd;
+                if (cmd)
+                    btn.classList.toggle("is-active", editor.isActive(cmd));
+            });
+        }
+
+        function hideBubble() {
+            bubbleEl.classList.add("hidden");
+        }
+
+        bubbleEl.addEventListener("mousedown", function (e) {
+            var btn = e.target.closest(".bubble-btn");
+            if (!btn) return;
+            e.preventDefault();
+            var cmd = btn.dataset.cmd;
+            if (cmd) exec(cmd);
+            if (btn.id === "bubble-link") promptLink();
+        });
+
+        window.addEventListener(
+            "scroll",
+            function () {
+                if (!bubbleEl.classList.contains("hidden")) updateBubble();
+            },
+            true,
+        );
+
+        window.addEventListener("resize", function () {
+            if (!bubbleEl.classList.contains("hidden")) updateBubble();
+        });
+
+        // ── Slash Menu ──
+        function showSlashMenu(view) {
+            var coords = view.coordsAtPos(view.state.selection.from);
+            if (!coords) return;
+            renderSlashItems("");
+            slashEl.classList.remove("hidden");
+            var mw = 224;
+            var left = coords.left - 10;
+            // Mostrar antes do onUpdate reposicionar (precisa do offsetHeight)
+            var mh = slashEl.offsetHeight || 240;
+            var top;
+            var spaceBelow = window.innerHeight - coords.bottom - 8;
+            if (spaceBelow < mh && coords.top > mh + 8) {
+                top = coords.top - mh - 4;
+            } else {
+                top = coords.bottom + 4;
+            }
+            if (left + mw > window.innerWidth - 8)
+                left = window.innerWidth - mw - 8;
+            if (left < 8) left = 8;
+            slashEl.style.left = left + "px";
+            slashEl.style.top = top + "px";
+            selectSlashItem(0);
+        }
+
+        function hideSlashMenu() {
+            slashEl.classList.add("hidden");
+        }
+
+        function renderSlashItems(filter) {
+            var f = filter.toLowerCase();
+            var items = SLASH_COMMANDS.filter(function (c) {
+                return c.label.toLowerCase().indexOf(f) !== -1;
+            });
+            slashItems.innerHTML = "";
+            items.forEach(function (cmd, i) {
+                var labelHtml = cmd.label;
+                if (f) {
+                    var idx = cmd.label.toLowerCase().indexOf(f);
+                    if (idx !== -1) {
+                        var before = htmlEscape(cmd.label.substring(0, idx));
+                        var match = htmlEscape(
+                            cmd.label.substring(idx, idx + f.length),
+                        );
+                        var after = htmlEscape(
+                            cmd.label.substring(idx + f.length),
+                        );
+                        labelHtml =
+                            before + "<strong>" + match + "</strong>" + after;
+                    }
+                }
+                var btn = document.createElement("button");
+                btn.className = "slash-item";
+                btn.innerHTML =
+                    '<span class="icon">' +
+                    cmd.icon +
+                    '</span><span class="label">' +
+                    labelHtml +
+                    "</span>";
+                btn.onclick = cmd.action;
+                btn.dataset.index = i;
+                slashItems.appendChild(btn);
+            });
+            selectSlashItem(0);
+        }
+
+        var slashSelected = 0;
+
+        function htmlEscape(s) {
+            return s
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
+        function selectSlashItem(idx) {
+            slashSelected = idx;
+            slashItems
+                .querySelectorAll(".slash-item")
+                .forEach(function (el, i) {
+                    el.classList.toggle("active", i === idx);
+                    if (i === idx) el.scrollIntoView({ block: "nearest" });
+                });
+        }
+
+        document.addEventListener("keydown", function (e) {
+            if (!slashEl.classList.contains("hidden")) {
+                var items = slashItems.querySelectorAll(".slash-item");
+                if (items.length === 0) return;
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    selectSlashItem(
+                        Math.min(slashSelected + 1, items.length - 1),
+                    );
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    selectSlashItem(Math.max(slashSelected - 1, 0));
+                } else if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    items[slashSelected] && items[slashSelected].click();
+                }
+            }
+        });
+
+        // ── Executar ──
+        function exec(cmd, attrs) {
+            if (!editor) return;
+            var chain = editor.chain().focus();
+            switch (cmd) {
+                case "bold":
+                    chain.toggleBold();
+                    break;
+                case "italic":
+                    chain.toggleItalic();
+                    break;
+                case "underline":
+                    chain.toggleUnderline();
+                    break;
+                case "strike":
+                    chain.toggleStrike();
+                    break;
+                case "highlight":
+                    chain.toggleHighlight();
+                    break;
+                case "code":
+                    chain.toggleCode();
+                    break;
+                case "heading":
+                    chain.toggleHeading(attrs);
+                    break;
+                case "bulletList":
+                    chain.toggleBulletList();
+                    break;
+                case "orderedList":
+                    chain.toggleOrderedList();
+                    break;
+                case "taskList":
+                    // Direct insertion is more reliable than toggleTaskList on empty paragraphs
+                    chain.insertContent({
+                        type: "taskList",
+                        content: [
+                            {
+                                type: "taskItem",
+                                attrs: { checked: false },
+                                content: [{ type: "paragraph" }],
+                            },
+                        ],
+                    });
+                    break;
+                case "blockquote":
+                    chain.toggleBlockquote();
+                    break;
+                case "codeBlock":
+                    chain.toggleCodeBlock();
+                    break;
+                case "horizontalRule":
+                    chain.setHorizontalRule();
+                    break;
+                default:
+                    return;
+            }
+            chain.run();
+        }
+
+        function promptLink() {
+            var url = prompt("URL do link:");
+            if (url && editor) {
+                editor.chain().focus().setLink({ href: url }).run();
+            }
+        }
+
+        // ── Frontmatter ──
+        function toggleFrontmatter() {
+            frontmatterVisible = !frontmatterVisible;
+            var el = document.getElementById("frontmatter-area");
+            var arrow = document.getElementById("fm-arrow");
+            var tagSuggest = document.getElementById("tag-suggestions");
+            if (el) el.classList.toggle("hidden", !frontmatterVisible);
+            if (arrow) arrow.classList.toggle("rotate-90", frontmatterVisible);
+            if (tagSuggest)
+                tagSuggest.classList.toggle("hidden", !frontmatterVisible);
+            if (frontmatterVisible) loadTagSuggestions();
+        }
+
+        // ── TOC ──
+        var tocVisible = false;
+        var tocUpdateTimer = null;
+
+        function toggleToc() {
+            tocVisible = !tocVisible;
+            var el = document.getElementById("toc-area");
+            var arrow = document.getElementById("toc-arrow");
+            if (el) el.classList.toggle("hidden", !tocVisible);
+            if (arrow) arrow.classList.toggle("rotate-90", tocVisible);
+            if (tocVisible) updateToc();
+        }
+
+        // ── Backlinks ──
+        var backlinksVisible = true;
+        function toggleBacklinks() {
+            backlinksVisible = !backlinksVisible;
+            var el = document.getElementById("backlinks-content");
+            var arrow = document.getElementById("backlinks-arrow");
+            if (el) el.classList.toggle("hidden", !backlinksVisible);
+            if (arrow) arrow.classList.toggle("rotate-90", backlinksVisible);
+        }
+
+        function updateToc() {
+            if (!editor || editor.isDestroyed) return;
+            var headings = [];
+            editor.state.doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") {
+                    var level = node.attrs.level;
+                    var text = node.textContent.trim();
+                    if (text) headings.push({ level: level, text: text, pos: pos });
+                }
+            });
+            var el = document.getElementById("toc-area");
+            el.value = headings.map(function (h) {
+                var indent = "";
+                for (var i = 1; i < h.level; i++) indent += "\t";
+                return indent + h.text;
+            }).join("\n");
+            // Ajusta altura
+            el.style.height = "auto";
+            el.style.height = el.scrollHeight + "px";
+        }
+
+        function applyToc(headings) {
+            if (!editor || editor.isDestroyed) return;
+            var lines = headings.split("\n").filter(function (l) { return l.trim(); });
+            var tr = editor.state.tr;
+            var headingsInDoc = [];
+            editor.state.doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") headingsInDoc.push(pos);
+            });
+            // Atualiza niveis dos headings existentes
+            for (var idx = 0; idx < headingsInDoc.length && idx < lines.length; idx++) {
+                var line = lines[idx];
+                var tabs = 0;
+                for (var i = 0; i < line.length; i++) {
+                    if (line[i] === "\t") tabs++;
+                    else break;
+                }
+                var text = line.trim();
+                var node = editor.state.doc.nodeAt(headingsInDoc[idx]);
+                if (!node || node.type.name !== "heading") continue;
+                var newLevel = Math.min(Math.max(tabs + 1, 1), 6);
+                if (newLevel !== node.attrs.level) {
+                    tr.setNodeMarkup(headingsInDoc[idx], null, { level: newLevel });
+                }
+                // Atualiza texto se mudou
+                var oldText = node.textContent;
+                if (text && text !== oldText) {
+                    var textNode = editor.state.schema.text(text);
+                    var from = headingsInDoc[idx] + 1;
+                    var to = headingsInDoc[idx] + node.nodeSize - 1;
+                    if (to > from) {
+                        tr.replaceWith(from, to, textNode);
+                    } else {
+                        tr.insert(from, textNode);
+                    }
+                }
+            }
+            // Cria headings novos se o TOC tiver mais linhas
+            if (lines.length > headingsInDoc.length) {
+                var lastPos = editor.state.doc.content.size;
+                for (var idx = headingsInDoc.length; idx < lines.length; idx++) {
+                    var line = lines[idx];
+                    var tabs = 0;
+                    for (var i = 0; i < line.length; i++) {
+                        if (line[i] === "\t") tabs++;
+                        else break;
+                    }
+                    var text = line.trim();
+                    if (!text) continue;
+                    var newLevel = Math.min(Math.max(tabs + 1, 1), 6);
+                    var hNode = editor.state.schema.nodes.heading.create({ level: newLevel }, editor.state.schema.text(text));
+                    tr.insert(lastPos - 1, hNode);
+                }
+            }
+            if (tr.steps.length) editor.view.dispatch(tr);
+        }
+
+        document.addEventListener("input", function (e) {
+            if (e.target && e.target.id === "toc-area") {
+                if (tocUpdateTimer) clearTimeout(tocUpdateTimer);
+                tocUpdateTimer = setTimeout(function () {
+                    applyToc(document.getElementById("toc-area").value);
+                }, 300);
+            }
+        });
+
+        // Tab no TOC insere/remove tabulacao
+        document.addEventListener("keydown", function (e) {
+            if (e.target && e.target.id === "toc-area" && e.key === "Tab") {
+                e.preventDefault();
+                var ta = e.target;
+                var start = ta.selectionStart;
+                var end = ta.selectionEnd;
+                if (e.shiftKey) {
+                    // Shift+Tab: remove um tab no inicio da linha
+                    var lineStart = ta.value.lastIndexOf("\n", start - 1) + 1;
+                    if (ta.value.charAt(lineStart) === "\t") {
+                        ta.value = ta.value.substring(0, lineStart) + ta.value.substring(lineStart + 1);
+                        ta.selectionStart = ta.selectionEnd = Math.max(start - 1, lineStart);
+                    }
+                } else {
+                    // Tab: insere tab
+                    ta.value = ta.value.substring(0, start) + "\t" + ta.value.substring(end);
+                    ta.selectionStart = ta.selectionEnd = start + 1;
+                }
+                ta.dispatchEvent(new Event("input"));
+            }
+        });
+
+        function loadTagSuggestions() {
+            fetch("/api/tags")
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    var list = document.getElementById("tag-suggestion-list");
+                    var tags = data.tags || [];
+                    if (tags.length === 0) {
+                        list.innerHTML =
+                            '<span class="text-[10px] text-zinc-700">Nenhuma tag indexada.</span>';
+                        return;
+                    }
+                    list.innerHTML = "";
+                    tags.forEach(function (t) {
+                        var btn = document.createElement("button");
+                        btn.className =
+                            "text-[10px] font-bold text-zinc-500 bg-zinc-800/40 hover:bg-zinc-700/60 hover:text-zinc-300 px-2 py-0.5 rounded transition-colors";
+                        btn.textContent = "#" + t;
+                        btn.onclick = function () {
+                            addTagToFrontmatter(t);
+                        };
+                        list.appendChild(btn);
+                    });
+                })
+                .catch(function () {});
+        }
+
+        function addTagToFrontmatter(tag) {
+            var fm = document.getElementById("frontmatter-area");
+            var val = fm.value;
+            
+            // 1. Tenta encontrar tags no formato flow style: tags: [tag1, tag2]
+            var flowMatch = val.match(/^tags:\s*\[([^\]]*)\]/m);
+            if (flowMatch) {
+                var existing = flowMatch[1].trim();
+                var tags = existing ? existing.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+                if (!tags.includes(tag)) {
+                    tags.push(tag);
+                }
+                var newVal = val.replace(/^tags:\s*\[[^\]]*\]/m, "tags: [" + tags.join(", ") + "]");
+                fm.value = newVal;
+                triggerFmInput(fm);
+                return;
+            }
+            
+            // 2. Tenta encontrar tags no formato block style (ex: tags:\n  - tag1\n  - tag2)
+            var lines = val.split('\n');
+            var tagsIndex = -1;
+            for (var i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === 'tags:') {
+                    tagsIndex = i;
+                    break;
+                }
+            }
+            if (tagsIndex !== -1) {
+                var tags = [];
+                var lastIndex = tagsIndex;
+                for (var j = tagsIndex + 1; j < lines.length; j++) {
+                    var line = lines[j];
+                    var match = line.match(/^\s*-\s*(.+)$/);
+                    if (match) {
+                        tags.push(match[1].trim());
+                        lastIndex = j;
+                    } else if (line.trim() !== "" && !line.startsWith(" ")) {
+                        break;
+                    }
+                }
+                if (!tags.includes(tag)) {
+                    tags.push(tag);
+                }
+                // Substitui o bloco por flow style de tags
+                lines.splice(tagsIndex, (lastIndex - tagsIndex) + 1, "tags: [" + tags.join(", ") + "]");
+                fm.value = lines.join('\n');
+                triggerFmInput(fm);
+                return;
+            }
+            
+            // 3. Se tags: não existir no frontmatter, adiciona tags: [tag]
+            if (val.trim()) {
+                fm.value = val.trim() + "\ntags: [" + tag + "]\n";
+            } else {
+                fm.value = "tags: [" + tag + "]\n";
+            }
+            triggerFmInput(fm);
+        }
+
+        function triggerFmInput(el) {
+            var evt = new Event("input", { bubbles: true });
+            el.dispatchEvent(evt);
+        }
+
+        document.addEventListener("input", function (e) {
+            if (e.target && e.target.id === "frontmatter-area") {
+                frontmatterText = e.target.value;
+                // Ajusta altura
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
+            }
+        });
+
+        // ── Status ──
+        function setStatus(s) {
+            currentStatus = s;
+            if (s === "saved") {
+                statusEl.textContent = "\u2713";
+                statusEl.className =
+                    "text-base font-mono text-emerald-500 shrink-0";
+            } else if (s === "saving") {
+                statusEl.textContent = "\u27F3";
+                statusEl.className =
+                    "text-base font-mono text-sky-400 shrink-0";
+            } else {
+                statusEl.textContent = "\u25CF";
+                statusEl.className =
+                    "text-base font-mono text-amber-500 shrink-0";
+            }
+        }
+
+        // ── Save ──
+        async function saveNow() {
+            if (saveTimer) clearTimeout(saveTimer);
+            await doSave();
+        }
+
+        async function doSave() {
+            if (!editor || currentStatus === "saving") return;
+            setStatus("saving");
+            var md = "";
+            try {
+                md = editor.storage.markdown.getMarkdown();
+            } catch (e) {
+                md = editor.getHTML();
+            }
+            var fm = document.getElementById("frontmatter-area").value.trim();
+            var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+            // Convert editor links to [[wikilink]] for storage
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                "[[$1]]",
+            );
+            // Também converte links de download de volta pra [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
+                "[[$1]]",
+            );
+
+            var currentHash = await generateHash(finalContent);
+            if (currentHash === lastSavedHash) {
+                setStatus("saved");
+                return;
+            }
+
+            var fd = new FormData();
+            fd.append("filename", filenameInput.value);
+            fd.append("content", finalContent);
+            fd.append("tags", "");
+            try {
+                var resp = await fetch("/file/save", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (resp.ok || resp.status === 303) {
+                    setStatus("saved");
+                    lastSavedHash = currentHash;
+                } else {
+                    var errText = await resp.text().catch(function () {
+                        return "";
+                    });
+                    setStatus("dirty");
+                    console.error("Save failed:", resp.status, errText);
+                }
+            } catch (e) {
+                setStatus("dirty");
+            }
+        }
+
+        // ── Rename ──
+        filenameInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                doRename();
+            }
+        });
+        filenameInput.addEventListener("blur", function () {
+            doRename();
+        });
+
+        async function doRename() {
+            var newName = filenameInput.value.trim();
+            // Remove .md se o usuario digitou, pois adicionamos automaticamente
+            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
+            if (!newName || newName === originalDisplayName) return;
+            newName += ".md";
+            if (saveTimer) clearTimeout(saveTimer);
+            setStatus("saving");
+
+            var md = "";
+            try {
+                md = editor.storage.markdown.getMarkdown();
+            } catch (e) {
+                md = editor.getHTML();
+            }
+            var fm = document.getElementById("frontmatter-area").value.trim();
+            var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
+            // Convert editor links to [[wikilink]] for storage
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                "[[$1]]",
+            );
+            // Também converte links de download de volta pra [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
+                "[[$1]]",
+            );
+
+            // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
+            if (originalFilename !== "notes/" + newName) {
+                var renameFd = new FormData();
+                renameFd.append("old", originalFilename);
+                renameFd.append("new", "notes/" + newName);
+                try {
+                    var renameResp = await fetch("/file/rename", {
+                        method: "POST",
+                        body: renameFd,
+                    });
+                    if (!renameResp.ok) {
+                        throw new Error("Erro ao renomear no servidor");
+                    }
+                } catch (err) {
+                    setStatus("dirty");
+                    console.error("Rename failed:", err);
+                    alert("Erro ao renomear nota: " + err.message);
+                    return;
+                }
+            }
+
+            // 2. Salva o conteúdo final com o novo nome
+            var fd = new FormData();
+            fd.append("filename", newName);
+            fd.append("content", finalContent);
+            fd.append("tags", "");
+            try {
+                var saveResp = await fetch("/file/save", {
+                    method: "POST",
+                    body: fd,
+                });
+                if (saveResp.ok || saveResp.status === 303) {
+                    setStatus("saved");
+                    var newHash = await generateHash(finalContent);
+                    lastSavedHash = newHash;
+                } else {
+                    setStatus("dirty");
+                    console.error("Save failed:", saveResp.status);
+                }
+
+                // 3. Atualiza referências locais e redireciona
+                originalFilename = "notes/" + newName;
+                originalDisplayName = newName.replace(/\.md$/, "");
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent("notes/" + newName);
+            } catch (e) {
+                setStatus("dirty");
+            }
+        }
+
+        // ── Delete current note ──
+        function deleteCurrentNote() {
+            var filename = filenameInput.value;
+            if (!filename) return;
+            if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
+            var fd = new FormData();
+            fd.append("filename", filename);
+            // O servidor ja deleta o arquivo e faz um redirect 303.
+            // O fetch segue o redirect automaticamente (recebe HTML).
+            // Nao tentamos parsear JSON — apenas redirecionamos para a home.
+            fetch("/file/delete", { method: "POST", body: fd })
+                .then(function () {
+                    window.location.href = "/";
+                })
+                .catch(function () {
+                    window.location.href = "/";
+                });
+        }
+
+        // ── Duplicate current note ──
+        function duplicateCurrentNote() {
+            var filename = filenameInput.dataset.filename || originalFilename;
+            if (!filename) return;
+            if (!confirm('Duplicar esta nota "' + filename + '"?')) return;
+            
+            var fd = new FormData();
+            fd.append("filename", filename);
+            
+            fetch("/api/note/duplicate", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (!r.ok) {
+                        return r.text().then(function (t) { throw new Error(t); });
+                    }
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.new_filename) {
+                        window.location.href = "/editor?file=" + encodeURIComponent(data.new_filename);
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro ao duplicar nota: " + err.message);
+                });
+        }
+
+        // ── Ctrl+S ──
+        document.addEventListener("keydown", function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                saveNow();
+            }
+        });
+
+        // ── Save button ──
+        document.getElementById("save-btn").addEventListener("click", saveNow);
+
+        // ── Frontmatter toggle ──
+        document
+            .getElementById("toggle-fm-btn")
+            .addEventListener("click", toggleFrontmatter);
+
+        // ── Clicar fora fecha menus ──
+        document.addEventListener("mousedown", function (e) {
+            if (
+                !bubbleEl.classList.contains("hidden") &&
+                !bubbleEl.contains(e.target)
+            )
+                hideBubble();
+            if (
+                !slashEl.classList.contains("hidden") &&
+                !slashEl.contains(e.target)
+            )
+                hideSlashMenu();
+            var wm = document.getElementById("wikilink-menu");
+            if (
+                !wm.classList.contains("hidden") &&
+                !wm.contains(e.target) &&
+                !e.target.closest(".ProseMirror")
+            ) {
+                hideWikiMenu();
+            }
+        });
+
+        // ── Image upload: usada tanto pelo slash command quanto pelo Ctrl+V ──
+        async function uploadAndInsertImage(file) {
+            var fd = new FormData();
+            fd.append("file", file);
+
+            try {
+                var resp = await fetch("/api/upload-image", {
+                    method: "POST",
+                    body: fd,
+                });
+                var data = await resp.json();
+                if (data.ok && editor) {
+                    editor.chain().focus().setImage({ src: data.url }).run();
+                    setStatus("dirty");
+                } else {
+                    alert(
+                        "Erro ao fazer upload da imagem: " +
+                            (data.error || "desconhecido"),
+                    );
+                }
+            } catch (err) {
+                alert("Erro ao fazer upload da imagem: " + err.message);
+            }
+        }
+
+        document
+            .getElementById("editor-image-input")
+            .addEventListener("change", async function (e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                e.target.value = ""; // reset para poder selecionar o mesmo arquivo de novo
+                await uploadAndInsertImage(file);
+            });
+
+        loadWikiNotes();
+        setStatus("saved");
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+        window.toggleToc = toggleToc;
+        window.toggleBacklinks = toggleBacklinks;
+        window.updateToc = updateToc;
+        window.applyToc = applyToc;
+    })();
+</script>
+}

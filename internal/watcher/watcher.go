@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"ton618/internal/config"
-	"ton618/internal/db"
+	"ton618/internal/core/config"
+	"ton618/internal/core/db"
 	"ton618/internal/processor"
 
 	"github.com/fsnotify/fsnotify"

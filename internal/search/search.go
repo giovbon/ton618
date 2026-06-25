@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"ton618/internal/db"
+	"ton618/internal/core/db"
 )
 
 type SearchHit struct {

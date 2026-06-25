@@ -340,7 +340,7 @@
 
     async function updateTodosCount() {
         try {
-            const response = await fetch("/api/todos?type=all&status=pending");
+            const response = await fetch("/api/todos?type=all&status=pending&format=json");
             if (!response.ok) return;
             const data = await response.json();
             const count = data.todos ? data.todos.length : 0;

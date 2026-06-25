@@ -1,0 +1,178 @@
+package search
+
+import "ton618/web/layout"
+
+templ Index(title string) {
+    @layout.Layout(title, false, indexContent())
+}
+
+templ indexContent() {
+<div>
+    <!-- Search toggle + bar -->
+    <div class="flex items-center gap-3 mb-4">
+        <button
+            id="mode-toggle"
+            onclick="toggleMode()"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30"
+            title="Alternar modo de busca"
+        >
+            <span id="mode-icon">
+                <svg
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2.5"
+                        d="M4 6h16M4 12h16m-7 6h7"
+                    />
+                </svg>
+            </span>
+            <span id="mode-label">Notas</span>
+        </button>
+
+        <div class="relative flex-1">
+            <input
+                id="search-local"
+                type="text"
+                placeholder="Filtrar notas..."
+                name="q"
+                hx-get="/api/sidebar"
+                hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
+                hx-target="#contentArea"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all"
+            />
+            <input
+                id="search-global"
+                type="text"
+                placeholder="Buscar no conteúdo das notas..."
+                name="q"
+                hx-post="/search"
+                hx-trigger="input changed delay:300ms, search"
+                hx-target="#global-container"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all hidden"
+            />
+            <div
+                id="spinner"
+                class="absolute right-3 top-1/2 -translate-y-1/2 htmx-indicator"
+            >
+                <svg
+                    class="animate-spin h-4 w-4 text-zinc-500"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                >
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+        <div id="compact-container">
+            <div id="contentArea"></div>
+        </div>
+        <div id="global-container" class="hidden"></div>
+    </div>
+</div>
+
+<script>
+    var isCompact = true;
+
+    function toggleMode() {
+        isCompact = !isCompact;
+        var btn = document.getElementById("mode-toggle");
+        var label = document.getElementById("mode-label");
+        var icon = document.getElementById("mode-icon");
+        var localInput = document.getElementById("search-local");
+        var globalInput = document.getElementById("search-global");
+
+        if (isCompact) {
+            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
+            label.textContent = "Notas";
+            icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"/></svg>';
+            
+            localInput.classList.remove("hidden");
+            globalInput.classList.add("hidden");
+            document.getElementById("compact-container").classList.remove("hidden");
+            document.getElementById("global-container").classList.add("hidden");
+            
+            // Refocus and re-trigger search if needed
+            localInput.focus();
+        } else {
+            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
+            label.textContent = "Busca";
+            icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
+            
+            localInput.classList.add("hidden");
+            globalInput.classList.remove("hidden");
+            document.getElementById("compact-container").classList.add("hidden");
+            document.getElementById("global-container").classList.remove("hidden");
+            
+            globalInput.focus();
+        }
+    }
+
+    function highlightSearchTerms(query) {
+        if (!query) return;
+
+        var terms = [];
+        var remaining = query;
+        var quoteRe = /"([^"]*)"|'([^']*)'/g;
+        var m;
+        while ((m = quoteRe.exec(query)) !== null) {
+            var phrase = m[1] || m[2];
+            if (phrase && phrase.length > 1) {
+                terms.push(phrase);
+                var phraseWords = phrase.split(/\s+/);
+                phraseWords.forEach(function (pw) {
+                    if (pw.length > 1 && terms.indexOf(pw) === -1)
+                        terms.push(pw);
+                });
+            }
+            remaining = remaining.replace(m[0], " ");
+        }
+        var words = remaining.split(/\s+/).filter(function (w) {
+            return w.length > 1 && w !== '"';
+        });
+        terms = terms.concat(words);
+
+        if (!terms.length) return;
+        document.querySelectorAll(".snippet-text, #global-container a[href^='/editor']").forEach(function (el) {
+            var html = el.innerHTML;
+            var textOnly = el.textContent;
+            
+            // To prevent replacing inside HTML tags, a safe approach for basic layout:
+            // Since snippet-text is simple text, we can just replace textContent.
+            // For links with icons, we might need a safer regex. For now, simple text replacement:
+            var replacedText = textOnly;
+            terms.forEach(function (w) {
+                var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+                replacedText = replacedText.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
+            });
+            if (replacedText !== textOnly) {
+                // If the element has children (like the icon span), we might destroy it.
+                // The previous implementation used innerHTML naively. We'll stick to it if it was working.
+                html = el.innerHTML;
+                terms.forEach(function (w) {
+                    var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>|[^<>]*<\/)", "gi");
+                    html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
+                });
+                el.innerHTML = html;
+            }
+        });
+    }
+
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'global-container') {
+            var q = document.getElementById('search-global').value;
+            highlightSearchTerms(q);
+        }
+    });
+</script>
+}
