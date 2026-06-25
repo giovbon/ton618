@@ -1,5 +1,5 @@
 # ─── Estágio 1: Build do bundle web ────────────────
-FROM node:20 AS web-builder
+FROM node:20-alpine AS web-builder
 
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
@@ -7,28 +7,30 @@ RUN npm install --legacy-peer-deps
 COPY web/ .
 RUN node build.js
 
-# ─── Estágio 2: Build Go ────────────────────────────
-FROM golang:1.25 AS builder
+# Remove arquivos não-comprimidos — o servidor sempre serve o .gz,
+# os originais nunca são usados no runtime (economiza ~9 MB na imagem final)
+RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" -delete && \
+    find static -maxdepth 1 -name "*.css" ! -name "*.gz" -delete
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# ─── Estágio 2: Build Go ────────────────────────────
+FROM golang:1.24-alpine AS builder
+
+# modernc.org/sqlite é pure Go → CGO_ENABLED=0, não precisa de gcc nem git
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
 COPY go.mod go.sum ./
-RUN go mod download && go mod tidy
+RUN go mod download
 
-# Instalar templ e dependências
+# Instalar templ
 RUN go install github.com/a-h/templ/cmd/templ@latest
 
 ARG TARGETARCH
 COPY . .
 
-# Copia bundle web do estágio anterior
-COPY --from=web-builder /web/static/editor.js web/static/editor.js
-COPY --from=web-builder /web/static/editor.js.gz web/static/editor.js.gz
+# Copia bundle web (apenas .gz) do estágio anterior
+COPY --from=web-builder /web/static ./web/static
 
 # Gerar código do templ antes de compilar
 RUN templ generate
@@ -47,11 +49,11 @@ RUN adduser -D -h /app appuser
 
 WORKDIR /app
 
-COPY --from=builder /ton618 .
-COPY --from=builder /app/web /app/web
+# --chown direto elimina a camada de chown -R separada
+COPY --from=builder --chown=appuser:appuser /ton618 .
+COPY --from=builder --chown=appuser:appuser /app/web ./web
 
-# Garante permissão de escrita nos volumes
-RUN mkdir -p /app/docs /app/data && chown -R appuser:appuser /app
+RUN mkdir -p /app/docs /app/data && chown appuser:appuser /app/docs /app/data
 
 USER appuser
 
@@ -59,11 +61,11 @@ VOLUME ["/app/docs", "/app/data"]
 
 EXPOSE 6180
 
-ENV DOCS_DIR=/app/docs
-ENV DB_PATH=/app/data/ton618.db
-ENV STATE_DIR=/app/data
-ENV WEB_DIR=/app/web
-ENV PORT=6180
+ENV DOCS_DIR=/app/docs \
+    DB_PATH=/app/data/ton618.db \
+    STATE_DIR=/app/data \
+    WEB_DIR=/app/web \
+    PORT=6180
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:6180/api/health || exit 1

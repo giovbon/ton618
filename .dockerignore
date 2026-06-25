@@ -4,7 +4,13 @@ web/node_modules
 ton618
 ton618.exe
 server
+build_check.sh
 data/
 *.db
 *.log
 tmp/
+docs/
+*.md
+deploy.sh
+extract.py
+*.py
