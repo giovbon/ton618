@@ -51,4 +51,10 @@ coverage.out
 package-lock.json
 
 # Build artifacts
+*_templ.go
+web/static/editor.js
 web/static/editor.js.gz
+web/static/spreadsheet.js
+web/static/spreadsheet.js.gz
+web/static/drawing.js
+web/static/drawing.js.gz
