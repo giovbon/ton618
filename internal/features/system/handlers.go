@@ -669,7 +669,7 @@ func (ctx *HandlerContext) HandleLogin(w http.ResponseWriter, r *http.Request) {
 // ── Tabulator Database Handlers ──
 
 func (ctx *HandlerContext) HandleDatabasePage(w http.ResponseWriter, r *http.Request) {
-	notes.Database("Banco de Dados — TON-618").Render(r.Context(), w)
+	notes.Database("Tabulator — TON-618").Render(r.Context(), w)
 }
 
 func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.Request) {

@@ -1,7 +1,5 @@
 #!/bin/bash
 # user: admin | pass: ton618
-# 🌌 TON-618 v2.2 — Runner & Builder
-# Motor de Busca Personal Knowledge Management
 
 set -euo pipefail # Interrompe o script se houver erros ou variáveis nulas
 
@@ -38,12 +36,6 @@ export DOCS_DIR DATA_DIR
 echo -e "${BLUE}🌌 Iniciando TON-618 v2...${NC}"
 echo -e "🗄️  Banco SQLite em: ${YELLOW}$DB_PATH${NC}"
 echo -e "🔌 Porta:           ${YELLOW}$PORT${NC}"
-
-if [ -n "${EMBEDDING_API_KEY:-}" ]; then
-    echo -e "🧠 Modo Semântico:  ${GREEN}Ativo (API Key configurada)${NC}"
-else
-    echo -e "🧠 Modo Semântico:  ${YELLOW}Desativado (Apenas busca local/FTS5)${NC}"
-fi
 
 # Garantir diretórios essenciais
 mkdir -p "$DOCS_DIR" "$DATA_DIR"

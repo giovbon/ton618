@@ -19,9 +19,9 @@ Fórmulas possíveis: https://jspreadsheet.com/docs/formulas/functions
 - **Busca Global**: Pesquisa textual rápida em todos os seus arquivos (Full Text Search - FTS5). O sistema aplica pesos inteligentes nos resultados: **Título** (10x), **Tags** (5x) e **Conteúdo** (1x) para garantir que os itens mais relevantes apareçam primeiro.
 - **Listagem Compacta**: Modo de visualização limpo, perfeito para navegar rapidamente por uma lista densa de notas e acessar seus recursos por tipo (Mermaid, Planilha, Typst).
 
-### 🎯 TODOs e Banco de Dados
+### 🎯 TODOs e Tabulator
 - **TODOs Dinâmicos**: O sistema rastreia palavras-chave ativas (como `TODO`, `FIX`, `HACK`) em tempo real pelas suas notas e as exibe em um dashboard central. Você pode gerenciar cores e marcadores nas Configurações.
-- **Banco de Dados**: Visão global de tudo que está armazenado no seu buraco negro de informações, de forma tabular e pesquisável.
+- **Tabulator**: Visão global de tudo que está armazenado no seu buraco negro de informações, de forma tabular e pesquisável.
 
 ### ⚙️ Opções Avançadas e Manutenção
 - **Tagueamento e RAKE**: Notas não etiquetadas ou órfãs podem receber sugestões de tags automáticas baseadas em extração de palavras-chave do texto (RAKE).

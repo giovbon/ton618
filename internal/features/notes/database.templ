@@ -11,14 +11,38 @@ templ databaseContent() {
     <!-- Header -->
     <div class="flex flex-col gap-4 mb-6">
         <div class="flex items-center justify-between">
-            <h1 class="text-2xl font-black tracking-tight text-white">🗃️ Banco de Dados</h1>
-            <div class="text-sm text-zinc-400" id="db-stats">Carregando...</div>
+            <h1 class="text-2xl font-black tracking-tight text-white">🗃️ Tabulator</h1>
+            <div class="flex items-center gap-4">
+                <div class="text-sm text-zinc-400" id="db-stats">Carregando...</div>
+                
+                <!-- Column Visibility Selector -->
+                <div class="relative" id="column-selector-container">
+                    <button id="column-selector-btn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 10.5h.008v.008H9V10.5zm0 2.25h.008v.008H9v-.008zm3-2.25h.008v.008H12V10.5zm0 2.25h.008v.008H12v-.008zm3-2.25h.008v.008H15V10.5zm0 2.25h.008v.008H15v-.008zm-6-5.25h.008v.008H9V5.25zm0 2.25h.008v.008H9v-.008zm3-2.25h.008v.008H12V5.25zm0 2.25h.008v.008H12v-.008zm3-2.25h.008v.008H15V5.25zm0 2.25h.008v.008H15v-.008zm-6 10.5h.008v.008H9v-.008zm0 2.25h.008v.008H9v-.008zm3-10.5h.008v.008H12v-.008zm0 2.25h.008v.008H12v-.008zm3-10.5h.008v.008H15v-.008zm0 2.25h.008v.008H15v-.008z" />
+                        </svg>
+                        Colunas
+                    </button>
+                    <!-- Dropdown Menu -->
+                    <div id="column-selector-menu" class="absolute right-0 mt-2 w-56 origin-top-right bg-zinc-950/95 border border-zinc-800 rounded-xl shadow-2xl hidden z-50 p-3 max-h-80 overflow-y-auto">
+                        <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">Exibir/Ocultar Colunas</div>
+                        <div class="space-y-1" id="column-checkboxes">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Search input and filters -->
-        <div class="relative mt-2">
+        <div class="relative mt-2 flex items-center">
             <input id="db-search" type="text" placeholder="Buscar em qualquer campo..."
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-all" />
+                class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-all" />
+            <button id="db-search-clear" type="button" class="absolute right-3 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -179,8 +203,16 @@ templ databaseContent() {
             .then(data => {
                 document.getElementById("db-stats").innerText = data.data.length + " notas registradas";
 
+                var savedVisibility = {};
+                try {
+                    savedVisibility = JSON.parse(localStorage.getItem("db_column_visibility")) || {};
+                } catch(e) {}
+
                 // Format columns
                 var cols = data.columns.map(function(c) {
+                    if (savedVisibility[c.field] !== undefined) {
+                        c.visible = savedVisibility[c.field];
+                    }
                     // Action Link Formatter
                     if (c.field === "abrir_link") {
                         c.formatter = function(cell) {
@@ -241,6 +273,34 @@ templ databaseContent() {
                     
                     if (c.editor) {
                         c.headerTooltip = "Clique nas células para editar";
+                        
+                        // Adaptive editor and formatter for custom frontmatter fields
+                        if (c.field !== "titulo" && c.field !== "tags") {
+                            c.editor = function(cell) {
+                                var val = cell.getValue();
+                                if (typeof val === "boolean") {
+                                    return "tickCross";
+                                }
+                                // Check if value is a date or looks like YYYY-MM-DD
+                                if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val.trim())) {
+                                    return "date";
+                                }
+                                // Check if value is numeric
+                                if (typeof val === "number" || (typeof val === "string" && val.trim() !== "" && !isNaN(val.trim()))) {
+                                    return "number";
+                                }
+                                return "input";
+                            };
+                            
+                            // Adaptive formatter to display checkmark/cross for booleans
+                            c.formatter = function(cell) {
+                                var val = cell.getValue();
+                                if (typeof val === "boolean") {
+                                    return val ? "<span class='text-emerald-500 font-bold'>✔️</span>" : "<span class='text-rose-500 font-bold'>❌</span>";
+                                }
+                                return val;
+                            };
+                        }
                     }
                     
                     return c;
@@ -251,13 +311,68 @@ templ databaseContent() {
                     columns: cols,
                     layout: "fitColumns",
                     responsiveLayout: "collapse",
+                    columnResizeGuide: true,
                     pagination: "local",
                     paginationSize: 100,
                     paginationSizeSelector: [100, 200, 500, true],
-                    placeholder: "Nenhuma nota encontrada no banco de dados.",
+                    placeholder: "Nenhuma nota encontrada no Tabulator.",
                     initialSort: [
                         {column: "mtime", dir: "desc"}
                     ],
+                });
+
+                // Populate column selector checkboxes
+                var checkboxContainer = document.getElementById("column-checkboxes");
+                checkboxContainer.innerHTML = "";
+                
+                cols.forEach(function(c) {
+                    var fieldName = c.field;
+                    var titleName = c.title || fieldName;
+                    if (!fieldName) return;
+                    
+                    var isVisible = c.visible !== false;
+                    
+                    var label = document.createElement("label");
+                    label.className = "flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-900 cursor-pointer transition-colors text-[12px] font-medium";
+                    
+                    var input = document.createElement("input");
+                    input.type = "checkbox";
+                    input.checked = isVisible;
+                    input.className = "w-3.5 h-3.5 rounded border-zinc-800 text-sky-500 bg-zinc-900 focus:ring-sky-500 focus:ring-offset-zinc-950 transition-colors";
+                    
+                    input.addEventListener("change", function() {
+                        var checked = input.checked;
+                        if (checked) {
+                            table.showColumn(fieldName);
+                        } else {
+                            table.hideColumn(fieldName);
+                        }
+                        
+                        savedVisibility[fieldName] = checked;
+                        localStorage.setItem("db_column_visibility", JSON.stringify(savedVisibility));
+                    });
+                    
+                    var span = document.createElement("span");
+                    span.innerText = titleName;
+                    
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    checkboxContainer.appendChild(label);
+                });
+
+                // Column selector dropdown toggle logic
+                var selectorBtn = document.getElementById("column-selector-btn");
+                var selectorMenu = document.getElementById("column-selector-menu");
+                
+                selectorBtn.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    selectorMenu.classList.toggle("hidden");
+                });
+                
+                document.addEventListener("click", function(e) {
+                    if (!selectorMenu.contains(e.target) && e.target !== selectorBtn) {
+                        selectorMenu.classList.add("hidden");
+                    }
                 });
 
                 // Listen for edits and save to backend
@@ -269,10 +384,21 @@ templ databaseContent() {
 
                     if(newVal === oldVal) return; // No change
 
+                    // Normalize edited value to correct type (boolean, number or string)
+                    var parsedVal = newVal;
+                    if (typeof newVal === "string") {
+                        var trimmed = newVal.trim();
+                        if (trimmed === "true") parsedVal = true;
+                        else if (trimmed === "false") parsedVal = false;
+                        else if (trimmed !== "" && !isNaN(trimmed)) {
+                            parsedVal = Number(trimmed);
+                        }
+                    }
+
                     var payload = {
                         file: rowData.arquivo,
                         key: field,
-                        value: newVal
+                        value: parsedVal
                     };
 
                     fetch("/api/notes/update-property", {
@@ -400,12 +526,26 @@ templ databaseContent() {
                     return { filters: filters, generalTerms: generalTerms };
                 }
 
-                // Global Search
-                document.getElementById("db-search").addEventListener("input", function(e){
+                // Global Search setup
+                var searchInput = document.getElementById("db-search");
+                var clearBtn = document.getElementById("db-search-clear");
+
+                function updateClearButton() {
+                    if (searchInput.value) {
+                        clearBtn.classList.remove("hidden");
+                    } else {
+                        clearBtn.classList.add("hidden");
+                    }
+                }
+
+                function applyFilter(queryValue) {
+                    var val = queryValue.trim();
+                    if (!val) {
+                        table.clearFilter();
+                        return;
+                    }
+                    
                     table.setFilter(function(data, filterParams){
-                        var val = e.target.value.trim();
-                        if(!val) return true;
-                        
                         var parsed = parseSearchQuery(val);
                         if (parsed.filters.length === 0 && parsed.generalTerms.length === 0) {
                             return true;
@@ -459,6 +599,31 @@ templ databaseContent() {
                         
                         return true;
                     });
+                }
+
+                // Restore last query from localStorage
+                var lastQuery = localStorage.getItem("db_last_query") || "";
+                if (lastQuery) {
+                    searchInput.value = lastQuery;
+                    applyFilter(lastQuery);
+                    updateClearButton();
+                }
+
+                // Input listener
+                searchInput.addEventListener("input", function(e){
+                    var val = e.target.value;
+                    localStorage.setItem("db_last_query", val);
+                    applyFilter(val);
+                    updateClearButton();
+                });
+
+                // Clear button listener
+                clearBtn.addEventListener("click", function(){
+                    searchInput.value = "";
+                    localStorage.setItem("db_last_query", "");
+                    applyFilter("");
+                    updateClearButton();
+                    searchInput.focus();
                 });
 
             })
