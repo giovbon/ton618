@@ -13,7 +13,7 @@ RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" -delete && \
     find static -maxdepth 1 -name "*.css" ! -name "*.gz" -delete
 
 # ─── Estágio 2: Build Go ────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # modernc.org/sqlite é pure Go → CGO_ENABLED=0, não precisa de gcc nem git
 RUN apk add --no-cache ca-certificates
