@@ -65,13 +65,44 @@ func (s *NoteService) Save(filename, content string, rawTags []string) error {
 		filename = "notes/" + filename
 	}
 
-	mtime := time.Now().UTC().Format(time.RFC3339)
-	if err := s.notes.SaveNote(filename, content, mtime); err != nil {
+	mtime := time.Now().UTC()
+
+	// 1. Extração preliminar para detectar keywords e atualizar o conteúdo antes de salvar
+	// ProcessMarkdownContent é muito leve comparado à I/O
+	_, _, fileTags := processor.ProcessMarkdownContent([]byte(content), filename, mtime, mtime)
+	
+	newContent := content
+	if processor.HasKeywords(fileTags) {
+		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
+		if len(keywords) > 0 {
+			if err := s.store.SetNoteKeywords(filename, keywords); err != nil {
+				slog.Error("set keywords", "file", filename, "error", err)
+			}
+			if updated, err := UpdateFrontmatterProperty(newContent, "keywords", strings.Join(keywords, ", ")); err == nil {
+				newContent = updated
+			}
+		} else {
+			s.store.SetNoteKeywords(filename, nil)
+			if updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil); err == nil {
+				newContent = updated
+			}
+		}
+	} else {
+		s.store.SetNoteKeywords(filename, nil)
+		if updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil); err == nil {
+			newContent = updated
+		}
+	}
+	content = newContent
+
+	// 2. Salva a nota no DB e disco
+	mtimeStr := mtime.Format(time.RFC3339)
+	if err := s.notes.SaveNote(filename, content, mtimeStr); err != nil {
 		return fmt.Errorf("save note: %w", err)
 	}
 
-	// Indexa (extrai documentos, FTS, links, tags)
-	if err := s.reindex(filename, content, time.Now().UTC()); err != nil {
+	// 3. Indexa no FTS (passa o conteúdo finalizado)
+	if err := s.reindex(filename, content, mtime); err != nil {
 		slog.Error("reindex after save", "file", filename, "error", err)
 	}
 
@@ -409,9 +440,6 @@ func (s *NoteService) GetBacklinks(filename string) (*BacklinksResult, error) {
 func (s *NoteService) reindex(filename, content string, modTime time.Time) error {
 	creationTime := modTime
 
-	s.store.DeleteDocumentsByFile(filename)
-	s.store.DeleteFTSByFile(filename)
-
 	var docs []processor.Document
 	var links []string
 	var fileTags []string
@@ -427,54 +455,14 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 		)
 	}
 
-	for _, doc := range docs {
-		dbDoc := db.Document{
-			ID:        doc.ID,
-			Tipo:      doc.Tipo,
-			Arquivo:   doc.Arquivo,
-			Secao:     doc.Secao,
-			Texto:     doc.Texto,
-			Tags:      db.SliceToTags(doc.Tags),
-			Pagina:    doc.Pagina,
-			Ordem:     doc.Ordem,
-			Timestamp: doc.Timestamp,
-			CreatedAt: doc.Created,
-			Hash:      doc.Hash,
-		}
-		if err := s.store.InsertDocument(dbDoc); err != nil {
-			slog.Error("insert doc", "id", doc.ID, "error", err)
-			continue
-		}
-		if err := s.store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, db.SliceToTags(doc.Tags)); err != nil {
-			slog.Error("index fts", "id", doc.ID, "error", err)
-		}
-	}
-
-	s.links.ClearLinks(filename)
-	for _, link := range links {
-		s.links.AddLink(filename, link)
-	}
-
-	// Filtra o sentinel __no_keywords__ antes de persistir as tags
-	cleanTags := processor.FilterKeywords(fileTags)
-	if len(cleanTags) > 0 {
-		if err := s.tags.SetFileTags(filename, cleanTags); err != nil {
-			return fmt.Errorf("set file tags: %w", err)
-		}
-	} else {
-		if err := s.tags.SetFileTags(filename, nil); err != nil {
-			return fmt.Errorf("clear file tags: %w", err)
-		}
-	}
-
-	// Extrai e persiste TODOs estruturados
+	// 1. Extrai TODOs estruturados
+	var todos []processor.TodoItem
 	activeMarkers, err := s.store.GetActiveTodoMarkers()
 	if err == nil {
 		var markers []string
 		for _, m := range activeMarkers {
 			markers = append(markers, m.Marker)
 		}
-		var todos []processor.TodoItem
 		if content != "" {
 			todos = processor.ExtractTodos(content, filename, modTime, markers)
 		} else {
@@ -482,16 +470,19 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 				todos = processor.ExtractTodos(string(contentBytes), filename, modTime, markers)
 			}
 		}
-		if err := s.store.SaveFileTodos(filename, todos); err != nil {
-			slog.Error("save todos", "file", filename, "error", err)
-		}
 	} else {
 		slog.Error("get active todo markers", "error", err)
 	}
 
-	s.fileMod.SetFileMod(filename, modTime.UTC().Format(time.RFC3339))
+	// 2. Prepara Tags limpas
+	cleanTags := processor.FilterKeywords(fileTags)
 
-	// Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
+	// 3. Submete TUDO para a transação única
+	if err := s.store.ReplaceFileIndexes(filename, docs, links, cleanTags, todos, modTime); err != nil {
+		return fmt.Errorf("replace file indexes: %w", err)
+	}
+
+	// 4. Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
 	var newContent = content
 	if processor.HasKeywords(fileTags) {
 		keywords := processor.ExtractKeywords(content, processor.KeywordsCount(content))
@@ -518,6 +509,7 @@ func (s *NoteService) reindex(filename, content string, modTime time.Time) error
 		}
 	}
 
+	// 5. Atualiza o conteúdo se o frontmatter mudou (isso é o fallback para SyncDatabase e Rename)
 	if newContent != content && content != "" {
 		mtimeStr := modTime.UTC().Format(time.RFC3339)
 		s.notes.SaveNote(filename, newContent, mtimeStr)

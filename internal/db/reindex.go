@@ -1,0 +1,125 @@
+package db
+
+import (
+	"time"
+	"ton618/internal/processor"
+)
+
+// ReplaceFileIndexes replaces all indexing data for a file in a single transaction.
+func (s *Store) ReplaceFileIndexes(
+	filename string,
+	docs []processor.Document,
+	links []string,
+	tags []string,
+	todos []processor.TodoItem,
+	modTime time.Time,
+) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Documents & FTS
+	if _, err := tx.Exec("DELETE FROM documents WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM docs_fts WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+
+	docStmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO documents 
+		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer docStmt.Close()
+
+	ftsStmt, err := tx.Prepare(`
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) 
+		VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer ftsStmt.Close()
+
+	for _, doc := range docs {
+		tagsStr := SliceToTags(doc.Tags)
+		if _, err := docStmt.Exec(
+			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
+			doc.Pagina, doc.Ordem, doc.Timestamp, doc.Created, doc.Hash,
+		); err != nil {
+			return err
+		}
+		if _, err := ftsStmt.Exec(
+			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
+		); err != nil {
+			return err
+		}
+	}
+
+	// 2. Links
+	if _, err := tx.Exec("DELETE FROM links WHERE from_file = ?", filename); err != nil {
+		return err
+	}
+	if len(links) > 0 {
+		linkStmt, err := tx.Prepare("INSERT OR IGNORE INTO links (from_file, to_file) VALUES (?, ?)")
+		if err != nil {
+			return err
+		}
+		defer linkStmt.Close()
+		for _, link := range links {
+			if _, err := linkStmt.Exec(filename, link); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 3. Tags
+	if _, err := tx.Exec("DELETE FROM tags WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if len(tags) > 0 {
+		tagStmt, err := tx.Prepare("INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
+		if err != nil {
+			return err
+		}
+		defer tagStmt.Close()
+		for _, tag := range tags {
+			if _, err := tagStmt.Exec(filename, tag); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 4. Todos
+	if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
+		return err
+	}
+	if len(todos) > 0 {
+		todoStmt, err := tx.Prepare("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+		if err != nil {
+			return err
+		}
+		defer todoStmt.Close()
+		for _, t := range todos {
+			createdStr := t.Created.UTC().Format(time.RFC3339)
+			if _, err := todoStmt.Exec(t.ID, t.File, t.Section, t.Type, t.Status, t.Text, t.Line, createdStr); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 5. File Mod
+	modTimeStr := modTime.UTC().Format(time.RFC3339)
+	if _, err := tx.Exec("INSERT OR REPLACE INTO file_mods (arquivo, mtime) VALUES (?, ?)", filename, modTimeStr); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

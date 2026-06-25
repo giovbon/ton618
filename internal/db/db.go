@@ -14,6 +14,25 @@ type Store struct {
 	WriteMu sync.Mutex
 }
 
+// RunInTx executes the given function within a database transaction.
+// It acquires the WriteMu lock to ensure exclusive write access.
+func (s *Store) RunInTx(fn func(tx *sql.Tx) error) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // NewStore abre (ou cria) o banco e inicializa o schema.
 func NewStore(path string) (*Store, error) {
 	database, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
@@ -128,6 +147,8 @@ func initSchema(database *sql.DB) error {
 	seedDefaultMarkers(database)
 
 	// Performance PRAGMAs
+	database.Exec("PRAGMA journal_mode=WAL")
+	database.Exec("PRAGMA busy_timeout=5000")
 	database.Exec("PRAGMA synchronous=NORMAL")
 	database.Exec("PRAGMA cache_size=-8000")
 	database.Exec("PRAGMA temp_store=MEMORY")

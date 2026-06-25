@@ -70,12 +70,12 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 
 	// Parse frontmatter
 	var metaParts []string
+	var fm map[string]interface{}
 	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
 		endIdx := strings.Index(text[4:], "\n---")
 		if endIdx != -1 {
 			endIdx += 4
 			yamlContent := text[4:endIdx]
-			var fm map[string]interface{}
 			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
 				// Normalize keys to lowercase to allow case-insensitive frontmatter keys
 				cleanFm := make(map[string]interface{})
@@ -105,8 +105,6 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 						}
 					}
 				}
-				// Detecta no_keywords: true e tag no-keywords
-				fileTags = detectKeywords(fm, fileTags)
 				// Serializa demais campos do frontmatter para indexacao FTS
 				for k, v := range fm {
 					if k == "tags" || k == "no_keywords" {
@@ -322,6 +320,11 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	// Prepend frontmatter metadata to first document for FTS indexing
 	if len(metaParts) > 0 && len(docs) > 0 {
 		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
+	}
+
+	fileTags = detectKeywords(fm, fileTags)
+	for i := range docs {
+		docs[i].Tags = fileTags
 	}
 
 	return docs, links, fileTags
@@ -341,12 +344,12 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 
 	// Parse frontmatter
 	var metaParts []string
+	var fm map[string]interface{}
 	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
 		endIdx := strings.Index(text[4:], "\n---")
 		if endIdx != -1 {
 			endIdx += 4
 			yamlContent := text[4:endIdx]
-			var fm map[string]interface{}
 			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
 				// Normalize keys to lowercase to allow case-insensitive frontmatter keys
 				cleanFm := make(map[string]interface{})
@@ -376,8 +379,6 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 						}
 					}
 				}
-				// Detecta no_keywords: true e tag no-keywords
-				fileTags = detectKeywords(fm, fileTags)
 				// Serializa demais campos do frontmatter para indexacao FTS
 				for k, v := range fm {
 					if k == "tags" || k == "no_keywords" {
@@ -593,6 +594,11 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	// Prepend frontmatter metadata to first document for FTS indexing
 	if len(metaParts) > 0 && len(docs) > 0 {
 		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
+	}
+
+	fileTags = detectKeywords(fm, fileTags)
+	for i := range docs {
+		docs[i].Tags = fileTags
 	}
 
 	return docs, links, fileTags
@@ -651,19 +657,28 @@ func FilterKeywords(fileTags []string) []string {
 // Se detectado, adiciona o sentinel __no_keywords__ a fileTags.
 func detectKeywords(fm map[string]interface{}, fileTags []string) []string {
 	// Verifica propriedade keywords no frontmatter
-	if v, ok := fm["keywords"]; ok {
-		if b, ok := v.(bool); ok && b {
-			hasSentinel := false
-			for _, t := range fileTags {
-				if t == keywordsSentinel {
-					hasSentinel = true
-					break
+	if fm != nil {
+		if v, ok := fm["keywords"]; ok {
+			isActive := false
+			if b, ok := v.(bool); ok && b {
+				isActive = true
+			} else if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				isActive = true
+			}
+
+			if isActive {
+				hasSentinel := false
+				for _, t := range fileTags {
+					if t == keywordsSentinel {
+						hasSentinel = true
+						break
+					}
 				}
+				if !hasSentinel {
+					fileTags = append(fileTags, keywordsSentinel)
+				}
+				return fileTags
 			}
-			if !hasSentinel {
-				fileTags = append(fileTags, keywordsSentinel)
-			}
-			return fileTags
 		}
 	}
 	// Verifica se a tag "keywords" está presente (como hashtag #keywords)
