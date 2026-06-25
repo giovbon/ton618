@@ -94,3 +94,5 @@ echo -e "--------------------------------------------"
 
 # Executa e joga pro log mantendo o output limpo
 ./ton618 2>&1 | tee -a "$LOG_FILE"
+
+# repomix --remove-comments --compress --ignore "**/*_test.go,**/*.html,web/**/*"
