@@ -151,21 +151,40 @@ templ mermaidContent(data EditorData) {
     }
 </style>
 
-<!-- Load Mermaid locally -->
-<script src="/static/mermaid.min.js"></script>
-
+<!-- Load Mermaid locally (Lazy Loading via JS) -->
 <script type="module">
     import { CodeJar } from '/static/codejar.js';
 
     (function () {
         "use strict";
 
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            securityLevel: 'loose',
-            flowchart: { useMaxWidth: true, htmlLabels: false }
-        });
+        // Variável de controle para o Lazy Load do Mermaid
+        var mermaidLoaded = false;
+        var mermaidLoadingPromise = null;
+
+        async function ensureMermaid() {
+            if (mermaidLoaded) return;
+            if (mermaidLoadingPromise) return mermaidLoadingPromise;
+            
+            mermaidLoadingPromise = new Promise(function(resolve, reject) {
+                var s = document.createElement("script");
+                s.src = "/static/mermaid.min.js";
+                s.onload = function() {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'dark',
+                        securityLevel: 'loose',
+                        flowchart: { useMaxWidth: true, htmlLabels: false }
+                    });
+                    mermaidLoaded = true;
+                    resolve();
+                };
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+            
+            return mermaidLoadingPromise;
+        }
 
         var editorEl = document.getElementById("mermaid-editor");
         var previewContainer = document.getElementById("mermaid-preview-container");
@@ -314,6 +333,9 @@ templ mermaidContent(data EditorData) {
             compileIndicator.classList.remove("hidden");
 
             try {
+                // Força o carregamento da biblioteca sob demanda antes de tentar invocar
+                await ensureMermaid();
+
                 var uniqueId = "mermaid-svg-" + (renderIdCounter++);
                 
                 // Render dynamically using mermaid client-side API

@@ -474,6 +474,9 @@ func (w *Watcher) relPathFromWalk(path string) (string, bool) {
 }
 
 func (w *Watcher) pollAll() {
+	// 0. Carrega mods do DB em memória para evitar N+1 queries
+	dbFiles, _ := w.store.GetAllFileMods()
+
 	// 1. Escaneia arquivos no disco
 	diskFiles := make(map[string]bool)
 	var batchEvents []FileEvent
@@ -498,7 +501,7 @@ func (w *Watcher) pollAll() {
 			}
 
 			// SO processa se o mtime mudou desde a ultima indexacao
-			if existingMod, err := w.store.GetFileMod(relPath); err == nil && existingMod != "" {
+			if existingMod, exists := dbFiles[relPath]; exists && existingMod != "" {
 				if existingMod == info.ModTime().Format(time.RFC3339) {
 					// Mtime igual — arquivo nao mudou, pula
 					diskFiles[relPath] = true
@@ -532,7 +535,6 @@ func (w *Watcher) pollAll() {
 	}
 
 	// 2. Remove do banco arquivos que existem no DB mas não estão no disco
-	dbFiles, _ := w.store.GetAllFileMods()
 	for filename := range dbFiles {
 		if !diskFiles[filename] {
 			// Pula arquivos que não têm extensão monitorada pelo watcher

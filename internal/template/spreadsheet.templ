@@ -245,6 +245,7 @@ templ spreadsheetContent(data EditorData) {
             fd.append("filename", filename);
             fd.append("content", fullContent);
             fd.append("tags", "spreadsheet");
+            fd.append("silent", "true");
 
             try {
                 var r = await fetch("/api/note/save", { method: "POST", body: fd });

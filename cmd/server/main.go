@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -100,21 +101,16 @@ func main() {
 	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(r.URL.Path) >= 8 && r.URL.Path[:8] == "/static/" {
 			// Serve arquivo .gz pre-comprimido se existir
-			if strings.HasSuffix(r.URL.Path, "editor.js") {
-				gzPath := cfg.WebDir + "/static/editor.js.gz"
+			if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
+				relPath := strings.TrimPrefix(r.URL.Path, "/static/")
+				gzPath := filepath.Join(cfg.WebDir, "static", relPath) + ".gz"
 				if _, err := os.Stat(gzPath); err == nil {
 					w.Header().Set("Content-Encoding", "gzip")
-					w.Header().Set("Content-Type", "application/javascript")
-					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-					http.ServeFile(w, r, gzPath)
-					return
-				}
-			}
-			if strings.HasSuffix(r.URL.Path, "spreadsheet.js") {
-				gzPath := cfg.WebDir + "/static/spreadsheet.js.gz"
-				if _, err := os.Stat(gzPath); err == nil {
-					w.Header().Set("Content-Encoding", "gzip")
-					w.Header().Set("Content-Type", "application/javascript")
+					if strings.HasSuffix(r.URL.Path, ".js") {
+						w.Header().Set("Content-Type", "application/javascript")
+					} else {
+						w.Header().Set("Content-Type", "text/css")
+					}
 					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 					http.ServeFile(w, r, gzPath)
 					return

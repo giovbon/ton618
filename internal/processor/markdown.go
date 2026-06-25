@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -37,7 +38,38 @@ var (
 	hashtagRegex   = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
 	wikilinkRegex  = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
 	mediaLinkRegex = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
+
+	checkboxTodoRegex = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
+	todoHeaderRegex   = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	
+	todoRegexMu      sync.RWMutex
+	todoRegexPattern string
+	cachedTodoRegex  *regexp.Regexp
 )
+
+func getTodoRegex(markers []string) *regexp.Regexp {
+	if len(markers) == 0 {
+		markers = []string{"TODO", "FIXME", "BUG"}
+	}
+	pattern := strings.Join(markers, "|")
+	
+	todoRegexMu.RLock()
+	if todoRegexPattern == pattern && cachedTodoRegex != nil {
+		defer todoRegexMu.RUnlock()
+		return cachedTodoRegex
+	}
+	todoRegexMu.RUnlock()
+
+	todoRegexMu.Lock()
+	defer todoRegexMu.Unlock()
+	if todoRegexPattern == pattern && cachedTodoRegex != nil {
+		return cachedTodoRegex
+	}
+	
+	cachedTodoRegex = regexp.MustCompile(`(?i)^\s*(` + pattern + `):\s*(.+)$`)
+	todoRegexPattern = pattern
+	return cachedTodoRegex
+}
 
 // HashFunc gera um ID único para um fragmento.
 func HashFunc(s string) string {
@@ -718,15 +750,8 @@ type TodoItem struct {
 func ExtractTodos(content string, filename string, modTime time.Time, markers []string) []TodoItem {
 	var todos []TodoItem
 
-	if len(markers) == 0 {
-		markers = []string{"TODO", "FIXME", "BUG"}
-	}
-
-	// Build dynamic regex from markers list
-	markerPattern := strings.Join(markers, "|")
-	todoRegex := regexp.MustCompile(`(?i)^\s*(` + markerPattern + `):\s*(.+)$`)
-	checkboxRegex := regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
-	headerRegex := regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	// Get cached regex for markers
+	todoRegex := getTodoRegex(markers)
 
 	lines := strings.Split(content, "\n")
 	currentSection := "Geral"
@@ -747,7 +772,7 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 		lineNum = i + 1
 
 		// Update current section on header
-		if headerMatch := headerRegex.FindStringSubmatch(line); headerMatch != nil {
+		if headerMatch := todoHeaderRegex.FindStringSubmatch(line); headerMatch != nil {
 			currentSection = strings.TrimSpace(headerMatch[2])
 			continue
 		}
@@ -770,7 +795,7 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 		}
 
 		// Check for checkboxes
-		if checkboxMatch := checkboxRegex.FindStringSubmatch(line); checkboxMatch != nil {
+		if checkboxMatch := checkboxTodoRegex.FindStringSubmatch(line); checkboxMatch != nil {
 			checkbox := checkboxMatch[1]
 			taskText := strings.TrimSpace(checkboxMatch[2])
 			status := "pending"

@@ -16,6 +16,7 @@ import (
 	"ton618/internal/processor"
 	"ton618/internal/service"
 	"ton618/internal/template"
+	"ton618/internal/template/components"
 	"ton618/internal/watcher"
 )
 
@@ -409,20 +410,35 @@ func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Requ
 }
 
 func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Request) {
-	rawType := strings.ToUpper(r.URL.Query().Get("type"))
+	r.ParseForm()
+	types := r.Form["type"]
 	typeFilter := map[string]bool{}
-	if rawType != "" && rawType != "ALL" {
-		for _, t := range strings.Split(rawType, ",") {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				typeFilter[t] = true
+	
+	for _, t := range types {
+		t = strings.ToUpper(strings.TrimSpace(t))
+		if t != "" && t != "ALL" {
+			typeFilter[t] = true
+		}
+	}
+	// Fallback para o antigo formato separado por vírgula via GET
+	if len(types) == 0 {
+		rawType := strings.ToUpper(r.URL.Query().Get("type"))
+		if rawType != "" && rawType != "ALL" {
+			for _, t := range strings.Split(rawType, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					typeFilter[t] = true
+				}
 			}
 		}
 	}
-	statusFilter := strings.ToLower(r.URL.Query().Get("status"))
+
+	statusFilter := strings.ToLower(r.FormValue("status"))
 	if statusFilter == "" {
 		statusFilter = "all"
 	}
+
+	searchQuery := strings.ToLower(r.FormValue("q"))
 
 	todos, err := ctx.Store.GetTodosFiltered(typeFilter, statusFilter)
 	if err != nil {
@@ -430,29 +446,64 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var allTodos []map[string]interface{}
-	for _, todo := range todos {
-		allTodos = append(allTodos, map[string]interface{}{
-			"id":      todo.ID,
-			"file":    todo.File,
-			"section": todo.Section,
-			"type":    todo.Type,
-			"status":  todo.Status,
-			"text":    todo.Text,
-			"line":    todo.Line,
-			"created": todo.Created.Format(time.RFC3339),
-		})
+	markers, _ := ctx.Store.GetTodoMarkers()
+	if markers == nil {
+		markers = []db.TodoMarker{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"todos": allTodos,
-		"total": len(allTodos),
-	})
+	var filteredTodos []processor.TodoItem
+	for _, t := range todos {
+		if searchQuery != "" {
+			if !strings.Contains(strings.ToLower(t.Text), searchQuery) &&
+			   !strings.Contains(strings.ToLower(t.File), searchQuery) &&
+			   !strings.Contains(strings.ToLower(t.Section), searchQuery) {
+				continue
+			}
+		}
+		filteredTodos = append(filteredTodos, t)
+	}
+
+	// Agrupar preserving insertion order for sections
+	fileMap := make(map[string]*components.FileGroup)
+	for _, t := range filteredTodos {
+		fg, ok := fileMap[t.File]
+		if !ok {
+			fg = &components.FileGroup{Name: t.File}
+			fileMap[t.File] = fg
+		}
+		fg.Count++
+		
+		foundIdx := -1
+		for i := range fg.Sections {
+			if fg.Sections[i].Name == t.Section {
+				foundIdx = i
+				break
+			}
+		}
+		if foundIdx == -1 {
+			fg.Sections = append(fg.Sections, components.SectionGroup{Name: t.Section})
+			foundIdx = len(fg.Sections) - 1
+		}
+		fg.Sections[foundIdx].Todos = append(fg.Sections[foundIdx].Todos, t)
+	}
+
+	var sortedFiles []string
+	for f := range fileMap {
+		sortedFiles = append(sortedFiles, f)
+	}
+	sort.Strings(sortedFiles)
+	
+	var finalGroups []components.FileGroup
+	for _, f := range sortedFiles {
+		finalGroups = append(finalGroups, *fileMap[f])
+	}
+
+	components.TodoTree(finalGroups, markers, len(filteredTodos)).Render(r.Context(), w)
 }
 
 func (ctx *HandlerContext) HandleTodosPage(w http.ResponseWriter, r *http.Request) {
-	template.Todos("TODOs — TON-618").Render(r.Context(), w)
+	markers, _ := ctx.Store.GetTodoMarkers()
+	template.Todos("TODOs — TON-618", markers).Render(r.Context(), w)
 }
 
 // ── Todo Marker Settings ──
@@ -463,34 +514,26 @@ func (ctx *HandlerContext) HandleTodoSettingsPage(w http.ResponseWriter, r *http
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (ctx *HandlerContext) HandleGetTodoMarkers(w http.ResponseWriter, r *http.Request) {
-	markers, err := ctx.Store.GetTodoMarkers()
+
+
+func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
+	notes, err := ctx.Notes.GetMany()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if markers == nil {
-		markers = []db.TodoMarker{}
-	}
+	sort.Slice(notes, func(i, j int) bool {
+		return notes[i].Mtime > notes[j].Mtime
+	})
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(markers)
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"notes": notes,
+		"total": len(notes),
+	})
 }
 
-func (ctx *HandlerContext) HandleSaveTodoMarkers(w http.ResponseWriter, r *http.Request) {
-	var markers []db.TodoMarker
-	if err := json.NewDecoder(r.Body).Decode(&markers); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-	if err := ctx.Store.SaveTodoMarkers(markers); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
+func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Request) {
 	// Delega para o NoteService que consolida file_mods + notes
 	notes, err := ctx.Notes.GetMany()
 	if err != nil {
@@ -502,12 +545,79 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 		return notes[i].Mtime > notes[j].Mtime
 	})
 
-	w.Header().Set("Content-Type", "application/json")
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	filteredNotes := filterNotes(notes, q)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"notes": notes,
-		"total": len(notes),
-	})
+	components.SidebarTree(filteredNotes, q).Render(r.Context(), w)
+}
+
+func filterNotes(notes []service.NoteItem, query string) []service.NoteItem {
+	if query == "" {
+		return notes
+	}
+
+	queryLower := strings.ToLower(query)
+	var tagQueries []string
+	
+	// Extrai as tags da busca (ex: #artigo)
+	for _, part := range strings.Fields(queryLower) {
+		if strings.HasPrefix(part, "#") {
+			tagQueries = append(tagQueries, strings.TrimPrefix(part, "#"))
+		}
+	}
+
+	nameSearch := ""
+	for _, part := range strings.Fields(queryLower) {
+		if !strings.HasPrefix(part, "#") {
+			nameSearch += part + " "
+		}
+	}
+	nameSearch = strings.TrimSpace(nameSearch)
+
+	matchesTags := func(n service.NoteItem) bool {
+		if len(tagQueries) == 0 {
+			return true
+		}
+		for _, tq := range tagQueries {
+			found := false
+			for _, nt := range n.Tags {
+				if strings.ToLower(nt) == tq {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+
+	if nameSearch == "" {
+		var filtered []service.NoteItem
+		for _, n := range notes {
+			if matchesTags(n) {
+				filtered = append(filtered, n)
+			}
+		}
+		return filtered
+	}
+
+	var nameMatches []service.NoteItem
+
+	for _, n := range notes {
+		if !matchesTags(n) {
+			continue
+		}
+		filenameLower := strings.ToLower(n.Arquivo)
+		if strings.Contains(filenameLower, nameSearch) {
+			nameMatches = append(nameMatches, n)
+		}
+	}
+
+	return nameMatches
 }
 
 func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Request) {
@@ -538,6 +648,7 @@ func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Reque
 
 	slog.Info("Manual sync completed", "notes_processed", count)
 	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("HX-Trigger", "reload-sidebar")
 	w.Write([]byte(`<div class="text-green-500">✓ Sincronização concluída (` + strconv.Itoa(count) + ` notas processadas)</div>`))
 }
 

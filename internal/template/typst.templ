@@ -60,6 +60,11 @@ templ typstContent(data EditorData) {
                     id="typst-editor"
                     class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
                     spellcheck="false"
+                    hx-post="/api/notes/render-typst"
+                    hx-trigger="load, keyup delay:500ms, typst-compile from:body"
+                    hx-target="#typst-preview-container"
+                    hx-vals="js:{content: window.getTypstContent ? window.getTypstContent() : ''}"
+                    hx-indicator="#typst-compile-indicator"
                 >{ data.Content }</div>
             </div>
         </div>
@@ -67,13 +72,10 @@ templ typstContent(data EditorData) {
         <!-- Painel Direito: Visualizador de Preview -->
         <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0" id="preview-panel">
             <!-- Spinner de Processamento -->
-            <div id="typst-compile-indicator" class="absolute top-4 right-4 hidden bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800">
+            <div id="typst-compile-indicator" class="absolute top-4 right-4 bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800 htmx-indicator">
                 ⚡ Compilando
             </div>
             
-            <!-- Banner de Erro -->
-            <div id="typst-error-banner" class="hidden w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap mb-4 shrink-0 overflow-x-auto"></div>
-
             <!-- Páginas Renderizadas -->
             <div id="typst-preview-container" class="flex flex-col items-center gap-6 w-full">
                 <div class="text-zinc-600 text-xs py-20 font-mono">
@@ -173,14 +175,10 @@ templ typstContent(data EditorData) {
         "use strict";
 
         var editorEl = document.getElementById("typst-editor");
-        var previewContainer = document.getElementById("typst-preview-container");
-        var errorBanner = document.getElementById("typst-error-banner");
-        var compileIndicator = document.getElementById("typst-compile-indicator");
         var statusEl = document.getElementById("editor-status");
         var filenameInput = document.getElementById("file-name");
 
         var currentStatus = "saved";
-        var compileTimer = null;
         var saveTimer = null;
         var saveInProgress = false;
         var savePending = false;
@@ -292,16 +290,14 @@ templ typstContent(data EditorData) {
 
         function handleChange() {
             setStatus("dirty");
-            scheduleCompile();
             scheduleSave();
         }
 
         jar.onUpdate(handleChange);
 
-        function scheduleCompile() {
-            clearTimeout(compileTimer);
-            compileTimer = setTimeout(doCompile, 300);
-        }
+        window.getTypstContent = function() {
+            return jar.toString();
+        };
 
         function scheduleSave() {
             clearTimeout(saveTimer);
@@ -312,48 +308,6 @@ templ typstContent(data EditorData) {
                     doSave();
                 }
             }, 1200);
-        }
-
-        async function doCompile() {
-            var content = jar.toString();
-            compileIndicator.classList.remove("hidden");
-
-            var fd = new FormData();
-            fd.append("content", content);
-
-            try {
-                var r = await fetch("/api/notes/render-typst", {
-                    method: "POST",
-                    body: fd
-                });
-                if (!r.ok) throw new Error("Erro na rede: HTTP " + r.status);
-                var data = await r.json();
-
-                if (data.status === "success") {
-                    errorBanner.classList.add("hidden");
-                    errorBanner.textContent = "";
-                    
-                    var html = "";
-                    (data.pages || []).forEach(function (pageSvg) {
-                        html += '<div class="typst-page">' + pageSvg + '</div>';
-                    });
-                    
-                    if (html === "") {
-                        previewContainer.innerHTML = '<div class="text-zinc-600 text-xs py-20 font-mono">Sem páginas geradas.</div>';
-                    } else {
-                        previewContainer.innerHTML = html;
-                    }
-                } else {
-                    // Erro do compilador
-                    errorBanner.textContent = data.error || "Erro de compilação desconhecido.";
-                    errorBanner.classList.remove("hidden");
-                }
-            } catch (err) {
-                errorBanner.textContent = "Erro ao comunicar com o compilador: " + err.message;
-                errorBanner.classList.remove("hidden");
-            } finally {
-                compileIndicator.classList.add("hidden");
-            }
         }
 
         async function doSave() {
@@ -537,7 +491,6 @@ templ typstContent(data EditorData) {
         (async function () {
             setStatus("saved");
             lastSavedHash = await generateHash(jar.toString());
-            doCompile();
         })();
 
         async function downloadPDF() {

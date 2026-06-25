@@ -167,13 +167,9 @@ func TestHandleFileDelete_Success(t *testing.T) {
 		t.Error("nota deveria ter sido removida do banco")
 	}
 
-	// Verifica resposta JSON
-	var resp map[string]bool
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro ao decodificar JSON: %v", err)
-	}
-	if !resp["ok"] {
-		t.Error("esperado ok=true na resposta")
+	// Verifica cabeçalho HTMX
+	if rec.Header().Get("HX-Trigger") != "reload-sidebar" {
+		t.Error("esperado header HX-Trigger=reload-sidebar")
 	}
 }
 
@@ -215,9 +211,12 @@ func TestHandleFileRename_Success(t *testing.T) {
 
 	ctx.HandleFileRename(rec, req)
 
-	// Rename redireciona (303 See Other)
-	if rec.Code != 303 {
-		t.Errorf("esperado 303, got %d", rec.Code)
+	// Rename retorna 200 e HX-Redirect header
+	if rec.Code != 200 {
+		t.Errorf("esperado 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("HX-Redirect"), "new-name.md") {
+		t.Errorf("esperado HX-Redirect contendo new-name.md, got %q", rec.Header().Get("HX-Redirect"))
 	}
 
 	// Nota antiga nao deve existir no banco
@@ -437,13 +436,9 @@ func TestHandleCleanupImages_RemovesOrphan(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	count, _ := resp["count"].(float64)
-	if count != 1 {
-		t.Errorf("esperado 1 imagem removida, got %v", resp["count"])
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "1 imagens órfãs removidas") {
+		t.Errorf("esperado mensagem contendo '1 imagens órfãs removidas', got %q", bodyStr)
 	}
 
 	// Arquivo deve ter sido deletado
@@ -479,13 +474,9 @@ func TestHandleCleanupImages_SkipsReferencedImage(t *testing.T) {
 
 	ctx.HandleCleanupImages(rec, req)
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	count, _ := resp["count"].(float64)
-	if count != 0 {
-		t.Errorf("esperado 0 imagens removidas (referenciada), got %v", count)
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "0 imagens órfãs removidas") {
+		t.Errorf("esperado mensagem contendo '0 imagens órfãs removidas', got %q", bodyStr)
 	}
 
 	// Arquivo deve permanecer
@@ -558,9 +549,11 @@ func TestHandleFileRename_ArchiveSuccess(t *testing.T) {
 
 	ctx.HandleFileRename(rec, req)
 
-	// Rename redireciona (303 See Other)
-	if rec.Code != 303 {
-		t.Errorf("esperado 303, got %d", rec.Code)
+	if rec.Code != 200 {
+		t.Errorf("esperado 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("HX-Redirect"), "new-archive.zip") {
+		t.Errorf("esperado HX-Redirect contendo new-archive.zip, got %q", rec.Header().Get("HX-Redirect"))
 	}
 
 	newPath := filepath.Join(archiveDir, "new-archive.zip")

@@ -519,8 +519,9 @@ func splitCandidates(text string) []string {
 
 		if unicode.IsSpace(r) {
 			// Verifica se a palavra atual (até o espaço) é stopword
+			// cleanWord normaliza acentos para que "não"→"nao" bata no mapa
 			word := current.String()
-			if word != "" && isStopword(word) {
+			if word != "" && isStopword(cleanWord(word)) {
 				// Stopword → quebra a frase candidata aqui
 				candidates = append(candidates, word)
 				current.Reset()

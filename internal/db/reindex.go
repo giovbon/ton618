@@ -123,3 +123,42 @@ func (s *Store) ReplaceFileIndexes(
 
 	return tx.Commit()
 }
+
+// DeleteAllFileRecords atomically deletes all DB records related to a specific file.
+func (s *Store) DeleteAllFileRecords(filename string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM documents WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM docs_fts WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM links WHERE from_file = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM tags WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM file_mods WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM popularity WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM notes WHERE filename = ?", filename); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

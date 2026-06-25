@@ -3,7 +3,6 @@ package api
 import (
 	"archive/zip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,9 +17,11 @@ import (
 	"unicode"
 
 	"ton618/internal/db"
+	"ton618/internal/domain"
 	"ton618/internal/processor"
 	"ton618/internal/search"
 	"ton618/internal/template"
+	"ton618/internal/template/components"
 	"ton618/internal/watcher"
 )
 
@@ -495,20 +496,12 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 			fileList = append(fileList, f)
 		}
 		sort.Strings(fileList)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"files": fileList,
-			"total": len(fileList),
-		})
+		components.ArchivePreview(fileList).Render(r.Context(), w)
 		return
 	}
 
 	if len(filesToDelete) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"deleted": 0,
-			"message": "nenhuma nota encontrada com os filtros selecionados",
-		})
+		components.ArchiveAlert("Nenhuma nota selecionada para exclusão.", false).Render(r.Context(), w)
 		return
 	}
 
@@ -543,11 +536,11 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 		deleted++
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"deleted": deleted,
-		"errors":  errors,
-	})
+	if len(errors) > 0 {
+		components.ArchiveAlert(fmt.Sprintf("%d notas excluídas permanentemente com %d erros.", deleted, len(errors)), false).Render(r.Context(), w)
+	} else {
+		components.ArchiveAlert(fmt.Sprintf("%d notas excluídas permanentemente.", deleted), true).Render(r.Context(), w)
+	}
 }
 
 // ── Bulk Archive (Config → Arquivamento) ──
@@ -657,13 +650,11 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 
 	slog.Info("Archive criado", "archive", archiveName, "arquivos", len(archivedFiles))
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":       true,
-		"archive":  archiveName,
-		"archived": len(archivedFiles),
-		"errors":   archiveErrors,
-	})
+	if len(archiveErrors) > 0 {
+		components.ArchiveAlert(fmt.Sprintf("%d notas arquivadas no pacote %s com %d erros.", len(archivedFiles), archiveName, len(archiveErrors)), false).Render(r.Context(), w)
+	} else {
+		components.ArchiveAlert(fmt.Sprintf("%d notas arquivadas com sucesso (%s).", len(archivedFiles), archiveName), true).Render(r.Context(), w)
+	}
 }
 
 // ── List Archives ──
@@ -672,22 +663,11 @@ func (ctx *HandlerContext) HandleListArchives(w http.ResponseWriter, r *http.Req
 	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
 	entries, err := os.ReadDir(archiveDir)
 	if err != nil {
-		// Directory might not exist yet
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"archives": []map[string]string{},
-		})
+		components.ArchivesList([]domain.ArchiveInfo{}).Render(r.Context(), w)
 		return
 	}
 
-	type archiveInfo struct {
-		Name      string `json:"name"`
-		Size      int64  `json:"size"`
-		Modified  string `json:"modified"`
-		FileCount int    `json:"file_count"`
-	}
-
-	var archives []archiveInfo
+	var archives []domain.ArchiveInfo
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
 			continue
@@ -701,7 +681,7 @@ func (ctx *HandlerContext) HandleListArchives(w http.ResponseWriter, r *http.Req
 		zipPath := filepath.Join(archiveDir, entry.Name())
 		fc := countFilesInZip(zipPath)
 
-		archives = append(archives, archiveInfo{
+		archives = append(archives, domain.ArchiveInfo{
 			Name:      entry.Name(),
 			Size:      info.Size(),
 			Modified:  info.ModTime().Format(time.RFC3339),
@@ -714,10 +694,13 @@ func (ctx *HandlerContext) HandleListArchives(w http.ResponseWriter, r *http.Req
 		return archives[i].Modified > archives[j].Modified
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"archives": archives,
-	})
+	for i := range archives {
+		if t, err := time.Parse(time.RFC3339, archives[i].Modified); err == nil {
+			archives[i].Modified = t.Format("02/01/2006 15:04")
+		}
+	}
+
+	components.ArchivesList(archives).Render(r.Context(), w)
 }
 
 func countFilesInZip(zipPath string) int {
@@ -850,11 +833,9 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 
 	slog.Info("Archive restaurado", "archive", archiveName, "arquivos", len(restoredFiles))
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":       true,
-		"restored": len(restoredFiles),
-		"files":    restoredFiles,
-		"errors":   restoreErrors,
-	})
+	if len(restoreErrors) > 0 {
+		components.ArchiveAlert(fmt.Sprintf("%d notas restauradas com %d erros.", len(restoredFiles), len(restoreErrors)), false).Render(r.Context(), w)
+	} else {
+		components.ArchiveAlert(fmt.Sprintf("%d notas restauradas com sucesso. Atualize a página para ver na árvore.", len(restoredFiles)), true).Render(r.Context(), w)
+	}
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -131,15 +130,12 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 
 	content := r.FormValue("content")
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// 1. Verifica se o executável 'typst' existe no PATH
 	_, err := exec.LookPath("typst")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"error":  "O compilador 'typst' não está instalado no servidor. Por favor, execute 'winget install Typst.Typst' (Windows) ou 'brew install typst' (Mac/Linux), ou verifique se ele está no PATH do sistema.",
-		})
+		w.Write([]byte(`<div class="w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap shrink-0 overflow-x-auto">O compilador 'typst' não está instalado no servidor. Por favor, execute 'winget install Typst.Typst' (Windows) ou 'brew install typst' (Mac/Linux), ou verifique se ele está no PATH do sistema.</div>`))
 		return
 	}
 
@@ -148,10 +144,7 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		slog.Error("erro ao criar diretório temporário para o typst", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"error":  fmt.Sprintf("Erro interno ao criar espaço de compilação: %v", err),
-		})
+		w.Write([]byte(`<div class="w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap shrink-0 overflow-x-auto">Erro interno ao criar espaço de compilação: ` + err.Error() + `</div>`))
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -172,15 +165,11 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 	if err := os.WriteFile(tmpFile, []byte(compileBody), 0644); err != nil {
 		slog.Error("erro ao escrever arquivo main.typ", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"error":  fmt.Sprintf("Erro interno ao salvar fonte do Typst: %v", err),
-		})
+		w.Write([]byte(`<div class="w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap shrink-0 overflow-x-auto">Erro interno ao salvar fonte do Typst: ` + err.Error() + `</div>`))
 		return
 	}
 
 	// 4. Executa a compilação do Typst para SVG
-	// Usa page-{p}.svg para suportar múltiplos SVGs se houver mais de uma página
 	cmd := exec.Command("typst", "compile", "main.typ", "page-{p}.svg")
 	cmd.Dir = tmpDir
 
@@ -188,11 +177,8 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		// Retorna erro amigável de compilação (geralmente gerado pelo compilador do typst)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"error":  stderr.String(),
-		})
+		// Retorna erro amigável de compilação
+		w.Write([]byte(`<div class="w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap shrink-0 overflow-x-auto">` + stderr.String() + `</div>`))
 		return
 	}
 
@@ -202,26 +188,24 @@ func (ctx *HandlerContext) HandleTypstRender(w http.ResponseWriter, r *http.Requ
 		pagePath := filepath.Join(tmpDir, fmt.Sprintf("page-%d.svg", i))
 		data, err := os.ReadFile(pagePath)
 		if err != nil {
-			// Não existem mais páginas
 			break
 		}
 		pages = append(pages, string(data))
 	}
 
-	// Caso nenhum arquivo tenha sido gerado (improvável se o typst retornou sucesso)
 	if len(pages) == 0 {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"error":  "Nenhuma página SVG foi gerada pelo compilador.",
-		})
+		w.Write([]byte(`<div class="text-zinc-600 text-xs py-20 font-mono">Nenhuma página SVG foi gerada pelo compilador.</div>`))
 		return
 	}
 
-	// 6. Sucesso!
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "success",
-		"pages":  pages,
-	})
+	// 6. Sucesso! Renderiza o HTML final
+	var finalHTML strings.Builder
+	for _, page := range pages {
+		finalHTML.WriteString(`<div class="typst-page">`)
+		finalHTML.WriteString(page)
+		finalHTML.WriteString(`</div>`)
+	}
+	w.Write([]byte(finalHTML.String()))
 }
 
 // HandleTypstPDF compila o conteúdo Typst para um arquivo PDF e o retorna como download.

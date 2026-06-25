@@ -1,0 +1,53 @@
+package components
+
+import (
+    "fmt"
+    "ton618/internal/domain"
+)
+
+templ ArchivesList(archives []domain.ArchiveInfo) {
+    if len(archives) == 0 {
+        <div class="text-center py-8">
+            <p class="text-zinc-500 text-sm">Nenhum arquivo morto encontrado.</p>
+        </div>
+    } else {
+        <div class="space-y-2 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+            for _, arch := range archives {
+                <div class="bg-zinc-800/50 rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 border border-zinc-700/50 hover:border-sky-500/30 transition-colors group">
+                    <div class="flex items-start gap-3">
+                        <div class="text-2xl pt-1">📦</div>
+                        <div>
+                            <div class="text-sm font-bold text-zinc-200 group-hover:text-sky-400 transition-colors">
+                                { arch.Name }
+                            </div>
+                            <div class="text-[10px] text-zinc-500 mt-0.5 flex gap-2">
+                                <span>{ arch.Modified }</span>
+                                <span>•</span>
+                                <span>{ fmt.Sprint(arch.FileCount) } notas</span>
+                                <span>•</span>
+                                <span>{ formatSize(arch.Size) }</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" hx-post="/api/archive/restore" hx-vals={ fmt.Sprintf(`{"archive": "%s"}`, arch.Name) } hx-target="#restore-result-area" hx-confirm="Deseja realmente restaurar as notas deste arquivo?"
+                        class="px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-sky-600 text-zinc-300 hover:text-white text-xs font-bold transition-colors shrink-0">
+                        Restaurar
+                    </button>
+                </div>
+            }
+        </div>
+    }
+}
+
+func formatSize(bytes int64) string {
+    const unit = 1024
+    if bytes < unit {
+        return fmt.Sprintf("%d B", bytes)
+    }
+    div, exp := int64(unit), 0
+    for n := bytes / unit; n >= unit; n /= unit {
+        div *= unit
+        exp++
+    }
+    return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}

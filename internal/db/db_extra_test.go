@@ -261,3 +261,87 @@ func TestGetDocument_NaoExistente_DB(t *testing.T) {
 		t.Error("esperado nil para documento inexistente")
 	}
 }
+
+func TestDeleteAllFileRecords(t *testing.T) {
+	s := newTestStore(t)
+	filename := "notes/delete-atomic-test.md"
+
+	// 1. Popular tabelas com registros associados ao arquivo
+	_, err := s.DB.Exec("INSERT INTO notes (filename, content, mtime) VALUES (?, 'conteudo', '2026-01-01T00:00:00Z')", filename)
+	if err != nil {
+		t.Fatalf("setup notes: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO documents (id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash) VALUES (?, 'md', ?, 'Geral', 'texto', '', 1, 1, '', '', '')", "doc-test-1", filename)
+	if err != nil {
+		t.Fatalf("setup documents: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) VALUES ('doc-test-1', 'md', ?, 'Geral', 'texto', '')", filename)
+	if err != nil {
+		t.Fatalf("setup docs_fts: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO links (from_file, to_file) VALUES (?, 'notes/outro.md')", filename)
+	if err != nil {
+		t.Fatalf("setup links: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO tags (arquivo, tag) VALUES (?, 'golang')", filename)
+	if err != nil {
+		t.Fatalf("setup tags: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES ('todo-test-1', ?, 'Geral', 'TODO', 'pending', 'teste', 1, '')", filename)
+	if err != nil {
+		t.Fatalf("setup todos: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO file_mods (arquivo, mtime) VALUES (?, '2026-01-01T00:00:00Z')", filename)
+	if err != nil {
+		t.Fatalf("setup file_mods: %v", err)
+	}
+
+	_, err = s.DB.Exec("INSERT INTO popularity (arquivo, count) VALUES (?, 10)", filename)
+	if err != nil {
+		t.Fatalf("setup popularity: %v", err)
+	}
+
+	// 2. Garantir que os registros foram criados
+	checkCount := func(query string, arg string, expected int) {
+		t.Helper()
+		var count int
+		err := s.DB.QueryRow(query, arg).Scan(&count)
+		if err != nil {
+			t.Fatalf("checkCount query %s: %v", query, err)
+		}
+		if count != expected {
+			t.Fatalf("esperava %d registros para a query %s, got %d", expected, query, count)
+		}
+	}
+
+	checkCount("SELECT COUNT(*) FROM notes WHERE filename = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM documents WHERE arquivo = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM docs_fts WHERE arquivo = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM links WHERE from_file = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM tags WHERE arquivo = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM todos WHERE file = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM file_mods WHERE arquivo = ?", filename, 1)
+	checkCount("SELECT COUNT(*) FROM popularity WHERE arquivo = ?", filename, 1)
+
+	// 3. Executar o DeleteAllFileRecords
+	err = s.DeleteAllFileRecords(filename)
+	if err != nil {
+		t.Fatalf("DeleteAllFileRecords falhou: %v", err)
+	}
+
+	// 4. Verificar se TODOS os registros foram removidos
+	checkCount("SELECT COUNT(*) FROM notes WHERE filename = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM documents WHERE arquivo = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM docs_fts WHERE arquivo = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM links WHERE from_file = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM tags WHERE arquivo = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM todos WHERE file = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM file_mods WHERE arquivo = ?", filename, 0)
+	checkCount("SELECT COUNT(*) FROM popularity WHERE arquivo = ?", filename, 0)
+}

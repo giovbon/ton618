@@ -89,8 +89,12 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tags", ctx.HandleGetTags)
 	mux.HandleFunc("GET /api/keywords", ctx.HandleGetKeywords)
 	mux.HandleFunc("GET /api/todos", ctx.HandleListTodos)
+	// Todo Markers
 	mux.HandleFunc("GET /api/todo-markers", ctx.HandleGetTodoMarkers)
-	mux.HandleFunc("POST /api/todo-markers", ctx.HandleSaveTodoMarkers)
+	mux.HandleFunc("POST /api/todo-markers/add", ctx.HandleAddTodoMarker)
+	mux.HandleFunc("POST /api/todo-markers/update", ctx.HandleUpdateTodoMarker)
+	mux.HandleFunc("DELETE /api/todo-markers/remove", ctx.HandleRemoveTodoMarker)
+	mux.HandleFunc("POST /api/todo-markers/reset", ctx.HandleResetTodoMarkers)
 
 	// Settings page
 	mux.HandleFunc("GET /settings", ctx.HandleTodoSettingsPage)
@@ -98,6 +102,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/upload-attachment", ctx.HandleUploadAttachment)
 	mux.HandleFunc("POST /api/note/duplicate", ctx.HandleDuplicateNote)
 	mux.HandleFunc("GET /api/notes", ctx.HandleGetAllNotes)
+	mux.HandleFunc("GET /api/sidebar", ctx.HandleGetSidebar)
 	mux.HandleFunc("GET /api/notes/database", ctx.HandleGetDatabaseData)
 	mux.HandleFunc("POST /api/notes/update-property", ctx.HandleUpdateNoteProperty)
 	mux.HandleFunc("POST /api/sync", ctx.HandleManualSync)
@@ -110,7 +115,7 @@ func (ctx *HandlerContext) SetupRoutes(mux *http.ServeMux) {
 	// Stopwords customizadas
 	mux.HandleFunc("GET /api/stopwords", ctx.HandleGetStopwords)
 	mux.HandleFunc("POST /api/stopwords/add", ctx.HandleAddStopword)
-	mux.HandleFunc("POST /api/stopwords/remove", ctx.HandleRemoveStopword)
+	mux.HandleFunc("DELETE /api/stopwords/remove", ctx.HandleRemoveStopword)
 
 	// Static files
 	fs := http.FileServer(http.Dir(ctx.Cfg.WebDir + "/static"))

@@ -16,6 +16,7 @@ import (
 	"ton618/internal/db"
 	"ton618/internal/processor"
 	"ton618/internal/service"
+	"ton618/internal/template/components"
 	"ton618/internal/watcher"
 )
 
@@ -268,19 +269,16 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 	tags := r.FormValue("tags")
 
 	if raw == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "filename required"})
+		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
 	filename := noteFilename(raw)
 
-	// Otimização: verifica se o conteúdo enviado é igual ao atual para evitar I/O
 	if currentContent, err := ctx.Store.GetNote(filename); err == nil {
 		if currentContent == content {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "file": filename})
+			w.Header().Set("HX-Redirect", "/editor?file="+url.QueryEscape(filename))
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 	}
@@ -288,9 +286,7 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 	tagList := strings.Split(tags, ",")
 	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
 		slog.Error("save note json", "file", filename, "error", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -298,8 +294,13 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 	delete(ctx.dbCache, filename)
 	ctx.dbCacheMu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "file": filename})
+	if r.FormValue("silent") == "true" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/editor?file="+url.QueryEscape(filename))
+	w.WriteHeader(http.StatusOK)
 }
 
 func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
@@ -363,9 +364,8 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	delete(ctx.dbCache, filename)
 	ctx.dbCacheMu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("HX-Trigger", "reload-sidebar")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
 func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Request) {
@@ -481,7 +481,8 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	ctx.dbCacheMu.Unlock()
 
 	redirectTarget := "/editor?file=" + url.QueryEscape(newName)
-	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
+	w.Header().Set("HX-Redirect", redirectTarget)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
@@ -747,9 +748,7 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
 	entries, err := os.ReadDir(notesDir)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": false, "error": err.Error(),
-		})
+		components.ArchiveAlert("Erro ao ler diretório de notas.", false).Render(r.Context(), w)
 		return
 	}
 
@@ -806,13 +805,11 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 
 	slog.Info("Limpeza de imagens órfãs", "removidas", len(removed), "erros", len(errors))
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":      true,
-		"removed": removed,
-		"count":   len(removed),
-		"errors":  errors,
-	})
+	if len(errors) > 0 {
+		components.ArchiveAlert(fmt.Sprintf("%d imagens removidas com %d erros.", len(removed), len(errors)), false).Render(r.Context(), w)
+	} else {
+		components.ArchiveAlert(fmt.Sprintf("%d imagens órfãs removidas com sucesso.", len(removed)), true).Render(r.Context(), w)
+	}
 }
 
 // ── Backup ──

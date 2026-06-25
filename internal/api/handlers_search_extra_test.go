@@ -2,7 +2,6 @@ package api
 
 import (
 	"archive/zip"
-	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -109,17 +108,9 @@ func TestHandleBulkArchive_Success(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	ok, _ := resp["ok"].(bool)
-	if !ok {
-		t.Errorf("esperado ok=true, got %v", resp)
-	}
-	archived, _ := resp["archived"].(float64)
-	if archived != 2 {
-		t.Errorf("esperado 2 arquivos arquivados, got %v", archived)
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "2 notas arquivadas com sucesso") {
+		t.Errorf("esperado mensagem de sucesso para 2 notas arquivadas, got %q", bodyStr)
 	}
 
 	// Notas removidas do banco
@@ -161,13 +152,9 @@ func TestHandleBulkDelete_ByTag(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	deleted, _ := resp["deleted"].(float64)
-	if deleted != 2 {
-		t.Errorf("esperado 2 notas deletadas, got %v", deleted)
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "2 notas excluídas permanentemente") {
+		t.Errorf("esperado mensagem de sucesso para 2 notas excluídas, got %q", bodyStr)
 	}
 
 	// Nota com tag "keep" deve permanecer no banco
@@ -191,13 +178,9 @@ func TestHandleBulkDelete_ByTagPreview(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	total, _ := resp["total"].(float64)
-	if total != 1 {
-		t.Errorf("esperado 1 no preview, got %v", total)
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "Notas encontradas (1)") {
+		t.Errorf("esperado preview com 1 nota encontrada, got %q", bodyStr)
 	}
 
 	// Nota nao deve ser deletada (preview) - verifica no banco
@@ -218,13 +201,9 @@ func TestHandleBulkDelete_ExplicitFiles(t *testing.T) {
 
 	ctx.HandleBulkDelete(rec, req)
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	deleted, _ := resp["deleted"].(float64)
-	if deleted != 2 {
-		t.Errorf("esperado 2, got %v", deleted)
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "2 notas excluídas permanentemente") {
+		t.Errorf("esperado mensagem de sucesso para 2 notas excluídas, got %q", bodyStr)
 	}
 }
 
@@ -241,13 +220,9 @@ func TestHandleListArchives_Empty(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	archives, _ := resp["archives"].([]interface{})
-	if len(archives) != 0 {
-		t.Errorf("esperado lista vazia, got %d archives", len(archives))
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "Nenhum arquivo morto encontrado") {
+		t.Errorf("esperado mensagem de nenhum arquivo morto, got %q", bodyStr)
 	}
 }
 
@@ -275,13 +250,9 @@ func TestHandleListArchives_WithArchives(t *testing.T) {
 
 	ctx.HandleListArchives(rec, req)
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	archives, _ := resp["archives"].([]interface{})
-	if len(archives) != 1 {
-		t.Errorf("esperado 1 archive, got %d", len(archives))
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, "test-archive.zip") {
+		t.Errorf("esperado conter test-archive.zip, got %q", bodyStr)
 	}
 }
 
@@ -327,11 +298,16 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 	req1.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx.HandleBulkArchive(rec1, req1)
 
-	var archiveResp map[string]interface{}
-	json.NewDecoder(rec1.Body).Decode(&archiveResp)
-	archiveName, _ := archiveResp["archive"].(string)
+	bodyStr1 := rec1.Body.String()
+	// Encontra o nome do zip na string do body, formato usual: "(id_cuid2.zip)"
+	startIdx := strings.Index(bodyStr1, "(")
+	endIdx := strings.Index(bodyStr1, ")")
+	var archiveName string
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		archiveName = bodyStr1[startIdx+1 : endIdx]
+	}
 	if archiveName == "" {
-		t.Fatal("archive name nao pode ser vazio")
+		t.Fatal("archive name nao pode ser vazio, body: " + bodyStr1)
 	}
 
 	// Nota removida do banco apos arquivar
@@ -350,17 +326,9 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 		t.Errorf("esperado 200, got %d", rec2.Code)
 	}
 
-	var restoreResp map[string]interface{}
-	if err := json.NewDecoder(rec2.Body).Decode(&restoreResp); err != nil {
-		t.Fatalf("erro: %v", err)
-	}
-	ok, _ := restoreResp["ok"].(bool)
-	if !ok {
-		t.Errorf("esperado ok=true, got %v", restoreResp)
-	}
-	restored, _ := restoreResp["restored"].(float64)
-	if restored != 1 {
-		t.Errorf("esperado 1 arquivo restaurado, got %v", restored)
+	bodyStr2 := rec2.Body.String()
+	if !strings.Contains(bodyStr2, "1 notas restauradas com sucesso") {
+		t.Errorf("esperado mensagem contendo '1 notas restauradas com sucesso', got %q", bodyStr2)
 	}
 
 	// Arquivo restaurado no banco

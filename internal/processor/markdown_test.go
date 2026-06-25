@@ -324,3 +324,101 @@ Este e um documento #typst.
 		t.Errorf("Esperado exatamente 2 tags (typst, relatorio), obteve %d: %v", len(tags), tags)
 	}
 }
+
+func TestExtractTodos_RegexCaching(t *testing.T) {
+	// Limpa o cache inicial
+	todoRegexMu.Lock()
+	cachedTodoRegex = nil
+	todoRegexPattern = ""
+	todoRegexMu.Unlock()
+
+	// Primeira chamada - deve compilar e fazer cache
+	mTime := time.Now()
+	todos1 := ExtractTodos("TODO: fazer café", "nota.md", mTime, []string{"TODO", "FIXME"})
+	if len(todos1) != 1 || todos1[0].Text != "fazer café" || todos1[0].Type != "TODO" {
+		t.Errorf("Erro ao extrair TODO na primeira chamada: %+v", todos1)
+	}
+
+	todoRegexMu.RLock()
+	firstRegex := cachedTodoRegex
+	pattern1 := todoRegexPattern
+	todoRegexMu.RUnlock()
+
+	if firstRegex == nil {
+		t.Fatal("Esperava que o regex estivesse em cache, mas está nil")
+	}
+	if pattern1 != "TODO|FIXME" {
+		t.Errorf("Pattern errado: %q", pattern1)
+	}
+
+	// Segunda chamada com os mesmos marcadores - deve reusar o regex em cache
+	todos2 := ExtractTodos("FIXME: consertar bug", "nota.md", mTime, []string{"TODO", "FIXME"})
+	if len(todos2) != 1 || todos2[0].Text != "consertar bug" || todos2[0].Type != "FIXME" {
+		t.Errorf("Erro ao extrair FIXME na segunda chamada: %+v", todos2)
+	}
+
+	todoRegexMu.RLock()
+	secondRegex := cachedTodoRegex
+	todoRegexMu.RUnlock()
+
+	if firstRegex != secondRegex {
+		t.Error("Esperava que o regex cacheado fosse reusado (mesmo ponteiro), mas mudou")
+	}
+
+	// Terceira chamada com marcadores diferentes - deve invalidar/recompilar
+	todos3 := ExtractTodos("BUG: tela preta", "nota.md", mTime, []string{"BUG"})
+	if len(todos3) != 1 || todos3[0].Text != "tela preta" || todos3[0].Type != "BUG" {
+		t.Errorf("Erro ao extrair BUG na terceira chamada: %+v", todos3)
+	}
+
+	todoRegexMu.RLock()
+	thirdRegex := cachedTodoRegex
+	pattern3 := todoRegexPattern
+	todoRegexMu.RUnlock()
+
+	if thirdRegex == nil {
+		t.Fatal("Esperava novo regex compilado em cache")
+	}
+	if pattern3 != "BUG" {
+		t.Errorf("Novo pattern esperado 'BUG', obteve %q", pattern3)
+	}
+	if thirdRegex == firstRegex {
+		t.Error("Esperava novo regex compilado para pattern diferente, mas o ponteiro é o mesmo")
+	}
+}
+
+func TestExtractTodos_Checkboxes(t *testing.T) {
+	content := `
+# Tarefas
+- [ ] Tarefa pendente 1
+* [x] Tarefa concluída 2
+- [X] Tarefa concluída 3 com X maiúsculo
+* [ ] Tarefa pendente 2
+`
+	todos := ExtractTodos(content, "tasks.md", time.Now(), nil)
+	if len(todos) != 4 {
+		t.Fatalf("Esperava 4 tarefas de checkbox, obteve %d", len(todos))
+	}
+
+	expected := []struct {
+		Text   string
+		Status string
+	}{
+		{"Tarefa pendente 1", "pending"},
+		{"Tarefa concluída 2", "completed"},
+		{"Tarefa concluída 3 com X maiúsculo", "completed"},
+		{"Tarefa pendente 2", "pending"},
+	}
+
+	for i, exp := range expected {
+		if todos[i].Type != "TASK" {
+			t.Errorf("Tarefa %d: esperado Type TASK, got %q", i, todos[i].Type)
+		}
+		if todos[i].Text != exp.Text {
+			t.Errorf("Tarefa %d: esperado Text %q, got %q", i, exp.Text, todos[i].Text)
+		}
+		if todos[i].Status != exp.Status {
+			t.Errorf("Tarefa %d: esperado Status %q, got %q", i, exp.Status, todos[i].Status)
+		}
+	}
+}
