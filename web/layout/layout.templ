@@ -1,5 +1,13 @@
 package layout
 
+import "context"
+
+func getLayoutClass(ctx context.Context) string {
+    if val, ok := ctx.Value("is_full_width").(bool); ok && val {
+        return "w-full px-6 py-6"
+    }
+    return "max-w-4xl mx-auto px-4 py-6"
+}
 
 templ Layout(title string, loadTipTap bool, content templ.Component) {
 <!doctype html>
@@ -15,6 +23,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
         tailwind.config = {
@@ -70,6 +79,10 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <script src="/static/editor.js?v=2"></script>
     }
     <style>
+        [x-cloak] {
+            display: none !important;
+        }
+
         * {
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
@@ -204,7 +217,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
 
 <body class="font-sans antialiased">
     @Navbar()
-    <main class="max-w-4xl mx-auto px-4 py-6">
+    <main class={ getLayoutClass(ctx) }>
 
         @content
     </main>

@@ -46,3 +46,14 @@ type SearchResultsData struct {
 	Total   int
 	Results []SearchResultItem
 }
+
+// Appointment represents a task or appointment
+type Appointment struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	EventDate   string `json:"event_date"`
+	Year        int    `json:"year"`
+	Month       int    `json:"month"`
+	WeekNumber  int    `json:"week_number"`
+	CreatedAt   string `json:"created_at"`
+}

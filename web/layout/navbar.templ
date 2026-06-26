@@ -115,6 +115,8 @@ templ Navbar() {
                 </div>
 
                 <!-- Nav links — icon + label only for key destinations -->
+                <a id="nav-agenda" href="/agenda"
+                    class="text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">📅 Agenda</a>
                 <a id="nav-todos" href="/todos"
                     class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯 TODOs</a>
                 <a href="/database"
@@ -214,6 +216,14 @@ templ Navbar() {
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Navegação</div>
                 <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
+                    <a id="mobile-nav-agenda" href="/agenda" onclick="
+                                document.getElementById('mobile-menu').classList.add('hidden')
+                            "
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
+                        <span class="text-sm">📅</span>
+                        <span class="text-[11px] font-bold tracking-wider">AGENDA</span>
+                    </a>
+                    
                     <a id="mobile-nav-todos" href="/todos" onclick="
                                 document.getElementById('mobile-menu').classList.add('hidden')
                             "

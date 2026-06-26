@@ -310,22 +310,40 @@
             return;
         }
 
-        // Inject auth header into HTMX requests
+        // Inject auth header into HTMX requests (same-origin only)
         if (typeof htmx !== "undefined") {
             document.body.addEventListener(
                 "htmx:configRequest",
                 function (evt) {
-                    if (auth) evt.detail.headers["Authorization"] = auth;
+                    var isLocal = evt.detail.path.startsWith('/') || (!evt.detail.path.startsWith('http://') && !evt.detail.path.startsWith('https://')) || evt.detail.path.startsWith(window.location.origin);
+                    if (isLocal && auth) evt.detail.headers["Authorization"] = auth;
                 },
             );
         }
 
-        // Wrap fetch to always include auth
+        // Wrap fetch to always include auth for same-origin requests
         var origFetch = window.fetch;
         window.fetch = function (url, opts) {
             opts = opts || {};
             opts.headers = opts.headers || {};
-            if (auth && !opts.headers["Authorization"]) {
+
+            // Check if target is same-origin
+            var isSameOrigin = false;
+            if (typeof url === 'string') {
+                if (url.startsWith('/') || (!url.startsWith('http://') && !url.startsWith('https://')) || url.startsWith(window.location.origin)) {
+                    isSameOrigin = true;
+                }
+            } else if (url instanceof URL) {
+                if (url.origin === window.location.origin) {
+                    isSameOrigin = true;
+                }
+            } else if (url && typeof url.url === 'string') {
+                if (url.url.startsWith('/') || (!url.url.startsWith('http://') && !url.url.startsWith('https://')) || url.url.startsWith(window.location.origin)) {
+                    isSameOrigin = true;
+                }
+            }
+
+            if (isSameOrigin && auth && !opts.headers["Authorization"]) {
                 if (opts.headers instanceof Headers) {
                     opts.headers.set("Authorization", auth);
                 } else {

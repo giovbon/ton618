@@ -18,6 +18,7 @@ import (
 	"ton618/internal/core/services"
 	"ton618/internal/features/system"
 	"ton618/internal/features/todos"
+	"ton618/internal/features/appointments"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
 	"ton618/internal/middleware"
@@ -91,6 +92,7 @@ func main() {
 	notesCtx := notes.NewHandlerContext(cfg, store, w, notesService, backupService)
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
+	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
 
 	slog.Info("Sincronizando notas do banco de dados...")
 	if err := notesCtx.Notes.SyncDatabase(); err != nil {
@@ -98,7 +100,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	SetupRoutes(mux, sysCtx, notesCtx, todosCtx, searchCtx)
+	SetupRoutes(mux, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx)
 
 	staticFS := http.FileServer(http.Dir(cfg.WebDir + "/static"))
 	staticHandler := http.StripPrefix("/static/", staticFS)

@@ -133,6 +133,16 @@ func initSchema(database *sql.DB) error {
 		created_at TEXT DEFAULT ''
 	);
 	CREATE INDEX IF NOT EXISTS idx_todos_file ON todos(file);
+
+	CREATE TABLE IF NOT EXISTS appointments (
+		id TEXT PRIMARY KEY,
+		description TEXT DEFAULT '',
+		event_date TEXT DEFAULT '',
+		year INTEGER DEFAULT 0,
+		month INTEGER DEFAULT 0,
+		week_number INTEGER DEFAULT 0,
+		created_at TEXT DEFAULT ''
+	);
 	`
 
 	_, err := database.Exec(schema)

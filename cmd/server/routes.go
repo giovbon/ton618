@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"ton618/internal/features/appointments"
 	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
 	"ton618/internal/features/system"
@@ -12,7 +13,7 @@ import (
 )
 
 // SetupRoutes registra todas as rotas no ServeMux.
-func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext) {
+func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext) {
 	// Rate limiters para endpoints pesados
 	searchLimiter := middleware.NewRateLimiter(30, time.Minute)
 
@@ -81,6 +82,15 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("GET /api/stopwords", searchCtx.HandleGetStopwords)
 	mux.HandleFunc("POST /api/stopwords/add", searchCtx.HandleAddStopword)
 	mux.HandleFunc("DELETE /api/stopwords/remove", searchCtx.HandleRemoveStopword)
+
+	// APPOINTMENTS
+	mux.HandleFunc("GET /agenda", appointmentsCtx.HandleAgendaPage)
+	mux.HandleFunc("GET /api/appointments", appointmentsCtx.HandleGetAppointments)
+	mux.HandleFunc("GET /api/appointments/tree", appointmentsCtx.HandleGetAgendaTree)
+	mux.HandleFunc("POST /api/appointments/create", appointmentsCtx.HandleCreateAppointment)
+	mux.HandleFunc("POST /api/appointments/update", appointmentsCtx.HandleUpdateAppointment)
+	mux.HandleFunc("DELETE /api/appointments/delete", appointmentsCtx.HandleDeleteAppointment)
+	mux.HandleFunc("POST /api/appointments/purge", appointmentsCtx.HandlePurgeOldAppointments)
 
 	// Static files
 	fs := http.FileServer(http.Dir(sysCtx.Cfg.WebDir + "/static"))

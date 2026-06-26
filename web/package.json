@@ -6,6 +6,7 @@
     "build": "node build.js"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
     "@tiptap/core": "^3.26.0",
     "@tiptap/extension-code-block-lowlight": "^3.26.0",
     "@tiptap/extension-font-family": "^3.26.0",
@@ -25,6 +26,7 @@
     "@tiptap/pm": "^3.26.0",
     "@tiptap/starter-kit": "^3.26.0",
     "@tiptap/suggestion": "^3.26.0",
+    "chrono-node": "^2.9.1",
     "jspreadsheet-ce": "^5.0.4",
     "jsuites": "^6.3.6",
     "lowlight": "^3.3.0",
@@ -33,7 +35,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tiptap-markdown": "^0.9.0",
-    "@excalidraw/excalidraw": "0.18.1"
+    "vis-timeline": "^8.5.1"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
