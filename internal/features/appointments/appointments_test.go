@@ -20,6 +20,10 @@ func newTestContext(t *testing.T) *HandlerContext {
 	dbDir := t.TempDir()
 	dbPath := filepath.Join(dbDir, "test.db")
 
+	origLocal := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = origLocal })
+
 	store, err := db.NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("db.NewStore: %v", err)
@@ -276,8 +280,8 @@ func TestHandleGetAgendaTree(t *testing.T) {
 	bodyStr := rr.Body.String()
 
 	// Verify that the tree HTML contains Year, Month (Junho) and Week (Semana 26) structure
-	if !strings.Contains(bodyStr, "Ano 2026") {
-		t.Error("expected HTML to contain 'Ano 2026'")
+	if !strings.Contains(bodyStr, "2026") {
+		t.Error("expected HTML to contain '2026'")
 	}
 	if !strings.Contains(bodyStr, "Junho") {
 		t.Error("expected HTML to contain 'Junho'")

@@ -82,6 +82,16 @@ templ agendaContent() {
         .vis-tooltip .tt-desc { font-weight: 600; color: #f4f4f5; margin-bottom: 4px; }
         .vis-tooltip .tt-date { font-size: 11px; color: #71717a; }
 
+        /* Pinned tooltip override rules */
+        .pinned-tooltip {
+            visibility: visible !important;
+            display: block !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            position: fixed !important;
+            z-index: 99999 !important;
+        }
+
         .vis-item.vis-background { background: rgba(56, 189, 248, 0.05) !important; }
         .vis-time-axis .vis-text { color: #a1a1aa !important; }
         .vis-time-axis .vis-grid.vis-vertical { border-color: #27272a !important; }

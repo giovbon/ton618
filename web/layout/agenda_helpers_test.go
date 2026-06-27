@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -76,12 +77,16 @@ func TestFormatDescription(t *testing.T) {
 }
 
 func TestFormatAgendaDate(t *testing.T) {
+	origLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = origLocal }()
+
 	now := time.Now()
 	
 	// Test current year
 	currentYearTime := time.Date(now.Year(), time.January, 15, 14, 30, 0, 0, time.UTC)
 	gotCurrent := FormatAgendaDate(currentYearTime.Format(time.RFC3339))
-	expectedCurrent := "15/01 - 14:30"
+	expectedCurrent := fmt.Sprintf("%s, 15/01 - 14:30", getWeekdayPt(currentYearTime.Weekday()))
 	if gotCurrent != expectedCurrent {
 		t.Errorf("FormatAgendaDate for current year = %q, want %q", gotCurrent, expectedCurrent)
 	}
@@ -89,7 +94,7 @@ func TestFormatAgendaDate(t *testing.T) {
 	// Test different year
 	otherYearTime := time.Date(2024, time.March, 10, 9, 15, 0, 0, time.UTC)
 	gotOther := FormatAgendaDate(otherYearTime.Format(time.RFC3339))
-	expectedOther := "10/03/2024 - 09:15"
+	expectedOther := fmt.Sprintf("%s, 10/03/2024 - 09:15", getWeekdayPt(otherYearTime.Weekday()))
 	if gotOther != expectedOther {
 		t.Errorf("FormatAgendaDate for different year = %q, want %q", gotOther, expectedOther)
 	}
@@ -98,5 +103,14 @@ func TestFormatAgendaDate(t *testing.T) {
 	gotInvalid := FormatAgendaDate("invalid-date-string")
 	if gotInvalid != "invalid-date-string" {
 		t.Errorf("FormatAgendaDate for invalid date = %q, want invalid-date-string", gotInvalid)
+	}
+
+	// Test timezone conversion: UTC date parsed and localized to UTC-3
+	time.Local = time.FixedZone("UTC-3", -3*60*60)
+	utcTime := time.Date(now.Year(), time.January, 15, 14, 30, 0, 0, time.UTC)
+	gotConverted := FormatAgendaDate(utcTime.Format(time.RFC3339))
+	expectedConverted := fmt.Sprintf("%s, 15/01 - 11:30", getWeekdayPt(utcTime.Local().Weekday()))
+	if gotConverted != expectedConverted {
+		t.Errorf("FormatAgendaDate timezone conversion = %q, want %q", gotConverted, expectedConverted)
 	}
 }

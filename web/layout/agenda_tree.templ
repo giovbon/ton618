@@ -4,125 +4,76 @@ import (
 	"fmt"
 	"strings"
 	"ton618/internal/core/domain"
-	"sort"
 )
 
-templ AgendaTree(grouped map[int]map[int]map[int][]domain.Appointment) {
-    if len(grouped) == 0 {
-        <div class="text-zinc-500 italic p-2">Nenhum compromisso agendado.</div>
-    } else {
-        <!-- Sort years descending -->
-        {{ 
-            years := make([]int, 0, len(grouped))
-            for y := range grouped { years = append(years, y) }
-            sort.Slice(years, func(i, j int) bool { return years[i] > years[j] })
-        }}
-        
-        for _, year := range years {
-            @AgendaYearNode(year, grouped[year])
-        }
-    }
+type WeekGroup struct {
+	Year         int
+	Month        int
+	MonthName    string
+	WeekNumber   int
+	Appointments []domain.Appointment
 }
 
-templ AgendaYearNode(year int, months map[int]map[int][]domain.Appointment) {
-    {{
-        yearCount := 0
-        for _, weeks := range months {
-            for _, apps := range weeks {
-                yearCount += len(apps)
-            }
-        }
-        
-        monthKeys := make([]int, 0, len(months))
-        for m := range months { monthKeys = append(monthKeys, m) }
-        sort.Ints(monthKeys)
-    }}
-    <div class="mb-1" x-data="{ open: true }">
-        <div class="tree-node-title py-1 text-zinc-300 font-medium flex items-center gap-1" @click="open = !open">
-            <span class="tree-icon" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
-            Ano { fmt.Sprint(year) } 
-            <span class="ml-2 text-[10px] font-bold text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(yearCount) }</span>
-        </div>
-        <div class="mt-1" x-show="open" style="margin-left: 8px; border-left: 1px solid #27272a; padding-left: 12px;" x-cloak>
-            for _, m := range monthKeys {
-                @AgendaMonthNode(year, m, months[m])
-            }
-        </div>
-    </div>
+templ AgendaTree(groups []WeekGroup) {
+	if len(groups) == 0 {
+		<div class="text-zinc-500 italic p-2">Nenhum compromisso agendado.</div>
+	} else {
+		for _, g := range groups {
+			@AgendaWeekNode(g)
+		}
+	}
 }
 
-templ AgendaMonthNode(year int, month int, weeks map[int][]domain.Appointment) {
-    {{
-        monthCount := 0
-        for _, apps := range weeks {
-            monthCount += len(apps)
-        }
-        
-        weekKeys := make([]int, 0, len(weeks))
-        for w := range weeks { weekKeys = append(weekKeys, w) }
-        sort.Ints(weekKeys)
-        
-        monthsPt := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
-        mName := monthsPt[month-1]
-    }}
-    <div class="mb-1" x-data="{ open: true }">
-        <div class="tree-node-title py-1 text-zinc-300 font-medium flex items-center gap-1" @click="open = !open">
-            <span class="tree-icon" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
-            { mName } 
-            <span class="ml-2 text-[10px] font-bold text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(monthCount) }</span>
-        </div>
-        <div class="mt-1" x-show="open" style="margin-left: 8px; border-left: 1px solid #27272a; padding-left: 12px;" x-cloak>
-            for _, w := range weekKeys {
-                @AgendaWeekNode(w, weeks[w])
-            }
-        </div>
-    </div>
-}
-
-templ AgendaWeekNode(week int, apps []domain.Appointment) {
-    <div class="mb-1" x-data="{ open: true }">
-        <div class="tree-node-title py-1 text-zinc-300 font-medium flex items-center gap-1" @click="open = !open">
-            <span class="tree-icon" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
-            Semana { fmt.Sprint(week) } 
-            <span class="ml-2 text-[10px] font-bold text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(len(apps)) }</span>
-        </div>
-        <div class="mt-1" x-show="open" style="margin-left: 8px; border-left: 1px solid #27272a; padding-left: 12px;" x-cloak>
-            <div class="space-y-1.5 mt-1 mb-3" style="margin-left: 16px;">
-                for _, app := range apps {
-                    @AgendaItem(app)
-                }
-            </div>
-        </div>
-    </div>
+templ AgendaWeekNode(g WeekGroup) {
+	<div class="mb-4" x-data="{ open: true }">
+		<div class="tree-node-title py-2 text-zinc-300 font-medium flex items-center justify-between border-b border-zinc-800/60 pb-1.5 cursor-pointer select-none" @click="open = !open">
+			<div class="flex items-center gap-1.5">
+				<span class="tree-icon text-zinc-500 text-xs transition-transform duration-200" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
+				<span class="text-sm font-semibold">Semana { fmt.Sprint(g.WeekNumber) }</span>
+				<span class="text-xs text-zinc-500 font-normal">({ g.MonthName } { fmt.Sprint(g.Year) })</span>
+			</div>
+			<span class="text-[10px] font-bold text-zinc-400 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(len(g.Appointments)) }</span>
+		</div>
+		<div class="mt-2 bg-zinc-950/60 border border-zinc-800/60 rounded-lg overflow-hidden divide-y divide-zinc-900" x-show="open" x-cloak>
+			for _, app := range g.Appointments {
+				@AgendaItem(app)
+			}
+		</div>
+	</div>
 }
 
 templ AgendaItem(app domain.Appointment) {
-    {{
-        tags := tagRegex.FindAllString(app.Description, -1)
-        dotStyle := ""
-        if len(tags) > 0 {
-            cleanTag := strings.TrimSpace(tags[0])
-            baseColor, _ := GetTagColor(cleanTag)
-            dotStyle = fmt.Sprintf("background-color: %s;", baseColor)
-        }
-    }}
-    <div class="flex items-center justify-between bg-zinc-950 p-2 rounded border border-zinc-800">
-        <div class="flex items-center gap-3 overflow-hidden flex-1">
-            if dotStyle != "" {
-                <span class="w-2.5 h-2.5 rounded-full shrink-0" style={ dotStyle }></span>
-            } else {
-                <span class="w-2.5 h-2.5 rounded-full bg-sky-400 shrink-0"></span>
-            }
-            <span id={ "desc-" + app.ID } class="text-sm font-semibold text-zinc-100 flex-1 truncate">
-                @templ.Raw(FormatDescription(app.Description))
-            </span>
-            <span class="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-md shrink-0 font-mono">
-                { FormatAgendaDate(app.EventDate) }
-            </span>
-        </div>
-        <div class="flex items-center gap-1 ml-2 shrink-0">
-            <button class="edit-btn text-zinc-500 hover:text-sky-400 px-1.5 py-1 rounded transition-colors text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✏️</button>
-            <button class="del-btn text-zinc-500 hover:text-red-400 px-1.5 py-1 rounded transition-colors text-xs" title="Excluir" data-id={ app.ID }>✕</button>
-        </div>
-    </div>
+	{{
+		tags := tagRegex.FindAllString(app.Description, -1)
+		dotStyle := ""
+		if len(tags) > 0 {
+			cleanTag := strings.TrimSpace(tags[0])
+			baseColor, _ := GetTagColor(cleanTag)
+			dotStyle = fmt.Sprintf("background-color: %s;", baseColor)
+		}
+	}}
+	<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3 p-2.5 hover:bg-zinc-900/30 transition-colors">
+		<!-- Primeira linha: Descrição + Bullet -->
+		<div class="flex items-center gap-2.5 overflow-hidden w-full md:flex-1">
+			if dotStyle != "" {
+				<span class="w-2 h-2 rounded-full shrink-0" style={ dotStyle }></span>
+			} else {
+				<span class="w-2 h-2 rounded-full bg-sky-400 shrink-0"></span>
+			}
+			<span id={ "desc-" + app.ID } class="text-[13px] font-semibold text-zinc-100 flex-1 truncate">
+				@templ.Raw(FormatDescription(app.Description))
+			</span>
+		</div>
+		
+		<!-- Segunda linha (mobile) / Mesma linha (desktop): Data + Ações -->
+		<div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto md:shrink-0 pt-1.5 md:pt-0 border-t border-zinc-900/40 md:border-t-0">
+			<span class="text-[11px] text-zinc-400 bg-zinc-900/60 border border-zinc-800/80 px-2 py-0.5 rounded font-mono">
+				{ FormatAgendaDate(app.EventDate) }
+			</span>
+			<div class="flex items-center gap-1.5 shrink-0">
+				<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1 rounded hover:bg-zinc-900 transition-colors text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
+				<button class="del-btn text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-zinc-900 transition-colors text-xs" title="Excluir" data-id={ app.ID }>✕</button>
+			</div>
+		</div>
+	</div>
 }

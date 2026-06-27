@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let items = new vis.DataSet();
     let appointments = [];
     let cachedDecorations = null; // Timeline background decorations (weekends + week numbers)
+    let pinnedTooltip = null;
     
     // Wiki note autocomplete state variables
     let availableNotes = [];
@@ -624,6 +625,80 @@ document.addEventListener('DOMContentLoaded', async () => {
         return result;
     }
 
+    let lastPinnedTime = 0;
+
+    function removePinnedTooltip() {
+        if (pinnedTooltip) {
+            pinnedTooltip.remove();
+            pinnedTooltip = null;
+        }
+    }
+
+    function showPinnedTooltip(app, targetEl) {
+        removePinnedTooltip();
+        
+        // Find the active hover tooltip in the DOM
+        const activeTooltip = document.querySelector('.vis-tooltip:not(.pinned-tooltip)');
+        
+        if (activeTooltip) {
+            // Clone the active tooltip's content and exact position
+            const rect = activeTooltip.getBoundingClientRect();
+            
+            pinnedTooltip = document.createElement('div');
+            pinnedTooltip.className = 'vis-tooltip pinned-tooltip';
+            pinnedTooltip.innerHTML = activeTooltip.innerHTML;
+            
+            document.body.appendChild(pinnedTooltip);
+            
+            pinnedTooltip.style.top = `${rect.top}px`;
+            pinnedTooltip.style.left = `${rect.left}px`;
+        } else {
+            // Fallback calculations if native tooltip is not active
+            pinnedTooltip = document.createElement('div');
+            pinnedTooltip.className = 'vis-tooltip pinned-tooltip';
+            
+            const date = new Date(app.event_date);
+            const dateStr = date.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            pinnedTooltip.innerHTML = `<div class="tt-desc">${formatTooltipDescription(app.description)}</div><div class="tt-date">📅 ${dateStr}</div>`;
+            
+            document.body.appendChild(pinnedTooltip);
+            
+            const anchorEl = targetEl.closest('.vis-item') || targetEl;
+            const rect = anchorEl.getBoundingClientRect();
+            const tooltipRect = pinnedTooltip.getBoundingClientRect();
+            
+            let top = rect.top - tooltipRect.height - 8;
+            if (top < 8) {
+                top = rect.bottom + 8;
+            }
+            
+            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            if (left < 8) left = 8;
+            if (left + tooltipRect.width > window.innerWidth - 8) {
+                left = window.innerWidth - tooltipRect.width - 8;
+            }
+            
+            pinnedTooltip.style.top = `${top}px`;
+            pinnedTooltip.style.left = `${left}px`;
+        }
+        
+        pinnedTooltip.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        lastPinnedTime = Date.now();
+    }
+
+    document.addEventListener('click', (e) => {
+        if (Date.now() - lastPinnedTime < 100) {
+            return;
+        }
+        if (pinnedTooltip && !pinnedTooltip.contains(e.target)) {
+            removePinnedTooltip();
+        }
+    });
+
     // Render vis timeline
     function renderTimeline() {
         items.clear();
@@ -663,6 +738,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 zoomMax: 1000 * 60 * 60 * 24 * 31 * 12 * 2, // 2 years
             };
             timeline = new vis.Timeline(timelineContainer, items, options);
+
+            timeline.on('click', (properties) => {
+                removePinnedTooltip();
+                const itemId = properties.item;
+                if (!itemId) return;
+                const app = appointments.find(a => a.id === itemId);
+                if (!app) return;
+                
+                if (properties.event) {
+                    properties.event.stopPropagation();
+                }
+                
+                showPinnedTooltip(app, properties.event.target);
+            });
 
             // Centraliza o tempo atual e abre uma janela de visualização de ~2 semanas
             const start = new Date();

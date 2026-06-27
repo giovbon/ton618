@@ -71,15 +71,30 @@ func FormatDescription(desc string) string {
 	return h
 }
 
-// FormatAgendaDate formats the date as DD/MM/YYYY - HH:MM or DD/MM - HH:MM if current year
+func getWeekdayPt(wd time.Weekday) string {
+	switch wd {
+	case time.Sunday:    return "DOM"
+	case time.Monday:    return "SEG"
+	case time.Tuesday:   return "TER"
+	case time.Wednesday: return "QUA"
+	case time.Thursday:  return "QUI"
+	case time.Friday:    return "SEX"
+	case time.Saturday:  return "SÁB"
+	}
+	return ""
+}
+
+// FormatAgendaDate formats the date as DD/MM/YYYY - HH:MM or DD/MM - HH:MM if current year, prefixed with Portuguese weekday abbreviation
 func FormatAgendaDate(dateStr string) string {
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
 		return dateStr
 	}
+	t = t.Local()
+	weekday := getWeekdayPt(t.Weekday())
 	now := time.Now()
 	if t.Year() == now.Year() {
-		return t.Format("02/01 - 15:04")
+		return fmt.Sprintf("%s, %s", weekday, t.Format("02/01 - 15:04"))
 	}
-	return t.Format("02/01/2006 - 15:04")
+	return fmt.Sprintf("%s, %s", weekday, t.Format("02/01/2006 - 15:04"))
 }

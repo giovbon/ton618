@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 	"ton618/internal/core/config"
 	"ton618/internal/core/db"
@@ -131,23 +132,56 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 		apps = []domain.Appointment{}
 	}
 
-	grouped := make(map[int]map[int]map[int][]domain.Appointment)
-	
+	type groupKey struct {
+		year  int
+		month int
+		week  int
+	}
+
+	groupsMap := make(map[groupKey][]domain.Appointment)
+	var keys []groupKey
+
 	for _, a := range apps {
 		dt, _ := time.Parse(time.RFC3339, a.EventDate)
+		dt = dt.Local()
 		year := dt.Year()
 		month := int(dt.Month())
 		week := GetISOWeek(dt)
-		
-		if _, ok := grouped[year]; !ok {
-			grouped[year] = make(map[int]map[int][]domain.Appointment)
+
+		key := groupKey{year: year, month: month, week: week}
+		if _, ok := groupsMap[key]; !ok {
+			keys = append(keys, key)
 		}
-		if _, ok := grouped[year][month]; !ok {
-			grouped[year][month] = make(map[int][]domain.Appointment)
-		}
-		grouped[year][month][week] = append(grouped[year][month][week], a)
+		groupsMap[key] = append(groupsMap[key], a)
 	}
 
-	layout.AgendaTree(grouped).Render(r.Context(), w)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].year != keys[j].year {
+			return keys[i].year > keys[j].year
+		}
+		if keys[i].month != keys[j].month {
+			return keys[i].month > keys[j].month
+		}
+		return keys[i].week > keys[j].week
+	})
+
+	monthsPt := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
+	var groups []layout.WeekGroup
+
+	for _, k := range keys {
+		mName := "Desconhecido"
+		if k.month >= 1 && k.month <= 12 {
+			mName = monthsPt[k.month-1]
+		}
+		groups = append(groups, layout.WeekGroup{
+			Year:         k.year,
+			Month:        k.month,
+			MonthName:    mName,
+			WeekNumber:   k.week,
+			Appointments: groupsMap[k],
+		})
+	}
+
+	layout.AgendaTree(groups).Render(r.Context(), w)
 }
 
