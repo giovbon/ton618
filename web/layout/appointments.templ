@@ -97,7 +97,23 @@ templ agendaContent() {
         .vis-time-axis .vis-grid.vis-vertical { border-color: #27272a !important; }
         .vis-current-time { background-color: #ef4444 !important; width: 2px !important; }
         .vis-item.vis-background.weekend-shade {
-            background: rgba(255, 255, 255, 0.03) !important;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(63, 63, 70, 0.04),
+                rgba(63, 63, 70, 0.04) 6px,
+                transparent 6px,
+                transparent 12px
+            ) !important;
+            border-left: 1px dashed rgba(63, 63, 70, 0.25) !important;
+            border-right: 1px dashed rgba(63, 63, 70, 0.25) !important;
+        }
+        .vis-time-axis .vis-text.vis-saturday,
+        .vis-time-axis .vis-text.vis-sunday {
+            color: #d4d4d8 !important;
+            font-weight: 600;
+        }
+        .vis-item.vis-background.night-shade {
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(9, 9, 11, 0.45) 100%) !important;
             border: none !important;
         }
         .vis-item.vis-background.week-num-bg {
@@ -126,5 +142,6 @@ templ agendaContent() {
     <link href="https://unpkg.com/vis-timeline@7.7.2/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
     <script src="https://unpkg.com/vis-timeline@7.7.2/standalone/umd/vis-timeline-graph2d.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
     <script src="/static/js/appointments.js?v=22"></script>
 }

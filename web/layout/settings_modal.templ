@@ -47,6 +47,12 @@ templ SettingsModal() {
                     class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
                     🔖 Marcadores
                 </button>
+                <button data-tab="agenda" onclick="
+                            switchSettingsTab('agenda');
+                        "
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    📅 Agenda
+                </button>
             </div>
 
             <!-- Tab Content -->
@@ -230,6 +236,34 @@ templ SettingsModal() {
                         <div class="text-center py-8">
                             <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
                             <p class="text-xs text-zinc-600">Carregando marcadores...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agenda Tab -->
+                <div id="tab-agenda" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Configure as opções de visualização da sua agenda e linha do tempo.
+                    </p>
+
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-300 mb-2">Fuso Horário / Localização (Timezone)</label>
+                            <select id="setting-agenda-timezone" onchange="saveTimezoneSetting(this.value)"
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500 transition-colors">
+                                <option value="America/Sao_Paulo">America/Sao_Paulo (São Paulo - Brasil)</option>
+                                <option value="America/Manaus">America/Manaus (Manaus - Brasil)</option>
+                                <option value="America/Noronha">America/Noronha (Fernando de Noronha - Brasil)</option>
+                                <option value="America/Belem">America/Belem (Belém - Brasil)</option>
+                                <option value="America/Fortaleza">America/Fortaleza (Fortaleza - Brasil)</option>
+                                <option value="America/New_York">America/New_York (Nova York - EUA)</option>
+                                <option value="Europe/London">Europe/London (Londres - Reino Unido)</option>
+                                <option value="Europe/Paris">Europe/Paris (Paris - França)</option>
+                                <option value="UTC">UTC (Tempo Universal Coordenado)</option>
+                            </select>
+                            <p class="text-[10px] text-zinc-500 mt-2">
+                                Define as coordenadas para calcular o nascer e pôr do sol no gráfico. O padrão é America/Sao_Paulo.
+                            </p>
                         </div>
                     </div>
                 </div>

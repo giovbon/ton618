@@ -13,6 +13,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     let cachedDecorations = null; // Timeline background decorations (weekends + week numbers)
     let pinnedTooltip = null;
     
+    const timezoneCoordinates = {
+        'America/Sao_Paulo': { lat: -23.5505, lng: -46.6333 },
+        'America/Manaus': { lat: -3.1190, lng: -60.0217 },
+        'America/Noronha': { lat: -3.8548, lng: -32.4231 },
+        'America/Belem': { lat: -1.4558, lng: -48.4902 },
+        'America/Fortaleza': { lat: -3.7319, lng: -38.5267 },
+        'America/New_York': { lat: 40.7128, lng: -74.0060 },
+        'Europe/London': { lat: 51.5074, lng: -0.1278 },
+        'Europe/Paris': { lat: 48.8566, lng: 2.3522 },
+        'UTC': { lat: 0, lng: 0 }
+    };
+
+    const storedTz = localStorage.getItem('agenda-timezone') || 'America/Sao_Paulo';
+    const coords = timezoneCoordinates[storedTz] || timezoneCoordinates['America/Sao_Paulo'];
+    let lat = coords.lat;
+    let lng = coords.lng;
+
+    function initTimezoneSelect() {
+        const select = document.getElementById('setting-agenda-timezone');
+        if (select) {
+            select.value = storedTz;
+        }
+    }
+    initTimezoneSelect();
+
+    window.saveTimezoneSetting = function(tz) {
+        localStorage.setItem('agenda-timezone', tz);
+        const newCoords = timezoneCoordinates[tz] || timezoneCoordinates['America/Sao_Paulo'];
+        lat = newCoords.lat;
+        lng = newCoords.lng;
+        if (timeline) {
+            const nightIds = items.get({ filter: (item) => item.className === 'night-shade' }).map(i => i.id);
+            items.remove(nightIds);
+            items.add(buildNightDecorations());
+        }
+    };
+    
     // Wiki note autocomplete state variables
     let availableNotes = [];
     let filteredNotes = [];
@@ -625,6 +662,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         return result;
     }
 
+    function buildNightDecorations() {
+        if (typeof SunCalc === 'undefined') {
+            console.log('SunCalc library is not loaded');
+            return [];
+        }
+        const result = [];
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 10);
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 30);
+        
+        const cur = new Date(startDate);
+        cur.setHours(12, 0, 0, 0); // Start at noon
+        
+        while (cur <= endDate) {
+            const times = SunCalc.getTimes(cur, lat, lng);
+            const sunset = times.sunset;
+            
+            const nextDay = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
+            const nextTimes = SunCalc.getTimes(nextDay, lat, lng);
+            const nextSunrise = nextTimes.sunrise;
+            
+            if (sunset && nextSunrise) {
+                result.push({
+                    id: `night-${cur.getTime()}`,
+                    content: '',
+                    start: sunset,
+                    end: nextSunrise,
+                    type: 'background',
+                    className: 'night-shade'
+                });
+            }
+            
+            cur.setDate(cur.getDate() + 1);
+        }
+        return result;
+    }
+
     let lastPinnedTime = 0;
 
     function removePinnedTooltip() {
@@ -725,6 +800,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         items.add(data);
         // Re-add decorations after every clear() — they are cached so no recomputation cost
         items.add(buildDecorations());
+        items.add(buildNightDecorations());
 
         if (!timeline) {
             const options = {
