@@ -16,7 +16,7 @@ RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" -delete && \
 FROM golang:1.25-alpine AS builder
 
 # modernc.org/sqlite é pure Go → CGO_ENABLED=0, não precisa de gcc nem git
-RUN apk add --no-cache ca-certificates upx
+RUN apk add --no-cache ca-certificates upx curl
 
 WORKDIR /app
 
@@ -43,10 +43,21 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 # Compacta o binário com UPX
 RUN upx --best --lzma /ton618
 
+# Baixa as fontes Fira Sans Regular e Bold diretamente do repositório Google Fonts
+RUN mkdir -p /app/fonts && \
+    curl -sSL -o /app/fonts/FiraSans-Regular.ttf https://github.com/google/fonts/raw/main/ofl/firasans/FiraSans-Regular.ttf && \
+    curl -sSL -o /app/fonts/FiraSans-Bold.ttf https://github.com/google/fonts/raw/main/ofl/firasans/FiraSans-Bold.ttf
+
 # ─── Estágio 3: Runtime ──────────────────────────────
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata typst font-fira-otf
+RUN apk add --no-cache ca-certificates tzdata typst
+
+# Copia as fontes baixadas do builder
+COPY --from=builder /app/fonts /usr/share/fonts/truetype/fira-sans
+
+# Atualiza o cache de fontes do sistema
+RUN fc-cache -fv
 
 RUN adduser -D -h /app appuser
 
