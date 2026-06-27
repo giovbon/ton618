@@ -1,26 +1,47 @@
-package layout
+package appointments
 
 import (
 	"fmt"
 	"html"
-	"math"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+	"ton618/internal/core/timeutil"
 )
 
-// GetTagColor generates a deterministic HSL color based on the tag string
+// GetTagColor generates a distinct color from a predefined aesthetic palette based on the tag string
 func GetTagColor(tag string) (string, string) {
+	colors := []struct {
+		Base  string
+		Alpha string
+	}{
+		{"#f43f5e", "rgba(244, 63, 94, 0.2)"},
+		{"#ec4899", "rgba(236, 72, 153, 0.2)"},
+		{"#d946ef", "rgba(217, 70, 239, 0.2)"},
+		{"#a855f7", "rgba(168, 85, 247, 0.2)"},
+		{"#8b5cf6", "rgba(139, 92, 246, 0.2)"},
+		{"#6366f1", "rgba(99, 102, 241, 0.2)"},
+		{"#14b8a6", "rgba(20, 184, 166, 0.2)"},
+		{"#10b981", "rgba(16, 185, 129, 0.2)"},
+		{"#22c55e", "rgba(34, 197, 94, 0.2)"},
+		{"#84cc16", "rgba(132, 204, 22, 0.2)"},
+		{"#eab308", "rgba(234, 179, 8, 0.2)"},
+		{"#f59e0b", "rgba(245, 158, 11, 0.2)"},
+		{"#f97316", "rgba(249, 115, 22, 0.2)"},
+	}
+
 	var hash int32 = 0
 	clean := strings.TrimSpace(strings.ReplaceAll(strings.ToLower(tag), "#", ""))
 	for i := 0; i < len(clean); i++ {
 		hash = int32(clean[i]) + ((hash << 5) - hash)
 	}
-	hue := int(math.Abs(float64(hash))) % 360
-	base := fmt.Sprintf("hsl(%d, 80%%, 65%%)", hue)
-	alpha := fmt.Sprintf("hsla(%d, 80%%, 65%%, 0.2)", hue)
-	return base, alpha
+	
+	if hash < 0 {
+		hash = -hash
+	}
+	idx := int(hash) % len(colors)
+	return colors[idx].Base, colors[idx].Alpha
 }
 
 var wikiLinkRegex = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]+))?\]\]`)
@@ -86,11 +107,11 @@ func getWeekdayPt(wd time.Weekday) string {
 
 // FormatAgendaDate formats the date as DD/MM/YYYY - HH:MM or DD/MM - HH:MM if current year, prefixed with Portuguese weekday abbreviation
 func FormatAgendaDate(dateStr string) string {
-	t, err := time.Parse(time.RFC3339, dateStr)
+	t, err := timeutil.ParseFloatingTime(dateStr)
 	if err != nil {
 		return dateStr
 	}
-	t = t.Local()
+	
 	weekday := getWeekdayPt(t.Weekday())
 	now := time.Now()
 	if t.Year() == now.Year() {

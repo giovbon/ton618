@@ -1,4 +1,130 @@
-document.addEventListener('DOMContentLoaded', async () => {
+// Checks if a chrono-matched token appears as an isolated word (not inside another word).
+// This prevents false positives like 'dom' matching inside 'armagedom'.
+function isChronoMatchIsolated(fullText, matchedText) {
+    if (!matchedText) return false;
+    const idx = fullText.indexOf(matchedText);
+    if (idx === -1) return false;
+    // Check character before match (if exists) is not a word character
+    const before = idx > 0 ? fullText[idx - 1] : ' ';
+    // Check character after match (if exists) is not a word character
+    const after = idx + matchedText.length < fullText.length ? fullText[idx + matchedText.length] : ' ';
+    const wordChar = /[\wáàâãéèêíìîóòôõúùûç]/i;
+    return !wordChar.test(before) && !wordChar.test(after);
+}
+
+function normalizarPT(texto, nowOverride) {
+    let res = texto;
+    
+    // 0. Normalizar AM/PM para 24h: "8 pm" -> "20:00", "8:30am" -> "08:30"
+    res = res.replace(/(\b\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/gi, (match, h, m, ampm) => {
+        let hour = parseInt(h, 10);
+        const min = m || '00';
+        if (ampm.toLowerCase() === 'pm' && hour < 12) hour += 12;
+        if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
+        return `${hour}:${min}`;
+    });
+
+    // 1. Normalizar notação de hora: "15h30" -> "15:30", "15h" -> "15:00"
+    res = res.replace(/(\b\d{1,2})[hH](\d{2})?\b/g, (match, h, m) => {
+        return h + ':' + (m || '00');
+    });
+
+    const now = nowOverride || new Date();
+
+    // 2. Semanas relativas: "daqui a X semanas", "semana que vem", "daqui a uma semana"
+    res = res.replace(/daqui a (uma?|\d+) semanas?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setDate(d.getDate() + n * 7);
+        return formatShortDate(d);
+    });
+    res = res.replace(/\bsemana que vem\b/gi, () => {
+        const d = new Date(now);
+        d.setDate(d.getDate() + 7);
+        return formatShortDate(d);
+    });
+
+    // 3. Dias relativos: "daqui a X dias", "daqui a um dia"
+    res = res.replace(/daqui a (uma?|\d+) dias?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setDate(d.getDate() + n);
+        return formatShortDate(d);
+    });
+
+    // 4. Meses relativos: "daqui a X meses", "daqui a um mês", "mês que vem"
+    res = res.replace(/daqui a (uma?|\d+) m[eê]s(es)?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setMonth(d.getMonth() + n);
+        return formatShortDate(d);
+    });
+    res = res.replace(/\bm[eê]s que vem\b/gi, () => {
+        const d = new Date(now);
+        d.setMonth(d.getMonth() + 1);
+        return formatShortDate(d);
+    });
+
+    // 5. Anos relativos: "daqui a X anos", "daqui a um ano", "ano que vem"
+    res = res.replace(/daqui a (uma?|\d+) anos?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setFullYear(d.getFullYear() + n);
+        return formatShortDate(d);
+    });
+    res = res.replace(/\bano que vem\b/gi, () => {
+        const d = new Date(now);
+        d.setFullYear(d.getFullYear() + 1);
+        return formatShortDate(d);
+    });
+
+    // 6. Horas relativas: "daqui a X horas"
+    res = res.replace(/daqui a (uma?|\d+) horas?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setHours(d.getHours() + n);
+        return formatFullDateTime(d);
+    });
+
+    // 7. Minutos relativos: "daqui a X minutos"
+    res = res.replace(/daqui a (uma?|\d+) minutos?/gi, (match, val) => {
+        const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
+        const d = new Date(now);
+        d.setMinutes(d.getMinutes() + n);
+        return formatFullDateTime(d);
+    });
+
+    return res;
+}
+
+function formatShortDate(date) {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatFullDateTime(date) {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy} às ${hh}:${min}`;
+}
+
+function formatPreviewDate(date) {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const sec = String(date.getSeconds()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${sec}`;
+}
+
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', async () => {
     const input = document.getElementById('agenda-input');
     const preview = document.getElementById('agenda-preview');
     const saveBtn = document.getElementById('agenda-save');
@@ -50,14 +176,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
     
-    // Wiki note autocomplete state variables
-    let availableNotes = [];
-    let filteredNotes = [];
-    let autocompleteVisible = false;
-    let selectedIndex = 0;
-    const autocompleteContainer = document.getElementById('agenda-autocomplete');
-    let activeInput = null;
-
     // Dynamic tag styling sheet to override vis-timeline colors
     const tagStylesElement = document.createElement('style');
     tagStylesElement.id = 'agenda-tag-styles';
@@ -84,280 +202,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         return `tag-item-${clean}`;
     }
 
-    // Initialize Chrono (Portuguese)
-    let chronoPt;
-    if (typeof chrono !== 'undefined' && chrono.pt) {
-        chronoPt = chrono.pt;
-    } else {
-        try {
-            const chronoModule = await import('https://esm.sh/chrono-node@2.7.5');
-            chronoPt = chronoModule.pt;
-        } catch (err) {
-            console.error('Failed to load chrono-node from CDN', err);
-            preview.textContent = 'Erro: Não foi possível carregar o analisador de data.';
-            return;
-        }
+    // Initialize Chrono (Portuguese) from local vendored script
+    const chronoPt = typeof chrono !== 'undefined' ? chrono.pt : null;
+    if (!chronoPt) {
+        console.error('Failed to load chrono-node Portuguese parser.');
+        preview.textContent = 'Erro: Analisador de data não disponível offline.';
+        return;
     }
 
-    function normalizarPT(texto) {
-        let res = texto;
-        
-        // 0. Normalizar AM/PM para 24h: "8 pm" -> "20:00", "8:30am" -> "08:30"
-        res = res.replace(/(\b\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/gi, (match, h, m, ampm) => {
-            let hour = parseInt(h, 10);
-            const min = m || '00';
-            if (ampm.toLowerCase() === 'pm' && hour < 12) hour += 12;
-            if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
-            return `${hour}:${min}`;
-        });
 
-        // 1. Normalizar notação de hora: "15h30" -> "15:30", "15h" -> "15:00"
-        res = res.replace(/(\b\d{1,2})[hH](\d{2})?\b/g, (match, h, m) => {
-            return h + ':' + (m || '00');
-        });
-
-        const now = new Date();
-
-        // 2. Semanas relativas: "daqui a X semanas", "semana que vem", "daqui a uma semana"
-        res = res.replace(/daqui a (uma?|\d+) semanas?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setDate(d.getDate() + n * 7);
-            return formatShortDate(d);
-        });
-        res = res.replace(/\bsemana que vem\b/gi, () => {
-            const d = new Date(now);
-            d.setDate(d.getDate() + 7);
-            return formatShortDate(d);
-        });
-
-        // 3. Dias relativos: "daqui a X dias", "daqui a um dia"
-        res = res.replace(/daqui a (uma?|\d+) dias?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setDate(d.getDate() + n);
-            return formatShortDate(d);
-        });
-
-        // 4. Meses relativos: "daqui a X meses", "daqui a um mês", "mês que vem"
-        res = res.replace(/daqui a (uma?|\d+) m[eê]s(es)?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setMonth(d.getMonth() + n);
-            return formatShortDate(d);
-        });
-        res = res.replace(/\bm[eê]s que vem\b/gi, () => {
-            const d = new Date(now);
-            d.setMonth(d.getMonth() + 1);
-            return formatShortDate(d);
-        });
-
-        // 5. Anos relativos: "daqui a X anos", "daqui a um ano", "ano que vem"
-        res = res.replace(/daqui a (uma?|\d+) anos?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setFullYear(d.getFullYear() + n);
-            return formatShortDate(d);
-        });
-        res = res.replace(/\bano que vem\b/gi, () => {
-            const d = new Date(now);
-            d.setFullYear(d.getFullYear() + 1);
-            return formatShortDate(d);
-        });
-
-        // 6. Horas relativas: "daqui a X horas"
-        res = res.replace(/daqui a (uma?|\d+) horas?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setHours(d.getHours() + n);
-            return formatFullDateTime(d);
-        });
-
-        // 7. Minutos relativos: "daqui a X minutos"
-        res = res.replace(/daqui a (uma?|\d+) minutos?/gi, (match, val) => {
-            const n = (val.toLowerCase() === 'um' || val.toLowerCase() === 'uma') ? 1 : parseInt(val, 10);
-            const d = new Date(now);
-            d.setMinutes(d.getMinutes() + n);
-            return formatFullDateTime(d);
-        });
-
-        return res;
-    }
-
-    function formatShortDate(date) {
-        const dd = String(date.getDate()).padStart(2, '0');
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-    }
-
-    function formatFullDateTime(date) {
-        const dd = String(date.getDate()).padStart(2, '0');
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-        const hh = String(date.getHours()).padStart(2, '0');
-        const min = String(date.getMinutes()).padStart(2, '0');
-        return `${dd}/${mm}/${yyyy} às ${hh}:${min}`;
-    }
-
-    function formatPreviewDate(date) {
-        const dd = String(date.getDate()).padStart(2, '0');
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-        const hh = String(date.getHours()).padStart(2, '0');
-        const min = String(date.getMinutes()).padStart(2, '0');
-        const sec = String(date.getSeconds()).padStart(2, '0');
-        return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${sec}`;
-    }
-
-    async function fetchNotesForAutocomplete() {
-        if (availableNotes.length > 0) return;
-        try {
-            const res = await fetch('/api/notes');
-            if (res.ok) {
-                const data = await res.json();
-                availableNotes = (data.notes || []).map(n => {
-                    const filename = n.arquivo.split('/').pop() || n.arquivo;
-                    return filename.replace(/\.md$/i, '');
-                });
-            }
-        } catch (e) {
-            console.error("Erro ao carregar notas para autocomplete", e);
-        }
-    }
-
-    function positionAutocomplete(targetInput) {
-        const rect = targetInput.getBoundingClientRect();
-        autocompleteContainer.style.top = `${rect.bottom + 4}px`;
-        autocompleteContainer.style.left = `${rect.left}px`;
-        autocompleteContainer.style.width = `${rect.width}px`;
-    }
-
-    function showAutocomplete(query) {
-        const q = query.toLowerCase().trim();
-        filteredNotes = availableNotes.filter(name => name.toLowerCase().includes(q));
-        
-        if (filteredNotes.length === 0) {
-            hideAutocomplete();
-            return;
-        }
-        
-        selectedIndex = Math.min(selectedIndex, filteredNotes.length - 1);
-        if (selectedIndex < 0) selectedIndex = 0;
-        
-        autocompleteContainer.innerHTML = '';
-        filteredNotes.forEach((name, idx) => {
-            const btn = document.createElement('button');
-            btn.className = `w-full text-left px-3 py-2 text-[13px] text-zinc-300 hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors ${idx === selectedIndex ? 'bg-zinc-800 text-white font-medium' : ''}`;
-            btn.innerHTML = `<span class="text-sky-400 text-[11px] font-bold shrink-0">[[]]</span><span class="truncate">${escapeHtml(name)}</span>`;
-            
-            btn.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                selectNote(name);
-            });
-            autocompleteContainer.appendChild(btn);
-        });
-        
-        autocompleteContainer.classList.remove('hidden');
-        autocompleteVisible = true;
-    }
-    
-    function hideAutocomplete() {
-        autocompleteContainer.classList.add('hidden');
-        autocompleteContainer.innerHTML = '';
-        autocompleteVisible = false;
-    }
-    
-    function selectNote(name) {
-        if (!activeInput) return;
-        const text = activeInput.value;
-        const cursor = activeInput.selectionStart;
-        const textBefore = text.substring(0, cursor);
-        const bracketPos = textBefore.lastIndexOf('[[');
-        if (bracketPos !== -1) {
-            const textAfter = text.substring(cursor);
-            const newValue = textBefore.substring(0, bracketPos) + `[[${name}]] ` + textAfter;
-            activeInput.value = newValue;
-            const newCursorPos = bracketPos + name.length + 5;
-            activeInput.setSelectionRange(newCursorPos, newCursorPos);
-        }
-        hideAutocomplete();
-        activeInput.focus();
-        
-        // Trigger input event to re-evaluate date preview after selecting a note
-        activeInput.dispatchEvent(new Event('input'));
-    }
-
-    function updateAutocompleteSelection() {
-        const buttons = autocompleteContainer.querySelectorAll('button');
-        buttons.forEach((btn, idx) => {
-            if (idx === selectedIndex) {
-                btn.classList.add('bg-zinc-800', 'text-white', 'font-medium');
-                btn.scrollIntoView({ block: 'nearest' });
-            } else {
-                btn.classList.remove('bg-zinc-800', 'text-white', 'font-medium');
-            }
-        });
-    }
-
-    function setupAutocomplete(targetInput) {
-        targetInput.addEventListener('input', async (e) => {
-            activeInput = targetInput;
-            const text = targetInput.value;
-            if (!text.trim()) {
-                hideAutocomplete();
-                return;
-            }
-
-            // Handle Wiki Link autocomplete detection
-            const cursor = targetInput.selectionStart;
-            const textBefore = text.substring(0, cursor);
-            const bracketPos = textBefore.lastIndexOf('[[');
-            
-            if (bracketPos !== -1) {
-                const textAfterBracket = textBefore.substring(bracketPos + 2);
-                if (!textAfterBracket.includes(']]')) {
-                    await fetchNotesForAutocomplete();
-                    positionAutocomplete(targetInput);
-                    showAutocomplete(textAfterBracket);
-                } else {
-                    hideAutocomplete();
-                }
-            } else {
-                hideAutocomplete();
-            }
-        });
-
-        targetInput.addEventListener('keydown', (e) => {
-            if (!autocompleteVisible || activeInput !== targetInput) return;
-            
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectedIndex = (selectedIndex + 1) % filteredNotes.length;
-                updateAutocompleteSelection();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectedIndex = (selectedIndex - 1 + filteredNotes.length) % filteredNotes.length;
-                updateAutocompleteSelection();
-            } else if (e.key === 'Enter' || e.key === 'Tab') {
-                e.preventDefault();
-                if (filteredNotes[selectedIndex]) {
-                    selectNote(filteredNotes[selectedIndex]);
-                }
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                hideAutocomplete();
-            }
-        });
-    }
-
-    // Set up autocomplete on the main input field
-    setupAutocomplete(input);
 
     // Keep the date preview listener on the main input
     input.addEventListener('input', (e) => {
@@ -367,9 +220,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const results = chronoPt.parse(normalizarPT(text), new Date(), { forwardDate: true });
-        if (results && results.length > 0) {
-            const date = results[0].start.date();
+        const normalizedText = normalizarPT(text);
+        const results = chronoPt.parse(normalizedText, new Date(), { forwardDate: true });
+        // Use normalizedText (not raw text) because r.text comes from the normalized string
+        const isolated = results.filter(r => isChronoMatchIsolated(normalizedText, r.text));
+        if (isolated.length > 0) {
+            const date = isolated[0].start.date();
             preview.textContent = `Data reconhecida: ${formatPreviewDate(date)}`;
             preview.className = 'text-xs text-emerald-400 mt-2 h-4';
         } else {
@@ -378,12 +234,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Close autocomplete when clicking outside
-    document.addEventListener('click', (e) => {
-        if (autocompleteVisible && !autocompleteContainer.contains(e.target) && e.target !== activeInput) {
-            hideAutocomplete();
-        }
-    });
+    // Initialize Autocomplete from external module
+    if (window.setupAutocomplete) {
+        window.setupAutocomplete(input);
+    }
 
     // Save appointment
     saveBtn.addEventListener('click', async () => {
@@ -391,7 +245,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!text) return;
 
         const normalizedText = normalizarPT(text);
-        const results = chronoPt.parse(normalizedText, new Date(), { forwardDate: true });
+        const rawResults = chronoPt.parse(normalizedText, new Date(), { forwardDate: true });
+        // Filter results to only accept date tokens that appear as isolated words,
+        // preventing substring matches like 'dom' inside 'armagedom'
+        const results = rawResults.filter(r => isChronoMatchIsolated(normalizedText, r.text));
         let eventDate = new Date();
         let description = normalizedText;
 
@@ -409,9 +266,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const week1 = new Date(d.getFullYear(), 0, 4);
         const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 
+        const pad = (n) => n.toString().padStart(2, '0');
+        const localFloatingTime = `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}T${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}:${pad(eventDate.getSeconds())}`;
+
         const data = {
             description: description,
-            event_date: eventDate.toISOString(),
+            event_date: localFloatingTime,
             year: eventDate.getFullYear(),
             month: eventDate.getMonth() + 1,
             week_number: weekNum
@@ -536,14 +396,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         input.addEventListener('blur', commit);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { 
-                if (autocompleteVisible && activeInput === input) {
+                if (window.isAutocompleteVisible && window.isAutocompleteVisible()) {
                     return; // Let setupAutocomplete handle selecting the note
                 }
                 e.preventDefault(); 
                 input.blur(); 
             }
             if (e.key === 'Escape') { 
-                if (autocompleteVisible && activeInput === input) {
+                if (window.isAutocompleteVisible && window.isAutocompleteVisible()) {
                     return; // Let setupAutocomplete close the autocomplete dropdown
                 }
                 input.value = currentDesc; 
@@ -552,18 +412,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     };
 
-    // Generate a deterministic HSL color based on the tag string
     function getTagColor(tag) {
+        const colors = [
+            { base: '#f43f5e', alpha: 'rgba(244, 63, 94, 0.2)' }, // rose
+            { base: '#ec4899', alpha: 'rgba(236, 72, 153, 0.2)' }, // pink
+            { base: '#d946ef', alpha: 'rgba(217, 70, 239, 0.2)' }, // fuchsia
+            { base: '#a855f7', alpha: 'rgba(168, 85, 247, 0.2)' }, // purple
+            { base: '#8b5cf6', alpha: 'rgba(139, 92, 246, 0.2)' }, // violet
+            { base: '#6366f1', alpha: 'rgba(99, 102, 241, 0.2)' }, // indigo
+            { base: '#14b8a6', alpha: 'rgba(20, 184, 166, 0.2)' }, // teal
+            { base: '#10b981', alpha: 'rgba(16, 185, 129, 0.2)' }, // emerald
+            { base: '#22c55e', alpha: 'rgba(34, 197, 94, 0.2)' },  // green
+            { base: '#84cc16', alpha: 'rgba(132, 204, 22, 0.2)' }, // lime
+            { base: '#eab308', alpha: 'rgba(234, 179, 8, 0.2)' },  // yellow
+            { base: '#f59e0b', alpha: 'rgba(245, 158, 11, 0.2)' }, // amber
+            { base: '#f97316', alpha: 'rgba(249, 115, 22, 0.2)' }  // orange
+        ];
+
         let hash = 0;
         const clean = tag.toLowerCase().replace(/#/g, '').trim();
         for (let i = 0; i < clean.length; i++) {
             hash = clean.charCodeAt(i) + ((hash << 5) - hash);
         }
-        const hue = Math.abs(hash) % 360;
-        return {
-            base: `hsl(${hue}, 80%, 65%)`,
-            alpha: `hsla(${hue}, 80%, 65%, 0.2)`
-        };
+        hash = Math.abs(hash);
+        return colors[hash % colors.length];
     }
 
     // Format description text specifically for tooltips: stripping tags and wikilinks completely
@@ -700,68 +572,127 @@ document.addEventListener('DOMContentLoaded', async () => {
         return result;
     }
 
+    let holidaysList = [];
+
+    function buildHolidayDecorations() {
+        return holidaysList.map((h, idx) => {
+            return {
+                id: `holiday-${h.date}-${idx}`,
+                content: `<div class="holiday-label">${escapeHtml(h.name)}</div>`,
+                start: `${h.date}T00:00:00`,
+                end: `${h.date}T23:59:59`,
+                type: 'background',
+                className: 'holiday-shade'
+            };
+        });
+    }
+
+    async function loadHolidays() {
+        const startYear = new Date().getFullYear() - 1;
+        const endYear = new Date().getFullYear() + 2;
+        const fetchedHolidays = [];
+
+        for (let y = startYear; y <= endYear; y++) {
+            const cacheKey = `agenda-holidays-${y}`;
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    fetchedHolidays.push(...JSON.parse(cached));
+                    continue;
+                } catch (e) {
+                    console.error("Error parsing cached holidays", e);
+                }
+            }
+
+            try {
+                const res = await fetch(`https://brasilapi.com.br/api/feriados/v1/${y}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                    fetchedHolidays.push(...data);
+                }
+            } catch (e) {
+                console.error(`Failed to fetch holidays for year ${y}`, e);
+            }
+        }
+
+        holidaysList = fetchedHolidays;
+        if (timeline) {
+            const holidayIds = items.get({ filter: (item) => item.className === 'holiday-shade' }).map(i => i.id);
+            items.remove(holidayIds);
+            items.add(buildHolidayDecorations());
+        }
+    }
+
     let lastPinnedTime = 0;
+
+    function getRemainingTimeText(eventDate) {
+        const now = new Date();
+        const diffMs = eventDate - now;
+        if (diffMs <= 0) return '';
+
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        const rHours = diffHours % 24;
+        const rMins = diffMins % 60;
+
+        let parts = [];
+        if (diffDays > 0) parts.push(`${diffDays}d`);
+        if (rHours > 0 || diffDays > 0) parts.push(`${rHours}h`);
+        parts.push(`${rMins}m`);
+
+        return `em ${parts.join(' ')}`;
+    }
 
     function removePinnedTooltip() {
         if (pinnedTooltip) {
             pinnedTooltip.remove();
             pinnedTooltip = null;
+            document.body.classList.remove('has-pinned-tooltip');
         }
     }
 
     function showPinnedTooltip(app, targetEl) {
         removePinnedTooltip();
+        document.body.classList.add('has-pinned-tooltip');
         
-        // Find the active hover tooltip in the DOM
-        const activeTooltip = document.querySelector('.vis-tooltip:not(.pinned-tooltip)');
+        pinnedTooltip = document.createElement('div');
+        pinnedTooltip.className = 'vis-tooltip pinned-tooltip';
         
-        if (activeTooltip) {
-            // Clone the active tooltip's content and exact position
-            const rect = activeTooltip.getBoundingClientRect();
-            
-            pinnedTooltip = document.createElement('div');
-            pinnedTooltip.className = 'vis-tooltip pinned-tooltip';
-            pinnedTooltip.innerHTML = activeTooltip.innerHTML;
-            
-            document.body.appendChild(pinnedTooltip);
-            
-            pinnedTooltip.style.top = `${rect.top}px`;
-            pinnedTooltip.style.left = `${rect.left}px`;
-        } else {
-            // Fallback calculations if native tooltip is not active
-            pinnedTooltip = document.createElement('div');
-            pinnedTooltip.className = 'vis-tooltip pinned-tooltip';
-            
-            const date = new Date(app.event_date);
-            const dateStr = date.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            
-            pinnedTooltip.innerHTML = `<div class="tt-desc">${formatTooltipDescription(app.description)}</div><div class="tt-date">📅 ${dateStr}</div>`;
-            
-            document.body.appendChild(pinnedTooltip);
-            
-            const anchorEl = targetEl.closest('.vis-item') || targetEl;
-            const rect = anchorEl.getBoundingClientRect();
-            const tooltipRect = pinnedTooltip.getBoundingClientRect();
-            
-            let top = rect.top - tooltipRect.height - 8;
-            if (top < 8) {
-                top = rect.bottom + 8;
-            }
-            
-            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-            if (left < 8) left = 8;
-            if (left + tooltipRect.width > window.innerWidth - 8) {
-                left = window.innerWidth - tooltipRect.width - 8;
-            }
-            
-            pinnedTooltip.style.top = `${top}px`;
-            pinnedTooltip.style.left = `${left}px`;
+        const date = new Date(app.event_date);
+        const dateStr = date.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const remaining = getRemainingTimeText(date);
+        const remainingHTML = remaining ? `<div class="tt-remaining" style="font-size: 11px; color: #38bdf8; margin-top: 4px; font-weight: 600;">⏱️ ${remaining}</div>` : '';
+        
+        pinnedTooltip.innerHTML = `<div class="tt-desc">${formatTooltipDescription(app.description)}</div><div class="tt-date">📅 ${dateStr}</div>${remainingHTML}`;
+        
+        document.body.appendChild(pinnedTooltip);
+        
+        const anchorEl = targetEl.closest('.vis-item') || targetEl;
+        const rect = anchorEl.getBoundingClientRect();
+        const tooltipRect = pinnedTooltip.getBoundingClientRect();
+        
+        let top = rect.top - tooltipRect.height - 8;
+        if (top < 8) {
+            top = rect.bottom + 8;
         }
+        
+        let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+        if (left < 8) left = 8;
+        if (left + tooltipRect.width > window.innerWidth - 8) {
+            left = window.innerWidth - tooltipRect.width - 8;
+        }
+        
+        pinnedTooltip.style.top = `${top}px`;
+        pinnedTooltip.style.left = `${left}px`;
         
         pinnedTooltip.addEventListener('click', (e) => {
             e.stopPropagation();
         });
-
+        
         lastPinnedTime = Date.now();
     }
 
@@ -779,9 +710,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         items.clear();
 
         const data = appointments.map(a => {
-            const date = new Date(a.event_date);
-            const dateStr = date.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            
             const tags = a.description.match(/#[\w\-]+/g) || [];
             let itemClassName = '';
             if (tags.length > 0) {
@@ -793,14 +721,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 content: '',
                 start: a.event_date,
                 type: 'point',
-                className: itemClassName,
-                title: `<div class="tt-desc">${formatTooltipDescription(a.description)}</div><div class="tt-date">📅 ${dateStr}</div>`
+                className: itemClassName
             };
         });
         items.add(data);
         // Re-add decorations after every clear() — they are cached so no recomputation cost
         items.add(buildDecorations());
         items.add(buildNightDecorations());
+        items.add(buildHolidayDecorations());
 
         if (!timeline) {
             const options = {
@@ -809,7 +737,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 margin: { item: 10, axis: 5 },
                 orientation: 'top',
                 showCurrentTime: true,
-                tooltip: { followMouse: true, overflowMethod: 'cap', delay: 0 },
                 zoomMin: 1000 * 60 * 60 * 24,           // 1 day
                 zoomMax: 1000 * 60 * 60 * 24 * 31 * 12 * 2, // 2 years
             };
@@ -842,4 +769,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load initial data
     loadAppointments();
-});
+    loadHolidays();
+    });
+}
+
+if (typeof window !== 'undefined') {
+    window.normalizarPT = normalizarPT;
+    window.isChronoMatchIsolated = isChronoMatchIsolated;
+} else if (typeof global !== 'undefined') {
+    global.normalizarPT = normalizarPT;
+    global.isChronoMatchIsolated = isChronoMatchIsolated;
+}
+

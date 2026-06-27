@@ -1,14 +1,16 @@
-package layout
+package appointments
+
+import "ton618/web/layout"
 
 templ Agenda(title string) {
-    @Layout(title, false, agendaContent())
+    @layout.Layout(title, false, agendaContent())
 }
 
 templ agendaContent() {
     <div class="flex flex-col h-full gap-4" style="height: calc(100vh - 64px); padding: 0 0 16px 0;">
         <!-- Vis Timeline (no topo, 100% largura) -->
-        <div class="w-full bg-zinc-900/50 border-b border-zinc-800 p-4 flex flex-col shrink-0" style="height: 260px;">
-            <div id="agenda-timeline" class="flex-1 w-full bg-zinc-950/50 rounded-lg border border-zinc-800/50 overflow-hidden"></div>
+        <div class="w-full bg-zinc-900/50 border-b border-zinc-800 flex flex-col shrink-0 h-[120px] md:h-[122px]">
+            <div id="agenda-timeline" class="flex-1 w-full bg-zinc-950/50 overflow-hidden"></div>
         </div>
         
         <div class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-2 min-h-0 flex-1">
@@ -76,7 +78,7 @@ templ agendaContent() {
             font-family: inherit !important;
             box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
             max-width: 280px;
-            pointer-events: auto !important;
+            pointer-events: none !important;
             z-index: 9999;
         }
         .vis-tooltip .tt-desc { font-weight: 600; color: #f4f4f5; margin-bottom: 4px; }
@@ -92,7 +94,15 @@ templ agendaContent() {
             z-index: 99999 !important;
         }
 
-        .vis-item.vis-background { background: rgba(56, 189, 248, 0.05) !important; }
+        /* Hide native tooltip when a custom one is pinned (prevents double tooltips on mobile) */
+        body.has-pinned-tooltip .vis-tooltip:not(.pinned-tooltip) {
+            display: none !important;
+        }
+
+        .vis-item.vis-background { 
+            background: rgba(56, 189, 248, 0.05) !important;
+            pointer-events: none !important;
+        }
         .vis-time-axis .vis-text { color: #a1a1aa !important; }
         .vis-time-axis .vis-grid.vis-vertical { border-color: #27272a !important; }
         .vis-current-time { background-color: #ef4444 !important; width: 2px !important; }
@@ -128,6 +138,29 @@ templ agendaContent() {
             left: 3px;
             pointer-events: none;
             user-select: none;
+            overflow: visible !important;
+            white-space: nowrap !important;
+        }
+        .vis-item.vis-background.holiday-shade {
+            background: rgba(244, 63, 94, 0.07) !important;
+            border-left: 1px dashed rgba(244, 63, 94, 0.4) !important;
+            border-right: 1px dashed rgba(244, 63, 94, 0.4) !important;
+        }
+        .vis-item.vis-background.holiday-shade:not([style]) {
+            display: none !important;
+        }
+        .vis-item.vis-background.holiday-shade .vis-item-content {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            pointer-events: none;
+            user-select: none;
+            overflow: visible !important;
+            white-space: nowrap !important;
+            color: #f43f5e;
+            font-weight: 700;
+            font-size: 8px;
+            font-family: sans-serif;
         }
 
         .vis-panel.vis-background { border-color: #27272a !important; }
@@ -143,5 +176,7 @@ templ agendaContent() {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
     <script src="https://unpkg.com/vis-timeline@7.7.2/standalone/umd/vis-timeline-graph2d.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
-    <script src="/static/js/appointments.js?v=22"></script>
+    <script src="/static/js/vendor/chrono.min.js"></script>
+    <script src="/static/js/autocomplete.js?v=30"></script>
+    <script src="/static/js/appointments.js?v=30"></script>
 }

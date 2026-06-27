@@ -9,8 +9,8 @@ import (
 	"ton618/internal/core/config"
 	"ton618/internal/core/db"
 	"ton618/internal/core/domain"
+	"ton618/internal/core/timeutil"
 	"ton618/internal/processor"
-	"ton618/web/layout"
 )
 
 type HandlerContext struct {
@@ -112,7 +112,16 @@ func (ctx *HandlerContext) HandleAgendaPage(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	newCtx := context.WithValue(r.Context(), "is_full_width", true)
-	layout.Agenda("📅 Agenda").Render(newCtx, w)
+	Agenda("📅 Agenda").Render(newCtx, w)
+}
+
+// parseEventDate parses the appointment event date string safely using the shared timeutil package.
+func parseEventDate(dateStr string) time.Time {
+	t, err := timeutil.ParseFloatingTime(dateStr)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // GetISOWeek returns the ISO week number for a given date
@@ -133,22 +142,19 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	}
 
 	type groupKey struct {
-		year  int
-		month int
-		week  int
+		year int
+		week int
 	}
 
 	groupsMap := make(map[groupKey][]domain.Appointment)
 	var keys []groupKey
 
 	for _, a := range apps {
-		dt, _ := time.Parse(time.RFC3339, a.EventDate)
-		dt = dt.Local()
+		dt := parseEventDate(a.EventDate)
 		year := dt.Year()
-		month := int(dt.Month())
 		week := GetISOWeek(dt)
 
-		key := groupKey{year: year, month: month, week: week}
+		key := groupKey{year: year, week: week}
 		if _, ok := groupsMap[key]; !ok {
 			keys = append(keys, key)
 		}
@@ -157,31 +163,44 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].year != keys[j].year {
-			return keys[i].year > keys[j].year
+			return keys[i].year < keys[j].year
 		}
-		if keys[i].month != keys[j].month {
-			return keys[i].month > keys[j].month
-		}
-		return keys[i].week > keys[j].week
+		return keys[i].week < keys[j].week
 	})
 
 	monthsPt := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
-	var groups []layout.WeekGroup
+	var groups []WeekGroup
 
 	for _, k := range keys {
-		mName := "Desconhecido"
-		if k.month >= 1 && k.month <= 12 {
-			mName = monthsPt[k.month-1]
+		appsInGroup := groupsMap[k]
+		// Sort appointments ascending (oldest/closest first)
+		sort.Slice(appsInGroup, func(i, j int) bool {
+			return appsInGroup[i].EventDate < appsInGroup[j].EventDate
+		})
+
+		// Determine representative month from the first appointment in this sorted group
+		repMonth := 1
+		repYear := k.year
+		if len(appsInGroup) > 0 {
+			dtRep := parseEventDate(appsInGroup[0].EventDate)
+			repMonth = int(dtRep.Month())
+			repYear = dtRep.Year()
 		}
-		groups = append(groups, layout.WeekGroup{
-			Year:         k.year,
-			Month:        k.month,
+
+		mName := "Desconhecido"
+		if repMonth >= 1 && repMonth <= 12 {
+			mName = monthsPt[repMonth-1]
+		}
+
+		groups = append(groups, WeekGroup{
+			Year:         repYear,
+			Month:        repMonth,
 			MonthName:    mName,
 			WeekNumber:   k.week,
-			Appointments: groupsMap[k],
+			Appointments: appsInGroup,
 		})
 	}
 
-	layout.AgendaTree(groups).Render(r.Context(), w)
+	AgendaTree(groups).Render(r.Context(), w)
 }
 

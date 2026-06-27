@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -313,3 +314,271 @@ func TestHandleAgendaPage(t *testing.T) {
 		t.Error("expected agenda-timeline container in page output")
 	}
 }
+
+
+
+
+func TestHandleGetAgendaTreeIntensive(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// ISO Week 27, 2026: June 29 (Monday) to July 5 (Sunday)
+	apps := []domain.Appointment{
+		{ID: "app-june-29-early", Description: "Monday Early", EventDate: "2026-06-29T15:00:00"},
+		{ID: "app-july-5", Description: "Sunday July 5", EventDate: "2026-07-05T12:00:00"},
+		{ID: "app-june-29-late", Description: "Monday Late", EventDate: "2026-06-29T19:00:00"},
+		{ID: "app-june-30", Description: "Tuesday June 30", EventDate: "2026-06-30T21:00:00"},
+		// Week 26 item
+		{ID: "app-june-28", Description: "Sunday June 28 (Week 26)", EventDate: "2026-06-28T17:00:00"},
+	}
+
+	for _, a := range apps {
+		if err := ctx.Store.CreateAppointment(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/appointments/tree", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleGetAgendaTree(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	body := rr.Body.String()
+
+	// 1. Week 27 must appear exactly once (no split across June/July)
+	semana27Count := strings.Count(body, "Semana 27")
+	if semana27Count != 1 {
+		t.Errorf("expected exactly 1 'Semana 27', got %d", semana27Count)
+	}
+
+	// 2. Week 27 must appear before Week 26 (reverse chronological)
+	posWeek27 := strings.Index(body, "Semana 27")
+	posWeek26 := strings.Index(body, "Semana 26")
+	if posWeek27 == -1 || posWeek26 == -1 {
+		t.Fatalf("expected both Week 27 and Week 26 present")
+	}
+	// Ascending order: older week (26) appears before newer week (27)
+	if posWeek26 > posWeek27 {
+		t.Errorf("Semana 26 (older) must appear before Semana 27 (newer) in ascending order")
+	}
+
+	// 3. Items within Week 27 must be chronological (ascending: oldest first, newest last)
+	posJuly5 := strings.Index(body, "Sunday July 5")
+	posJune30 := strings.Index(body, "Tuesday June 30")
+	posJune29Late := strings.Index(body, "Monday Late")
+	posJune29Early := strings.Index(body, "Monday Early")
+
+	if posJuly5 == -1 || posJune30 == -1 || posJune29Late == -1 || posJune29Early == -1 {
+		t.Fatalf("expected all Week 27 items present in HTML")
+	}
+	if !(posJune29Early < posJune29Late && posJune29Late < posJune30 && posJune30 < posJuly5) {
+		t.Errorf("items in Week 27 not sorted chronologically ascending (Early < Late < June 30 < July 5)")
+	}
+}
+
+// TestHandleGetAgendaTreeEmpty verifies that an empty DB renders a "no appointments" message.
+func TestHandleGetAgendaTreeEmpty(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("GET", "/api/appointments/tree", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleGetAgendaTree(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Nenhum compromisso agendado") {
+		t.Errorf("expected empty-state message in HTML")
+	}
+}
+
+// TestHandleGetAgendaTreeMultiYear ensures items across different years are sorted with most recent year first.
+func TestHandleGetAgendaTreeMultiYear(t *testing.T) {
+	ctx := newTestContext(t)
+
+	apps := []domain.Appointment{
+		{ID: "y2024", Description: "Evento 2024", EventDate: "2024-03-15T10:00:00"},
+		{ID: "y2025", Description: "Evento 2025", EventDate: "2025-06-20T10:00:00"},
+		{ID: "y2026", Description: "Evento 2026", EventDate: "2026-09-01T10:00:00"},
+	}
+	for _, a := range apps {
+		if err := ctx.Store.CreateAppointment(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/appointments/tree", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleGetAgendaTree(rr, req)
+
+	body := rr.Body.String()
+
+	pos2026 := strings.Index(body, "2026")
+	pos2025 := strings.Index(body, "2025")
+	pos2024 := strings.Index(body, "2024")
+
+	if pos2026 == -1 || pos2025 == -1 || pos2024 == -1 {
+		t.Fatalf("expected all years present in HTML")
+	}
+	// Ascending order: 2024 before 2025 before 2026
+	if !(pos2024 < pos2025 && pos2025 < pos2026) {
+		t.Errorf("years not sorted ascending: 2024=%d 2025=%d 2026=%d", pos2024, pos2025, pos2026)
+	}
+}
+
+// TestHandleGetAgendaTreeDecYearBoundary tests ISO week 1 of year boundary (e.g. Dec 28 in week 1 of next year).
+func TestHandleGetAgendaTreeDecYearBoundary(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Dec 28, 2026 belongs to ISO Week 53 of 2026 (or week 1 of 2027, depending on year)
+	// Jan 2, 2027 belongs to ISO Week 53 of 2026 / Week 1 of 2027
+	// This tests we don't accidentally split the week
+	apps := []domain.Appointment{
+		{ID: "dec28", Description: "Dec 28 item", EventDate: "2026-12-28T10:00:00"},
+		{ID: "jan2", Description: "Jan 2 item", EventDate: "2027-01-02T10:00:00"},
+	}
+	for _, a := range apps {
+		if err := ctx.Store.CreateAppointment(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/appointments/tree", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleGetAgendaTree(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Dec 28 item") || !strings.Contains(body, "Jan 2 item") {
+		t.Errorf("expected both cross-year items in HTML")
+	}
+}
+
+// TestHandleCreateAppointmentBadJSON verifies that malformed JSON returns 400.
+func TestHandleCreateAppointmentBadJSON(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("POST", "/api/appointments/create", strings.NewReader("not json at all"))
+	rr := httptest.NewRecorder()
+	ctx.HandleCreateAppointment(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad JSON, got %d", rr.Code)
+	}
+}
+
+// TestHandleUpdateAppointmentBadJSON verifies that malformed JSON returns 400.
+func TestHandleUpdateAppointmentBadJSON(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("POST", "/api/appointments/update", strings.NewReader("{bad json"))
+	rr := httptest.NewRecorder()
+	ctx.HandleUpdateAppointment(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for bad JSON, got %d", rr.Code)
+	}
+}
+
+// TestHandleDeleteAppointmentMissingID verifies that missing ?id= returns 400.
+func TestHandleDeleteAppointmentMissingID(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("DELETE", "/api/appointments/delete", nil) // no ?id=
+	rr := httptest.NewRecorder()
+	ctx.HandleDeleteAppointment(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing id, got %d", rr.Code)
+	}
+}
+
+// TestHandleCreateAppointmentGeneratesID ensures a UUID/CUID is always generated when ID is absent.
+func TestHandleCreateAppointmentGeneratesID(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Send without an ID field
+	body := strings.NewReader(`{"description":"Test #auto-id","event_date":"2026-06-29T10:00:00"}`)
+	req := httptest.NewRequest("POST", "/api/appointments/create", body)
+	rr := httptest.NewRecorder()
+	ctx.HandleCreateAppointment(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var created domain.Appointment
+	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == "" {
+		t.Error("expected a generated ID, got empty string")
+	}
+	if len(created.ID) < 8 {
+		t.Errorf("generated ID too short: %q", created.ID)
+	}
+}
+
+// TestHandleAgendaPageCacheHeaders verifies that the agenda page sets no-cache headers.
+func TestHandleAgendaPageCacheHeaders(t *testing.T) {
+	ctx := newTestContext(t)
+
+	req := httptest.NewRequest("GET", "/agenda", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleAgendaPage(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if cc := rr.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+		t.Errorf("expected Cache-Control: no-store, got %q", cc)
+	}
+	if rr.Header().Get("Pragma") != "no-cache" {
+		t.Errorf("expected Pragma: no-cache")
+	}
+}
+
+// TestGetISOWeekEdgeCases tests ISO week edge cases at year boundaries.
+func TestGetISOWeekEdgeCases(t *testing.T) {
+	tests := []struct {
+		date     time.Time
+		expected int
+		label    string
+	}{
+		{time.Date(2026, time.June, 27, 12, 0, 0, 0, time.UTC), 26, "Jun 27 2026"},
+		{time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC), 1, "Jan 1 2026"},
+		{time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC), 2, "Jan 5 2026"},
+		{time.Date(2026, time.December, 28, 12, 0, 0, 0, time.UTC), 53, "Dec 28 2026"},
+		{time.Date(2024, time.December, 30, 12, 0, 0, 0, time.UTC), 1, "Dec 30 2024 = week 1 of 2025"},
+		{time.Date(2025, time.January, 1, 12, 0, 0, 0, time.UTC), 1, "Jan 1 2025"},
+		{time.Date(2020, time.December, 31, 12, 0, 0, 0, time.UTC), 53, "Dec 31 2020"},
+	}
+
+	for _, tt := range tests {
+		got := GetISOWeek(tt.date)
+		if got != tt.expected {
+			t.Errorf("GetISOWeek(%s) = %d, want %d", tt.label, got, tt.expected)
+		}
+	}
+}
+
+// TestFrontendDateParser invokes the node-based test suite for appointments.js
+// to ensure no regressions occur on frontend date normalization and parsing.
+func TestFrontendDateParser(t *testing.T) {
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not found in PATH, skipping frontend date parser test")
+	}
+
+	scriptPath := filepath.Join("..", "..", "..", "web", "static", "js", "appointments.test.cjs")
+	cmd := exec.Command(nodePath, scriptPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Frontend date parser tests failed: %v\nOutput:\n%s", err, string(output))
+	}
+}
+

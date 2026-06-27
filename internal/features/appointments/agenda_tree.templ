@@ -1,4 +1,4 @@
-package layout
+package appointments
 
 import (
 	"fmt"
@@ -18,14 +18,14 @@ templ AgendaTree(groups []WeekGroup) {
 	if len(groups) == 0 {
 		<div class="text-zinc-500 italic p-2">Nenhum compromisso agendado.</div>
 	} else {
-		for _, g := range groups {
-			@AgendaWeekNode(g)
+		for idx, g := range groups {
+			@AgendaWeekNode(g, idx < 2)
 		}
 	}
 }
 
-templ AgendaWeekNode(g WeekGroup) {
-	<div class="mb-4" x-data="{ open: true }">
+templ AgendaWeekNode(g WeekGroup, defaultOpen bool) {
+	<div class="mb-4" x-data={ fmt.Sprintf("{ open: %t }", defaultOpen) }>
 		<div class="tree-node-title py-2 text-zinc-300 font-medium flex items-center justify-between border-b border-zinc-800/60 pb-1.5 cursor-pointer select-none" @click="open = !open">
 			<div class="flex items-center gap-1.5">
 				<span class="tree-icon text-zinc-500 text-xs transition-transform duration-200" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
@@ -71,8 +71,8 @@ templ AgendaItem(app domain.Appointment) {
 				{ FormatAgendaDate(app.EventDate) }
 			</span>
 			<div class="flex items-center gap-1.5 shrink-0">
-				<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1 rounded hover:bg-zinc-900 transition-colors text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
-				<button class="del-btn text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-zinc-900 transition-colors text-xs" title="Excluir" data-id={ app.ID }>✕</button>
+				<button class="edit-btn text-zinc-500 hover:text-sky-400 p-2 md:p-1 rounded hover:bg-zinc-900 transition-colors text-[16px] md:text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
+				<button class="del-btn text-zinc-500 hover:text-red-400 p-2 md:p-1 rounded hover:bg-zinc-900 transition-colors text-[16px] md:text-xs" title="Excluir" data-id={ app.ID }>✕</button>
 			</div>
 		</div>
 	</div>

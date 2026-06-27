@@ -119,7 +119,7 @@ templ Navbar() {
                     class="text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">📅 Agenda</a>
                 <a id="nav-todos" href="/todos"
                     class="text-zinc-400 hover:text-amber-400 transition-colors" title="TODOs">🎯 TODOs</a>
-                <a href="/database"
+                <a id="nav-database" href="/database"
                     class="text-zinc-400 hover:text-white transition-colors" title="Tabulator">🗃️ Tabulator</a>
 
                 <!-- Utility icons (icon only + tooltip) -->
@@ -232,7 +232,7 @@ templ Navbar() {
                         <span class="text-[11px] font-bold tracking-wider">TODOS</span>
                     </a>
                     
-                    <a href="/database" onclick="
+                    <a id="mobile-nav-database" href="/database" onclick="
                                 document.getElementById('mobile-menu').classList.add('hidden')
                             "
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors">
@@ -271,4 +271,25 @@ templ Navbar() {
             </div>
         </div>
     </nav>
+    <script>
+        (function() {
+            const path = window.location.pathname;
+            if (path === '/agenda') {
+                const nav = document.getElementById('nav-agenda');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-400 flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-agenda');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sky-400 bg-sky-950/40 border border-sky-500/20 transition-colors';
+            } else if (path === '/todos') {
+                const nav = document.getElementById('nav-todos');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-500/30 text-amber-400 flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-todos');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-amber-400 bg-amber-950/40 border border-amber-500/20 transition-colors';
+            } else if (path === '/database') {
+                const nav = document.getElementById('nav-database');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-white flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-database');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-white bg-zinc-800/60 border border-zinc-700/30 transition-colors';
+            }
+        })();
+    </script>
 }
