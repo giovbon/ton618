@@ -16,7 +16,7 @@ RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" -delete && \
 FROM golang:1.25-alpine AS builder
 
 # modernc.org/sqlite é pure Go → CGO_ENABLED=0, não precisa de gcc nem git
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates upx
 
 WORKDIR /app
 
@@ -40,10 +40,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
 
+# Compacta o binário com UPX
+RUN upx --best --lzma /ton618
+
 # ─── Estágio 3: Runtime ──────────────────────────────
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata typst font-dejavu
+RUN apk add --no-cache ca-certificates tzdata typst font-fira-otf
 
 RUN adduser -D -h /app appuser
 
