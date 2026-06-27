@@ -42,7 +42,7 @@ Nul
 
 go.work
 go.work.sum
-vendor/
+/vendor/
 .env
 repomix-output.xml
 *.log

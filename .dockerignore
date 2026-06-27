@@ -31,7 +31,7 @@ ton618.exe
 server
 go.work
 go.work.sum
-vendor/
+/vendor/
 *.test
 *.out
 *.test-output

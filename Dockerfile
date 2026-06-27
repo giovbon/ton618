@@ -56,9 +56,6 @@ RUN apk add --no-cache ca-certificates tzdata typst
 # Copia as fontes baixadas do builder
 COPY --from=builder /app/fonts /usr/share/fonts/truetype/fira-sans
 
-# Atualiza o cache de fontes do sistema
-RUN fc-cache -fv
-
 RUN adduser -D -h /app appuser
 
 WORKDIR /app
