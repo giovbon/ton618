@@ -8,6 +8,25 @@ templ Typst(data domain.EditorData) {
 }
 
 templ typstContent(data domain.EditorData) {
+<script>
+    window.autoCompile = localStorage.getItem("typst-auto-compile") !== "false";
+    window.toggleAutoCompile = function(checked) {
+        window.autoCompile = checked;
+        localStorage.setItem("typst-auto-compile", checked);
+    };
+    window.shouldAutoCompile = function() {
+        return window.autoCompile === true;
+    };
+    window.triggerCompile = function() {
+        document.body.dispatchEvent(new Event("typst-compile"));
+    };
+    document.addEventListener("DOMContentLoaded", function() {
+        var toggle = document.getElementById("auto-compile-toggle");
+        if (toggle) {
+            toggle.checked = window.autoCompile;
+        }
+    });
+</script>
 <div class="editor-root flex flex-col" id="typst-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
     <!-- Topbar -->
     <div class="flex items-center gap-3 mb-3 shrink-0" id="typst-topbar">
@@ -20,6 +39,30 @@ templ typstContent(data domain.EditorData) {
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        
+        <!-- Toggle Auto-Compilar -->
+        <div class="flex items-center gap-1.5 bg-zinc-900/40 px-2 py-1 rounded-lg border border-zinc-800 shrink-0 select-none">
+            <input
+                id="auto-compile-toggle"
+                type="checkbox"
+                class="w-3.5 h-3.5 rounded border-zinc-750 text-sky-500 bg-zinc-950 focus:ring-sky-500 focus:ring-offset-zinc-900 cursor-pointer"
+                onchange="toggleAutoCompile(this.checked)"
+            />
+            <label for="auto-compile-toggle" class="text-[11px] font-bold tracking-tight text-zinc-400 cursor-pointer">
+                Auto
+            </label>
+        </div>
+
+        <!-- Botão de Compilar Manual -->
+        <button
+            id="compile-btn"
+            onclick="triggerCompile()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Compilar Visualização (Alt+Enter)"
+        >
+            ⚡
+        </button>
+
         <button
             id="save-btn"
             onclick="saveTypst()"
@@ -64,7 +107,7 @@ templ typstContent(data domain.EditorData) {
                     class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
                     spellcheck="false"
                     hx-post="/api/notes/render-typst"
-                    hx-trigger="load, keyup delay:500ms, typst-compile from:body"
+                    hx-trigger="load, keyup[shouldAutoCompile()] delay:1500ms, typst-compile from:body"
                     hx-target="#typst-preview-container"
                     hx-vals="js:{content: window.getTypstContent ? window.getTypstContent() : ''}"
                     hx-indicator="#typst-compile-indicator"
@@ -482,13 +525,19 @@ templ typstContent(data domain.EditorData) {
             doRename();
         });
 
-        // Event listener Ctrl+S para salvar manualmente
+        // Event listener Ctrl+S para salvar manualmente e Alt+Enter para compilar manual
         document.addEventListener("keydown", function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
                 e.preventDefault();
                 doSave();
             }
+            if (e.altKey && e.key === "Enter") {
+                e.preventDefault();
+                window.triggerCompile();
+            }
         });
+
+        // Auto-compile e Compilação Manual definidos no bloco <script> inicial do template
 
         // Inicialização
         (async function () {
