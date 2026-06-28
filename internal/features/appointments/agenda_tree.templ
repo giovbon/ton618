@@ -34,7 +34,7 @@ templ AgendaWeekNode(g WeekGroup, defaultOpen bool) {
 			</div>
 			<span class="text-[10px] font-bold text-zinc-400 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(len(g.Appointments)) }</span>
 		</div>
-		<div class="mt-2 bg-zinc-950/60 border border-zinc-800/60 rounded-lg overflow-hidden divide-y divide-zinc-900" x-show="open" x-cloak>
+		<div class="mt-2 space-y-1" x-show="open" x-cloak>
 			for _, app := range g.Appointments {
 				@AgendaItem(app)
 			}
@@ -52,28 +52,45 @@ templ AgendaItem(app domain.Appointment) {
 			dotStyle = fmt.Sprintf("background-color: %s;", baseColor)
 		}
 	}}
-	<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3 p-2.5 hover:bg-zinc-900/30 transition-colors">
-		<!-- Primeira linha: Descrição + Bullet -->
-		<div class="flex items-center gap-2.5 overflow-hidden w-full md:flex-1">
+	<div class="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-3 gap-y-1 md:gap-3 px-2 md:px-3 py-1.5 rounded-lg hover:bg-zinc-900/40 transition-colors group">
+		<!-- Primeira coluna/linha: Descrição + Bullet -->
+		<div class="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1 order-1">
 			if dotStyle != "" {
 				<span class="w-2 h-2 rounded-full shrink-0" style={ dotStyle }></span>
 			} else {
 				<span class="w-2 h-2 rounded-full bg-sky-400 shrink-0"></span>
 			}
 			<span id={ "desc-" + app.ID } class="text-[13px] font-semibold text-zinc-100 flex-1 truncate">
-				@templ.Raw(FormatDescription(app.Description))
+				@templ.Raw(FormatDescription(StripTags(app.Description)))
 			</span>
 		</div>
 		
-		<!-- Segunda linha (mobile) / Mesma linha (desktop): Data + Ações -->
-		<div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto md:shrink-0 pt-1.5 md:pt-0 border-t border-zinc-900/40 md:border-t-0">
-			<span class="text-[11px] text-zinc-400 bg-zinc-900/60 border border-zinc-800/80 px-2 py-0.5 rounded font-mono">
+		<!-- Tags -->
+		if len(tags) > 0 {
+			<div class="flex gap-1 shrink-0 order-2">
+				for _, tag := range tags {
+					{{
+						cleanTag := strings.TrimSpace(tag)
+						baseColor, alphaColor := GetTagColor(cleanTag)
+					}}
+					<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style={ fmt.Sprintf("background-color: %s; color: %s; border: 1px solid %s", alphaColor, baseColor, alphaColor) }>
+						{ cleanTag }
+					</span>
+				}
+			</div>
+		}
+		
+		<!-- Data -->
+		<div class="w-full pl-[18px] md:w-auto md:pl-0 order-4 md:order-3 shrink-0">
+			<span class="text-[11px] text-zinc-500 font-mono block w-fit">
 				{ FormatAgendaDate(app.EventDate) }
 			</span>
-			<div class="flex items-center gap-1.5 shrink-0">
-				<button class="edit-btn text-zinc-500 hover:text-sky-400 p-2 md:p-1 rounded hover:bg-zinc-900 transition-colors text-[16px] md:text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
-				<button class="del-btn text-zinc-500 hover:text-red-400 p-2 md:p-1 rounded hover:bg-zinc-900 transition-colors text-[16px] md:text-xs" title="Excluir" data-id={ app.ID }>✕</button>
-			</div>
+		</div>
+
+		<!-- Ações -->
+		<div class="flex items-center gap-1 shrink-0 order-3 md:order-4">
+			<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors text-sm md:text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
+			<button class="del-btn text-zinc-500 hover:text-red-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors text-sm md:text-xs" title="Excluir" data-id={ app.ID }>✕</button>
 		</div>
 	</div>
 }

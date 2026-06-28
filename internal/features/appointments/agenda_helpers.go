@@ -119,3 +119,10 @@ func FormatAgendaDate(dateStr string) string {
 	}
 	return fmt.Sprintf("%s, %s", weekday, t.Format("02/01/2006 - 15:04"))
 }
+
+// StripTags removes hashtag patterns from the description text
+func StripTags(desc string) string {
+	stripTagRegex := regexp.MustCompile(`\s*#[\w\-]+`)
+	res := stripTagRegex.ReplaceAllString(desc, "")
+	return strings.TrimSpace(res)
+}

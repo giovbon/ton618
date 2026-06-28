@@ -50,9 +50,7 @@ templ databaseContent() {
     <div id="notes-table" class="w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
 </div>
 
-<!-- Tabulator Assets local -->
-<link href="/static/tabulator_midnight.min.css" rel="stylesheet" />
-<script type="text/javascript" src="/static/tabulator.min.js"></script>
+<!-- Tabulator Assets loaded dynamically below -->
 
 <style>
     /* Tabulator Overrides to match the premium dark mode of TON-618 */
@@ -178,8 +176,32 @@ templ databaseContent() {
 </style>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
+    (function () {
         var table;
+
+        // Helper to load CSS dynamically
+        function loadStyle(url) {
+            if (document.querySelector(`link[href="${url}"]`)) return;
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = url;
+            document.head.appendChild(link);
+        }
+
+        // Helper to load JS dynamically
+        function loadScript(url, callback) {
+            if (window.Tabulator) {
+                callback();
+                return;
+            }
+            const script = document.createElement("script");
+            script.type = "text/javascript";
+            script.src = url;
+            script.onload = callback;
+            document.head.appendChild(script);
+        }
+
+        function initTabulator() {
 
         // Custom formatter for tags
         var tagsFormatter = function(cell, formatterParams, onRendered){
@@ -632,6 +654,13 @@ templ databaseContent() {
                 document.getElementById("db-stats").innerText = "Erro ao carregar dados";
                 document.getElementById("notes-table").innerHTML = "<div class='p-8 text-center text-red-400'>Não foi possível carregar a tabela.</div>";
             });
-    });
+        }
+
+        // Dynamically load stylesheets and script, then run initTabulator
+        loadStyle("/static/tabulator_midnight.min.css");
+        loadScript("/static/tabulator.min.js", function() {
+            initTabulator();
+        });
+    })();
 </script>
 }

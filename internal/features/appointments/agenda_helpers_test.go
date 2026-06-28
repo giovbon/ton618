@@ -235,3 +235,23 @@ func TestGetWeekdayPt(t *testing.T) {
 		}
 	}
 }
+
+func TestStripTags(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Hello #world", "Hello"},
+		{"#tag at start", "at start"},
+		{"Multiple #tags in #row", "Multiple in"},
+		{"No tags here", "No tags here"},
+		{"Clean  double   spaces #tag", "Clean  double   spaces"},
+	}
+
+	for _, tt := range tests {
+		got := StripTags(tt.input)
+		if got != tt.expected {
+			t.Errorf("StripTags(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}

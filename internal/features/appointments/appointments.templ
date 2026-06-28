@@ -9,23 +9,29 @@ templ Agenda(title string) {
 templ agendaContent() {
     <div class="flex flex-col h-full gap-4" style="height: calc(100vh - 64px); padding: 0 0 16px 0;">
         <!-- Vis Timeline (no topo, 100% largura) -->
-        <div class="w-full bg-zinc-900/50 border-b border-zinc-800 flex flex-col shrink-0 h-[120px] md:h-[122px]">
+        <div class="-mx-6 bg-zinc-900/50 border-b border-zinc-800 flex flex-col shrink-0 h-[120px] md:h-[122px]">
             <div id="agenda-timeline" class="flex-1 w-full bg-zinc-950/50 overflow-hidden"></div>
         </div>
         
-        <div class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-2 min-h-0 flex-1">
+        <div class="max-w-4xl w-full mx-auto px-2 md:px-4 flex flex-col gap-2 min-h-0 flex-1">
             <!-- Input section fora do scroll -->
-            <div class="w-full flex flex-col gap-1 shrink-0 pt-2 relative">
-                <div class="flex gap-2 items-center">
+            <div class="w-full flex flex-col gap-1.5 shrink-0 pt-2 relative">
+                <div class="flex flex-col md:flex-row gap-2 items-stretch md:items-center">
+                    <!-- Input -->
                     <div class="relative flex-1 flex items-center bg-zinc-900/30 border border-zinc-800/80 rounded-lg overflow-hidden focus-within:border-zinc-600 transition-all">
                         <input type="text" id="agenda-input" placeholder="Novo compromisso... (Ex: Reunião amanhã às 15h)" class="w-full px-4 py-2.5 text-[13px] bg-transparent text-zinc-200 placeholder-zinc-500 focus:outline-none" autocomplete="off" />
-                        <button id="agenda-save" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 text-[13px] font-semibold transition-colors shrink-0 flex items-center gap-2">
+                    </div>
+                    
+                    <!-- Botões acoplados -->
+                    <div class="flex rounded-lg overflow-hidden border border-zinc-800/80 w-full md:w-auto shrink-0">
+                        <button id="agenda-save" class="flex-1 md:flex-initial md:px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white text-[13px] font-semibold transition-colors flex items-center justify-center gap-2">
                             Salvar
                         </button>
+                        <div class="w-[1px] bg-zinc-800/60 self-stretch"></div>
+                        <button id="agenda-purge" class="bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 px-5 py-2.5 text-[13px] font-semibold transition-all flex items-center justify-center gap-2 shrink-0" title="Excluir anteriores a 7 dias">
+                            🗑️ Limpar
+                        </button>
                     </div>
-                    <button id="agenda-purge" class="bg-red-950/40 hover:bg-red-900/60 border border-red-900/30 hover:border-red-700/50 text-red-400 hover:text-red-300 px-3 py-2.5 rounded-lg text-[13px] font-semibold transition-all shrink-0" title="Excluir anteriores a 7 dias">
-                        🗑️ Limpar
-                    </button>
                 </div>
                 <div id="agenda-autocomplete" class="hidden fixed bg-zinc-950 border border-zinc-800 rounded-lg shadow-xl max-h-48 overflow-y-auto z-[10000] p-1 flex flex-col gap-0.5"></div>
                 <div id="agenda-preview" class="text-[11px] text-emerald-400 h-4 px-2"></div>
@@ -48,23 +54,10 @@ templ agendaContent() {
     </div>
 
     <style>
-        .vis-timeline { border: none !important; }
-        
-        /* Discrete point items */
-        .vis-item.vis-point { border-color: transparent !important; background: transparent !important; }
-        .vis-item.vis-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: #38bdf8 !important;
-            border: 2px solid #38bdf8 !important;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .vis-item.vis-dot:hover {
-            transform: scale(1.6);
-            box-shadow: 0 0 8px rgba(56,189,248,0.7) !important;
-        }
-        .vis-item.vis-point .vis-item-content { display: none; }
+        .tree-node-title { cursor: pointer; user-select: none; }
+        .tree-node-title:hover { color: #38bdf8; }
+        .tree-icon { display: inline-block; width: 16px; transition: transform 0.2s; }
+        .tree-open > .tree-node-title > .tree-icon { transform: rotate(90deg); }
 
         /* Custom tooltip */
         .vis-tooltip {
@@ -84,7 +77,6 @@ templ agendaContent() {
         .vis-tooltip .tt-desc { font-weight: 600; color: #f4f4f5; margin-bottom: 4px; }
         .vis-tooltip .tt-date { font-size: 11px; color: #71717a; }
 
-        /* Pinned tooltip override rules */
         .pinned-tooltip {
             visibility: visible !important;
             display: block !important;
@@ -94,87 +86,11 @@ templ agendaContent() {
             z-index: 99999 !important;
         }
 
-        /* Hide native tooltip when a custom one is pinned (prevents double tooltips on mobile) */
         body.has-pinned-tooltip .vis-tooltip:not(.pinned-tooltip) {
             display: none !important;
         }
-
-        .vis-item.vis-background { 
-            background: rgba(56, 189, 248, 0.05) !important;
-            pointer-events: none !important;
-        }
-        .vis-time-axis .vis-text { color: #a1a1aa !important; }
-        .vis-time-axis .vis-grid.vis-vertical { border-color: #27272a !important; }
-        .vis-current-time { background-color: #ef4444 !important; width: 2px !important; }
-        .vis-item.vis-background.weekend-shade {
-            background: repeating-linear-gradient(
-                45deg,
-                rgba(63, 63, 70, 0.04),
-                rgba(63, 63, 70, 0.04) 6px,
-                transparent 6px,
-                transparent 12px
-            ) !important;
-            border-left: 1px dashed rgba(63, 63, 70, 0.25) !important;
-            border-right: 1px dashed rgba(63, 63, 70, 0.25) !important;
-        }
-        .vis-time-axis .vis-text.vis-saturday,
-        .vis-time-axis .vis-text.vis-sunday {
-            color: #d4d4d8 !important;
-            font-weight: 600;
-        }
-        .vis-item.vis-background.night-shade {
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(9, 9, 11, 0.45) 100%) !important;
-            border: none !important;
-        }
-        .vis-item.vis-background.week-num-bg {
-            background: transparent !important;
-            border-left: 1px dashed rgba(63, 63, 70, 0.6) !important;
-            border-right: none !important;
-            overflow: visible !important;
-        }
-        .vis-item.vis-background.week-num-bg .vis-item-content {
-            position: absolute;
-            bottom: 4px;
-            left: 3px;
-            pointer-events: none;
-            user-select: none;
-            overflow: visible !important;
-            white-space: nowrap !important;
-        }
-        .vis-item.vis-background.holiday-shade {
-            background: rgba(244, 63, 94, 0.07) !important;
-            border-left: 1px dashed rgba(244, 63, 94, 0.4) !important;
-            border-right: 1px dashed rgba(244, 63, 94, 0.4) !important;
-        }
-        .vis-item.vis-background.holiday-shade:not([style]) {
-            display: none !important;
-        }
-        .vis-item.vis-background.holiday-shade .vis-item-content {
-            position: absolute;
-            top: 4px;
-            left: 4px;
-            pointer-events: none;
-            user-select: none;
-            overflow: visible !important;
-            white-space: nowrap !important;
-            color: #f43f5e;
-            font-weight: 700;
-            font-size: 8px;
-            font-family: sans-serif;
-        }
-
-        .vis-panel.vis-background { border-color: #27272a !important; }
-        .vis-panel.vis-bottom, .vis-panel.vis-center, .vis-panel.vis-left, .vis-panel.vis-right, .vis-panel.vis-top { border-color: #27272a !important; }
-
-        .tree-node-title { cursor: pointer; user-select: none; }
-        .tree-node-title:hover { color: #38bdf8; }
-        .tree-icon { display: inline-block; width: 16px; transition: transform 0.2s; }
-        .tree-open > .tree-node-title > .tree-icon { transform: rotate(90deg); }
     </style>
 
-    <link href="https://unpkg.com/vis-timeline@7.7.2/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
-    <script src="https://unpkg.com/vis-timeline@7.7.2/standalone/umd/vis-timeline-graph2d.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
     <script src="/static/js/vendor/chrono.min.js"></script>
     <script src="/static/js/autocomplete.js?v=30"></script>
