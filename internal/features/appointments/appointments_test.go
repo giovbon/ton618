@@ -280,15 +280,9 @@ func TestHandleGetAgendaTree(t *testing.T) {
 
 	bodyStr := rr.Body.String()
 
-	// Verify that the tree HTML contains Year, Month (Junho) and Week (Semana 26) structure
-	if !strings.Contains(bodyStr, "2026") {
-		t.Error("expected HTML to contain '2026'")
-	}
-	if !strings.Contains(bodyStr, "Junho") {
-		t.Error("expected HTML to contain 'Junho'")
-	}
-	if !strings.Contains(bodyStr, "Semana 26") {
-		t.Error("expected HTML to contain 'Semana 26'")
+	// Verify that the tree HTML contains the custom week starting date label structure (e.g. Semana 22 jun)
+	if !strings.Contains(bodyStr, "Semana 22 jun") {
+		t.Error("expected HTML to contain 'Semana 22 jun'")
 	}
 	if !strings.Contains(bodyStr, "Friday item") {
 		t.Error("expected HTML to contain 'Friday item'")
@@ -347,21 +341,21 @@ func TestHandleGetAgendaTreeIntensive(t *testing.T) {
 
 	body := rr.Body.String()
 
-	// 1. Week 27 must appear exactly once (no split across June/July)
-	semana27Count := strings.Count(body, "Semana 27")
-	if semana27Count != 1 {
-		t.Errorf("expected exactly 1 'Semana 27', got %d", semana27Count)
+	// 1. Week 27 (starting June 29) must appear exactly once (no split across June/July)
+	semana29JunCount := strings.Count(body, "Semana 29 jun")
+	if semana29JunCount != 1 {
+		t.Errorf("expected exactly 1 'Semana 29 jun', got %d", semana29JunCount)
 	}
 
-	// 2. Week 27 must appear before Week 26 (reverse chronological)
-	posWeek27 := strings.Index(body, "Semana 27")
-	posWeek26 := strings.Index(body, "Semana 26")
-	if posWeek27 == -1 || posWeek26 == -1 {
-		t.Fatalf("expected both Week 27 and Week 26 present")
+	// 2. Week 27 (starting June 29) must appear after Week 26 (starting June 22)
+	posWeek29Jun := strings.Index(body, "Semana 29 jun")
+	posWeek22Jun := strings.Index(body, "Semana 22 jun")
+	if posWeek29Jun == -1 || posWeek22Jun == -1 {
+		t.Fatalf("expected both Semana 29 jun and Semana 22 jun present")
 	}
-	// Ascending order: older week (26) appears before newer week (27)
-	if posWeek26 > posWeek27 {
-		t.Errorf("Semana 26 (older) must appear before Semana 27 (newer) in ascending order")
+	// Ascending order: older week (22 jun) appears before newer week (29 jun)
+	if posWeek22Jun > posWeek29Jun {
+		t.Errorf("Semana 22 jun (older) must appear before Semana 29 jun (newer) in ascending order")
 	}
 
 	// 3. Items within Week 27 must be chronological (ascending: oldest first, newest last)

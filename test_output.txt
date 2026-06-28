@@ -1,0 +1,53 @@
+?   	ton618/cmd/debug_rename	[no test files]
+?   	ton618/cmd/server	[no test files]
+ok  	ton618/internal/core/config	(cached)
+# ton618/internal/features/notes [ton618/internal/features/notes.test]
+internal/features/notes/frontmatter_test.go:16:51: undefined: BackupService
+internal/features/notes/frontmatter_test.go:33:15: undefined: NewBackupService
+internal/features/notes/handlers_file_test.go:19:6: undefined: isNoteOrPdf
+internal/features/notes/handlers_file_test.go:25:6: undefined: isNoteOrPdf
+internal/features/notes/handlers_file_test.go:31:6: undefined: isNoteOrPdf
+internal/features/notes/handlers_file_test.go:37:5: undefined: isNoteOrPdf
+internal/features/notes/handlers_file_test.go:43:5: undefined: isNoteOrPdf
+internal/features/notes/handlers_file_test.go:51:9: undefined: newTestContext
+internal/features/notes/handlers_file_test.go:63:9: undefined: newTestContext
+internal/features/notes/handlers_file_test.go:75:9: undefined: newTestContext
+internal/features/notes/handlers_file_test.go:75:9: too many errors
+# ton618/internal/features/search [ton618/internal/features/search.test]
+internal/features/search/handlers_search_extra_test.go:83:9: undefined: newTestContext
+internal/features/search/handlers_search_extra_test.go:96:9: undefined: newTestContext
+internal/features/search/handlers_search_extra_test.go:97:2: undefined: saveTestNote
+internal/features/search/handlers_search_extra_test.go:98:2: undefined: saveTestNote
+internal/features/search/handlers_search_extra_test.go:127:9: undefined: newTestContext
+internal/features/search/handlers_search_extra_test.go:139:9: undefined: newTestContext
+internal/features/search/handlers_search_extra_test.go:140:2: undefined: saveTestNote
+internal/features/search/handlers_search_extra_test.go:141:2: undefined: saveTestNote
+internal/features/search/handlers_search_extra_test.go:142:2: undefined: saveTestNote
+internal/features/search/handlers_search_extra_test.go:167:9: undefined: newTestContext
+internal/features/search/handlers_search_extra_test.go:167:9: too many errors
+# ton618/internal/features/system [ton618/internal/features/system.test]
+internal/features/system/handlers_extra_test.go:25:16: ctx.reindexNote undefined (type *HandlerContext has no field or method reindexNote)
+internal/features/system/handlers_test.go:36:39: not enough arguments in call to NewHandlerContext
+	have (*config.AppConfig, *db.Store, *watcher.Watcher)
+	want (*config.AppConfig, *db.Store, *watcher.Watcher, *services.BackupService, *notes.NoteService)
+internal/features/system/routes_test.go:11:6: ctx.SetupRoutes undefined (type *HandlerContext has no field or method SetupRoutes)
+internal/features/system/routes_test.go:67:46: not enough arguments in call to NewHandlerContext
+	have (*config.AppConfig, *db.Store, *watcher.Watcher)
+	want (*config.AppConfig, *db.Store, *watcher.Watcher, *services.BackupService, *notes.NoteService)
+internal/features/system/routes_test.go:83:6: ctx.SetupRoutes undefined (type *HandlerContext has no field or method SetupRoutes)
+ok  	ton618/internal/core/db	1.349s
+?   	ton618/internal/core/domain	[no test files]
+?   	ton618/internal/core/services	[no test files]
+ok  	ton618/internal/core/timeutil	0.009s
+ok  	ton618/internal/features/appointments	0.797s
+FAIL	ton618/internal/features/notes [build failed]
+FAIL	ton618/internal/features/search [build failed]
+FAIL	ton618/internal/features/system [build failed]
+?   	ton618/internal/features/todos	[no test files]
+ok  	ton618/internal/middleware	(cached)
+ok  	ton618/internal/processor	(cached)
+?   	ton618/internal/repository	[no test files]
+ok  	ton618/internal/search	0.124s
+ok  	ton618/internal/watcher	0.324s
+?   	ton618/web/layout	[no test files]
+FAIL

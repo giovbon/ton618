@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ton618/internal/db"
+	"ton618/internal/core/db"
 )
 
 // ── buildFTSQuery ───────────────────────────────────────────────

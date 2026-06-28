@@ -3,6 +3,7 @@ package appointments
 import (
 	"fmt"
 	"strings"
+	"time"
 	"ton618/internal/core/domain"
 )
 
@@ -29,8 +30,10 @@ templ AgendaWeekNode(g WeekGroup, defaultOpen bool) {
 		<div class="tree-node-title py-2 text-zinc-300 font-medium flex items-center justify-between border-b border-zinc-800/60 pb-1.5 cursor-pointer select-none" @click="open = !open">
 			<div class="flex items-center gap-1.5">
 				<span class="tree-icon text-zinc-500 text-xs transition-transform duration-200" :style="open ? 'transform: rotate(90deg)' : ''">▶</span> 
-				<span class="text-sm font-semibold">Semana { fmt.Sprint(g.WeekNumber) }</span>
-				<span class="text-xs text-zinc-500 font-normal">({ g.MonthName } { fmt.Sprint(g.Year) })</span>
+				<span class="text-sm font-semibold">{ FormatWeekLabel(g.Year, g.WeekNumber) }</span>
+				if g.Year != time.Now().Year() {
+					<span class="text-xs text-zinc-500 font-normal">({ fmt.Sprint(g.Year) })</span>
+				}
 			</div>
 			<span class="text-[10px] font-bold text-zinc-400 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-full">{ fmt.Sprint(len(g.Appointments)) }</span>
 		</div>

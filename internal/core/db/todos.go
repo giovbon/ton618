@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"strings"
 	"time"
 	"ton618/internal/processor"
@@ -16,36 +17,30 @@ func (s *Store) DeleteTodosByFile(filename string) error {
 
 // SaveFileTodos exclui os TODOs antigos de um arquivo e insere os novos em lote.
 func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
-		return err
-	}
-
-	if len(todos) == 0 {
-		return tx.Commit()
-	}
-
-	stmt, err := tx.Prepare("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, t := range todos {
-		createdStr := t.Created.UTC().Format(time.RFC3339)
-		if _, err := stmt.Exec(t.ID, t.File, t.Section, t.Type, t.Status, t.Text, t.Line, createdStr); err != nil {
+	return s.RunInTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
 			return err
 		}
-	}
 
-	return tx.Commit()
+		if len(todos) == 0 {
+			return nil
+		}
+
+		stmt, err := tx.Prepare("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, t := range todos {
+			createdStr := t.Created.UTC().Format(time.RFC3339)
+			if _, err := stmt.Exec(t.ID, t.File, t.Section, t.Type, t.Status, t.Text, t.Line, createdStr); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // GetTodosFiltered retorna os TODOs baseados nos filtros fornecidos.

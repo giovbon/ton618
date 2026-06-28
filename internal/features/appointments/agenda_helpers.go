@@ -126,3 +126,25 @@ func StripTags(desc string) string {
 	res := stripTagRegex.ReplaceAllString(desc, "")
 	return strings.TrimSpace(res)
 }
+
+// FormatWeekLabel returns the week label string in the format "Semana DD mmm", e.g. "Semana 29 jun"
+func FormatWeekLabel(year, weekNumber int) string {
+	// ISO week starts on Monday
+	jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
+	wd := jan4.Weekday()
+	daysToSubtract := int(wd) - 1
+	if wd == time.Sunday {
+		daysToSubtract = 6
+	}
+	isoWeek1Start := jan4.AddDate(0, 0, -daysToSubtract)
+	mondayOfTargetWeek := isoWeek1Start.AddDate(0, 0, (weekNumber-1)*7)
+
+	monthsPtShort := []string{"jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"}
+	monthIndex := int(mondayOfTargetWeek.Month()) - 1
+	monthStr := "des"
+	if monthIndex >= 0 && monthIndex < 12 {
+		monthStr = monthsPtShort[monthIndex]
+	}
+
+	return fmt.Sprintf("Semana %d %s", mondayOfTargetWeek.Day(), monthStr)
+}

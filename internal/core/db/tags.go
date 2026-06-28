@@ -1,36 +1,32 @@
 package db
 
+import "database/sql"
+
 // ---------------------------------------------------------------------------
 // tags
 // ---------------------------------------------------------------------------
 
 // SetFileTags replaces the entire set of tags for a file atomically.
 func (s *Store) SetFileTags(arquivo string, tags []string) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec("DELETE FROM tags WHERE arquivo = ?", arquivo); err != nil {
-		return err
-	}
-
-	stmt, err := tx.Prepare("INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, tag := range tags {
-		if _, err := stmt.Exec(arquivo, tag); err != nil {
+	return s.RunInTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("DELETE FROM tags WHERE arquivo = ?", arquivo); err != nil {
 			return err
 		}
-	}
 
-	return tx.Commit()
+		stmt, err := tx.Prepare("INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, tag := range tags {
+			if _, err := stmt.Exec(arquivo, tag); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // GetFileTags returns all tags associated with a file.

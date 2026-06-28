@@ -4,7 +4,7 @@ import "context"
 
 func getLayoutClass(ctx context.Context) string {
     if val, ok := ctx.Value("is_full_width").(bool); ok && val {
-        return "w-full px-6 py-6"
+        return "w-full px-3 md:px-6 py-6"
     }
     return "max-w-4xl mx-auto px-4 py-6"
 }

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ton618/internal/config"
-	"ton618/internal/db"
+	"ton618/internal/core/config"
+	"ton618/internal/core/db"
 )
 
 func newTestStore(t *testing.T) *db.Store {

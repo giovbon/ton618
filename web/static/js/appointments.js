@@ -636,10 +636,32 @@ if (typeof document !== 'undefined') {
             if (scaleDaysPx < 10) scale = 'months';
             else if (scaleDaysPx < 50) scale = 'weeks';
 
+            // 1. Render Night Shades (Drawn first/behind)
+            if (typeof SunCalc !== 'undefined' && scale === 'days') {
+                let shadeStart = new Date(startDate);
+                while (shadeStart <= endDate) {
+                    const times = SunCalc.getTimes(shadeStart, lat, lng);
+                    const sunset = times.sunset;
+                    
+                    const nextDay = new Date(shadeStart.getTime() + 24 * 60 * 60 * 1000);
+                    const nextTimes = SunCalc.getTimes(nextDay, lat, lng);
+                    const nextSunrise = nextTimes.sunrise;
+                    
+                    if (sunset && nextSunrise && sunset >= startDate && nextSunrise <= endDate) {
+                        const xStart = (sunset - startDate) / msPerPixel;
+                        const xEnd = (nextSunrise - startDate) / msPerPixel;
+                        const nightShade = document.createElement('div');
+                        nightShade.style.cssText = `position: absolute; top: 0; bottom: 0; left: ${xStart}px; width: ${xEnd - xStart}px; background: linear-gradient(180deg, rgba(13, 20, 38, 0.72) 0%, rgba(9, 9, 11, 0.45) 100%); pointer-events: none;`;
+                        canvas.appendChild(nightShade);
+                    }
+                    shadeStart.setDate(shadeStart.getDate() + 1);
+                }
+            }
+
+            // 2. Draw Axis (Drawn on top of night shades)
             let cur = new Date(startDate);
             let lastMonthStr = '';
 
-            // 1. Draw Axis
             while (cur <= endDate) {
                 const colMs = cur.getTime() - startDate.getTime();
                 const colLeft = colMs / msPerPixel;
@@ -675,7 +697,7 @@ if (typeof document !== 'undefined') {
                 if (scale === 'months') {
                     const monthLabel = document.createElement('div');
                     monthLabel.className = 'absolute text-zinc-100 font-bold uppercase tracking-wider';
-                    monthLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px;';
+                    monthLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px; z-index: 10;';
                     monthLabel.textContent = monthStr;
                     col.appendChild(monthLabel);
                 } else if (scale === 'weeks') {
@@ -683,13 +705,13 @@ if (typeof document !== 'undefined') {
                         lastMonthStr = monthStr;
                         const monthLabel = document.createElement('div');
                         monthLabel.className = 'absolute text-zinc-500 font-bold uppercase tracking-wider';
-                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px;';
+                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px; z-index: 10;';
                         monthLabel.textContent = monthStr;
                         col.appendChild(monthLabel);
                     }
                     const weekLabel = document.createElement('div');
                     weekLabel.className = 'absolute text-zinc-300 font-bold';
-                    weekLabel.style.cssText = 'left: 10px; top: 20px; font-size: 11px; font-family: monospace;';
+                    weekLabel.style.cssText = 'left: 10px; top: 20px; font-size: 11px; font-family: monospace; z-index: 10;';
                     weekLabel.textContent = `Semana ${cur.getDate()} ${monthsPtShort[cur.getMonth()]}`;
                     col.appendChild(weekLabel);
                 } else {
@@ -701,14 +723,14 @@ if (typeof document !== 'undefined') {
                         lastMonthStr = monthStr;
                         const monthLabel = document.createElement('div');
                         monthLabel.className = 'absolute text-zinc-500 font-bold uppercase tracking-wider';
-                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px;';
+                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px; z-index: 10;';
                         monthLabel.textContent = monthStr;
                         col.appendChild(monthLabel);
                     }
                     const isToday = cur.getDate() === now.getDate() && cur.getMonth() === now.getMonth() && cur.getFullYear() === now.getFullYear();
                     const dayLabel = document.createElement('div');
                     dayLabel.className = isToday ? 'absolute text-zinc-100 font-bold' : 'absolute text-zinc-400';
-                    dayLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px; font-family: monospace;';
+                    dayLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px; font-family: monospace; z-index: 10;';
                     dayLabel.textContent = `${weekdaysPt[dayOfWeek]} ${cur.getDate().toString().padStart(2, '0')}`;
                     col.appendChild(dayLabel);
                 }
@@ -717,7 +739,7 @@ if (typeof document !== 'undefined') {
                 cur = nextDate;
             }
 
-            // 2. Render Holidays
+            // 3. Render Holidays (Drawn on top of night shades/axis)
             holidaysList.forEach((h) => {
                 const hDate = new Date(h.date + 'T12:00:00');
                 if (hDate >= startDate && hDate <= endDate) {
@@ -731,34 +753,12 @@ if (typeof document !== 'undefined') {
 
                     const hLabel = document.createElement('div');
                     hLabel.className = 'absolute text-rose-500/80 font-bold truncate';
-                    hLabel.style.cssText = 'left: 10px; bottom: 22px; font-size: 8px; width: calc(100% - 20px); pointer-events: none;';
+                    hLabel.style.cssText = 'left: 10px; bottom: 22px; font-size: 8px; width: calc(100% - 20px); pointer-events: none; z-index: 10;';
                     hLabel.textContent = h.name;
                     hCol.appendChild(hLabel);
                     canvas.appendChild(hCol);
                 }
             });
-
-            // 3. Render Night Shades
-            if (typeof SunCalc !== 'undefined' && scale === 'days') {
-                let shadeStart = new Date(startDate);
-                while (shadeStart <= endDate) {
-                    const times = SunCalc.getTimes(shadeStart, lat, lng);
-                    const sunset = times.sunset;
-                    
-                    const nextDay = new Date(shadeStart.getTime() + 24 * 60 * 60 * 1000);
-                    const nextTimes = SunCalc.getTimes(nextDay, lat, lng);
-                    const nextSunrise = nextTimes.sunrise;
-                    
-                    if (sunset && nextSunrise && sunset >= startDate && nextSunrise <= endDate) {
-                        const xStart = (sunset - startDate) / msPerPixel;
-                        const xEnd = (nextSunrise - startDate) / msPerPixel;
-                        const nightShade = document.createElement('div');
-                        nightShade.style.cssText = `position: absolute; top: 0; bottom: 0; left: ${xStart}px; width: ${xEnd - xStart}px; background: linear-gradient(180deg, rgba(13, 20, 38, 0.72) 0%, rgba(9, 9, 11, 0.45) 100%); pointer-events: none;`;
-                        canvas.appendChild(nightShade);
-                    }
-                    shadeStart.setDate(shadeStart.getDate() + 1);
-                }
-            }
 
             // 4. Current Time Line
             const updateRedLine = () => {
@@ -836,14 +836,14 @@ if (typeof document !== 'undefined') {
         draw();
         timelineContainer.appendChild(container);
 
-        // Initial scroll center: scroll to today, centered on the screen
-        const xNow = (new Date() - startDate) / msPerPixel;
-        container.scrollLeft = xNow - (container.clientWidth / 2);
+        // Initial scroll: show one day before today at the left edge
+        const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+        const xYesterday = (yesterday - startDate) / msPerPixel;
+        container.scrollLeft = xYesterday;
 
-        // Allow drawing initially before clientWidth might be available properly
+        // Allow drawing initially before DOM is fully settled
         setTimeout(() => {
-            const finalXNow = (new Date() - startDate) / msPerPixel;
-            container.scrollLeft = finalXNow - (container.clientWidth / 2);
+            container.scrollLeft = xYesterday;
         }, 50);
 
         // Zoom Logic

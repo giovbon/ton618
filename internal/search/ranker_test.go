@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"ton618/internal/db"
+	"ton618/internal/core/db"
 )
 
 func TestScoreFragment_Base(t *testing.T) {

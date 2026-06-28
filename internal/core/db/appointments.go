@@ -10,17 +10,14 @@ func (s *Store) CreateAppointment(a domain.Appointment) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	stmt, err := s.DB.Prepare("INSERT INTO appointments (id, description, event_date, year, month, week_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
 	if a.CreatedAt == "" {
 		a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
-	_, err = stmt.Exec(a.ID, a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.CreatedAt)
+	_, err := s.DB.Exec(
+		"INSERT INTO appointments (id, description, event_date, year, month, week_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		a.ID, a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.CreatedAt,
+	)
 	return err
 }
 
@@ -29,13 +26,10 @@ func (s *Store) UpdateAppointment(a domain.Appointment) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	stmt, err := s.DB.Prepare("UPDATE appointments SET description = ?, event_date = ?, year = ?, month = ?, week_number = ? WHERE id = ?")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.ID)
+	_, err := s.DB.Exec(
+		"UPDATE appointments SET description = ?, event_date = ?, year = ?, month = ?, week_number = ? WHERE id = ?",
+		a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.ID,
+	)
 	return err
 }
 

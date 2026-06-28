@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"ton618/internal/db"
+	"ton618/internal/core/db"
 )
 
 func main() {

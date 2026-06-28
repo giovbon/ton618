@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ton618/internal/config"
+	"ton618/internal/core/config"
 )
 
 func TestIsRecentlyProcessed(t *testing.T) {

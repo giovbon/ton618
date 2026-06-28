@@ -267,35 +267,29 @@ func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
 
 // SaveTodoMarkers substitui todos os marcadores pelos fornecidos.
 func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec("DELETE FROM todo_markers"); err != nil {
-		return err
-	}
-
-	stmt, err := tx.Prepare("INSERT INTO todo_markers (marker, color, active) VALUES (?, ?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, m := range markers {
-		active := 0
-		if m.Active {
-			active = 1
-		}
-		if _, err := stmt.Exec(m.Marker, m.Color, active); err != nil {
+	return s.RunInTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("DELETE FROM todo_markers"); err != nil {
 			return err
 		}
-	}
 
-	return tx.Commit()
+		stmt, err := tx.Prepare("INSERT INTO todo_markers (marker, color, active) VALUES (?, ?, ?)")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, m := range markers {
+			active := 0
+			if m.Active {
+				active = 1
+			}
+			if _, err := stmt.Exec(m.Marker, m.Color, active); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // Close fecha a conexão com o banco.
