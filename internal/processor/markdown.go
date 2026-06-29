@@ -34,13 +34,15 @@ const (
 )
 
 var (
-	headerRegex    = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-	hashtagRegex   = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
-	wikilinkRegex  = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
-	mediaLinkRegex = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
+	headerRegex          = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
+	typstHeaderRegex     = regexp.MustCompile(`(?m)^(=+)\s+(.*)`)
+	hashtagRegex         = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
+	wikilinkRegex        = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	mediaLinkRegex       = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
 
-	checkboxTodoRegex = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
-	todoHeaderRegex   = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	checkboxTodoRegex    = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
+	todoHeaderRegex      = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	todoTypstHeaderRegex = regexp.MustCompile(`^(=+)\s+(.+)$`)
 	
 	todoRegexMu      sync.RWMutex
 	todoRegexPattern string
@@ -270,7 +272,11 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 	}
 
 	// Split by headers
-	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)
+	activeHeaderRegex := headerRegex
+	if isTypst {
+		activeHeaderRegex = typstHeaderRegex
+	}
+	matches := activeHeaderRegex.FindAllStringSubmatchIndex(text, -1)
 	ordem := 0
 	headerStack := make([]string, 7)
 
@@ -329,6 +335,9 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 			}
 			levelStr := text[m[2]:m[3]]
 			level := len(levelStr)
+			if level > 6 {
+				level = 6
+			}
 			title := text[m[4]:m[5]]
 			currentHeader = formatSectionTrail(level, title)
 			lastPos = m[0]
@@ -544,7 +553,11 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Split by headers
-	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)
+	activeHeaderRegex := headerRegex
+	if isTypst {
+		activeHeaderRegex = typstHeaderRegex
+	}
+	matches := activeHeaderRegex.FindAllStringSubmatchIndex(text, -1)
 	ordem := 0
 	headerStack := make([]string, 7)
 
@@ -603,6 +616,9 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 			}
 			levelStr := text[m[2]:m[3]]
 			level := len(levelStr)
+			if level > 6 {
+				level = 6
+			}
 			title := text[m[4]:m[5]]
 			currentHeader = formatSectionTrail(level, title)
 			lastPos = m[0]
@@ -639,14 +655,40 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 // ExtractTitle extrai o título do primeiro heading markdown (linha iniciada com #).
 // Se não houver heading, retorna o nome do arquivo sem extensão.
 func ExtractTitle(content, filename string) string {
+	text := strings.TrimLeft(content, " \t\r\n\xef\xbb\xbf")
+	isTypst := false
+	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
+		endIdx := strings.Index(text[4:], "\n---")
+		if endIdx != -1 {
+			endIdx += 4
+			yamlContent := text[4:endIdx]
+			var fm map[string]interface{}
+			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
+				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+					isTypst = true
+				}
+			}
+		}
+	}
+
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") {
-			// É um heading markdown; remove os # e espaços iniciais
-			clean := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
-			if clean != "" {
-				return clean
+		if isTypst {
+			if strings.HasPrefix(trimmed, "=") {
+				// É um heading typst; remove os = e espaços iniciais
+				clean := strings.TrimSpace(strings.TrimLeft(trimmed, "="))
+				if clean != "" {
+					return clean
+				}
+			}
+		} else {
+			if strings.HasPrefix(trimmed, "#") {
+				// É um heading markdown; remove os # e espaços iniciais
+				clean := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+				if clean != "" {
+					return clean
+				}
 			}
 		}
 	}
@@ -757,14 +799,28 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 	currentSection := "Geral"
 	lineNum := 0
 	startIdx := 0
+	isTypst := false
+
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
 		for i := 1; i < len(lines); i++ {
 			if strings.TrimSpace(lines[i]) == "---" {
 				startIdx = i + 1
 				lineNum = i + 1
+				yamlContent := strings.Join(lines[1:i], "\n")
+				var fm map[string]interface{}
+				if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
+					if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
+						isTypst = true
+					}
+				}
 				break
 			}
 		}
+	}
+
+	activeTodoHeaderRegex := todoHeaderRegex
+	if isTypst {
+		activeTodoHeaderRegex = todoTypstHeaderRegex
 	}
 
 	for i := startIdx; i < len(lines); i++ {
@@ -772,7 +828,7 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 		lineNum = i + 1
 
 		// Update current section on header
-		if headerMatch := todoHeaderRegex.FindStringSubmatch(line); headerMatch != nil {
+		if headerMatch := activeTodoHeaderRegex.FindStringSubmatch(line); headerMatch != nil {
 			currentSection = strings.TrimSpace(headerMatch[2])
 			continue
 		}

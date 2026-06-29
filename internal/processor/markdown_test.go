@@ -422,3 +422,142 @@ func TestExtractTodos_Checkboxes(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessMarkdown_TypstHeadings(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "typst_headings.md")
+	content := `---
+type: typst
+---
+= Introdução
+Este é o começo.
+== Subseção A
+Detalhes aqui.
+`
+	os.WriteFile(fp, []byte(content), 0644)
+
+	now := time.Now()
+	docs, _, _ := ProcessMarkdown(fp, "notes/typst_headings.md", now, now)
+
+	if len(docs) != 2 {
+		t.Fatalf("esperado 2 fragmentos (Introdução e Introdução › Subseção A), got %d", len(docs))
+	}
+
+	if docs[0].Secao != "Introdução" {
+		t.Errorf("primeira seção errada: %q", docs[0].Secao)
+	}
+	if !strings.Contains(docs[0].Texto, "Este é o começo.") {
+		t.Errorf("texto da primeira seção errado: %q", docs[0].Texto)
+	}
+
+	if docs[1].Secao != "Introdução › Subseção A" {
+		t.Errorf("segunda seção errada: %q", docs[1].Secao)
+	}
+	if !strings.Contains(docs[1].Texto, "Detalhes aqui.") {
+		t.Errorf("texto da segunda seção errado: %q", docs[1].Texto)
+	}
+}
+
+func TestExtractTitle_Typst(t *testing.T) {
+	content := `---
+type: typst
+---
+= Título Principal Typst
+== Subtítulo
+`
+	title := ExtractTitle(content, "notes/titulo.md")
+	if title != "Título Principal Typst" {
+		t.Errorf("esperado 'Título Principal Typst', got %q", title)
+	}
+}
+
+func TestExtractTodos_Typst(t *testing.T) {
+	content := `---
+type: typst
+---
+= Seção Typst
+TODO: Minha tarefa
+`
+	todos := ExtractTodos(content, "notes/todos.md", time.Now(), nil)
+	if len(todos) != 1 {
+		t.Fatalf("esperado 1 todo, got %d", len(todos))
+	}
+	if todos[0].Section != "Seção Typst" {
+		t.Errorf("esperado seção 'Seção Typst', got %q", todos[0].Section)
+	}
+	if todos[0].Text != "Minha tarefa" {
+		t.Errorf("esperado todo text 'Minha tarefa', got %q", todos[0].Text)
+	}
+}
+
+func TestProcessMarkdown_RegressoesIsolamento(t *testing.T) {
+	dir := t.TempDir()
+
+	// 1. Caso Markdown normal com '=' no corpo (não deve gerar seções por '=')
+	fpNormal := filepath.Join(dir, "normal.md")
+	contentNormal := `# Título MD
+Este é um documento MD normal.
+a = b
+====================
+`
+	os.WriteFile(fpNormal, []byte(contentNormal), 0644)
+	now := time.Now()
+	docsNormal, _, _ := ProcessMarkdown(fpNormal, "notes/normal.md", now, now)
+
+	if len(docsNormal) != 1 {
+		t.Fatalf("MD normal: esperado 1 fragmento (Título MD), got %d", len(docsNormal))
+	}
+	if docsNormal[0].Secao != "Título MD" {
+		t.Errorf("MD normal: seção incorreta: %q", docsNormal[0].Secao)
+	}
+
+	// 2. Caso Typst com '#' no corpo (não deve gerar seções por '#')
+	fpTypst := filepath.Join(dir, "typst_iso.md")
+	contentTypst := `---
+type: typst
+---
+= Título Typst
+#set page(paper: "a4")
+#let x = 5
+`
+	os.WriteFile(fpTypst, []byte(contentTypst), 0644)
+	docsTypst, _, tagsTypst := ProcessMarkdown(fpTypst, "notes/typst_iso.md", now, now)
+
+	if len(docsTypst) != 1 {
+		t.Fatalf("Typst: esperado 1 fragmento (Título Typst), got %d", len(docsTypst))
+	}
+	if docsTypst[0].Secao != "Título Typst" {
+		t.Errorf("Typst: seção incorreta: %q", docsTypst[0].Secao)
+	}
+
+	// Verifica se os comandos Typst '#' não foram extraídos como tags
+	for _, tag := range tagsTypst {
+		if tag == "set" || tag == "let" || tag == "page" {
+			t.Errorf("Typst: tag inválida extraída de diretiva '#': %q", tag)
+		}
+	}
+}
+
+func TestExtractTitle_RegressoesIsolamento(t *testing.T) {
+	// Markdown normal com '=' no início de linhas (não deve extrair '=' como título)
+	contentNormal := `
+= Título MD Falso
+# Título MD Real
+`
+	titleNormal := ExtractTitle(contentNormal, "notes/normal.md")
+	if titleNormal != "Título MD Real" {
+		t.Errorf("MD normal: esperado 'Título MD Real', got %q", titleNormal)
+	}
+
+	// Typst com '#' no início de linhas (não deve extrair '#' como título)
+	contentTypst := `---
+type: typst
+---
+#set page(paper: "a4")
+= Título Typst Real
+`
+	titleTypst := ExtractTitle(contentTypst, "notes/typst.md")
+	if titleTypst != "Título Typst Real" {
+		t.Errorf("Typst: esperado 'Título Typst Real', got %q", titleTypst)
+	}
+}
