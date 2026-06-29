@@ -49,17 +49,8 @@ func buildContextSnippet(query, text string) string {
 			break
 		}
 		phrase := strings.TrimSpace(m[1])
-		if phrase == "" {
-			phrase = strings.TrimSpace(m[2])
-		}
 		if len(phrase) > 1 {
 			terms = append(terms, phrase)
-			// Adiciona palavras individuais como fallback
-			for _, pw := range strings.Fields(phrase) {
-				if len(pw) > 1 {
-					terms = append(terms, pw)
-				}
-			}
 		}
 		remaining = strings.Replace(remaining, m[0], " ", 1)
 	}
@@ -97,6 +88,7 @@ func buildContextSnippet(query, text string) string {
 	}
 
 	textLower := strings.ToLower(text)
+	textLowerNormalized := removeAccents(textLower)
 
 	// Find first occurrence of each term
 	type match struct {
@@ -111,7 +103,8 @@ func buildContextSnippet(query, text string) string {
 			continue
 		}
 		seen[termLower] = true
-		if pos := strings.Index(textLower, termLower); pos >= 0 {
+		termLowerNormalized := removeAccents(termLower)
+		if pos := strings.Index(textLowerNormalized, termLowerNormalized); pos >= 0 {
 			matches = append(matches, match{pos: pos, term: termLower})
 		}
 	}
@@ -178,6 +171,24 @@ func buildContextSnippet(query, text string) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func removeAccents(s string) string {
+	r := strings.NewReplacer(
+		"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+		"é", "e", "è", "e", "ê", "e", "ë", "e",
+		"í", "i", "ì", "i", "î", "i", "ï", "i",
+		"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+		"ú", "u", "ù", "u", "û", "u", "ü", "u",
+		"ç", "c",
+		"Á", "a", "À", "a", "Â", "a", "Ã", "a", "Ä", "a",
+		"É", "e", "È", "e", "Ê", "e", "Ë", "e",
+		"Í", "i", "Ì", "i", "Î", "i", "Ï", "i",
+		"Ó", "o", "Ò", "o", "Ô", "o", "Õ", "o", "Ö", "o",
+		"Ú", "u", "Ù", "u", "Û", "u", "Ü", "u",
+		"Ç", "c",
+	)
+	return r.Replace(s)
 }
 
 // ── Search (HTMX partial) ──

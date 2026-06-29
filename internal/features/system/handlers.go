@@ -514,7 +514,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 
 func (ctx *HandlerContext) HandleTodosPage(w http.ResponseWriter, r *http.Request) {
 	markers, _ := ctx.Store.GetTodoMarkers()
-	todos.Todos("TODOs — TON-618", markers).Render(r.Context(), w)
+	todos.Todos("Task — TON-618", markers).Render(r.Context(), w)
 }
 
 // ── Todo Marker Settings ──

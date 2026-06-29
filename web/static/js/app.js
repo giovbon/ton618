@@ -367,10 +367,10 @@
             const mobileNavTodos = document.getElementById("mobile-nav-todos");
 
             if (navTodos) {
-                navTodos.textContent = count > 0 ? `🎯TODOs ${count}` : `🎯TODOs`;
+                navTodos.textContent = count > 0 ? `🚧 Task ${count}` : `🚧 Task`;
             }
             if (mobileNavTodos) {
-                mobileNavTodos.textContent = count > 0 ? `🎯 TODOs ${count}` : `🎯 TODOs`;
+                mobileNavTodos.textContent = count > 0 ? `🚧 Task ${count}` : `🚧 Task`;
             }
         } catch (e) {
             console.error("Error updating todos count:", e);

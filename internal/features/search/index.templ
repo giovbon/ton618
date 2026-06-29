@@ -129,11 +129,6 @@ templ indexContent() {
             var phrase = m[1] || m[2];
             if (phrase && phrase.length > 1) {
                 terms.push(phrase);
-                var phraseWords = phrase.split(/\s+/);
-                phraseWords.forEach(function (pw) {
-                    if (pw.length > 1 && terms.indexOf(pw) === -1)
-                        terms.push(pw);
-                });
             }
             remaining = remaining.replace(m[0], " ");
         }
