@@ -1,6 +1,7 @@
 package system
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -926,10 +927,20 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false, "visible": false})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"columns": columns,
-		"data":    data,
-	})
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		json.NewEncoder(gz).Encode(map[string]interface{}{
+			"columns": columns,
+			"data":    data,
+		})
+	} else {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"columns": columns,
+			"data":    data,
+		})
+	}
 }
 
 type UpdatePropertyRequest struct {

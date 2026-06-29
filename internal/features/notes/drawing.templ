@@ -269,7 +269,19 @@ templ drawingContent(data domain.EditorData) {
 
                 var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot || {});
 
-                // 1. Salvar no novo nome
+                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
+                if (currentFilename !== fullNewName) {
+                    var renameFd = new FormData();
+                    renameFd.append("old", currentFilename);
+                    renameFd.append("new", fullNewName);
+                    var renameResp = await fetch("/file/rename", {
+                        method: "POST",
+                        body: renameFd
+                    });
+                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+                }
+
+                // 2. Salvar no novo nome
                 var saveFd = new FormData();
                 saveFd.append("filename", fullNewName);
                 saveFd.append("content", fullContent);
@@ -282,16 +294,6 @@ templ drawingContent(data domain.EditorData) {
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
                 
                 lastSavedHash = await generateHash(fullContent);
-
-                // 2. Deletar o arquivo antigo
-                if (currentFilename !== fullNewName) {
-                    var deleteFd = new FormData();
-                    deleteFd.append("filename", currentFilename);
-                    await fetch("/file/delete", {
-                        method: "POST",
-                        body: deleteFd
-                    });
-                }
 
                 // 3. Atualizar e redirecionar
                 filenameInput.dataset.filename = fullNewName;

@@ -180,18 +180,24 @@ templ databaseContent() {
         var table;
 
         // Helper to load CSS dynamically
-        function loadStyle(url) {
-            if (document.querySelector(`link[href="${url}"]`)) return;
+        function loadStyle(url, callback) {
+            if (document.querySelector(`link[href="${url}"]`)) {
+                if (callback) callback();
+                return;
+            }
             const link = document.createElement("link");
             link.rel = "stylesheet";
             link.href = url;
+            if (callback) {
+                link.onload = callback;
+            }
             document.head.appendChild(link);
         }
 
         // Helper to load JS dynamically
         function loadScript(url, callback) {
             if (window.Tabulator) {
-                callback();
+                if (callback) callback();
                 return;
             }
             const script = document.createElement("script");
@@ -331,6 +337,7 @@ templ databaseContent() {
                 table = new Tabulator("#notes-table", {
                     data: data.data,
                     columns: cols,
+                    height: "calc(100vh - 190px)", // Enables Virtual DOM for instant rendering
                     layout: "fitColumns",
                     responsiveLayout: "collapse",
                     columnResizeGuide: true,
@@ -656,10 +663,24 @@ templ databaseContent() {
             });
         }
 
-        // Dynamically load stylesheets and script, then run initTabulator
-        loadStyle("/static/tabulator_midnight.min.css");
+        // Dynamically load stylesheets and script, then run initTabulator when both are ready
+        var styleLoaded = false;
+        var scriptLoaded = false;
+
+        function checkAndInit() {
+            if (styleLoaded && scriptLoaded) {
+                initTabulator();
+            }
+        }
+
+        loadStyle("/static/tabulator_midnight.min.css", function() {
+            styleLoaded = true;
+            checkAndInit();
+        });
+
         loadScript("/static/tabulator.min.js", function() {
-            initTabulator();
+            scriptLoaded = true;
+            checkAndInit();
         });
     })();
 </script>

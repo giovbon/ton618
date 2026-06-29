@@ -436,7 +436,19 @@ templ mermaidContent(data domain.EditorData) {
                 setStatus("saving");
                 var content = jar.toString();
 
-                // 1. Salva a nota no novo nome
+                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
+                if (currentFilename !== fullNewName) {
+                    var renameFd = new FormData();
+                    renameFd.append("old", currentFilename);
+                    renameFd.append("new", fullNewName);
+                    var renameResp = await fetch("/file/rename", {
+                        method: "POST",
+                        body: renameFd
+                    });
+                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+                }
+
+                // 2. Salva a nota no novo nome
                 var saveFd = new FormData();
                 saveFd.append("filename", fullNewName);
                 saveFd.append("content", content);
@@ -449,16 +461,6 @@ templ mermaidContent(data domain.EditorData) {
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
                 
                 lastSavedHash = await generateHash(content);
-
-                // 2. Exclui a nota antiga no disco e no banco
-                if (currentFilename !== fullNewName) {
-                    var deleteFd = new FormData();
-                    deleteFd.append("filename", currentFilename);
-                    await fetch("/file/delete", {
-                        method: "POST",
-                        body: deleteFd
-                    });
-                }
 
                 // 3. Atualiza local de exibição e recarrega
                 filenameInput.dataset.filename = fullNewName;
