@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "../internal/features/**/*.templ",
     "../web/layout/**/*.templ",
+    "./layout/**/*.templ",
     "../internal/features/**/*.go",
     "./src/**/*.js",
     "./static/js/**/*.js",

@@ -8,10 +8,8 @@ COPY web/ .
 COPY internal/ ../internal/
 RUN node build.js
 
-# Remove arquivos não-comprimidos — o servidor sempre serve o .gz,
-# os originais nunca são usados no runtime (economiza ~9 MB na imagem final)
-RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" ! -name "*.br" -delete && \
-    find static -maxdepth 1 -name "*.css" ! -name "*.gz" ! -name "*.br" -delete
+# Mantém os arquivos originais não-comprimidos como fallback para clientes/proxies que
+# não suportam ou removem os cabeçalhos de compressão Accept-Encoding.
 
 # ─── Estágio 2: Build Go ────────────────────────────
 FROM golang:1.25-alpine AS builder
