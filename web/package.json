@@ -27,6 +27,7 @@
     "@tiptap/starter-kit": "^3.26.0",
     "@tiptap/suggestion": "^3.26.0",
     "chrono-node": "^2.9.1",
+    "fast-glob": "^3.3.3",
     "jspreadsheet-ce": "^5.0.4",
     "jsuites": "^6.3.6",
     "lowlight": "^3.3.0",

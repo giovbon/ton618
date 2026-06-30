@@ -5,7 +5,7 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 COPY web/ .
-COPY internal/ ../internal/
+COPY internal/ ./internal/
 RUN node build.js
 
 # Mantém os arquivos originais não-comprimidos como fallback para clientes/proxies que
