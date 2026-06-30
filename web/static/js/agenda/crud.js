@@ -3,15 +3,26 @@
  * Appointment CRUD operations: load, save, delete, purge, inline edit.
  */
 
-import { normalizarPT, formatPreviewDate } from './date-utils.js';
+import { normalizarPT } from './date-utils.js';
 import { isChronoMatchIsolated } from './date-utils.js';
 
-/** Shared in-memory appointment list — updated on every load. */
+/**
+ * @typedef {import('./timeline.js').Appointment} Appointment
+ */
+
+/** Shared in-memory appointment list — updated on every load.
+ * @type {Appointment[]}
+ */
 export let appointments = [];
 
 /**
  * Fetches all appointments from the API, refreshes `appointments`,
  * calls the provided callbacks and dispatches agenda-updated on body.
+ * 
+ * @param {Object} [options]
+ * @param {function(Appointment[]): void} [options.onLoaded]
+ * @param {HTMLElement | null} [options.countBadge]
+ * @returns {Promise<void>}
  */
 export async function loadAppointments({ onLoaded, countBadge } = {}) {
     try {
@@ -19,7 +30,7 @@ export async function loadAppointments({ onLoaded, countBadge } = {}) {
         if (res.ok) {
             appointments = await res.json() || [];
             document.body.dispatchEvent(new Event('agenda-updated'));
-            if (countBadge) countBadge.textContent = appointments.length;
+            if (countBadge) countBadge.textContent = String(appointments.length);
             if (onLoaded) onLoaded(appointments);
         }
     } catch (e) {
@@ -30,13 +41,23 @@ export async function loadAppointments({ onLoaded, countBadge } = {}) {
 /**
  * Saves a new appointment parsed from the input text.
  * Calls `reload` after a successful save.
+ * 
+ * @param {Object} params
+ * @param {string} params.text
+ * @param {HTMLButtonElement} params.saveBtn
+ * @param {HTMLInputElement} params.input
+ * @param {HTMLElement} params.preview
+ * @param {function(): Promise<void>} params.reload
+ * @returns {Promise<void>}
  */
 export async function saveAppointment({ text, saveBtn, input, preview, reload }) {
+    // @ts-ignore
     const chronoPt = typeof chrono !== 'undefined' ? chrono.pt : null;
     if (!chronoPt || !text) return;
 
     const normalized = normalizarPT(text);
     const rawResults = chronoPt.parse(normalized, new Date(), { forwardDate: true });
+    // @ts-ignore
     const results    = rawResults.filter(r => isChronoMatchIsolated(normalized, r.text));
 
     let eventDate   = new Date();
@@ -53,9 +74,9 @@ export async function saveAppointment({ text, saveBtn, input, preview, reload })
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
     const week1   = new Date(d.getFullYear(), 0, 4);
-    const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+    const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 
-    const pad = (n) => String(n).padStart(2, '0');
+    const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
     const localFloatingTime = `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}T${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}:${pad(eventDate.getSeconds())}`;
 
     saveBtn.disabled    = true;
@@ -89,7 +110,14 @@ export async function saveAppointment({ text, saveBtn, input, preview, reload })
     }
 }
 
-/** Purges appointments older than 7 days. */
+/** 
+ * Purges appointments older than 7 days. 
+ * 
+ * @param {Object} params
+ * @param {HTMLButtonElement} params.purgeBtn
+ * @param {function(): Promise<void>} params.reload
+ * @returns {Promise<void>}
+ */
 export async function purgeOldAppointments({ purgeBtn, reload }) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7);
@@ -119,6 +147,10 @@ export async function purgeOldAppointments({ purgeBtn, reload }) {
 /**
  * Deletes a single appointment by id.
  * Exposed on window for HTML onclick buttons in the HTMX-rendered tree.
+ * 
+ * @param {string} id 
+ * @param {function(): Promise<void>} reload 
+ * @returns {Promise<void>}
  */
 export async function deleteAppointment(id, reload) {
     if (!confirm('Deseja excluir este apontamento?')) return;
@@ -133,6 +165,11 @@ export async function deleteAppointment(id, reload) {
 /**
  * Starts an inline edit for a tree item.
  * Exposed on window for HTML onclick buttons in the HTMX-rendered tree.
+ * 
+ * @param {string} id 
+ * @param {string} currentDesc 
+ * @param {function(): Promise<void>} reload 
+ * @returns {void}
  */
 export function startEdit(id, currentDesc, reload) {
     const span = document.getElementById(`desc-${id}`);
@@ -144,6 +181,7 @@ export function startEdit(id, currentDesc, reload) {
     editInput.className = 'bg-transparent border-b border-sky-500 text-sm font-semibold text-zinc-100 outline-none flex-1 w-full';
     span.replaceWith(editInput);
 
+    // @ts-ignore
     if (window.setupAutocomplete) window.setupAutocomplete(editInput);
 
     editInput.focus();
@@ -167,11 +205,13 @@ export function startEdit(id, currentDesc, reload) {
     editInput.addEventListener('blur', commit);
     editInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
+            // @ts-ignore
             if (window.isAutocompleteVisible && window.isAutocompleteVisible()) return;
             e.preventDefault();
             editInput.blur();
         }
         if (e.key === 'Escape') {
+            // @ts-ignore
             if (window.isAutocompleteVisible && window.isAutocompleteVisible()) return;
             editInput.value = currentDesc;
             editInput.blur();

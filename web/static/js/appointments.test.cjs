@@ -1,17 +1,24 @@
 #!/usr/bin/env node
+// @ts-check
 'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const chrono = require('chrono-node');
-
 const fs = require('fs');
 
-// Read and evaluate appointments.js
-const appointmentsSrc = fs.readFileSync(path.join(__dirname, 'appointments.js'), 'utf8');
-eval(appointmentsSrc);
+// Read and evaluate date-utils.js (which contains the parsed logic now)
+const utilsSrc = fs.readFileSync(path.join(__dirname, 'agenda', 'date-utils.js'), 'utf8');
 
+// Strip ES6 export statement prefix and replace with global assignments
+const cleanSrc = utilsSrc
+    .replace(/\bexport\s+function\s+(\w+)/g, 'global.$1 = function $1')
+    .replace(/\bexport\s+let\s+(\w+)/g, 'global.$1');
+
+eval(cleanSrc);
+
+// @ts-ignore
 const chronoPt = chrono.pt;
 if (!chronoPt) {
     console.error('Failed to load chrono-node Portuguese parser.');
@@ -21,10 +28,17 @@ if (!chronoPt) {
 // Reference Date: Saturday, June 27, 2026, 12:00:00 (month is 0-indexed: 5 = June)
 const REF = new Date(2026, 5, 27, 12, 0, 0);
 
+/**
+ * @param {string} input 
+ * @param {Date} [now] 
+ * @returns {Date|null}
+ */
 function parseDate(input, now) {
     now = now || REF;
+    // @ts-ignore - evaluated via cleanSrc
     const normalized = normalizarPT(input, now);
     const results = chronoPt.parse(normalized, now, { forwardDate: true });
+    // @ts-ignore - evaluated via cleanSrc
     const isolated = results.filter(r => isChronoMatchIsolated(normalized, r.text));
     if (isolated.length === 0) return null;
     return isolated[0].start.date();
@@ -114,7 +128,6 @@ test('Date parsing tests for absolute and relative dates', async (t) => {
 
         const d4 = parseDate('Meia-noite');
         assert.ok(d4);
-        // Meia-noite of today (Jun 27) is normally interpreted by Chrono as beginning of next day (Jun 28)
         assert.strictEqual(d4.getHours(), 0);
         assert.strictEqual(d4.getMinutes(), 0);
     });
@@ -132,19 +145,16 @@ test('Date parsing tests for absolute and relative dates', async (t) => {
     });
 
     await t.test('Relative weeks: daqui a X semanas, daqui a uma semana, semana que vem', () => {
-        // daqui a 2 semanas (REF: Jun 27 -> July 11)
         const d1 = parseDate('daqui a 2 semanas');
         assert.ok(d1);
         assert.strictEqual(d1.getDate(), 11);
         assert.strictEqual(d1.getMonth(), 6); // July
 
-        // daqui a uma semana (REF: Jun 27 -> July 4)
         const d2 = parseDate('daqui a uma semana');
         assert.ok(d2);
         assert.strictEqual(d2.getDate(), 4);
         assert.strictEqual(d2.getMonth(), 6);
 
-        // semana que vem (REF: Jun 27 -> July 4)
         const d3 = parseDate('semana que vem');
         assert.ok(d3);
         assert.strictEqual(d3.getDate(), 4);
@@ -152,13 +162,11 @@ test('Date parsing tests for absolute and relative dates', async (t) => {
     });
 
     await t.test('Relative days: daqui a X dias, daqui a um dia', () => {
-        // daqui a 3 dias (REF: Jun 27 -> June 30)
         const d1 = parseDate('daqui a 3 dias');
         assert.ok(d1);
         assert.strictEqual(d1.getDate(), 30);
         assert.strictEqual(d1.getMonth(), 5); // June
 
-        // daqui a um dia (REF: Jun 27 -> June 28)
         const d2 = parseDate('daqui a um dia');
         assert.ok(d2);
         assert.strictEqual(d2.getDate(), 28);
@@ -166,17 +174,14 @@ test('Date parsing tests for absolute and relative dates', async (t) => {
     });
 
     await t.test('Relative months: daqui a X meses, daqui a um mês, mês que vem', () => {
-        // daqui a 2 meses (REF: Jun 27 -> Aug 27)
         const d1 = parseDate('daqui a 2 meses');
         assert.ok(d1);
         assert.strictEqual(d1.getMonth(), 7); // August
 
-        // daqui a um mês (REF: Jun 27 -> July 27)
         const d2 = parseDate('daqui a um mês');
         assert.ok(d2);
         assert.strictEqual(d2.getMonth(), 6); // July
 
-        // mês que vem (REF: Jun 27 -> July 27)
         const d3 = parseDate('mês que vem');
         assert.ok(d3);
         assert.strictEqual(d3.getMonth(), 6);
@@ -197,32 +202,26 @@ test('Date parsing tests for absolute and relative dates', async (t) => {
     });
 
     await t.test('Relative hours/minutes: daqui a X horas, daqui a X minutos', () => {
-        // REF is 12:00. daqui a 2 horas -> 14:00
         const d1 = parseDate('daqui a 2 horas');
         assert.ok(d1);
         assert.strictEqual(d1.getHours(), 14);
 
-        // daqui a 30 minutos -> 12:30
         const d2 = parseDate('daqui a 30 minutos');
         assert.ok(d2);
         assert.strictEqual(d2.getMinutes(), 30);
 
-        // daqui a 1 hora -> 13:00
         const d3 = parseDate('daqui a 1 hora');
         assert.ok(d3);
         assert.strictEqual(d3.getHours(), 13);
     });
 
     await t.test('Word boundary prevention: armagedom, mameluco', () => {
-        // 'armagedom' must not match 'dom'
         const d1 = parseDate('armagedom');
         assert.strictEqual(d1, null, 'armagedom should not resolve to a date');
 
-        // 'mameluco' must not match anything
         const d2 = parseDate('mameluco');
         assert.strictEqual(d2, null, 'mameluco should not resolve to a date');
 
-        // 'reunião domingo às 15h' must match successfully because 'domingo' is isolated
         const d3 = parseDate('reunião domingo às 15h');
         assert.ok(d3);
         assert.strictEqual(d3.getDay(), 0); // Sunday

@@ -17,8 +17,15 @@ import {
     deleteAppointment, startEdit,
 } from './crud.js';
 
+/**
+ * @typedef {import('./timeline.js').Appointment} Appointment
+ * @typedef {import('./timeline.js').Holiday} Holiday
+ */
+
 // ─── Keep window globals for test compatibility ──────────────────────────────
+// @ts-ignore
 window.normalizarPT          = normalizarPT;
+// @ts-ignore
 window.isChronoMatchIsolated = isChronoMatchIsolated;
 
 // ─── Timezone coordinates map ────────────────────────────────────────────────
@@ -36,17 +43,21 @@ const TIMEZONE_COORDS = {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // ── DOM refs ──────────────────────────────────────────────────────────────
-    const input             = document.getElementById('agenda-input');
+    /** @type {HTMLInputElement | null} */
+    const input             = document.querySelector('#agenda-input');
     const preview           = document.getElementById('agenda-preview');
-    const saveBtn           = document.getElementById('agenda-save');
-    const purgeBtn          = document.getElementById('agenda-purge');
+    /** @type {HTMLButtonElement | null} */
+    const saveBtn           = document.querySelector('#agenda-save');
+    /** @type {HTMLButtonElement | null} */
+    const purgeBtn          = document.querySelector('#agenda-purge');
     const treeContainer     = document.getElementById('agenda-tree');
     const timelineContainer = document.getElementById('agenda-timeline');
     const countBadge        = document.getElementById('agenda-count');
 
-    if (!input || !timelineContainer) return; // not on agenda page
+    if (!input || !timelineContainer || !preview || !saveBtn || !purgeBtn) return; // not on agenda page
 
     // ── Chrono sanity check ───────────────────────────────────────────────────
+    // @ts-ignore
     const chronoPt = typeof chrono !== 'undefined' ? chrono.pt : null;
     if (!chronoPt) {
         console.error('chrono-node Portuguese parser not loaded.');
@@ -56,24 +67,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Timezone init ─────────────────────────────────────────────────────────
     const storedTz = localStorage.getItem('agenda-timezone') || 'America/Sao_Paulo';
+    // @ts-ignore
     const coords   = TIMEZONE_COORDS[storedTz] || TIMEZONE_COORDS['America/Sao_Paulo'];
     setCoords(coords.lat, coords.lng);
 
-    const tzSelect = document.getElementById('setting-agenda-timezone');
+    /** @type {HTMLSelectElement | null} */
+    const tzSelect = document.querySelector('#setting-agenda-timezone');
     if (tzSelect) tzSelect.value = storedTz;
 
+    // @ts-ignore
     window.saveTimezoneSetting = (tz) => {
         localStorage.setItem('agenda-timezone', tz);
+        // @ts-ignore
         const c = TIMEZONE_COORDS[tz] || TIMEZONE_COORDS['America/Sao_Paulo'];
         setCoords(c.lat, c.lng);
         redrawTimeline();
     };
 
     // ── Shared state ──────────────────────────────────────────────────────────
+    /** @type {Appointment[]} */
     let currentAppointments = [];
+    /** @type {Holiday[]} */
     let currentHolidays     = [];
 
     function redrawTimeline() {
+        if (!timelineContainer) return;
         renderTimeline(timelineContainer, currentAppointments, currentHolidays);
     }
 
@@ -88,16 +106,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // ── Expose window hooks for HTMX-rendered tree buttons ───────────────────
+    // @ts-ignore
     window.deleteAppointment = (id)              => deleteAppointment(id, reload);
+    // @ts-ignore
     window.startEdit         = (id, currentDesc) => startEdit(id, currentDesc, reload);
 
     // ── Input preview ─────────────────────────────────────────────────────────
     input.addEventListener('input', (e) => {
-        const text = e.target.value;
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const text = target.value;
         if (!text.trim()) { preview.textContent = ''; return; }
 
         const normalized = normalizarPT(text);
         const results    = chronoPt.parse(normalized, new Date(), { forwardDate: true });
+        // @ts-ignore
         const isolated   = results.filter(r => isChronoMatchIsolated(normalized, r.text));
 
         if (isolated.length > 0) {
@@ -110,6 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ── Autocomplete ──────────────────────────────────────────────────────────
+    // @ts-ignore
     if (window.setupAutocomplete) window.setupAutocomplete(input);
 
     // ── Save ──────────────────────────────────────────────────────────────────
@@ -125,12 +148,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Tree click delegation (edit / delete) ─────────────────────────────────
     if (treeContainer) {
         treeContainer.addEventListener('click', (e) => {
-            const editBtn = e.target.closest('.edit-btn');
+            const target = /** @type {HTMLElement} */ (e.target);
+            const editBtn = target.closest('.edit-btn');
             if (editBtn) {
+                // @ts-ignore
                 const { id, desc } = editBtn.dataset;
                 if (id && desc) startEdit(id, desc, reload);
             }
-            const delBtn = e.target.closest('.del-btn');
+            const delBtn = target.closest('.del-btn');
+            // @ts-ignore
             if (delBtn && delBtn.dataset.id) deleteAppointment(delBtn.dataset.id, reload);
         });
     }
@@ -138,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Global click: close pinned tooltip ───────────────────────────────────
     document.addEventListener('click', (e) => {
         if (isRecentPin()) return;
-        if (!tooltipContains(e.target)) removePinnedTooltip();
+        if (!tooltipContains(/** @type {Node} */ (e.target))) removePinnedTooltip();
     });
 
     // ── Initial data load ─────────────────────────────────────────────────────

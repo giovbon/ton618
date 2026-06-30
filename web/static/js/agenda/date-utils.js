@@ -6,6 +6,10 @@
 /**
  * Checks if a chrono-matched token appears as an isolated word (not inside another word).
  * Prevents false positives like 'dom' matching inside 'armagedom'.
+ * 
+ * @param {string} fullText
+ * @param {string} matchedText
+ * @returns {boolean}
  */
 export function isChronoMatchIsolated(fullText, matchedText) {
     if (!matchedText) return false;
@@ -17,7 +21,12 @@ export function isChronoMatchIsolated(fullText, matchedText) {
     return !wordChar.test(before) && !wordChar.test(after);
 }
 
-/** Formats a date as dd/mm/yyyy */
+/** 
+ * Formats a date as dd/mm/yyyy 
+ * 
+ * @param {Date} date
+ * @returns {string}
+ */
 export function formatShortDate(date) {
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -25,7 +34,12 @@ export function formatShortDate(date) {
     return `${dd}/${mm}/${yyyy}`;
 }
 
-/** Formats a date as dd/mm/yyyy às HH:MM */
+/** 
+ * Formats a date as dd/mm/yyyy às HH:MM 
+ * 
+ * @param {Date} date
+ * @returns {string}
+ */
 export function formatFullDateTime(date) {
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -35,7 +49,12 @@ export function formatFullDateTime(date) {
     return `${dd}/${mm}/${yyyy} às ${hh}:${min}`;
 }
 
-/** Formats a date as dd/mm/yyyy, HH:MM:SS (for input preview) */
+/** 
+ * Formats a date as dd/mm/yyyy, HH:MM:SS (for input preview) 
+ * 
+ * @param {Date} date
+ * @returns {string}
+ */
 export function formatPreviewDate(date) {
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -49,6 +68,10 @@ export function formatPreviewDate(date) {
 /**
  * Normalizes Portuguese natural language date expressions to formats
  * that chrono-node can parse (e.g., "daqui a 3 dias" → "DD/MM/YYYY").
+ * 
+ * @param {string} texto
+ * @param {Date} [nowOverride]
+ * @returns {string}
  */
 export function normalizarPT(texto, nowOverride) {
     let res = texto;

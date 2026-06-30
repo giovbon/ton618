@@ -3,6 +3,13 @@
  * Tag color generation, HTML escaping, and tooltip description formatting.
  */
 
+/**
+ * @typedef {Object} TagColor
+ * @property {string} base
+ * @property {string} alpha
+ */
+
+/** @type {TagColor[]} */
 const TAG_COLORS = [
     { base: '#f43f5e', alpha: 'rgba(244, 63, 94, 0.2)' },   // rose
     { base: '#ec4899', alpha: 'rgba(236, 72, 153, 0.2)' },   // pink
@@ -19,7 +26,12 @@ const TAG_COLORS = [
     { base: '#f97316', alpha: 'rgba(249, 115, 22, 0.2)' },   // orange
 ];
 
-/** Returns a deterministic {base, alpha} color pair for a tag string. */
+/** 
+ * Returns a deterministic {base, alpha} color pair for a tag string. 
+ * 
+ * @param {string} tag
+ * @returns {TagColor}
+ */
 export function getTagColor(tag) {
     let hash = 0;
     const clean = tag.toLowerCase().replace(/#/g, '').trim();
@@ -29,7 +41,12 @@ export function getTagColor(tag) {
     return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 }
 
-/** Escapes HTML special chars to safely inject text into innerHTML. */
+/** 
+ * Escapes HTML special chars to safely inject text into innerHTML. 
+ * 
+ * @param {string|number|boolean} str
+ * @returns {string}
+ */
 export function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -42,6 +59,9 @@ export function escapeHtml(str) {
 /**
  * Formats a description for tooltip display:
  * strips wikilinks [[...]] and hashtags #tag, collapses whitespace.
+ * 
+ * @param {string} desc
+ * @returns {string}
  */
 export function formatTooltipDescription(desc) {
     if (!desc) return '';

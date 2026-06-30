@@ -5,13 +5,20 @@
 
 import { formatTooltipDescription } from './tags.js';
 
+/** @type {HTMLElement | null} */
 let pinnedTooltip = null;
+/** @type {number} */
 let lastPinnedTime = 0;
 
-/** Returns a human-readable "em Xd Yh Zm" string for a future event. */
+/** 
+ * Returns a human-readable "em Xd Yh Zm" string for a future event. 
+ * 
+ * @param {Date} eventDate
+ * @returns {string}
+ */
 export function getRemainingTimeText(eventDate) {
     const now = new Date();
-    const diffMs = eventDate - now;
+    const diffMs = eventDate.getTime() - now.getTime();
     if (diffMs <= 0) return '';
 
     const diffMins  = Math.floor(diffMs / 60000);
@@ -20,6 +27,7 @@ export function getRemainingTimeText(eventDate) {
     const rHours    = diffHours % 24;
     const rMins     = diffMins % 60;
 
+    /** @type {string[]} */
     const parts = [];
     if (diffDays > 0)            parts.push(`${diffDays}d`);
     if (rHours > 0 || diffDays > 0) parts.push(`${rHours}h`);
@@ -27,6 +35,11 @@ export function getRemainingTimeText(eventDate) {
     return `em ${parts.join(' ')}`;
 }
 
+/**
+ * Removes the currently pinned tooltip from the DOM.
+ * 
+ * @returns {void}
+ */
 export function removePinnedTooltip() {
     if (pinnedTooltip) {
         pinnedTooltip.remove();
@@ -35,6 +48,13 @@ export function removePinnedTooltip() {
     }
 }
 
+/**
+ * Shows a pinned tooltip for an appointment.
+ * 
+ * @param {{event_date: string, description: string}} app 
+ * @param {HTMLElement} targetEl 
+ * @returns {void}
+ */
 export function showPinnedTooltip(app, targetEl) {
     removePinnedTooltip();
     document.body.classList.add('has-pinned-tooltip');
@@ -59,9 +79,9 @@ export function showPinnedTooltip(app, targetEl) {
 
     document.body.appendChild(pinnedTooltip);
 
-    const anchorEl  = targetEl.closest('.vis-item') || targetEl;
-    const rect       = anchorEl.getBoundingClientRect();
-    const tipRect    = pinnedTooltip.getBoundingClientRect();
+    const anchorEl = targetEl.closest('.vis-item') || targetEl;
+    const rect     = anchorEl.getBoundingClientRect();
+    const tipRect  = pinnedTooltip.getBoundingClientRect();
 
     let top  = rect.top - tipRect.height - 8;
     if (top < 8) top = rect.bottom + 8;
@@ -78,15 +98,30 @@ export function showPinnedTooltip(app, targetEl) {
     lastPinnedTime = Date.now();
 }
 
-/** Returns true if a click event should be ignored because a tooltip was just pinned. */
+/** 
+ * Returns true if a click event should be ignored because a tooltip was just pinned. 
+ * 
+ * @returns {boolean}
+ */
 export function isRecentPin() {
     return Date.now() - lastPinnedTime < 100;
 }
 
+/**
+ * Checks if a tooltip is currently pinned.
+ * 
+ * @returns {boolean}
+ */
 export function hasPinnedTooltip() {
     return pinnedTooltip !== null;
 }
 
+/**
+ * Checks if the tooltip element contains the given node.
+ * 
+ * @param {Node} el 
+ * @returns {boolean}
+ */
 export function tooltipContains(el) {
-    return pinnedTooltip && pinnedTooltip.contains(el);
+    return pinnedTooltip !== null && pinnedTooltip.contains(el);
 }

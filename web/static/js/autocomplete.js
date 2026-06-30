@@ -1,13 +1,23 @@
 (function() {
+    /** @type {string[]} */
     let availableNotes = [];
+    /** @type {string[]} */
     let filteredNotes = [];
+    /** @type {boolean} */
     let autocompleteVisible = false;
+    /** @type {number} */
     let selectedIndex = 0;
+    /** @type {HTMLInputElement | null} */
     let activeInput = null;
     
     // Grab the autocomplete container from the DOM
+    /** @type {HTMLElement | null} */
     const autocompleteContainer = document.getElementById('agenda-autocomplete');
 
+    /**
+     * @param {string|number|boolean} str
+     * @returns {string}
+     */
     function escapeHtml(str) {
         return String(str)
             .replace(/&/g, '&amp;')
@@ -17,13 +27,16 @@
             .replace(/'/g, '&#39;');
     }
 
+    /**
+     * @returns {Promise<void>}
+     */
     async function fetchNotesForAutocomplete() {
         if (availableNotes.length > 0) return;
         try {
             const res = await fetch('/api/notes');
             if (res.ok) {
                 const data = await res.json();
-                availableNotes = (data.notes || []).map(n => {
+                availableNotes = (data.notes || []).map((/** @type {{arquivo: string}} */ n) => {
                     const filename = n.arquivo.split('/').pop() || n.arquivo;
                     return filename.replace(/\.md$/i, '');
                 });
@@ -33,14 +46,23 @@
         }
     }
 
+    /**
+     * @param {HTMLElement} targetInput 
+     */
     function positionAutocomplete(targetInput) {
+        if (!autocompleteContainer) return;
         const rect = targetInput.getBoundingClientRect();
         autocompleteContainer.style.top = `${rect.bottom + 4}px`;
         autocompleteContainer.style.left = `${rect.left}px`;
         autocompleteContainer.style.width = `${rect.width}px`;
     }
 
+    /**
+     * @param {string} query 
+     */
     function showAutocomplete(query) {
+        if (!autocompleteContainer) return;
+
         const q = query.toLowerCase().trim();
         filteredNotes = availableNotes.filter(name => name.toLowerCase().includes(q));
         
@@ -82,10 +104,13 @@
         autocompleteVisible = false;
     }
     
+    /**
+     * @param {string} name 
+     */
     function selectNote(name) {
         if (!activeInput) return;
         const text = activeInput.value;
-        const cursor = activeInput.selectionStart;
+        const cursor = activeInput.selectionStart || 0;
         const textBefore = text.substring(0, cursor);
         const bracketPos = textBefore.lastIndexOf('[[');
         if (bracketPos !== -1) {
@@ -103,6 +128,7 @@
     }
 
     function updateAutocompleteSelection() {
+        if (!autocompleteContainer) return;
         const buttons = autocompleteContainer.querySelectorAll('button');
         buttons.forEach((btn, idx) => {
             if (idx === selectedIndex) {
@@ -115,7 +141,8 @@
     }
 
     // Expose configuration function globally
-    window.setupAutocomplete = function(targetInput) {
+    // @ts-ignore
+    window.setupAutocomplete = function(/** @type {HTMLInputElement} */ targetInput) {
         targetInput.addEventListener('input', async (e) => {
             activeInput = targetInput;
             const text = targetInput.value;
@@ -125,7 +152,7 @@
             }
 
             // Handle Wiki Link autocomplete detection
-            const cursor = targetInput.selectionStart;
+            const cursor = targetInput.selectionStart || 0;
             const textBefore = text.substring(0, cursor);
             const bracketPos = textBefore.lastIndexOf('[[');
             
@@ -168,12 +195,13 @@
 
     // Close autocomplete when clicking outside
     document.addEventListener('click', (e) => {
-        if (autocompleteVisible && autocompleteContainer && !autocompleteContainer.contains(e.target) && e.target !== activeInput) {
+        if (autocompleteVisible && autocompleteContainer && !autocompleteContainer.contains(/** @type {Node} */ (e.target)) && e.target !== activeInput) {
             hideAutocomplete();
         }
     });
 
     // Expose checking state globally for editor modal integration
+    // @ts-ignore
     window.isAutocompleteVisible = function() {
         return autocompleteVisible;
     };

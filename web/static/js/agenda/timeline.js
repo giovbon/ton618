@@ -8,6 +8,19 @@
 import { getTagColor } from './tags.js';
 import { showPinnedTooltip, removePinnedTooltip } from './tooltip.js';
 
+/**
+ * @typedef {Object} Holiday
+ * @property {string} date
+ * @property {string} name
+ */
+
+/**
+ * @typedef {Object} Appointment
+ * @property {string} id
+ * @property {string} description
+ * @property {string} event_date
+ */
+
 const WEEKDAYS_PT   = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const MONTHS_PT_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -15,6 +28,10 @@ const MONTHS_PT_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago',
 let lat = -23.5505;
 let lng = -46.6333;
 
+/**
+ * @param {number} newLat 
+ * @param {number} newLng 
+ */
 export function setCoords(newLat, newLng) {
     lat = newLat;
     lng = newLng;
@@ -22,9 +39,11 @@ export function setCoords(newLat, newLng) {
 
 /**
  * Renders the full timeline into `timelineContainer`.
+ * 
  * @param {HTMLElement} timelineContainer
- * @param {Array}       appointments
- * @param {Array}       holidaysList
+ * @param {Appointment[]} appointments
+ * @param {Holiday[]} holidaysList
+ * @returns {void}
  */
 export function renderTimeline(timelineContainer, appointments, holidaysList) {
     timelineContainer.innerHTML = '';
@@ -45,11 +64,12 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
     const now       = new Date();
     const startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate(), 0, 0, 0);
     const endDate   = new Date(now.getFullYear(), now.getMonth() + 9, now.getDate(), 23, 59, 59);
-    const totalMs   = endDate - startDate;
+    const totalMs   = endDate.getTime() - startDate.getTime();
 
     // Default: 1 day = 140 px
     let msPerPixel = (24 * 60 * 60 * 1000) / 140;
 
+    /** @type {number | undefined} */
     let redLineInterval;
 
     function draw() {
@@ -63,17 +83,20 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
         else if (scaleDaysPx < 50) scale = 'weeks';
 
         // ── 1. Night shades ────────────────────────────────────────────────
+        // @ts-ignore - SunCalc is loaded globally via script tag
         if (typeof SunCalc !== 'undefined' && scale === 'days') {
             let shadeStart = new Date(startDate);
             while (shadeStart <= endDate) {
+                // @ts-ignore
                 const times    = SunCalc.getTimes(shadeStart, lat, lng);
                 const nextDay  = new Date(shadeStart.getTime() + 86400000);
+                // @ts-ignore
                 const nextTimes = SunCalc.getTimes(nextDay, lat, lng);
 
                 if (times.sunset && nextTimes.sunrise &&
                     times.sunset >= startDate && nextTimes.sunrise <= endDate) {
-                    const xStart = (times.sunset    - startDate) / msPerPixel;
-                    const xEnd   = (nextTimes.sunrise - startDate) / msPerPixel;
+                    const xStart = (times.sunset.getTime() - startDate.getTime()) / msPerPixel;
+                    const xEnd   = (nextTimes.sunrise.getTime() - startDate.getTime()) / msPerPixel;
                     const shade  = document.createElement('div');
                     shade.style.cssText = `position:absolute; top:0; bottom:0; left:${xStart}px; width:${xEnd - xStart}px;` +
                         `background:linear-gradient(180deg,rgba(13,20,38,0.72) 0%,rgba(9,9,11,0.45) 100%); pointer-events:none;`;
@@ -163,7 +186,7 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
             const hDate = new Date(h.date + 'T12:00:00');
             if (hDate < startDate || hDate > endDate) return;
 
-            const hLeft  = (hDate - startDate) / msPerPixel;
+            const hLeft  = (hDate.getTime() - startDate.getTime()) / msPerPixel;
             const hWidth = 86400000 / msPerPixel;
 
             const hCol = document.createElement('div');
@@ -181,7 +204,8 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
         const updateRedLine = () => {
             const nowTime = new Date();
             if (nowTime < startDate || nowTime > endDate) return;
-            const xNow = (nowTime - startDate) / msPerPixel;
+            const xNow = (nowTime.getTime() - startDate.getTime()) / msPerPixel;
+            /** @type {HTMLElement | null} */
             let redLine = canvas.querySelector('.timeline-current-time');
             if (!redLine) {
                 redLine = document.createElement('div');
@@ -193,6 +217,7 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
         };
         updateRedLine();
         if (redLineInterval) clearInterval(redLineInterval);
+        // @ts-ignore
         redLineInterval = setInterval(updateRedLine, 60000);
 
         // ── 5. Appointment dots ────────────────────────────────────────────
@@ -203,7 +228,7 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
             const appDate = new Date(app.event_date);
             if (appDate < startDate || appDate > endDate) return;
 
-            const xApp = (appDate - startDate) / msPerPixel;
+            const xApp = (appDate.getTime() - startDate.getTime()) / msPerPixel;
 
             let trackIndex = 0;
             let found = false;
@@ -243,7 +268,7 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
 
     // Scroll to show yesterday at left edge
     const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-    const xYesterday = (yesterday - startDate) / msPerPixel;
+    const xYesterday = (yesterday.getTime() - startDate.getTime()) / msPerPixel;
     container.scrollLeft = xYesterday;
     setTimeout(() => { container.scrollLeft = xYesterday; }, 50);
 
@@ -266,7 +291,7 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
     }, { passive: false });
 
     // ── Drag to scroll ───────────────────────────────────────────────────────
-    let isDown = false, startX, scrollLeft;
+    let isDown = false, startX = 0, scrollLeft = 0;
     container.addEventListener('mousedown', (e) => { isDown = true; startX = e.pageX - container.offsetLeft; scrollLeft = container.scrollLeft; container.style.cursor = 'grabbing'; });
     container.addEventListener('mouseleave', () => { isDown = false; container.style.cursor = 'grab'; });
     container.addEventListener('mouseup',    () => { isDown = false; container.style.cursor = 'grab'; });
@@ -277,10 +302,15 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
     });
 }
 
-/** Fetches holidays for prev/current/next years, caches in localStorage, returns array. */
+/** 
+ * Fetches holidays for prev/current/next years, caches in localStorage, returns array.
+ * 
+ * @returns {Promise<Holiday[]>} 
+ */
 export async function loadHolidays() {
     const startYear = new Date().getFullYear() - 1;
     const endYear   = new Date().getFullYear() + 2;
+    /** @type {Holiday[]} */
     const result    = [];
 
     for (let y = startYear; y <= endYear; y++) {
@@ -288,11 +318,12 @@ export async function loadHolidays() {
         const cached = localStorage.getItem(key);
         if (cached) {
             try { result.push(...JSON.parse(cached)); continue; }
-            catch { /* fall through to fetch */ }
+            catch (e) { /* fall through to fetch */ }
         }
         try {
             const res = await fetch(`https://brasilapi.com.br/api/feriados/v1/${y}`);
             if (res.ok) {
+                /** @type {Holiday[]} */
                 const data = await res.json();
                 localStorage.setItem(key, JSON.stringify(data));
                 result.push(...data);
