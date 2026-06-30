@@ -12,6 +12,8 @@
 - CodeJar (editor de código leve) - https://medv.io/codejar/
 - vis-timeline (editor e renderizador de diagramas) - https://visjs.github.io/vis-timeline/
 - chrono v2 (Parser de datas, suporte parcial em PT-BR) - https://github.com/wanasit/chrono
+- JSDoc (Tipagem de variáveis no JS) - https://jsdoc.app/
+- Markmap (Editor e renderizador de mapas mentais) - https://markmap.js.org/
 
 Fórmulas possíveis: https://jspreadsheet.com/docs/formulas/functions
 

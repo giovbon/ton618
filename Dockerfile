@@ -5,6 +5,7 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 COPY web/ .
+COPY internal/ ../internal/
 RUN node build.js
 
 # Remove arquivos não-comprimidos — o servidor sempre serve o .gz,
