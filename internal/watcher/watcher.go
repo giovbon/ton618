@@ -502,8 +502,10 @@ func (w *Watcher) pollAll() {
 
 			// SO processa se o mtime mudou desde a ultima indexacao
 			if existingMod, exists := dbFiles[relPath]; exists && existingMod != "" {
-				if existingMod == info.ModTime().Format(time.RFC3339) {
-					// Mtime igual — arquivo nao mudou, pula
+				// Parse do mtime do banco e comparação ignorando sub-segundos
+				dbTime, err := time.Parse(time.RFC3339, existingMod)
+				if err == nil && dbTime.Unix() == info.ModTime().Unix() {
+					// Mtime igual (no mesmo segundo) — arquivo nao mudou, pula
 					diskFiles[relPath] = true
 					return nil
 				}

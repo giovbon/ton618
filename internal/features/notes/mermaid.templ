@@ -156,7 +156,7 @@ templ mermaidContent(data domain.EditorData) {
 
 <!-- Load Mermaid locally (Lazy Loading via JS) -->
 <script type="module">
-    import { CodeJar } from '/static/codejar.js';
+    import { CodeJar } from '/static/codejar.js?v=2';
 
     (function () {
         "use strict";
@@ -171,7 +171,7 @@ templ mermaidContent(data domain.EditorData) {
             
             mermaidLoadingPromise = new Promise(function(resolve, reject) {
                 var s = document.createElement("script");
-                s.src = "/static/mermaid.min.js";
+                s.src = "/static/mermaid.min.js?v=2";
                 s.onload = function() {
                     mermaid.initialize({
                         startOnLoad: false,

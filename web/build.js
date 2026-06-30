@@ -1,9 +1,19 @@
 import * as esbuild from "esbuild";
-import { gzipSync } from "zlib";
-import { readFileSync, writeFileSync } from "fs";
+import { gzipSync, brotliCompressSync, constants } from "zlib";
+import { readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from "fs";
+import { join } from "path";
+import { execSync } from "child_process";
+
+console.log("Compilando Tailwind CSS...");
+try {
+  execSync("npx tailwindcss -c tailwind.config.cjs -i src/input.css -o static/app.css --minify", { stdio: "inherit" });
+} catch (error) {
+  console.error("Erro ao compilar Tailwind CSS:", error.message);
+  process.exit(1);
+}
 
 await esbuild.build({
-  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx"],
+  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx", "src/mindmap.js"],
   bundle: true,
   minify: true,
   outdir: "static",
@@ -18,28 +28,72 @@ await esbuild.build({
   },
 });
 
-// Gera versão .gz para servir com Content-Encoding: gzip
-const dataEditor = readFileSync("static/editor.js");
-const compressedEditor = gzipSync(dataEditor, { level: 9 });
-writeFileSync("static/editor.js.gz", compressedEditor);
-console.log(
-  `editor.js: ${(dataEditor.length / 1024).toFixed(1)}KB → ${(compressedEditor.length / 1024).toFixed(1)}KB gzip`,
-);
+console.log("Comprimindo assets estáticos (Gzip & Brotli)...");
 
-const dataSheet = readFileSync("static/spreadsheet.js");
-const compressedSheet = gzipSync(dataSheet, { level: 9 });
-writeFileSync("static/spreadsheet.js.gz", compressedSheet);
-console.log(
-  `spreadsheet.js: ${(dataSheet.length / 1024).toFixed(1)}KB → ${(compressedSheet.length / 1024).toFixed(1)}KB gzip`,
-);
-
-try {
-  const dataDrawing = readFileSync("static/drawing.js");
-  const compressedDrawing = gzipSync(dataDrawing, { level: 9 });
-  writeFileSync("static/drawing.js.gz", compressedDrawing);
+function compressFile(filePath) {
+  if (filePath.endsWith(".gz") || filePath.endsWith(".br")) return;
+  const data = readFileSync(filePath);
+  
+  // Gzip
+  const gzipData = gzipSync(data, { level: 9 });
+  writeFileSync(filePath + ".gz", gzipData);
+  
+  // Brotli
+  const brotliData = brotliCompressSync(data, {
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: 11,
+    },
+  });
+  writeFileSync(filePath + ".br", brotliData);
+  
   console.log(
-    `drawing.js: ${(dataDrawing.length / 1024).toFixed(1)}KB → ${(compressedDrawing.length / 1024).toFixed(1)}KB gzip`,
+    `  ${filePath}: ${(data.length / 1024).toFixed(1)}KB → Gzip: ${(gzipData.length / 1024).toFixed(1)}KB, Brotli: ${(brotliData.length / 1024).toFixed(1)}KB`
   );
-} catch (e) {
-  console.warn("Aviso: static/drawing.js não pôde ser lido ou comprimido.", e.message);
+}
+
+function compressDirectory(dirPath) {
+  const files = readdirSync(dirPath);
+  for (const file of files) {
+    const fullPath = join(dirPath, file);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      compressDirectory(fullPath);
+    } else if (file.endsWith(".js") || file.endsWith(".css")) {
+      compressFile(fullPath);
+    }
+  }
+}
+
+function cleanCompressedFiles(dirPath) {
+  const files = readdirSync(dirPath);
+  for (const file of files) {
+    const fullPath = join(dirPath, file);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      cleanCompressedFiles(fullPath);
+    } else if (file.endsWith(".gz") || file.endsWith(".br")) {
+      try {
+        unlinkSync(fullPath);
+      } catch (err) {
+        console.warn(`Erro ao deletar ${fullPath}:`, err.message);
+      }
+    }
+  }
+}
+
+const isDev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
+
+if (isDev) {
+  console.log("Modo desenvolvimento: limpando arquivos Gzip e Brotli para evitar cache do servidor...");
+  try {
+    cleanCompressedFiles("static");
+  } catch (error) {
+    console.warn("Aviso ao limpar assets compactados:", error.message);
+  }
+} else {
+  try {
+    compressDirectory("static");
+  } catch (error) {
+    console.warn("Aviso durante compressão de assets:", error.message);
+  }
 }

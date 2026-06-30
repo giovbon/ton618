@@ -77,6 +77,8 @@ func getNoteLink(path string) string {
         return "/typst?file=" + url.QueryEscape(path)
     } else if strings.HasPrefix(path, "mermaid") {
         return "/mermaid?file=" + url.QueryEscape(path)
+    } else if strings.HasPrefix(path, "mindmap") || strings.HasPrefix(path, "markmap") {
+        return "/mindmap?file=" + url.QueryEscape(path)
     }
     return "/editor?file=" + url.QueryEscape(path)
 }
@@ -106,6 +108,8 @@ func getNoteIcon(path string, noteType string, tags []string) string {
         return "📘"
     case "mermaid":
         return "🧜"
+    case "mindmap", "markmap":
+        return "🗺️"
     case "youtube":
         return "🎬"
     case "artigo", "article":
@@ -120,6 +124,7 @@ func getNoteIcon(path string, noteType string, tags []string) string {
         case "drawing": return "🎨"
         case "typst": return "📘"
         case "mermaid": return "🧜"
+        case "mindmap", "markmap": return "🗺️"
         case "youtube": return "🎬"
         case "artigo", "article": return "📰"
         case "captura", "capture": return "🌐"
@@ -146,6 +151,8 @@ func getDisplayType(n domain.NoteItem) string {
             return "typst"
         } else if lowerT == "mermaid" {
             return "mermaid"
+        } else if lowerT == "mindmap" || lowerT == "markmap" {
+            return "markmap"
         }
     }
     return "nota"
@@ -155,7 +162,7 @@ func getVisibleTags(tags []string) []string {
     var visible []string
     for _, t := range tags {
         t = strings.ToLower(t)
-        if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" {
+        if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" && t != "mindmap" && t != "markmap" {
             visible = append(visible, t)
         }
     }

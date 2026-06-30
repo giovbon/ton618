@@ -105,37 +105,66 @@ func main() {
 	staticFS := http.FileServer(http.Dir(cfg.WebDir + "/static"))
 	staticHandler := http.StripPrefix("/static/", staticFS)
 
-	var handler http.Handler = mux
-	handler = middleware.LoggingMiddleware(handler)
-	handler = middleware.Recovery(handler)
-	handler = middleware.BasicAuthMiddleware(handler, cfg.AuthUser, cfg.AuthPass)
+	// Protege as rotas dinâmicas do mux com BasicAuth
+	var appHandler http.Handler = mux
+	appHandler = middleware.BasicAuthMiddleware(appHandler, cfg.AuthUser, cfg.AuthPass)
 
+	// Define o roteador principal (arquivos estáticos vs rotas dinâmicas)
 	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(r.URL.Path) >= 8 && r.URL.Path[:8] == "/static/" {
 			if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
 				relPath := strings.TrimPrefix(r.URL.Path, "/static/")
-				gzPath := filepath.Join(cfg.WebDir, "static", relPath) + ".gz"
-				if _, err := os.Stat(gzPath); err == nil {
-					w.Header().Set("Content-Encoding", "gzip")
-					if strings.HasSuffix(r.URL.Path, ".js") {
-						w.Header().Set("Content-Type", "application/javascript")
-					} else {
-						w.Header().Set("Content-Type", "text/css")
+				basePath := filepath.Join(cfg.WebDir, "static", relPath)
+				
+				// 1. Define cabeçalhos de content-type
+				if strings.HasSuffix(r.URL.Path, ".js") {
+					w.Header().Set("Content-Type", "application/javascript")
+				} else {
+					w.Header().Set("Content-Type", "text/css")
+				}
+				
+				// 2. Cache longo se o parâmetro de versão 'v' estiver presente
+				if r.URL.Query().Get("v") != "" {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+				}
+
+				// 3. Tenta servir Brotli (.br) se suportado pelo cliente
+				if strings.Contains(r.Header.Get("Accept-Encoding"), "br") {
+					brPath := basePath + ".br"
+					if _, err := os.Stat(brPath); err == nil {
+						w.Header().Set("Content-Encoding", "br")
+						http.ServeFile(w, r, brPath)
+						return
 					}
-					w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-					http.ServeFile(w, r, gzPath)
-					return
+				}
+
+				// 4. Fallback para Gzip (.gz) se suportado pelo cliente
+				if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+					gzPath := basePath + ".gz"
+					if _, err := os.Stat(gzPath); err == nil {
+						w.Header().Set("Content-Encoding", "gzip")
+						http.ServeFile(w, r, gzPath)
+						return
+					}
 				}
 			}
 			staticHandler.ServeHTTP(w, r)
 			return
 		}
-		handler.ServeHTTP(w, r)
+		appHandler.ServeHTTP(w, r)
 	})
+
+	// Aplica middlewares globais em todas as requisições (incluindo estáticos)
+	var globalHandler http.Handler = mainHandler
+	globalHandler = middleware.LoggingMiddleware(globalHandler)
+	globalHandler = middleware.Recovery(globalHandler)
+	globalHandler = middleware.SecurityHeadersMiddleware(globalHandler)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: mainHandler,
+		Handler: globalHandler,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

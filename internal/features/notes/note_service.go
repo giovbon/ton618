@@ -198,27 +198,16 @@ func (s *NoteService) Rename(oldName, newName string) error {
 
 // GetMany retorna todas as notas para listagem (formato domain.NoteItem).
 func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
-	mods, err := s.fileMod.GetAllFileMods()
+	dbItems, err := s.store.GetFilesModsAndTags()
 	if err != nil {
 		return nil, err
 	}
-	notesFromDB, _ := s.notes.GetAllNotes()
-	for name, mtime := range notesFromDB {
-		if _, exists := mods[name]; !exists {
-			mods[name] = mtime
-		}
-	}
-
-	allTags, err := s.store.GetAllFileTags()
-	if err != nil {
-		allTags = make(map[string][]string)
-	}
 
 	var items []domain.NoteItem
-	for arquivo, mtime := range mods {
-		tags := allTags[arquivo]
-		if tags == nil {
-			tags = []string{}
+	for _, item := range dbItems {
+		var tags []string
+		if item.Tags != "" {
+			tags = strings.Split(item.Tags, ",")
 		}
 
 		noteType := "nota"
@@ -226,6 +215,7 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 		isSpreadsheet := false
 		isTypst := false
 		isMermaid := false
+		isMarkmap := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -240,6 +230,8 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 				isTypst = true
 			case "mermaid":
 				isMermaid = true
+			case "mindmap", "markmap":
+				isMarkmap = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -256,17 +248,19 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 			noteType = "typst"
 		} else if isMermaid {
 			noteType = "mermaid"
+		} else if isMarkmap {
+			noteType = "markmap"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {
 			noteType = "artigo"
 		} else if isCapture {
 			noteType = "captura"
-		} else if strings.HasPrefix(arquivo, "pdfs/") {
+		} else if strings.HasPrefix(item.Arquivo, "pdfs/") {
 			noteType = "pdf"
-		} else if strings.HasPrefix(arquivo, "attachments/") {
+		} else if strings.HasPrefix(item.Arquivo, "attachments/") {
 			noteType = "anexo"
-		} else if strings.HasPrefix(arquivo, "archives/") {
+		} else if strings.HasPrefix(item.Arquivo, "archives/") {
 			noteType = "arquivo"
 		}
 
@@ -274,16 +268,16 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" {
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" {
 				userTags = append(userTags, t)
 			}
 		}
 
 		items = append(items, domain.NoteItem{
-			Arquivo:  arquivo,
-			Tags:     userTags,
-			Mtime:    mtime,
-			Type:     noteType,
+			Arquivo: item.Arquivo,
+			Tags:    userTags,
+			Mtime:   item.Mtime,
+			Type:    noteType,
 		})
 	}
 	return items, nil
@@ -296,16 +290,22 @@ func (s *NoteService) SyncDatabase() error {
 		return err
 	}
 
+	// Identifica markmaps legados através de query otimizada (apenas IDs)
+	legacyMarkmaps, _ := s.store.GetNotesNeedingMarkmapTag()
+	legacyMap := make(map[string]bool)
+	for _, name := range legacyMarkmaps {
+		legacyMap[name] = true
+	}
+
 	for filename, mtimeStr := range allNotes {
 		existingMod, err := s.fileMod.GetFileMod(filename)
 		if err != nil {
 			continue
 		}
 
-		// Se a nota não estiver indexada na tabela file_mods, fazemos o reindex
-		if existingMod == "" {
-			content, err := s.notes.GetNote(filename)
-			if err != nil || content == "" {
+		if existingMod == "" || legacyMap[filename] {
+			content, getErr := s.notes.GetNote(filename)
+			if getErr != nil || content == "" {
 				continue
 			}
 			mtime, err := time.Parse(time.RFC3339, mtimeStr)

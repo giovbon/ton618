@@ -3,33 +3,14 @@ package notes
 import "ton618/web/layout"
 import "ton618/internal/core/domain"
 
-templ Typst(data domain.EditorData) {
-    @layout.Layout(data.Title, false, typstContent(data))
+templ Mindmap(data domain.EditorData) {
+    @layout.Layout(data.Title, false, mindmapContent(data))
 }
 
-templ typstContent(data domain.EditorData) {
-<script>
-    window.autoCompile = localStorage.getItem("typst-auto-compile") !== "false";
-    window.toggleAutoCompile = function(checked) {
-        window.autoCompile = checked;
-        localStorage.setItem("typst-auto-compile", checked);
-    };
-    window.shouldAutoCompile = function() {
-        return window.autoCompile === true;
-    };
-    window.triggerCompile = function() {
-        document.body.dispatchEvent(new Event("typst-compile"));
-    };
-    document.addEventListener("DOMContentLoaded", function() {
-        var toggle = document.getElementById("auto-compile-toggle");
-        if (toggle) {
-            toggle.checked = window.autoCompile;
-        }
-    });
-</script>
-<div class="editor-root flex flex-col" id="typst-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+templ mindmapContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="mindmap-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
     <!-- Topbar -->
-    <div class="flex items-center gap-3 mb-3 shrink-0" id="typst-topbar">
+    <div class="flex items-center gap-3 mb-3 shrink-0" id="mindmap-topbar">
         <input
             id="file-name"
             type="text"
@@ -40,44 +21,15 @@ templ typstContent(data domain.EditorData) {
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
         
-        <!-- Toggle Auto-Compilar -->
-        <div class="flex items-center gap-1.5 bg-zinc-900/40 px-2 py-1 rounded-lg border border-zinc-800 shrink-0 select-none">
-            <input
-                id="auto-compile-toggle"
-                type="checkbox"
-                class="w-3.5 h-3.5 rounded border-zinc-750 text-sky-500 bg-zinc-950 focus:ring-sky-500 focus:ring-offset-zinc-900 cursor-pointer"
-                onchange="toggleAutoCompile(this.checked)"
-            />
-            <label for="auto-compile-toggle" class="text-[11px] font-bold tracking-tight text-zinc-400 cursor-pointer">
-                Auto
-            </label>
-        </div>
 
-        <!-- Botão de Compilar Manual -->
-        <button
-            id="compile-btn"
-            onclick="triggerCompile()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
-            title="Compilar Visualização (Alt+Enter)"
-        >
-            ⚡
-        </button>
 
         <button
             id="save-btn"
-            onclick="saveTypst()"
+            onclick="saveMindmap()"
             class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
             title="Salvar (Ctrl+S)"
         >
             💾
-        </button>
-        <button
-            id="pdf-download-btn"
-            onclick="downloadPDF()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800"
-            title="Baixar PDF"
-        >
-            📥 PDF
         </button>
         <button
             id="duplicate-editor-btn"
@@ -99,64 +51,41 @@ templ typstContent(data domain.EditorData) {
 
     <!-- Layout Dividido (Split-Pane) -->
     <div class="flex flex-col md:flex-row flex-1 gap-4 overflow-hidden min-h-0 relative">
-        <!-- Painel Esquerdo: Editor de Código -->
-        <div class="flex-1 flex flex-col min-w-0 relative">
+        <!-- Painel Esquerdo: Editor de Código (Markdown) -->
+        <div class="w-full mindmap-editor-panel flex flex-col min-w-0 relative">
             <div class="flex-1 w-full relative min-h-0">
                 <div
-                    id="typst-editor"
+                    id="mindmap-editor"
                     class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
                     spellcheck="false"
-                    hx-post="/api/notes/render-typst"
-                    hx-trigger="load, keyup[shouldAutoCompile()] delay:1500ms, typst-compile from:body"
-                    hx-target="#typst-preview-container"
-                    hx-vals="js:{content: window.getTypstContent ? window.getTypstContent() : ''}"
-                    hx-indicator="#typst-compile-indicator"
                 >{ data.Content }</div>
             </div>
         </div>
 
-        <!-- Painel Direito: Visualizador de Preview -->
-        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0" id="preview-panel">
-            <!-- Spinner de Processamento -->
-            <div id="typst-compile-indicator" class="absolute top-4 right-4 bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800 htmx-indicator">
-                ⚡ Compilando
+        <!-- Painel Direito: Visualizador do Mapa Mental (SVG) -->
+        <div class="flex-1 flex flex-col bg-zinc-950 border border-zinc-850/80 rounded-xl overflow-hidden relative min-w-0" id="preview-panel">
+            <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
+                <button
+                    id="fit-btn"
+                    onclick="triggerFit()"
+                    class="bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-all p-2 rounded-lg cursor-pointer flex items-center justify-center w-8 h-8 text-xs font-bold"
+                    title="Ajustar Mapa à Tela"
+                >
+                    🔍
+                </button>
             </div>
-            
-            <!-- Páginas Renderizadas -->
-            <div id="typst-preview-container" class="flex flex-col items-center gap-6 w-full">
-                <div class="text-zinc-600 text-xs py-20 font-mono">
-                    Nenhum conteúdo renderizado.
-                </div>
-            </div>
+            <svg id="mindmap-svg" class="w-full h-full text-zinc-100" style="background-color: #09090b; cursor: grab;"></svg>
         </div>
     </div>
 </div>
 
 <style>
-    /* Estilo de "folha de papel" para cada página SVG renderizada do Typst */
-    .typst-page {
-        background-color: #ffffff;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        max-width: 100%;
-        transition: transform 0.2s ease;
+    @media (min-width: 768px) {
+        .mindmap-editor-panel {
+            flex: 0 0 35% !important;
+            width: 35% !important;
+        }
     }
-    
-    .typst-page:hover {
-        transform: scale(1.005);
-    }
-
-    .typst-page svg {
-        max-width: 100%;
-        height: auto;
-        display: block;
-    }
-
     /* Editor CodeJar */
     .editor-codejar {
         margin: 0 !important;
@@ -185,7 +114,7 @@ templ typstContent(data domain.EditorData) {
     }
 
     .editor-codejar:empty::before {
-        content: "// Escreva seu código Typst aqui...";
+        content: "# Markmap\n- Escreva seus tópicos em Markdown...";
         color: #52525b; /* zinc-600 */
         pointer-events: none;
     }
@@ -212,7 +141,27 @@ templ typstContent(data domain.EditorData) {
         scrollbar-width: thin !important;
         scrollbar-color: #27272a transparent !important;
     }
+
+    /* Markmap custom SVG overrides for Premium Dark Theme */
+    #mindmap-svg g.markmap-node text {
+        fill: #e4e4e7 !important; /* zinc-200 */
+        font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+        font-weight: 500;
+        font-size: 13px !important;
+    }
+    #mindmap-svg g.markmap-node-heading-1 text {
+        fill: #38bdf8 !important; /* sky-400 */
+        font-weight: 800;
+        font-size: 16px !important;
+    }
+    #mindmap-svg path.markmap-link {
+        stroke-opacity: 0.6 !important;
+        stroke-width: 2px !important;
+    }
 </style>
+
+<!-- Carrega bundles compilados locais -->
+<script src="/static/mindmap.js?v=2"></script>
 
 <script type="module">
     import { CodeJar } from '/static/codejar.js?v=2';
@@ -220,7 +169,8 @@ templ typstContent(data domain.EditorData) {
     (function () {
         "use strict";
 
-        var editorEl = document.getElementById("typst-editor");
+        var editorEl = document.getElementById("mindmap-editor");
+        var svgEl = document.getElementById("mindmap-svg");
         var statusEl = document.getElementById("editor-status");
         var filenameInput = document.getElementById("file-name");
 
@@ -229,6 +179,7 @@ templ typstContent(data domain.EditorData) {
         var saveInProgress = false;
         var savePending = false;
         var lastSavedHash = null;
+        var mmWrapper = null;
 
         async function generateHash(text) {
             var encoder = new TextEncoder();
@@ -238,7 +189,7 @@ templ typstContent(data domain.EditorData) {
             return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
         }
 
-        function highlightTypst(code) {
+        function highlightMarkdown(code) {
             var html = code
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
@@ -253,54 +204,29 @@ templ typstContent(data domain.EditorData) {
                 return tokenPlace;
             }
 
-            // 1. Comments block /* ... */
-            html = html.replace(/\/\*[\s\S]*?\*\//g, function(match) {
-                return addToken(match, "text-zinc-500 italic");
+            // 1. Frontmatter
+            html = html.replace(/^---[\s\S]*?---/g, function(match) {
+                return addToken(match, "text-zinc-500 font-mono");
             });
 
-            // 2. Comments line // ...
-            html = html.replace(/\/\/.*/g, function(match) {
-                return addToken(match, "text-zinc-500 italic");
+            // 2. Headers (#, ##)
+            html = html.replace(/^#{1,6}\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-sky-400 font-black");
             });
 
-            // 3. Triple backtick code blocks ``` ... ```
-            html = html.replace(/```[\s\S]*?```/g, function(match) {
-                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+            // 3. Lists (- , * )
+            html = html.replace(/^\s*[-*+]\s+/gm, function(match) {
+                return addToken(match, "text-amber-400 font-bold");
             });
 
-            // 4. Single backtick code ` ... `
-            html = html.replace(/`[^`\n]+`/g, function(match) {
-                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
-            });
-
-            // 5. String literals
-            html = html.replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, function(match) {
-                return addToken(match, "text-emerald-400");
-            });
-
-            // 6. Keywords/Commands starting with #
-            html = html.replace(/#[a-zA-Z_][a-zA-Z0-9_.-]*/g, function(match) {
-                return addToken(match, "text-sky-400 font-bold");
-            });
-
-            // 7. Headings (=, ==, === etc) at start of line
-            html = html.replace(/^={1,6}\s+[^\n]+/gm, function(match) {
-                return addToken(match, "text-white font-black");
-            });
-
-            // 8. Math formulas $...$
-            html = html.replace(/\$[^\$\n]+\$/g, function(match) {
-                return addToken(match, "text-purple-400 font-semibold");
-            });
-
-            // 9. Bold *text*
-            html = html.replace(/\*[^*\n]+\*/g, function(match) {
+            // 4. Bold (**text**)
+            html = html.replace(/\*\*[^*]+\*\*/g, function(match) {
                 return addToken(match, "font-bold text-zinc-100");
             });
 
-            // 10. Italic _text_
-            html = html.replace(/_[^_\n]+_/g, function(match) {
-                return addToken(match, "italic text-zinc-100");
+            // 5. Italic (_text_)
+            html = html.replace(/_[^_]+_/g, function(match) {
+                return addToken(match, "italic text-zinc-300");
             });
 
             // Restore tokens
@@ -315,7 +241,7 @@ templ typstContent(data domain.EditorData) {
         }
 
         const highlight = (editor) => {
-            editor.innerHTML = highlightTypst(editor.textContent);
+            editor.innerHTML = highlightMarkdown(editor.textContent);
         };
 
         const jar = CodeJar(editorEl, highlight, { tab: "  " });
@@ -336,14 +262,17 @@ templ typstContent(data domain.EditorData) {
 
         function handleChange() {
             setStatus("dirty");
+            if (mmWrapper) {
+                try {
+                    mmWrapper.update(jar.toString());
+                } catch (e) {
+                    console.warn("Erro ao atualizar o mapa mental:", e);
+                }
+            }
             scheduleSave();
         }
 
         jar.onUpdate(handleChange);
-
-        window.getTypstContent = function() {
-            return jar.toString();
-        };
 
         function scheduleSave() {
             clearTimeout(saveTimer);
@@ -431,7 +360,7 @@ templ typstContent(data domain.EditorData) {
                 setStatus("saving");
                 var content = jar.toString();
 
-                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
+                // 1. Chama a rota de rename
                 if (currentFilename !== fullNewName) {
                     var renameFd = new FormData();
                     renameFd.append("old", currentFilename);
@@ -443,7 +372,7 @@ templ typstContent(data domain.EditorData) {
                     if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
                 }
 
-                // 2. Salva a nota no novo nome
+                // 2. Salva sob o novo nome
                 var saveFd = new FormData();
                 saveFd.append("filename", fullNewName);
                 saveFd.append("content", content);
@@ -457,12 +386,12 @@ templ typstContent(data domain.EditorData) {
                 
                 lastSavedHash = await generateHash(content);
 
-                // 3. Atualiza local de exibição e recarrega
+                // 3. Redireciona
                 filenameInput.dataset.filename = fullNewName;
-                window.location.href = "/typst?file=" + encodeURIComponent(fullNewName);
+                window.location.href = "/mindmap?file=" + encodeURIComponent(fullNewName);
             } catch (e) {
                 console.error(e);
-                alert("Erro ao renomear nota Typst.");
+                alert("Erro ao renomear nota.");
                 filenameInput.value = currentDisplayName;
                 setStatus("dirty");
             }
@@ -508,11 +437,11 @@ templ typstContent(data domain.EditorData) {
                 })
                 .then(function (data) {
                     if (data && data.new_filename) {
-                        window.location.href = "/typst?file=" + encodeURIComponent(data.new_filename);
+                        window.location.href = "/mindmap?file=" + encodeURIComponent(data.new_filename);
                     }
                 })
                 .catch(function (err) {
-                    alert("Erro ao duplicar nota Typst: " + err.message);
+                    alert("Erro ao duplicar nota de mapa mental: " + err.message);
                 });
         }
 
@@ -527,38 +456,35 @@ templ typstContent(data domain.EditorData) {
             doRename();
         });
 
-        // Event listener Ctrl+S para salvar manualmente e Alt+Enter para compilar manual
         document.addEventListener("keydown", function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
                 e.preventDefault();
                 doSave();
             }
-            if (e.altKey && e.key === "Enter") {
-                e.preventDefault();
-                window.triggerCompile();
-            }
         });
 
-        // Auto-compile e Compilação Manual definidos no bloco <script> inicial do template
+        window.triggerFit = function() {
+            if (mmWrapper) {
+                mmWrapper.fit();
+            }
+        };
 
         // Inicialização
         (async function () {
             setStatus("saved");
             lastSavedHash = await generateHash(jar.toString());
+
+            // Inicializa o Markmap se disponível globalmente
+            if (window.initMindmap) {
+                mmWrapper = window.initMindmap(svgEl, jar.toString());
+            } else {
+                console.error("Função initMindmap não encontrada.");
+            }
         })();
 
-        async function downloadPDF() {
-            await doSave();
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-            window.open("/api/notes/download-typst-pdf?file=" + encodeURIComponent(filename), "_blank");
-        }
-
-        window.saveTypst = doSave;
+        window.saveMindmap = doSave;
         window.deleteCurrentNote = deleteCurrentNote;
         window.duplicateCurrentNote = duplicateCurrentNote;
-        window.downloadPDF = downloadPDF;
     })();
 </script>
 }

@@ -606,12 +606,17 @@ if (typeof document !== 'undefined') {
         timelineContainer.innerHTML = '';
         timelineContainer.style.overflow = 'hidden';
 
+        // Use the explicit pixel height of the container so that
+        // absolute children with top-0/bottom-0 have a valid reference.
+        const tlHeight = timelineContainer.offsetHeight || 144;
+
         const container = document.createElement('div');
-        container.className = 'custom-timeline-scroll w-full h-full overflow-x-auto overflow-y-hidden select-none cursor-grab active:cursor-grabbing';
-        container.style.cssText = 'position: relative; scroll-behavior: auto;';
+        container.className = 'custom-timeline-scroll w-full overflow-x-auto overflow-y-hidden select-none cursor-grab active:cursor-grabbing';
+        container.style.cssText = `position: relative; scroll-behavior: auto; height: ${tlHeight}px;`;
         
         const canvas = document.createElement('div');
-        canvas.className = 'custom-timeline-canvas relative h-full bg-zinc-950';
+        canvas.className = 'custom-timeline-canvas bg-zinc-950';
+        canvas.style.cssText = `position: relative; height: ${tlHeight}px;`;
         container.appendChild(canvas);
 
         const now = new Date();
@@ -688,49 +693,42 @@ if (typeof document !== 'undefined') {
                 const colWidth = (nextMs - colMs) / msPerPixel;
 
                 const col = document.createElement('div');
-                col.className = 'absolute top-0 bottom-0 border-l border-zinc-800/80';
-                col.style.left = `${colLeft}px`;
-                col.style.width = `${colWidth}px`;
+                col.style.cssText = `position: absolute; top: 0; bottom: 0; left: ${colLeft}px; width: ${colWidth}px; border-left: 1px solid rgba(63,63,70,0.5);`;
 
                 const monthStr = `${monthsPtShort[cur.getMonth()]} ${cur.getFullYear()}`;
                 
                 if (scale === 'months') {
                     const monthLabel = document.createElement('div');
-                    monthLabel.className = 'absolute text-zinc-100 font-bold uppercase tracking-wider';
-                    monthLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px; z-index: 10;';
+                    monthLabel.style.cssText = 'position: absolute; left: 10px; top: 20px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #f4f4f5; z-index: 10;';
                     monthLabel.textContent = monthStr;
                     col.appendChild(monthLabel);
                 } else if (scale === 'weeks') {
                     if (monthStr !== lastMonthStr) {
                         lastMonthStr = monthStr;
                         const monthLabel = document.createElement('div');
-                        monthLabel.className = 'absolute text-zinc-500 font-bold uppercase tracking-wider';
-                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px; z-index: 10;';
+                        monthLabel.style.cssText = 'position: absolute; left: 10px; top: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; z-index: 10;';
                         monthLabel.textContent = monthStr;
                         col.appendChild(monthLabel);
                     }
                     const weekLabel = document.createElement('div');
-                    weekLabel.className = 'absolute text-zinc-300 font-bold';
-                    weekLabel.style.cssText = 'left: 10px; top: 20px; font-size: 11px; font-family: monospace; z-index: 10;';
+                    weekLabel.style.cssText = 'position: absolute; left: 10px; top: 20px; font-size: 11px; font-family: monospace; font-weight: 700; color: #d4d4d8; z-index: 10;';
                     weekLabel.textContent = `Semana ${cur.getDate()} ${monthsPtShort[cur.getMonth()]}`;
                     col.appendChild(weekLabel);
                 } else {
                     const dayOfWeek = cur.getDay();
                     if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        col.style.background = 'repeating-linear-gradient(45deg, rgba(63, 63, 70, 0.16), rgba(63, 63, 70, 0.16) 6px, transparent 6px, transparent 12px)';
+                        col.style.background = 'repeating-linear-gradient(45deg, rgba(63, 63, 70, 0.18), rgba(63, 63, 70, 0.18) 6px, transparent 6px, transparent 12px)';
                     }
                     if (monthStr !== lastMonthStr || colLeft === 0) {
                         lastMonthStr = monthStr;
                         const monthLabel = document.createElement('div');
-                        monthLabel.className = 'absolute text-zinc-500 font-bold uppercase tracking-wider';
-                        monthLabel.style.cssText = 'left: 10px; top: 6px; font-size: 9px; z-index: 10;';
+                        monthLabel.style.cssText = 'position: absolute; left: 10px; top: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; z-index: 10;';
                         monthLabel.textContent = monthStr;
                         col.appendChild(monthLabel);
                     }
                     const isToday = cur.getDate() === now.getDate() && cur.getMonth() === now.getMonth() && cur.getFullYear() === now.getFullYear();
                     const dayLabel = document.createElement('div');
-                    dayLabel.className = isToday ? 'absolute text-zinc-100 font-bold' : 'absolute text-zinc-400';
-                    dayLabel.style.cssText = 'left: 10px; top: 20px; font-size: 13px; font-family: monospace; z-index: 10;';
+                    dayLabel.style.cssText = `position: absolute; left: 10px; top: 20px; font-size: 13px; font-family: monospace; font-weight: ${isToday ? '700' : '400'}; color: ${isToday ? '#f4f4f5' : '#a1a1aa'}; z-index: 10;`;
                     dayLabel.textContent = `${weekdaysPt[dayOfWeek]} ${cur.getDate().toString().padStart(2, '0')}`;
                     col.appendChild(dayLabel);
                 }
@@ -748,12 +746,11 @@ if (typeof document !== 'undefined') {
                     const hWidth = (24 * 60 * 60 * 1000) / msPerPixel;
 
                     const hCol = document.createElement('div');
-                    hCol.className = 'absolute top-0 bottom-0 border-l border-r border-rose-950/20';
-                    hCol.style.cssText = `left: ${hLeft - hWidth/2}px; width: ${hWidth}px; background: rgba(244, 63, 94, 0.02); pointer-events: none;`;
+                    hCol.style.cssText = `position: absolute; top: 0; bottom: 0; left: ${hLeft - hWidth/2}px; width: ${hWidth}px; background: rgba(244, 63, 94, 0.04); border-left: 1px solid rgba(159,18,57,0.3); border-right: 1px solid rgba(159,18,57,0.3); pointer-events: none;`;
+
 
                     const hLabel = document.createElement('div');
-                    hLabel.className = 'absolute text-rose-500/80 font-bold truncate';
-                    hLabel.style.cssText = 'left: 10px; bottom: 22px; font-size: 8px; width: calc(100% - 20px); pointer-events: none; z-index: 10;';
+                    hLabel.style.cssText = 'position: absolute; left: 10px; bottom: 22px; font-size: 8px; font-weight: 700; color: rgba(251,113,133,0.85); width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; z-index: 10;';
                     hLabel.textContent = h.name;
                     hCol.appendChild(hLabel);
                     canvas.appendChild(hCol);
@@ -768,8 +765,8 @@ if (typeof document !== 'undefined') {
                     let redLine = canvas.querySelector('.timeline-current-time');
                     if (!redLine) {
                         redLine = document.createElement('div');
-                        redLine.className = 'timeline-current-time absolute top-0 bottom-0 z-10 pointer-events-none';
-                        redLine.style.cssText = 'width: 1.5px; background-color: #ef4444;';
+                        redLine.className = 'timeline-current-time';
+                        redLine.style.cssText = 'position: absolute; top: 0; bottom: 0; width: 1.5px; background-color: #ef4444; z-index: 10; pointer-events: none;';
                         canvas.appendChild(redLine);
                     }
                     redLine.style.left = `${xNow}px`;

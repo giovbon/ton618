@@ -253,6 +253,7 @@ templ databaseContent() {
                             var isDrawing = tagsStr.includes("drawing") || fileStr.includes("drawing") || (typeStr === "drawing") || (typeStr === "desenho");
                             var isTypst = tagsStr.includes("typst") || (typeStr === "typst");
                             var isMermaid = tagsStr.includes("mermaid") || (typeStr === "mermaid");
+                            var isMarkmap = tagsStr.includes("markmap") || tagsStr.includes("mindmap") || (typeStr === "markmap") || (typeStr === "mindmap");
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
                             var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
@@ -280,6 +281,9 @@ templ databaseContent() {
                             } else if (isMermaid) {
                                 url = "/mermaid?file=" + encodeURIComponent(file);
                                 icon = "🧜";
+                            } else if (isMarkmap) {
+                                url = "/mindmap?file=" + encodeURIComponent(file);
+                                icon = "🗺️";
                             } else {
                                 url = "/editor?file=" + encodeURIComponent(file);
                                 icon = "📄";

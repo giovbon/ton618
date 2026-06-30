@@ -51,3 +51,35 @@ func (s *Store) GetAllFileMods() (map[string]string, error) {
 	}
 	return result, rows.Err()
 }
+
+// FileModTag represents a file's modification time and its associated tags (comma separated).
+type FileModTag struct {
+	Arquivo string
+	Mtime   string
+	Tags    string
+}
+
+// GetFilesModsAndTags returns all files with their mtime and concatenated tags in a single query.
+func (s *Store) GetFilesModsAndTags() ([]FileModTag, error) {
+	query := `
+		SELECT f.arquivo, f.mtime, IFNULL(GROUP_CONCAT(t.tag, ','), '') as tags
+		FROM file_mods f
+		LEFT JOIN tags t ON f.arquivo = t.arquivo
+		GROUP BY f.arquivo, f.mtime
+	`
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []FileModTag
+	for rows.Next() {
+		var item FileModTag
+		if err := rows.Scan(&item.Arquivo, &item.Mtime, &item.Tags); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}

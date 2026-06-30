@@ -69,6 +69,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	isDrawing := false
 	isTypst := false
 	isMermaid := false
+	isMindmap := false
 	for _, t := range fileTags {
 		if t == "spreadsheet" {
 			isSpreadsheet = true
@@ -81,6 +82,9 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		}
 		if t == "mermaid" {
 			isMermaid = true
+		}
+		if t == "mindmap" {
+			isMindmap = true
 		}
 	}
 	if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -99,12 +103,16 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 		return
 	}
+	if isMindmap || strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
+		http.Redirect(w, r, "/mindmap?file="+url.QueryEscape(filename), http.StatusFound)
+		return
+	}
 
 	// Filtra as tags internas para não mostrar na UI do editor
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" && lt != "mindmap" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -165,6 +173,7 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 		isDrawing := false
 		isTypst := false
 		isMermaid := false
+		isMindmap := false
 		for _, t := range fileTags {
 			if t == "spreadsheet" {
 				isSpreadsheet = true
@@ -177,6 +186,9 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 			}
 			if t == "mermaid" {
 				isMermaid = true
+			}
+			if t == "mindmap" || t == "markmap" {
+				isMindmap = true
 			}
 		}
 		if isDrawing || strings.Contains(content, "type: drawing") {
@@ -191,6 +203,10 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
+		if isMindmap || strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
+			http.Redirect(w, r, "/mindmap?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
 		if !isSpreadsheet && !strings.Contains(content, "type: spreadsheet") {
 			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusFound)
 			return
@@ -201,7 +217,7 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" && lt != "mindmap" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -258,6 +274,7 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 		isSpreadsheet := false
 		isTypst := false
 		isMermaid := false
+		isMindmap := false
 		for _, t := range fileTags {
 			if t == "drawing" {
 				isDrawing = true
@@ -270,6 +287,9 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 			}
 			if t == "mermaid" {
 				isMermaid = true
+			}
+			if t == "mindmap" || t == "markmap" {
+				isMindmap = true
 			}
 		}
 		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -284,6 +304,10 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
+		if isMindmap || strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
+			http.Redirect(w, r, "/mindmap?file="+url.QueryEscape(filename), http.StatusFound)
+			return
+		}
 		if !isDrawing && !strings.Contains(content, "type: drawing") {
 			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusFound)
 			return
@@ -294,7 +318,7 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 	var userTags []string
 	for _, t := range fileTags {
 		lt := strings.ToLower(t)
-		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" {
+		if lt != "spreadsheet" && lt != "drawing" && lt != "typst" && lt != "mermaid" && lt != "mindmap" {
 			userTags = append(userTags, t)
 		}
 	}
@@ -752,6 +776,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			isSpreadsheet := false
 			isTypst := false
 			isMermaid := false
+			isMindmap := false
 			for _, t := range n.Tags {
 				lowerT := strings.ToLower(t)
 				if lowerT == "drawing" {
@@ -765,6 +790,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 				if lowerT == "mermaid" {
 					isMermaid = true
+				}
+				if lowerT == "mindmap" || lowerT == "markmap" {
+					isMindmap = true
 				}
 			}
 
@@ -783,9 +811,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			if !isMermaid && (strings.Contains(lowerArquivo, "mermaid") || strings.Contains(lowerContent, "type: mermaid")) {
 				isMermaid = true
 			}
+			if !isMindmap && (strings.Contains(lowerArquivo, "mindmap") || strings.Contains(lowerArquivo, "markmap") || strings.Contains(lowerContent, "type: mindmap") || strings.Contains(lowerContent, "type: markmap")) {
+				isMindmap = true
+			}
 
 			// Check if frontmatter specified type/Type explicitly
-			if !isDrawing && !isSpreadsheet && !isTypst && !isMermaid {
+			if !isDrawing && !isSpreadsheet && !isTypst && !isMermaid && !isMindmap {
 				for _, key := range []string{"type", "Type"} {
 					if val, ok := fm[key]; ok {
 						if strVal, isStr := val.(string); isStr {
@@ -801,6 +832,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 								break
 							} else if lowerVal == "mermaid" {
 								isMermaid = true
+								break
+							} else if lowerVal == "mindmap" || lowerVal == "markmap" {
+								isMindmap = true
 								break
 							}
 						}
@@ -820,6 +854,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			} else if isMermaid {
 				row["type"] = "mermaid"
 				row["Type"] = "mermaid"
+			} else if isMindmap {
+				row["type"] = "markmap"
+				row["Type"] = "markmap"
 			} else {
 				// Check if we have Type (capital T) in row
 				var rawType string

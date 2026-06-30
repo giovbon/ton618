@@ -9,8 +9,8 @@ RUN node build.js
 
 # Remove arquivos não-comprimidos — o servidor sempre serve o .gz,
 # os originais nunca são usados no runtime (economiza ~9 MB na imagem final)
-RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" -delete && \
-    find static -maxdepth 1 -name "*.css" ! -name "*.gz" -delete
+RUN find static -maxdepth 1 -name "*.js"  ! -name "*.gz" ! -name "*.br" -delete && \
+    find static -maxdepth 1 -name "*.css" ! -name "*.gz" ! -name "*.br" -delete
 
 # ─── Estágio 2: Build Go ────────────────────────────
 FROM golang:1.25-alpine AS builder

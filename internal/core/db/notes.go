@@ -151,7 +151,32 @@ func (s *Store) GetAllNotesKeywords() (map[string][]string, error) {
 	return result, rows.Err()
 }
 
+// GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
+func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
+	query := `
+		SELECT n.filename
+		FROM notes n
+		WHERE (n.content LIKE '%type: markmap%' OR n.content LIKE '%type: mindmap%')
+		  AND n.filename NOT IN (
+			  SELECT arquivo FROM tags WHERE tag IN ('markmap', 'mindmap')
+		  )
+	`
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
+	var result []string
+	for rows.Next() {
+		var filename string
+		if err := rows.Scan(&filename); err != nil {
+			return nil, err
+		}
+		result = append(result, filename)
+	}
+	return result, rows.Err()
+}
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
 // It skips files that already exist in the DB (by filename).
 // Returns the count of imported notes.

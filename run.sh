@@ -61,7 +61,7 @@ if [ -f "$BASE_DIR/web/package.json" ]; then
         npm install --silent
     fi
     echo -e "${BLUE}🌐 Compilando bundle web (TipTap)...${NC}"
-    node build.js 2>/dev/null
+    node build.js --dev
     cd "$BASE_DIR"
 fi
 

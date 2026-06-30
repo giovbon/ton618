@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 	"ton618/internal/processor"
-		)
+)
 
-// HandleMermaid renderiza a página do editor split-pane do Mermaid.
-func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request) {
+// HandleMindmap renderiza a página do editor split-pane do Markmap.
+func (ctx *HandlerContext) HandleMindmap(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("file")
 	if filename == "" {
 		filename = "notes/" + processor.GenerateCUID2() + ".md"
@@ -18,7 +18,7 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 
 	sanitized := NoteFilename(filename)
 	if sanitized != filename {
-		canonical := "/mermaid?file=" + url.QueryEscape(sanitized)
+		canonical := "/mindmap?file=" + url.QueryEscape(sanitized)
 		http.Redirect(w, r, canonical, http.StatusFound)
 		return
 	}
@@ -30,8 +30,8 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 		content = data
 		ctx.Store.IncrementPopularity(filename)
 	} else {
-		// Conteúdo default para uma nova nota Mermaid com frontmatter
-		content = "---\ntype: mermaid\n---\ngraph TD\n    A[Início] --> B(Processamento)\n    B --> C{Decisão}\n    C -->|Sim| D[Resultado 1]\n    C -->|Não| E[Resultado 2]"
+		// Conteúdo default para um novo mapa mental com frontmatter
+		content = "---\ntype: markmap\n---\n# Meu Markmap\n\n- Tópico Principal\n  - Subtópico 1\n  - Subtópico 2\n- Outro Tópico"
 	}
 
 	fileTags, err := ctx.Store.GetFileTags(filename)
@@ -39,16 +39,18 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 		tags = fileTags
 	}
 
-	// Redireciona planilhas, desenhos, typst, markmap ou editor para seus respectivos editores se esta nota mudou de tipo
+	// Redireciona planilhas, desenhos, typst, mermaid ou editor para seus respectivos editores se esta nota mudou de tipo
 	if content != "" {
+		isMarkmap := false
 		isMermaid := false
 		isTypst := false
 		isDrawing := false
 		isSpreadsheet := false
-		isMarkmap := false
 		for _, t := range fileTags {
 			lowerT := strings.ToLower(t)
-			if lowerT == "mermaid" {
+			if lowerT == "mindmap" || lowerT == "markmap" {
+				isMarkmap = true
+			} else if lowerT == "mermaid" {
 				isMermaid = true
 			} else if lowerT == "typst" {
 				isTypst = true
@@ -56,8 +58,6 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 				isDrawing = true
 			} else if lowerT == "spreadsheet" {
 				isSpreadsheet = true
-			} else if lowerT == "mindmap" || lowerT == "markmap" {
-				isMarkmap = true
 			}
 		}
 		if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -72,11 +72,11 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 			http.Redirect(w, r, "/typst?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
-		if isMarkmap || strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
-			http.Redirect(w, r, "/mindmap?file="+url.QueryEscape(filename), http.StatusFound)
+		if isMermaid || strings.Contains(content, "type: mermaid") {
+			http.Redirect(w, r, "/mermaid?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
-		if !isMermaid && !strings.Contains(content, "type: mermaid") {
+		if !isMarkmap && !strings.Contains(content, "type: mindmap") && !strings.Contains(content, "type: markmap") {
 			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusFound)
 			return
 		}
@@ -103,7 +103,7 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 	}
 
 	data := domain.EditorData{
-		Title:       "Mermaid - " + filename,
+		Title:       "Markmap - " + filename,
 		Filename:    filename,
 		DisplayName: domain.DisplayName(filename),
 		Content:     content,
@@ -112,5 +112,5 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 		Backlinks:   backlinks,
 	}
 
-	Mermaid(data).Render(r.Context(), w)
+	Mindmap(data).Render(r.Context(), w)
 }

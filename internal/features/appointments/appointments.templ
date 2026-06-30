@@ -43,7 +43,7 @@ templ agendaContent() {
             <!-- Árvore Colapsável (na base, 100% largura) -->
             <div class="w-full flex flex-col shrink-0">
                 <div id="agenda-tree" class="text-sm text-zinc-300 space-y-2"
-                     hx-get="/api/appointments/tree"
+                     hx-get="/api/appointments/tree?offset=0&limit=8"
                      hx-trigger="load, agenda-updated from:body"
                      hx-swap="innerHTML">
                     <!-- Renderizado dinamicamente pelo HTMX via backend Go -->
@@ -91,8 +91,8 @@ templ agendaContent() {
         }
     </style>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
-    <script src="/static/js/vendor/chrono.min.js"></script>
+    <script src="/static/js/vendor/suncalc.min.js?v=2"></script>
+    <script src="/static/js/vendor/chrono.min.js?v=2"></script>
     <script src="/static/js/autocomplete.js?v=30"></script>
-    <script src="/static/js/appointments.js?v=30"></script>
+    <script type="module" src="/static/js/agenda/main.js?v=1"></script>
 }

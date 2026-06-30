@@ -3,6 +3,7 @@ package appointments
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -130,7 +131,9 @@ func GetISOWeek(date time.Time) int {
 	return week
 }
 
-// HandleGetAgendaTree renders the agenda tree view HTML via Templ
+// HandleGetAgendaTree renders the agenda tree view HTML via Templ.
+// Supports lazy loading via ?offset=N&limit=M query parameters.
+// Default: offset=0, limit=8 (weeks).
 func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Request) {
 	apps, err := ctx.Store.GetAppointments()
 	if err != nil {
@@ -139,6 +142,17 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	}
 	if apps == nil {
 		apps = []domain.Appointment{}
+	}
+
+	// Parse pagination params
+	offsetStr := r.URL.Query().Get("offset")
+	limitStr  := r.URL.Query().Get("limit")
+	offset, limit := 0, 8
+	if v, err2 := parseInt(offsetStr); err2 == nil && v >= 0 {
+		offset = v
+	}
+	if v, err2 := parseInt(limitStr); err2 == nil && v > 0 {
+		limit = v
 	}
 
 	type groupKey struct {
@@ -150,7 +164,7 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	var keys []groupKey
 
 	for _, a := range apps {
-		dt := parseEventDate(a.EventDate)
+		dt   := parseEventDate(a.EventDate)
 		year := dt.Year()
 		week := GetISOWeek(dt)
 
@@ -169,22 +183,20 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	})
 
 	monthsPt := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
-	var groups []WeekGroup
+	var allGroups []WeekGroup
 
 	for _, k := range keys {
 		appsInGroup := groupsMap[k]
-		// Sort appointments ascending (oldest/closest first)
 		sort.Slice(appsInGroup, func(i, j int) bool {
 			return appsInGroup[i].EventDate < appsInGroup[j].EventDate
 		})
 
-		// Determine representative month from the first appointment in this sorted group
 		repMonth := 1
-		repYear := k.year
+		repYear  := k.year
 		if len(appsInGroup) > 0 {
-			dtRep := parseEventDate(appsInGroup[0].EventDate)
-			repMonth = int(dtRep.Month())
-			repYear = dtRep.Year()
+			dtRep    := parseEventDate(appsInGroup[0].EventDate)
+			repMonth  = int(dtRep.Month())
+			repYear   = dtRep.Year()
 		}
 
 		mName := "Desconhecido"
@@ -192,7 +204,7 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 			mName = monthsPt[repMonth-1]
 		}
 
-		groups = append(groups, WeekGroup{
+		allGroups = append(allGroups, WeekGroup{
 			Year:         repYear,
 			Month:        repMonth,
 			MonthName:    mName,
@@ -201,6 +213,29 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 		})
 	}
 
-	AgendaTree(groups).Render(r.Context(), w)
+	// Paginate
+	total    := len(allGroups)
+	end      := offset + limit
+	if end > total {
+		end = total
+	}
+	var page []WeekGroup
+	if offset < total {
+		page = allGroups[offset:end]
+	}
+	hasMore  := end < total
+	nextOffset := end
+
+	AgendaTree(page, hasMore, nextOffset, limit).Render(r.Context(), w)
+}
+
+// parseInt parses a string to int, returning an error if blank or invalid.
+func parseInt(s string) (int, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty")
+	}
+	var v int
+	_, err := fmt.Sscanf(s, "%d", &v)
+	return v, err
 }
 

@@ -22,29 +22,10 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
-    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script src="/static/js/vendor/htmx.min.js?v=2" defer></script>
+    <script src="/static/js/vendor/alpine.min.js?v=2" defer></script>
+    <link rel="stylesheet" href="/static/app.css?v=4" />
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ["Inter", "system-ui", "sans-serif"],
-                    },
-                    animation: {
-                        "fast-spin": "fast-spin 0.4s linear infinite",
-                    },
-                    keyframes: {
-                        "fast-spin": {
-                            from: { transform: "rotate(0deg)" },
-                            to: { transform: "rotate(360deg)" },
-                        },
-                    },
-                },
-            },
-        };
-
         // Menus Dropdown (Inlined para evitar cache persistente de arquivo estático js)
         window.toggleCriarMenu = function(e) {
             e.stopPropagation();

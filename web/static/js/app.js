@@ -319,6 +319,14 @@
                     if (isLocal && auth) evt.detail.headers["Authorization"] = auth;
                 },
             );
+            document.body.addEventListener(
+                "htmx:afterSwap",
+                function (evt) {
+                    if (typeof Alpine !== "undefined" && evt.detail.target) {
+                        Alpine.processTree(evt.detail.target);
+                    }
+                }
+            );
         }
 
         // Wrap fetch to always include auth for same-origin requests

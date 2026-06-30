@@ -206,6 +206,20 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 						fileTags = append(fileTags, "drawing")
 					}
 				}
+
+				// Se for markmap, garante a tag "markmap" indexada
+				if tRaw, ok := fm["type"]; ok && (tRaw == "markmap" || tRaw == "mindmap") {
+					hasMarkmapTag := false
+					for _, tag := range fileTags {
+						if tag == "markmap" || tag == "mindmap" {
+							hasMarkmapTag = true
+							break
+						}
+					}
+					if !hasMarkmapTag {
+						fileTags = append(fileTags, "markmap")
+					}
+				}
 			}
 			afterFrontmatter := endIdx + 4
 			if afterFrontmatter < len(text) && text[afterFrontmatter] == '\n' {
@@ -485,6 +499,20 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					}
 					if !hasDrawingTag {
 						fileTags = append(fileTags, "drawing")
+					}
+				}
+
+				// Se for markmap, garante a tag "markmap" indexada
+				if tRaw, ok := fm["type"]; ok && (tRaw == "markmap" || tRaw == "mindmap") {
+					hasMarkmapTag := false
+					for _, tag := range fileTags {
+						if tag == "markmap" || tag == "mindmap" {
+							hasMarkmapTag = true
+							break
+						}
+					}
+					if !hasMarkmapTag {
+						fileTags = append(fileTags, "markmap")
 					}
 				}
 			}
