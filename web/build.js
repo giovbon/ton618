@@ -12,6 +12,22 @@ try {
   process.exit(1);
 }
 
+// Validação de sanidade: garante que o Tailwind encontrou as classes do backend (internal/features)
+try {
+  const cssContent = readFileSync("static/app.css", "utf8");
+  const requiredClasses = ["green-500", "prose"];
+  for (const cls of requiredClasses) {
+    if (!cssContent.includes(cls)) {
+      throw new Error(`A classe obrigatória "${cls}" não foi encontrada no static/app.css. Verifique se o Tailwind está escaneando as pastas do backend (internal/features) corretamente.`);
+    }
+  }
+  console.log("Validação de sanidade do CSS concluída com sucesso!");
+} catch (error) {
+  console.error("FALHA CRÍTICA NO BUILD DO CSS:", error.message);
+  process.exit(1);
+}
+
+
 await esbuild.build({
   entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx", "src/mindmap.js"],
   bundle: true,

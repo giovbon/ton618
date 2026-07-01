@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
+    // Padrões locais (./) são cruciais no Docker para evitar problemas do glob saindo do root (/)
     "../internal/features/**/*.templ",
     "./internal/features/**/*.templ",
     "../web/layout/**/*.templ",

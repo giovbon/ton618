@@ -42,7 +42,35 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 		ctx.Store.IncrementPopularity(filename)
 	} else {
 		// Conteúdo default para uma nova nota Typst com frontmatter
-		content = "---\ntype: typst\n---\n= Minha Nota Typst\n\nComece a digitar aqui..."
+		content = `---
+type: typst
+---
+#let titulo = "Manual de Direito Defensivo"
+#set page(
+  paper: "a4",
+  fill: rgb("#1e1e2e"),
+  margin: (
+    x: 2cm,
+    y: 2.5cm,
+  ),
+  header: titulo,
+  footer: context {
+    let atual = counter(page).get().first()
+    let total = counter(page).final().first()
+    align(center)[#atual / #total]
+  }
+)
+
+#set text(
+  size: 11pt,                 // Tamanho da fonte
+  fill: rgb("#cdd6f4"),       // Cor do texto (Ex: claro #cdd6f4 ou black)
+)
+
+#outline()
+
+= Minha Nota Typst
+
+Comece a digitar aqui...`
 	}
 
 	fileTags, err := ctx.Store.GetFileTags(filename)

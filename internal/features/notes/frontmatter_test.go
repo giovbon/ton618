@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"ton618/internal/core/db"
+	"ton618/internal/core/services"
 )
 
 // ── Helpers ──
 
-func newTestService(t *testing.T) (*NoteService, *BackupService, *db.Store, func()) {
+func newTestService(t *testing.T) (*NoteService, *services.BackupService, *db.Store, func()) {
 	t.Helper()
 	docsDir := t.TempDir()
 	dbDir := t.TempDir()
@@ -30,7 +31,7 @@ func newTestService(t *testing.T) (*NoteService, *BackupService, *db.Store, func
 	os.MkdirAll(filepath.Join(docsDir, "attachments"), 0755)
 
 	noteSvc := NewNoteService(store, store, store, store, store, store, docsDir)
-	backupSvc := NewBackupService(store, store, docsDir)
+	backupSvc := services.NewBackupService(store, store, docsDir)
 
 	return noteSvc, backupSvc, store, cleanup
 }

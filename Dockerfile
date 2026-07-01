@@ -5,6 +5,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 COPY web/ .
+# ATENÇÃO: Copia 'internal' para dentro de './internal/' (e não '../internal/').
+# Isso evita problemas silenciosos com o globbing do Tailwind saindo da pasta raiz (/) no Alpine.
 COPY internal/ ./internal/
 RUN node build.js
 
