@@ -193,8 +193,10 @@ func ProcessMarkdown(path, filename string, modTime time.Time, creationTime time
 					}
 				}
 
-				// Se for desenho, garante a tag "drawing" indexada
+				// Se for desenho, esvaziamos o texto para não indexar o JSON na busca global
 				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
+					text = ""
+					metaParts = nil // limpa também o frontmatter
 					hasDrawingTag := false
 					for _, tag := range fileTags {
 						if tag == "drawing" {
@@ -488,8 +490,10 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					}
 				}
 
-				// Se for desenho, garante a tag "drawing" indexada
+				// Se for desenho, esvaziamos o texto para não indexar o JSON na busca global
 				if tRaw, ok := fm["type"]; ok && tRaw == "drawing" {
+					text = ""
+					metaParts = nil // limpa também o frontmatter
 					hasDrawingTag := false
 					for _, tag := range fileTags {
 						if tag == "drawing" {

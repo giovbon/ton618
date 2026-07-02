@@ -163,6 +163,10 @@ func initSchema(database *sql.DB) error {
 	database.Exec("PRAGMA cache_size=-8000")
 	database.Exec("PRAGMA temp_store=MEMORY")
 
+	// Força checkpoint do WAL ao iniciar para garantir que dados pendentes
+	// de sessões anteriores sejam incorporados ao arquivo principal.
+	database.Exec("PRAGMA wal_checkpoint(FULL)")
+
 	return nil
 }
 

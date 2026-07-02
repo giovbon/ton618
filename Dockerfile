@@ -62,12 +62,11 @@ RUN adduser -D -h /app appuser
 WORKDIR /app
 
 # --chown direto elimina a camada de chown -R separada
-COPY --from=builder --chown=appuser:appuser /ton618 .
-COPY --from=builder --chown=appuser:appuser /app/web ./web
+COPY --from=builder /ton618 .
+COPY --from=builder /app/web ./web
+COPY entrypoint.sh .
 
-RUN mkdir -p /app/docs /app/data && chown appuser:appuser /app/docs /app/data
-
-USER appuser
+RUN mkdir -p /app/docs /app/data && chmod 777 /app/docs /app/data && chmod +x /app/entrypoint.sh
 
 VOLUME ["/app/docs", "/app/data"]
 
@@ -82,4 +81,4 @@ ENV DOCS_DIR=/app/docs \
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:6180/api/health || exit 1
 
-ENTRYPOINT ["./ton618"]
+ENTRYPOINT ["/app/entrypoint.sh"]

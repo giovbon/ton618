@@ -351,6 +351,20 @@ document.addEventListener("DOMContentLoaded", function () {
 (function () {
     var auth = localStorage.getItem("ton_auth");
 
+    // Fallback: recupera token do cookie quando vindo de uma origem diferente
+    // (ex: IP local vs URL Cloudflare - localStorage e isolado por origem)
+    if (!auth) {
+        var cookieMatch = document.cookie.match(/(?:^|;\s*)ton_auth=([^;]+)/);
+        if (cookieMatch) {
+            var cookieVal = decodeURIComponent(cookieMatch[1]);
+            var basicToken = cookieVal.startsWith("Basic ")
+                ? cookieVal
+                : "Basic " + cookieVal;
+            localStorage.setItem("ton_auth", basicToken);
+            auth = basicToken;
+        }
+    }
+
     // Redirect to login if not authenticated (skip for login page and static)
     var path = window.location.pathname;
     if (!auth && path !== "/login" && !path.startsWith("/static/")) {

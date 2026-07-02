@@ -3,6 +3,7 @@ services:
     image: giovbon/ton618plus:latest
     container_name: ton618
     restart: unless-stopped
+    user: root
     ports:
       - "6180:6180"
     environment:
