@@ -10,12 +10,16 @@
 - Typst (compilador e editor de documentos) - https://typst.app/
 - Mermaid (editor e renderizador de diagramas) - https://mermaid.js.org/
 - CodeJar (editor de código leve) - https://medv.io/codejar/
-- vis-timeline (editor e renderizador de diagramas) - https://visjs.github.io/vis-timeline/
-- chrono v2 (Parser de datas, suporte parcial em PT-BR) - https://github.com/wanasit/chrono
+- vis-timeline (editor e renderizador de diagramas, usado em agenda) - https://visjs.github.io/vis-timeline/
+- chrono v2 (Parser de datas, suporte parcial em PT-BR, usado em agenda) - https://github.com/wanasit/chrono
 - JSDoc (Tipagem de variáveis no JS) - https://jsdoc.app/
 - Markmap (Editor e renderizador de mapas mentais) - https://markmap.js.org/
+- Leaflet (Editor e renderizador de mapas) - https://leafletjs.com/
 
 Fórmulas possíveis: https://jspreadsheet.com/docs/formulas/functions
+
+
+CSP (Content Security Policy - Política de Segurança de Conteúdo) está configurada no servidor backend da aplicação para evitar ataques XSS (Cross-Site Scripting). Por questões de segurança, o navegador é instruído a bloquear conexões (fetch) para qualquer domínio que não esteja explicitamente autorizado na lista de segurança. O que significa que não será possível acessar recursos (como mapas, imagens, etc.) de fontes externas não autorizadas.
 
 ## Funcionalidades do Sistema
 

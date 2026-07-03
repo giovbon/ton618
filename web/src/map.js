@@ -23,6 +23,13 @@
   const markers = [];
   let currentId = 0;
 
+  // Variáveis para modo de medição de rota/distância
+  let measureMode = false;
+  let measureStartMarker = null;
+  let measureEndMarker = null;
+  let measurePolyline = null;
+  let measurePopup = null;
+
   function addMarker(data, draggable) {
     const marker = L.marker([data.lat, data.lng], { draggable, icon: mapIcon }).addTo(map);
     marker._mapId = currentId++;
@@ -34,6 +41,12 @@
       direction: "top",
       offset: [0, -8],
       className: "map-marker-label",
+      interactive: true,
+    });
+
+    marker.getTooltip().on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      marker.fire("click");
     });
 
     marker.on("dragend", () => {
@@ -43,51 +56,57 @@
       onChange(getData());
     });
 
-    marker.on("click", async () => {
+    function getPopupHTML(name, address, lat, lng, id) {
+      return '<div id="popup-' + id + '" style="font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.5;min-width:200px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<b style="font-size:15px;color:#222">' + name + '</b>' +
+        '</div>' +
+        '<div style="color:#666;margin-top:4px;font-size:12px">' + address + '</div>' +
+        '<div style="color:#999;margin-top:2px;font-size:11px">' + lat + ', ' + lng + '</div>' +
+        '<div style="margin-top:8px;display:flex;gap:6px">' +
+          '<button onclick="var n=prompt(\'Renomear:\',\'' + name + '\');if(n){var m=window._mapGetMarker(' + id + ');m._data.name=n;m.setTooltipContent(n);document.querySelector(\'#popup-' + id + ' b\').textContent=n;window._mapOnChange()}" ' +
+          'style="flex:1;padding:3px 10px;font-size:11px;background:#3388ff;color:#fff;border:none;border-radius:4px;cursor:pointer">✎ Renomear</button>' +
+          '<button onclick="var m=window._mapGetMarker(' + id + ');m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange();document.querySelector(\'.leaflet-popup-close-button\').click()" ' +
+          'style="flex:1;padding:3px 10px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑️ Excluir</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    marker.on("click", () => {
       const pos = marker.getLatLng();
       const lat = pos.lat.toFixed(6);
       const lng = pos.lng.toFixed(6);
 
-      // Busca endereço via Nominatim (OpenStreetMap)
-      var address = "Buscando endereco...";
-      try {
-        var resp = await fetch("https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&addressdetails=1&accept-language=pt");
-        var data2 = await resp.json();
-        if (data2 && data2.display_name) {
-          var addr = data2.address || {};
-          var parts = [];
-          if (addr.road) parts.push(addr.road);
-          if (addr.suburb) parts.push(addr.suburb);
-          if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
-          if (addr.postcode) parts.push("CEP: " + addr.postcode);
-          var street = parts.join(", ") || data2.display_name.split(",").slice(0, 3).join(",");
-          address = street;
-          // Sugere o endereco como nome se o marcador ainda tem nome padrao
-          if (!data.name || data.name === "Novo ponto" || data.name === "Marcador") {
-            data.name = addr.road || addr.suburb || "Ponto";
-            marker.setTooltipContent(data.name);
-            onChange(getData());
-          }
-        }
-      } catch(e) {
-        address = "Endereco indisponivel";
-      }
+      // Abre o popup imediatamente
+      marker.bindPopup(getPopupHTML(data.name, "Buscando endereco...", lat, lng, marker._mapId)).openPopup();
 
-      marker.bindPopup(
-        '<div id="popup-' + marker._mapId + '" style="font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.5;min-width:200px">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center">' +
-            '<b style="font-size:15px;color:#222">' + data.name + '</b>' +
-          '</div>' +
-          '<div style="color:#666;margin-top:4px;font-size:12px">' + address + '</div>' +
-          '<div style="color:#999;margin-top:2px;font-size:11px">' + lat + ', ' + lng + '</div>' +
-          '<div style="margin-top:8px;display:flex;gap:6px">' +
-            '<button onclick="var n=prompt(\'Renomear:\',\'' + data.name + '\');if(n){var m=window._mapGetMarker(' + marker._mapId + ');m._data.name=n;m.setTooltipContent(n);document.querySelector(\'#popup-' + marker._mapId + ' b\').textContent=n;window._mapOnChange()}" ' +
-            'style="flex:1;padding:3px 10px;font-size:11px;background:#3388ff;color:#fff;border:none;border-radius:4px;cursor:pointer">✎ Renomear</button>' +
-            '<button onclick="var m=window._mapGetMarker(' + marker._mapId + ');m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange();document.querySelector(\'.leaflet-popup-close-button\').click()" ' +
-            'style="flex:1;padding:3px 10px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑️ Excluir</button>' +
-          '</div>' +
-        '</div>'
-      ).openPopup();
+      // Busca endereço via Nominatim (OpenStreetMap) em segundo plano
+      (async () => {
+        try {
+          var resp = await fetch("https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&addressdetails=1&accept-language=pt");
+          var data2 = await resp.json();
+          if (data2 && data2.display_name) {
+            var addr = data2.address || {};
+            var parts = [];
+            if (addr.road) parts.push(addr.road);
+            if (addr.suburb) parts.push(addr.suburb);
+            if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
+            if (addr.postcode) parts.push("CEP: " + addr.postcode);
+            var street = parts.join(", ") || data2.display_name.split(",").slice(0, 3).join(",");
+            
+            // Sugere o endereco como nome se o marcador ainda tem nome padrao
+            if (!data.name || data.name === "Novo ponto" || data.name === "Marcador") {
+              data.name = addr.road || addr.suburb || "Ponto";
+              marker.setTooltipContent(data.name);
+              onChange(getData());
+            }
+
+            marker.setPopupContent(getPopupHTML(data.name, street, lat, lng, marker._mapId));
+          }
+        } catch(e) {
+          marker.setPopupContent(getPopupHTML(data.name, "Endereco indisponivel", lat, lng, marker._mapId));
+        }
+      })();
     });
 
     markers.push(marker);
@@ -106,21 +125,203 @@
   // Carrega dados existentes
   (markersData || []).forEach((d) => addMarker(d, true));
 
+  function updateAddButtonState(active) {
+    const btn = document.getElementById("add-marker-btn");
+    if (btn) {
+      if (active) {
+        btn.classList.remove("text-zinc-400", "border-zinc-700");
+        btn.classList.add("text-sky-400", "border-sky-500", "bg-sky-950/40");
+      } else {
+        btn.classList.remove("text-sky-400", "border-sky-500", "bg-sky-950/40");
+        btn.classList.add("text-zinc-400", "border-zinc-700");
+      }
+    }
+  }
+
+  function updateMeasureButtonState(active) {
+    const btn = document.getElementById("measure-btn");
+    if (btn) {
+      if (active) {
+        btn.classList.remove("text-zinc-400", "border-zinc-700");
+        btn.classList.add("text-sky-400", "border-sky-500", "bg-sky-950/40");
+      } else {
+        btn.classList.remove("text-sky-400", "border-sky-500", "bg-sky-950/40");
+        btn.classList.add("text-zinc-400", "border-zinc-700");
+      }
+    }
+  }
+
+  function clearMeasurement() {
+    if (measureStartMarker) {
+      map.removeLayer(measureStartMarker);
+      measureStartMarker = null;
+    }
+    if (measureEndMarker) {
+      map.removeLayer(measureEndMarker);
+      measureEndMarker = null;
+    }
+    if (measurePolyline) {
+      map.removeLayer(measurePolyline);
+      measurePolyline = null;
+    }
+    if (measurePopup) {
+      map.removeLayer(measurePopup);
+      measurePopup = null;
+    }
+  }
+
+  function formatDuration(seconds) {
+    var minutes = Math.round(seconds / 60);
+    if (minutes < 1) return "<1 min";
+    if (minutes < 60) return minutes + " min";
+    var hours = Math.floor(minutes / 60);
+    var remainingMins = minutes % 60;
+    return hours + "h" + (remainingMins > 0 ? remainingMins + "m" : "");
+  }
+
+  function handleMeasureClick(latlng) {
+    if (!measureStartMarker) {
+      // Define ponto de partida
+      measureStartMarker = L.circleMarker(latlng, {
+        radius: 6,
+        color: '#10b981',
+        fillColor: '#10b981',
+        fillOpacity: 0.8
+      }).addTo(map);
+      measureStartMarker.bindTooltip("Início da rota", { permanent: false });
+    } else if (!measureEndMarker) {
+      // Define ponto de destino e calcula rota
+      measureEndMarker = L.circleMarker(latlng, {
+        radius: 6,
+        color: '#ef4444',
+        fillColor: '#ef4444',
+        fillOpacity: 0.8
+      }).addTo(map);
+      measureEndMarker.bindTooltip("Fim da rota", { permanent: false });
+
+      const start = measureStartMarker.getLatLng();
+      const end = measureEndMarker.getLatLng();
+
+      // Busca rota via OSRM
+      const url = "https://router.project-osrm.org/route/v1/driving/" + start.lng + "," + start.lat + ";" + end.lng + "," + end.lat + "?overview=full&geometries=geojson";
+      
+      // Mostra um estado de "calculando..." temporário
+      measurePolyline = L.polyline([start, end], { color: '#0ea5e9', weight: 4, dashArray: '5, 10', opacity: 0.5 }).addTo(map);
+      
+      fetch(url)
+        .then(r => {
+          if (!r.ok) throw new Error("Erro na rota");
+          return r.json();
+        })
+        .then(res => {
+          if (measurePolyline) map.removeLayer(measurePolyline);
+
+          if (res.routes && res.routes.length > 0) {
+            const route = res.routes[0];
+            const coordinates = route.geometry.coordinates;
+            const latlngs = coordinates.map(c => [c[1], c[0]]);
+
+            // Desenha a rota de carro no mapa
+            measurePolyline = L.polyline(latlngs, {
+              color: '#0ea5e9',
+              weight: 5,
+              opacity: 0.8,
+              lineJoin: 'round'
+            }).addTo(map);
+
+            const distKm = (route.distance / 1000).toFixed(2);
+            const carTime = formatDuration(route.duration);
+            const walkTime = formatDuration(route.distance / 1.33); // assume 4.8 km/h
+
+            showDistanceTooltip(latlngs, distKm + " km | 🚗 " + carTime + " | 🚶 " + walkTime);
+          } else {
+            throw new Error("Nenhuma rota encontrada");
+          }
+        })
+        .catch(err => {
+          // Fallback para linha reta se a rota falhar ou estiver offline
+          if (measurePolyline) map.removeLayer(measurePolyline);
+          
+          measurePolyline = L.polyline([start, end], {
+            color: '#f59e0b',
+            weight: 4,
+            dashArray: '5, 10',
+            opacity: 0.7
+          }).addTo(map);
+
+          const distMeters = map.distance(start, end);
+          const distKm = (distMeters / 1000).toFixed(2);
+          const carTime = formatDuration(distMeters / 8.33); // assume 30 km/h
+          const walkTime = formatDuration(distMeters / 1.33); // assume 4.8 km/h
+          showDistanceTooltip([start, end], distKm + " km (reta) | 🚗 " + carTime + " | 🚶 " + walkTime);
+        });
+    } else {
+      // Terceiro clique: reseta tudo e inicia nova medição
+      clearMeasurement();
+      handleMeasureClick(latlng);
+    }
+  }
+
+  function showDistanceTooltip(latlngs, labelText) {
+    if (measurePopup) map.removeLayer(measurePopup);
+    
+    // Encontra o ponto médio para posicionar o rótulo
+    const midIndex = Math.floor(latlngs.length / 2);
+    const midLatLng = latlngs[midIndex];
+
+    measurePopup = L.marker(midLatLng, { opacity: 0 }).addTo(map);
+    measurePopup.bindTooltip(labelText, {
+      permanent: true,
+      direction: 'center',
+      className: 'map-marker-label'
+    }).openTooltip();
+  }
+
   // Clique no mapa adiciona novo marcador (modo adicionar)
   let addingMode = false;
   window._mapAddMode = function () {
     addingMode = !addingMode;
-    map.getContainer().style.cursor = addingMode ? "crosshair" : "";
+    if (addingMode) {
+      if (measureMode) {
+        measureMode = false;
+        updateMeasureButtonState(false);
+        clearMeasurement();
+      }
+      map.getContainer().style.cursor = "crosshair";
+    } else {
+      map.getContainer().style.cursor = "";
+    }
+    updateAddButtonState(addingMode);
     return addingMode;
   };
 
+  window._mapToggleMeasureMode = function () {
+    measureMode = !measureMode;
+    if (measureMode) {
+      if (addingMode) {
+        addingMode = false;
+        updateAddButtonState(false);
+      }
+      map.getContainer().style.cursor = "crosshair";
+    } else {
+      map.getContainer().style.cursor = "";
+      clearMeasurement();
+    }
+    updateMeasureButtonState(measureMode);
+    return measureMode;
+  };
+
   map.on("click", (e) => {
-    if (!addingMode) return;
-    const data = { lat: e.latlng.lat, lng: e.latlng.lng, name: "Novo ponto", desc: "" };
-    addMarker(data, true);
-    addingMode = false;
-    map.getContainer().style.cursor = "";
-    onChange(getData());
+    if (addingMode) {
+      const data = { lat: e.latlng.lat, lng: e.latlng.lng, name: "Novo ponto", desc: "" };
+      addMarker(data, true);
+      addingMode = false;
+      map.getContainer().style.cursor = "";
+      updateAddButtonState(false);
+      onChange(getData());
+    } else if (measureMode) {
+      handleMeasureClick(e.latlng);
+    }
   });
 
   // Satélite toggle
