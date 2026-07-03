@@ -137,11 +137,15 @@ templ spreadsheetContent(data domain.EditorData) {
         var lastSavedHash = null;
 
         async function generateHash(text) {
-            var encoder = new TextEncoder();
-            var data = encoder.encode(text);
-            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
-            var hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+            try {
+                var encoder = new TextEncoder();
+                var data = encoder.encode(text);
+                var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+                var hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+            } catch (e) {
+                return "hash-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+            }
         }
 
 
@@ -251,7 +255,7 @@ templ spreadsheetContent(data domain.EditorData) {
             fd.append("silent", "true");
 
             try {
-                var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: getAuthHeaders() });
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
                 if (!r.ok) throw new Error("HTTP " + r.status);
                 saveInProgress = false;
                 setStatus("saved");
@@ -288,7 +292,7 @@ templ spreadsheetContent(data domain.EditorData) {
             if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
             var fd = new FormData();
             fd.append("filename", filename);
-            fetch("/file/delete", { method: "POST", body: fd, headers: getAuthHeaders() })
+            fetch("/file/delete", { method: "POST", body: fd })
                 .then(function () {
                     window.location.href = "/";
                 })
@@ -308,7 +312,7 @@ templ spreadsheetContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             
-            fetch("/api/note/duplicate", { method: "POST", body: fd, headers: getAuthHeaders() })
+            fetch("/api/note/duplicate", { method: "POST", body: fd })
                 .then(function (r) {
                     if (!r.ok) {
                         return r.text().then(function (t) { throw new Error(t); });
@@ -390,7 +394,6 @@ templ spreadsheetContent(data domain.EditorData) {
                     renameFd.append("new", fullNewName);
                     var renameResp = await fetch("/file/rename", {
                         method: "POST",
-                        headers: getAuthHeaders(),
                         body: renameFd
                     });
                     if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
@@ -404,7 +407,6 @@ templ spreadsheetContent(data domain.EditorData) {
 
                 var saveResp = await fetch("/api/note/save", {
                     method: "POST",
-                    headers: getAuthHeaders(),
                     body: saveFd
                 });
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");

@@ -568,11 +568,17 @@ templ editorContent(data domain.EditorData) {
         var lastSavedHash = null;
 
         async function generateHash(text) {
-            var encoder = new TextEncoder();
-            var data = encoder.encode(text);
-            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
-            var hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+            try {
+                var encoder = new TextEncoder();
+                var data = encoder.encode(text);
+                var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+                var hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+            } catch (e) {
+                // crypto.subtle nao disponivel em HTTP (nao-HTTPS)
+                // Fallback: retorna timestamp como hash unico
+                return "hash-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+            }
         }
 
         // ── Parse frontmatter do raw content ──
@@ -1989,7 +1995,6 @@ templ editorContent(data domain.EditorData) {
             try {
                 var resp = await fetch("/file/save", {
                     method: "POST",
-                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 if (resp.ok || resp.status === 303) {
@@ -2054,7 +2059,6 @@ templ editorContent(data domain.EditorData) {
                 try {
                     var renameResp = await fetch("/file/rename", {
                         method: "POST",
-                        headers: getAuthHeaders(),
                         body: renameFd,
                     });
                     if (!renameResp.ok) {
@@ -2076,7 +2080,6 @@ templ editorContent(data domain.EditorData) {
             try {
                 var saveResp = await fetch("/file/save", {
                     method: "POST",
-                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 if (saveResp.ok || saveResp.status === 303) {
@@ -2108,7 +2111,7 @@ templ editorContent(data domain.EditorData) {
             // O servidor ja deleta o arquivo e faz um redirect 303.
             // O fetch segue o redirect automaticamente (recebe HTML).
             // Nao tentamos parsear JSON — apenas redirecionamos para a home.
-            fetch("/file/delete", { method: "POST", body: fd, headers: getAuthHeaders() })
+            fetch("/file/delete", { method: "POST", body: fd })
                 .then(function () {
                     window.location.href = "/";
                 })
@@ -2126,7 +2129,7 @@ templ editorContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             
-            fetch("/api/note/duplicate", { method: "POST", body: fd, headers: getAuthHeaders() })
+            fetch("/api/note/duplicate", { method: "POST", body: fd })
                 .then(function (r) {
                     if (!r.ok) {
                         return r.text().then(function (t) { throw new Error(t); });
@@ -2189,7 +2192,6 @@ templ editorContent(data domain.EditorData) {
             try {
                 var resp = await fetch("/api/upload-image", {
                     method: "POST",
-                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 var data = await resp.json();
