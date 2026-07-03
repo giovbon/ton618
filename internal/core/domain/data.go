@@ -35,6 +35,7 @@ func NoteIcon(arquivo string, tags []string) string {
 		}
 		return false
 	}
+	lowerFile := strings.ToLower(arquivo)
 	if isPdf {
 		return "📕"
 	} else if hasTag("typst") {
@@ -45,6 +46,10 @@ func NoteIcon(arquivo string, tags []string) string {
 		return "📊"
 	} else if hasTag("mermaid") {
 		return "🧜"
+	} else if hasTag("mindmap") || hasTag("markmap") || strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
+		return "🔱"
+	} else if hasTag("map") || hasTag("mapa") || strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") {
+		return "🗺️"
 	} else if hasTag("youtube") {
 		return "🎬"
 	} else if hasTag("artigo") {

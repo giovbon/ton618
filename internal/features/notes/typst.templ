@@ -20,10 +20,40 @@ templ typstContent(data domain.EditorData) {
     window.triggerCompile = function() {
         document.body.dispatchEvent(new Event("typst-compile"));
     };
+    window.togglePreview = function() {
+        var panel = document.getElementById("preview-panel");
+        var btn = document.getElementById("toggle-preview-btn");
+        if (panel.classList.contains("hidden")) {
+            panel.classList.remove("hidden");
+            btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
+            btn.classList.remove("text-zinc-500");
+            window.triggerCompile();
+        } else {
+            panel.classList.add("hidden");
+            btn.classList.remove("bg-zinc-800", "text-sky-400", "border-sky-500/30");
+            btn.classList.add("text-zinc-500");
+        }
+    };
     document.addEventListener("DOMContentLoaded", function() {
         var toggle = document.getElementById("auto-compile-toggle");
         if (toggle) {
             toggle.checked = window.autoCompile;
+        }
+    });
+    document.addEventListener("htmx:afterOnLoad", function(evt) {
+        if (evt.detail.target && evt.detail.target.id === "typst-preview-container") {
+            var errorDiv = evt.detail.target.querySelector(".bg-red-950\\/85");
+            var errorBanner = document.getElementById("typst-error-banner");
+            if (errorBanner) {
+                if (errorDiv) {
+                    errorBanner.innerHTML = errorDiv.outerHTML;
+                    errorBanner.classList.remove("hidden");
+                    evt.detail.target.innerHTML = `<div class="text-red-400/80 text-xs py-20 font-mono flex items-center gap-1.5 justify-center">⚠️ Erro de compilação</div>`;
+                } else {
+                    errorBanner.innerHTML = "";
+                    errorBanner.classList.add("hidden");
+                }
+            }
         }
     });
 </script>
@@ -61,6 +91,16 @@ templ typstContent(data domain.EditorData) {
             title="Compilar Visualização (Alt+Enter)"
         >
             ⚡
+        </button>
+
+        <!-- Botão Toggle Preview -->
+        <button
+            id="toggle-preview-btn"
+            onclick="togglePreview()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 flex items-center gap-1"
+            title="Alternar Visualização (Preview)"
+        >
+            <span>👁️</span> Preview
         </button>
 
         <button
@@ -113,10 +153,12 @@ templ typstContent(data domain.EditorData) {
                     hx-indicator="#typst-compile-indicator"
                 >{ data.Content }</div>
             </div>
+            <!-- Banner de Erros de Sintaxe -->
+            <div id="typst-error-banner" class="hidden mt-2 shrink-0"></div>
         </div>
 
         <!-- Painel Direito: Visualizador de Preview -->
-        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0" id="preview-panel">
+        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0 hidden" id="preview-panel">
             <!-- Spinner de Processamento -->
             <div id="typst-compile-indicator" class="absolute top-4 right-4 bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800 htmx-indicator">
                 ⚡ Compilando
@@ -131,6 +173,7 @@ templ typstContent(data domain.EditorData) {
         </div>
     </div>
 </div>
+
 
 <style>
     /* Estilo de "folha de papel" para cada página SVG renderizada do Typst */

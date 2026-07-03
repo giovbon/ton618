@@ -38,6 +38,7 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("GET /typst", notesCtx.HandleTypst)
 	mux.HandleFunc("GET /mermaid", notesCtx.HandleMermaid)
 	mux.HandleFunc("GET /mindmap", notesCtx.HandleMindmap)
+	mux.HandleFunc("GET /map", notesCtx.HandleMap)
 
 	mux.HandleFunc("POST /api/notes/render-typst", notesCtx.HandleTypstRender)
 	mux.HandleFunc("GET /api/notes/download-typst-pdf", notesCtx.HandleTypstPDF)

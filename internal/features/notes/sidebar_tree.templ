@@ -69,16 +69,18 @@ func getNoteLink(path string) string {
         return "/file?name=" + url.QueryEscape(path)
     } else if strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
         return "/file/download?name=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "spreadsheet") {
+    } else if strings.HasPrefix(path, "notes/spreadsheet") || strings.HasPrefix(path, "spreadsheet") {
         return "/spreadsheet?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "drawing") {
+    } else if strings.HasPrefix(path, "notes/drawing") || strings.HasPrefix(path, "drawing") {
         return "/drawing?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "typst") {
+    } else if strings.HasPrefix(path, "notes/typst") || strings.HasPrefix(path, "typst") {
         return "/typst?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "mermaid") {
+    } else if strings.HasPrefix(path, "notes/mermaid") || strings.HasPrefix(path, "mermaid") {
         return "/mermaid?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "mindmap") || strings.HasPrefix(path, "markmap") {
+    } else if strings.HasPrefix(path, "notes/mindmap") || strings.HasPrefix(path, "notes/markmap") || strings.HasPrefix(path, "mindmap") || strings.HasPrefix(path, "markmap") {
         return "/mindmap?file=" + url.QueryEscape(path)
+    } else if strings.HasPrefix(path, "notes/map") || strings.HasPrefix(path, "map") {
+        return "/map?file=" + url.QueryEscape(path)
     }
     return "/editor?file=" + url.QueryEscape(path)
 }
@@ -109,6 +111,8 @@ func getNoteIcon(path string, noteType string, tags []string) string {
     case "mermaid":
         return "🧜"
     case "mindmap", "markmap":
+        return "🔱"
+    case "map", "mapa":
         return "🗺️"
     case "youtube":
         return "🎬"
@@ -124,7 +128,8 @@ func getNoteIcon(path string, noteType string, tags []string) string {
         case "drawing": return "🎨"
         case "typst": return "📘"
         case "mermaid": return "🧜"
-        case "mindmap", "markmap": return "🗺️"
+        case "mindmap", "markmap": return "🔱"
+        case "map", "mapa": return "🗺️"
         case "youtube": return "🎬"
         case "artigo", "article": return "📰"
         case "captura", "capture": return "🌐"
@@ -153,6 +158,8 @@ func getDisplayType(n domain.NoteItem) string {
             return "mermaid"
         } else if lowerT == "mindmap" || lowerT == "markmap" {
             return "markmap"
+        } else if lowerT == "map" || lowerT == "mapa" {
+            return "mapa"
         }
     }
     return "nota"
@@ -162,7 +169,7 @@ func getVisibleTags(tags []string) []string {
     var visible []string
     for _, t := range tags {
         t = strings.ToLower(t)
-        if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" && t != "mindmap" && t != "markmap" {
+        if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" && t != "mindmap" && t != "markmap" && t != "map" && t != "mapa" {
             visible = append(visible, t)
         }
     }

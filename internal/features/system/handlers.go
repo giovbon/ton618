@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"ton618/internal/core/db"
-	"ton618/internal/processor"
-		"ton618/internal/features/notes"
+	"ton618/internal/core/domain"
+	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
 	"ton618/internal/features/todos"
-	"ton618/internal/core/domain"
+	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
 
@@ -70,6 +70,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	isTypst := false
 	isMermaid := false
 	isMindmap := false
+	isMap := false
 	for _, t := range fileTags {
 		if t == "spreadsheet" {
 			isSpreadsheet = true
@@ -85,6 +86,9 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		}
 		if t == "mindmap" {
 			isMindmap = true
+		}
+		if t == "map" {
+			isMap = true
 		}
 	}
 	if isSpreadsheet || strings.Contains(content, "type: spreadsheet") {
@@ -105,6 +109,10 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	}
 	if isMindmap || strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
 		http.Redirect(w, r, "/mindmap?file="+url.QueryEscape(filename), http.StatusFound)
+		return
+	}
+	if isMap || strings.Contains(content, "type: map") {
+		http.Redirect(w, r, "/map?file="+url.QueryEscape(filename), http.StatusFound)
 		return
 	}
 
@@ -131,13 +139,13 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	}
 
 	data := domain.EditorData{
-		Title:        "Editor - " + filename,
-		Filename:     filename,
-		DisplayName:  domain.DisplayName(filename),
-		Content:      content,
-		Tags:         tags,
-		AllTags:      allTags,
-		Backlinks:    backlinks,
+		Title:       "Editor - " + filename,
+		Filename:    filename,
+		DisplayName: domain.DisplayName(filename),
+		Content:     content,
+		Tags:        tags,
+		AllTags:     allTags,
+		Backlinks:   backlinks,
 	}
 	notes.Editor(data).Render(r.Context(), w)
 }
@@ -232,13 +240,13 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 	}
 
 	data := domain.EditorData{
-		Title:        "Planilha - " + filename,
-		Filename:     filename,
-		DisplayName:  domain.DisplayName(filename),
-		Content:      content,
-		Tags:         tags,
-		AllTags:      allTags,
-		Backlinks:    backlinks,
+		Title:       "Planilha - " + filename,
+		Filename:    filename,
+		DisplayName: domain.DisplayName(filename),
+		Content:     content,
+		Tags:        tags,
+		AllTags:     allTags,
+		Backlinks:   backlinks,
 	}
 	notes.Spreadsheet(data).Render(r.Context(), w)
 }
@@ -333,13 +341,13 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 	}
 
 	data := domain.EditorData{
-		Title:        "Desenho - " + filename,
-		Filename:     filename,
-		DisplayName:  domain.DisplayName(filename),
-		Content:      content,
-		Tags:         tags,
-		AllTags:      allTags,
-		Backlinks:    backlinks,
+		Title:       "Desenho - " + filename,
+		Filename:    filename,
+		DisplayName: domain.DisplayName(filename),
+		Content:     content,
+		Tags:        tags,
+		AllTags:     allTags,
+		Backlinks:   backlinks,
 	}
 	notes.Drawing(data).Render(r.Context(), w)
 }
@@ -439,7 +447,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 	r.ParseForm()
 	types := r.Form["type"]
 	typeFilter := map[string]bool{}
-	
+
 	for _, t := range types {
 		t = strings.ToUpper(strings.TrimSpace(t))
 		if t != "" && t != "ALL" {
@@ -481,8 +489,8 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 	for _, t := range todoList {
 		if searchQuery != "" {
 			if !strings.Contains(strings.ToLower(t.Text), searchQuery) &&
-			   !strings.Contains(strings.ToLower(t.File), searchQuery) &&
-			   !strings.Contains(strings.ToLower(t.Section), searchQuery) {
+				!strings.Contains(strings.ToLower(t.File), searchQuery) &&
+				!strings.Contains(strings.ToLower(t.Section), searchQuery) {
 				continue
 			}
 		}
@@ -507,7 +515,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 			fileMap[t.File] = fg
 		}
 		fg.Count++
-		
+
 		foundIdx := -1
 		for i := range fg.Sections {
 			if fg.Sections[i].Name == t.Section {
@@ -527,7 +535,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 		sortedFiles = append(sortedFiles, f)
 	}
 	sort.Strings(sortedFiles)
-	
+
 	var finalGroups []todos.FileGroup
 	for _, f := range sortedFiles {
 		finalGroups = append(finalGroups, *fileMap[f])
@@ -548,8 +556,6 @@ func (ctx *HandlerContext) HandleTodoSettingsPage(w http.ResponseWriter, r *http
 	// foram movidas para o modal de Configurações (⚙️), aba "Marcadores".
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
-
-
 
 func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Request) {
 	noteList, err := ctx.Notes.GetMany()
@@ -595,7 +601,7 @@ func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {
 
 	queryLower := strings.ToLower(query)
 	var tagQueries []string
-	
+
 	// Extrai as tags da busca (ex: #artigo)
 	for _, part := range strings.Fields(queryLower) {
 		if strings.HasPrefix(part, "#") {
@@ -672,7 +678,7 @@ func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Reque
 		}
 		_, err = time.Parse(time.RFC3339, mtimeStr)
 		if err != nil {
-			
+
 		}
 		if false {
 			slog.Error("manual sync: reindex note", "file", filename)
@@ -772,11 +778,13 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 
 			// Infer robust type for drawings, spreadsheets, typst and mermaid
+			// Infer robust type for drawings, spreadsheets, typst and mermaid
 			isDrawing := false
 			isSpreadsheet := false
 			isTypst := false
 			isMermaid := false
 			isMindmap := false
+			isMap := false
 			for _, t := range n.Tags {
 				lowerT := strings.ToLower(t)
 				if lowerT == "drawing" {
@@ -793,6 +801,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 				if lowerT == "mindmap" || lowerT == "markmap" {
 					isMindmap = true
+				}
+				if lowerT == "map" || lowerT == "mapa" {
+					isMap = true
 				}
 			}
 
@@ -814,9 +825,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			if !isMindmap && (strings.Contains(lowerArquivo, "mindmap") || strings.Contains(lowerArquivo, "markmap") || strings.Contains(lowerContent, "type: mindmap") || strings.Contains(lowerContent, "type: markmap")) {
 				isMindmap = true
 			}
+			if !isMap && (strings.Contains(lowerArquivo, "mapa-") || strings.Contains(lowerArquivo, "mapa.") || strings.Contains(lowerContent, "type: map") || strings.Contains(lowerContent, "type: mapa")) {
+				isMap = true
+			}
 
 			// Check if frontmatter specified type/Type explicitly
-			if !isDrawing && !isSpreadsheet && !isTypst && !isMermaid && !isMindmap {
+			if !isDrawing && !isSpreadsheet && !isTypst && !isMermaid && !isMindmap && !isMap {
 				for _, key := range []string{"type", "Type"} {
 					if val, ok := fm[key]; ok {
 						if strVal, isStr := val.(string); isStr {
@@ -835,6 +849,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 								break
 							} else if lowerVal == "mindmap" || lowerVal == "markmap" {
 								isMindmap = true
+								break
+							} else if lowerVal == "map" || lowerVal == "mapa" {
+								isMap = true
 								break
 							}
 						}
@@ -857,6 +874,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			} else if isMindmap {
 				row["type"] = "markmap"
 				row["Type"] = "markmap"
+			} else if isMap {
+				row["type"] = "mapa"
+				row["Type"] = "mapa"
 			} else {
 				// Check if we have Type (capital T) in row
 				var rawType string
@@ -880,6 +900,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 					case "mermaid":
 						row["type"] = "mermaid"
 						row["Type"] = "mermaid"
+					case "mindmap", "markmap":
+						row["type"] = "markmap"
+						row["Type"] = "markmap"
+					case "map", "mapa":
+						row["type"] = "mapa"
+						row["Type"] = "mapa"
 					case "pdf":
 						row["type"] = "pdf"
 						row["Type"] = "pdf"

@@ -216,6 +216,7 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 		isTypst := false
 		isMermaid := false
 		isMarkmap := false
+		isMap := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -232,6 +233,8 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 				isMermaid = true
 			case "mindmap", "markmap":
 				isMarkmap = true
+			case "map", "mapa":
+				isMap = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -240,6 +243,14 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 				isCapture = true
 			}
 		}
+		lowerFile := strings.ToLower(item.Arquivo)
+		if !isMarkmap && (strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap")) {
+			isMarkmap = true
+		}
+		if !isMap && (strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map")) {
+			isMap = true
+		}
+
 		if isDrawing {
 			noteType = "desenho"
 		} else if isSpreadsheet {
@@ -250,6 +261,8 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 			noteType = "mermaid"
 		} else if isMarkmap {
 			noteType = "markmap"
+		} else if isMap {
+			noteType = "mapa"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {
@@ -268,7 +281,7 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" {
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" && lowerT != "map" && lowerT != "mapa" {
 				userTags = append(userTags, t)
 			}
 		}

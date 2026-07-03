@@ -264,7 +264,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" {
+			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" && lowerT != "map" && lowerT != "mapa" {
 				userTags = append(userTags, t)
 			}
 		}
@@ -282,6 +282,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		isSpreadsheet := false
 		isTypst := false
 		isMermaid := false
+		isMarkmap := false
+		isMap := false
 		isYoutube := false
 		isArticle := false
 		isCapture := false
@@ -296,6 +298,10 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 				isTypst = true
 			case "mermaid":
 				isMermaid = true
+			case "mindmap", "markmap":
+				isMarkmap = true
+			case "map", "mapa":
+				isMap = true
 			case "youtube":
 				isYoutube = true
 			case "artigo", "article":
@@ -304,6 +310,14 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 				isCapture = true
 			}
 		}
+		lowerFile := strings.ToLower(hit.Doc.Arquivo)
+		if !isMarkmap && (strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap")) {
+			isMarkmap = true
+		}
+		if !isMap && (strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map")) {
+			isMap = true
+		}
+
 		if isDrawing {
 			noteType = "desenho"
 		} else if isSpreadsheet {
@@ -312,6 +326,10 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			noteType = "typst"
 		} else if isMermaid {
 			noteType = "mermaid"
+		} else if isMarkmap {
+			noteType = "markmap"
+		} else if isMap {
+			noteType = "mapa"
 		} else if isYoutube {
 			noteType = "youtube"
 		} else if isArticle {

@@ -218,7 +218,7 @@ templ databaseContent() {
             tags.forEach(function(t){
                 var trimmed = t.trim();
                 var lt = trimmed.toLowerCase();
-                if(trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet" && lt !== "mermaid") {
+                if(trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet" && lt !== "mermaid" && lt !== "mindmap" && lt !== "markmap" && lt !== "map" && lt !== "mapa") {
                     html += "<span class='tag-pill'>#" + trimmed + "</span>";
                 }
             });
@@ -254,6 +254,7 @@ templ databaseContent() {
                             var isTypst = tagsStr.includes("typst") || (typeStr === "typst");
                             var isMermaid = tagsStr.includes("mermaid") || (typeStr === "mermaid");
                             var isMarkmap = tagsStr.includes("markmap") || tagsStr.includes("mindmap") || (typeStr === "markmap") || (typeStr === "mindmap");
+                            var isMap = !isMarkmap && (tagsStr.includes("map") || fileStr.includes("map") || (typeStr === "map") || (typeStr === "mapa"));
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
                             var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
@@ -283,6 +284,9 @@ templ databaseContent() {
                                 icon = "🧜";
                             } else if (isMarkmap) {
                                 url = "/mindmap?file=" + encodeURIComponent(file);
+                                icon = "🔱";
+                            } else if (isMap) {
+                                url = "/map?file=" + encodeURIComponent(file);
                                 icon = "🗺️";
                             } else {
                                 url = "/editor?file=" + encodeURIComponent(file);

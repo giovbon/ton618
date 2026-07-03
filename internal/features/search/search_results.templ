@@ -49,6 +49,14 @@ templ SearchResults(data domain.SearchResultsData) {
 								<a href={ templ.SafeURL("/typst?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
 									{ domain.DisplayName(res.Arquivo) }
 								</a>
+							} else if res.Tipo == "markmap" || res.Tipo == "mindmap" {
+								<a href={ templ.SafeURL("/mindmap?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "mapa" || res.Tipo == "map" {
+								<a href={ templ.SafeURL("/map?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
 							} else {
 								<a href={ templ.SafeURL("/editor?file=" + res.Arquivo + getLineHash(res.Line)) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
 									{ domain.DisplayName(res.Arquivo) }
