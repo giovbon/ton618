@@ -24,6 +24,8 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
     <script src="/static/js/vendor/htmx.min.js?v=2" defer></script>
     <script src="/static/js/vendor/alpine.min.js?v=2" defer></script>
+    <!-- Helpers compartilhados entre todos os editores (generateHash, setStatus, HTTP wrappers) -->
+    <script src="/static/editor-common.js?v=1"></script>
     <link rel="stylesheet" href="/static/app.css?v=5" />
     <script>
         // Menus Dropdown (Inlined para evitar cache persistente de arquivo estático js)

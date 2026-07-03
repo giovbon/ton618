@@ -4,24 +4,25 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
 
 // rateEntry armazena o estado de rate limiting para um IP.
 type rateEntry struct {
-	count    int
-	resetAt  time.Time
+	count   int
+	resetAt time.Time
 }
 
 // RateLimiter implementa um token bucket simples baseado em IP.
 // Sem dependências externas — usa apenas sync.Mutex e time.Ticker.
 type RateLimiter struct {
-	mu       sync.Mutex
-	entries  map[string]*rateEntry
-	limit    int           // requests máximos por janela
-	window   time.Duration // janela de tempo (ex: 1 minuto)
-	stopCh   chan struct{}
+	mu      sync.Mutex
+	entries map[string]*rateEntry
+	limit   int           // requests máximos por janela
+	window  time.Duration // janela de tempo (ex: 1 minuto)
+	stopCh  chan struct{}
 }
 
 // NewRateLimiter cria um novo rate limiter com a capacidade e janela especificadas.
@@ -81,10 +82,14 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 // extractIP extrai o IP real considerando proxies reversos.
 func extractIP(r *http.Request) string {
-	// Confia em X-Forwarded-For e X-Real-IP se presentes (ex: reverse proxy)
+	// Confia em X-Forwarded-For (pode ser cadeia: "ip1, ip2, ip3" — pega o primeiro)
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if ip := net.ParseIP(fwd); ip != nil {
-			return ip.String()
+		parts := strings.Split(fwd, ",")
+		for _, p := range parts {
+			ip := net.ParseIP(strings.TrimSpace(p))
+			if ip != nil {
+				return ip.String()
+			}
 		}
 	}
 	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {

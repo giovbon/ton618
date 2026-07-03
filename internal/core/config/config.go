@@ -45,6 +45,20 @@ func Load() *AppConfig {
 		cfg.StateDir = absState
 	}
 
+	// Validações
+	if cfg.PollIntervalSec <= 0 {
+		cfg.PollIntervalSec = 30 * time.Second
+	}
+	if cfg.Port == "" {
+		cfg.Port = "6180"
+	}
+	if cfg.AuthUser == "" {
+		cfg.AuthUser = "admin"
+	}
+	if cfg.AuthPass == "" {
+		cfg.AuthPass = "ton618"
+	}
+
 	return cfg
 }
 

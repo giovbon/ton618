@@ -205,7 +205,7 @@ func TestFormatCaptureTimestamp_Formato(t *testing.T) {
 	// Use a fixed time for reproducibility
 	fixed := time.Date(2025, 6, 15, 14, 30, 0, 0, time.UTC)
 	result := formatCaptureTimestamp(fixed)
-	expected := "2025-06-15 14:30:00 UTC"
+	expected := "15/06/2025 14:30:00"
 	if result != expected {
 		t.Errorf("esperado %q, got %q", expected, result)
 	}

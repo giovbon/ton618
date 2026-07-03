@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestHandleGetDatabaseData_CaseInsensitiveFrontmatter(t *testing.T) {
@@ -20,10 +19,10 @@ Type: "note"
 custom_field: "value"
 ---
 # Test Note`
-	
-	// Use reindexNote to parse frontmatter and populate the tags table in DB
-	if err := ctx.reindexNote("notes/test_fm.md", content, time.Now()); err != nil {
-		t.Fatalf("reindexNote: %v", err)
+
+	// Use Notes.Save to parse frontmatter and populate the tags table in DB
+	if err := ctx.Notes.Save("notes/test_fm.md", content, nil); err != nil {
+		t.Fatalf("Notes.Save: %v", err)
 	}
 
 	// Call HandleGetDatabaseData

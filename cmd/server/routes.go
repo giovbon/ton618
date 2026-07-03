@@ -38,7 +38,7 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("GET /typst", notesCtx.HandleTypst)
 	mux.HandleFunc("GET /mermaid", notesCtx.HandleMermaid)
 	mux.HandleFunc("GET /mindmap", notesCtx.HandleMindmap)
-	
+
 	mux.HandleFunc("POST /api/notes/render-typst", notesCtx.HandleTypstRender)
 	mux.HandleFunc("GET /api/notes/download-typst-pdf", notesCtx.HandleTypstPDF)
 
@@ -54,7 +54,7 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("POST /api/upload-image", notesCtx.HandleUploadImage)
 	mux.HandleFunc("POST /api/cleanup-images", notesCtx.HandleCleanupImages)
 	mux.HandleFunc("POST /api/upload-attachment", notesCtx.HandleUploadAttachment)
-	
+
 	mux.HandleFunc("POST /api/capture", notesCtx.HandleCapture)
 	mux.HandleFunc("GET /api/tags", sysCtx.HandleGetTags)
 	mux.HandleFunc("GET /api/keywords", sysCtx.HandleGetKeywords)
@@ -92,8 +92,4 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("POST /api/appointments/update", appointmentsCtx.HandleUpdateAppointment)
 	mux.HandleFunc("DELETE /api/appointments/delete", appointmentsCtx.HandleDeleteAppointment)
 	mux.HandleFunc("POST /api/appointments/purge", appointmentsCtx.HandlePurgeOldAppointments)
-
-	// Static files
-	fs := http.FileServer(http.Dir(sysCtx.Cfg.WebDir + "/static"))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
 }

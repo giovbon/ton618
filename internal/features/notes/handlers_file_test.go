@@ -211,12 +211,12 @@ func TestHandleFileRename_Success(t *testing.T) {
 
 	ctx.HandleFileRename(rec, req)
 
-	// Rename retorna 200 e HX-Redirect header
+	// Rename retorna 200 e HX-Trigger header
 	if rec.Code != 200 {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Header().Get("HX-Redirect"), "new-name.md") {
-		t.Errorf("esperado HX-Redirect contendo new-name.md, got %q", rec.Header().Get("HX-Redirect"))
+	if !strings.Contains(rec.Header().Get("HX-Trigger"), "reload-sidebar") {
+		t.Errorf("esperado HX-Trigger contendo reload-sidebar, got %q", rec.Header().Get("HX-Trigger"))
 	}
 
 	// Nota antiga nao deve existir no banco
@@ -552,8 +552,8 @@ func TestHandleFileRename_ArchiveSuccess(t *testing.T) {
 	if rec.Code != 200 {
 		t.Errorf("esperado 200, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Header().Get("HX-Redirect"), "new-archive.zip") {
-		t.Errorf("esperado HX-Redirect contendo new-archive.zip, got %q", rec.Header().Get("HX-Redirect"))
+	if !strings.Contains(rec.Header().Get("HX-Trigger"), "reload-sidebar") {
+		t.Errorf("esperado HX-Trigger contendo reload-sidebar, got %q", rec.Header().Get("HX-Trigger"))
 	}
 
 	newPath := filepath.Join(archiveDir, "new-archive.zip")

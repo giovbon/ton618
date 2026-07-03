@@ -6,59 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"ton618/internal/core/config"
-	"ton618/internal/core/db"
-	"ton618/internal/watcher"
 )
-
-// newTestContext cria um HandlerContext isolado para testes.
-// O diretório de docs e o banco são criados em tempdir (limpos automaticamente).
-func newTestContext(t *testing.T) *HandlerContext {
-	t.Helper()
-	docsDir := t.TempDir()
-	dbDir := t.TempDir()
-	dbPath := filepath.Join(dbDir, "test.db")
-
-	store, err := db.NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("db.NewStore: %v", err)
-	}
-	t.Cleanup(func() { store.Close() })
-
-	cfg := &config.AppConfig{
-		DocsDir: docsDir,
-	}
-
-	w := watcher.NewWatcher(cfg, store)
-
-	ctx := NewHandlerContext(cfg, store, w)
-
-	return ctx
-}
-
-
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-// saveTestNote cria uma nota de teste no disco, no banco (notes table) e registra metadados.
-func saveTestNote(t *testing.T, ctx *HandlerContext, filename, content, tags string) {
-	t.Helper()
-	// Write to disk (for backwards compat with download handlers, etc)
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-		t.Fatalf("write %s: %v", filename, err)
-	}
-	// Save to notes table
-	ctx.Store.SaveNote(filename, content, time.Now().Format(time.RFC3339))
-	if tags != "" {
-		tagList := strings.Split(tags, ",")
-		ctx.Store.SetFileTags(filename, tagList)
-	}
-	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
-}
 
 // createMinimalPDF escreve um PDF valido com o texto informado.
 func createMinimalPDF(t *testing.T, path, text string) {

@@ -13,15 +13,15 @@ import (
 
 	"ton618/internal/core/config"
 	"ton618/internal/core/db"
+	"ton618/internal/core/services"
+	"ton618/internal/features/appointments"
 	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
-	"ton618/internal/core/services"
 	"ton618/internal/features/system"
 	"ton618/internal/features/todos"
-	"ton618/internal/features/appointments"
+	"ton618/internal/middleware"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
-	"ton618/internal/middleware"
 )
 
 func main() {
@@ -84,12 +84,22 @@ func main() {
 	w.PollAll()
 	slog.Info("Indexação inicial concluída")
 
-	// 5. Inicializa os contextos das Features
-	backupService := services.NewBackupService(store, store, cfg.DocsDir)
-	notesService := notes.NewNoteService(store, store, store, store, store, store, cfg.DocsDir)
-	
+	// 5. Inicializa os repositórios por domínio
+	noteRepo := db.NewNoteRepo(store)
+	tagRepo := db.NewTagRepo(store)
+	linkRepo := db.NewLinkRepo(store)
+	popRepo := db.NewPopRepo(store)
+	fileModRepo := db.NewFileModRepo(store)
+
+	// 6. Inicializa os contextos das Features
+	backupService := services.NewBackupService(noteRepo, fileModRepo, cfg.DocsDir)
+	notesService := notes.NewNoteService(store, noteRepo, tagRepo, linkRepo, popRepo, fileModRepo, cfg.DocsDir)
+
+	captureService := notes.NewCaptureService(store)
+	typstService := notes.NewTypstService()
+
 	sysCtx := system.NewHandlerContext(cfg, store, w, backupService, notesService)
-	notesCtx := notes.NewHandlerContext(cfg, store, w, notesService, backupService)
+	notesCtx := notes.NewHandlerContext(cfg, store, w, notesService, backupService, captureService, typstService)
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
@@ -115,14 +125,14 @@ func main() {
 			if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
 				relPath := strings.TrimPrefix(r.URL.Path, "/static/")
 				basePath := filepath.Join(cfg.WebDir, "static", relPath)
-				
+
 				// 1. Define cabeçalhos de content-type
 				if strings.HasSuffix(r.URL.Path, ".js") {
 					w.Header().Set("Content-Type", "application/javascript")
 				} else {
 					w.Header().Set("Content-Type", "text/css")
 				}
-				
+
 				// 2. Cache longo se o parâmetro de versão 'v' estiver presente
 				if r.URL.Query().Get("v") != "" {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

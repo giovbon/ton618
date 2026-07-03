@@ -230,17 +230,8 @@ templ typstContent(data domain.EditorData) {
         var savePending = false;
         var lastSavedHash = null;
 
-        async function generateHash(text) {
-            try {
-                var encoder = new TextEncoder();
-                var data = encoder.encode(text);
-                var hashBuffer = await crypto.subtle.digest("SHA-256", data);
-                var hashArray = Array.from(new Uint8Array(hashBuffer));
-                return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
-            } catch (e) {
-                return "hash-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-            }
-        }
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
 
         function highlightTypst(code) {
             var html = code
@@ -326,16 +317,7 @@ templ typstContent(data domain.EditorData) {
 
         function setStatus(s) {
             currentStatus = s;
-            if (s === "saved") {
-                statusEl.textContent = "\u2713";
-                statusEl.className = "text-base font-mono text-emerald-500 shrink-0";
-            } else if (s === "saving") {
-                statusEl.textContent = "\u27F3";
-                statusEl.className = "text-base font-mono text-sky-400 shrink-0";
-            } else {
-                statusEl.textContent = "\u25CF";
-                statusEl.className = "text-base font-mono text-amber-500 shrink-0";
-            }
+            EditorCommon.setStatus(statusEl, s);
         }
 
         function handleChange() {
