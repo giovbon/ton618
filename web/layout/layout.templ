@@ -26,6 +26,24 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <script src="/static/js/vendor/alpine.min.js?v=2" defer></script>
     <link rel="stylesheet" href="/static/app.css?v=5" />
     <script>
+        // Helper global: retorna headers de Authorization do localStorage
+        window.getAuthHeaders = function() {
+            var auth = localStorage.getItem("ton_auth");
+            if (auth) {
+                var header = auth.startsWith("Basic ") ? auth : "Basic " + auth;
+                return { "Authorization": header };
+            }
+            return {};
+        };
+        // Configura HTMX para enviar Authorization header em todas as requisições
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.addEventListener('htmx:configRequest', function(evt) {
+                var headers = getAuthHeaders();
+                if (headers.Authorization) {
+                    evt.detail.headers['Authorization'] = headers.Authorization;
+                }
+            });
+        });
         // Menus Dropdown (Inlined para evitar cache persistente de arquivo estático js)
         window.toggleCriarMenu = function(e) {
             e.stopPropagation();

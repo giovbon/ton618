@@ -169,7 +169,7 @@ templ drawingContent(data domain.EditorData) {
             fd.append("silent", "true");
 
             try {
-                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: getAuthHeaders() });
                 if (!r.ok) throw new Error("HTTP " + r.status);
                 saveInProgress = false;
                 setStatus("saved");
@@ -207,7 +207,7 @@ templ drawingContent(data domain.EditorData) {
             if (!confirm('Excluir definitivamente o desenho "' + filename + '"?')) return;
             var fd = new FormData();
             fd.append("filename", filename);
-            fetch("/file/delete", { method: "POST", body: fd })
+            fetch("/file/delete", { method: "POST", body: fd, headers: getAuthHeaders() })
                 .then(function () {
                     window.location.href = "/";
                 })
@@ -227,7 +227,7 @@ templ drawingContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
+            fetch("/api/note/duplicate", { method: "POST", body: fd, headers: getAuthHeaders() })
                 .then(function (r) {
                     if (!r.ok) {
                         return r.text().then(function (t) { throw new Error(t); });
@@ -276,6 +276,7 @@ templ drawingContent(data domain.EditorData) {
                     renameFd.append("new", fullNewName);
                     var renameResp = await fetch("/file/rename", {
                         method: "POST",
+                        headers: getAuthHeaders(),
                         body: renameFd
                     });
                     if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
@@ -289,6 +290,7 @@ templ drawingContent(data domain.EditorData) {
 
                 var saveResp = await fetch("/api/note/save", {
                     method: "POST",
+                    headers: getAuthHeaders(),
                     body: saveFd
                 });
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");

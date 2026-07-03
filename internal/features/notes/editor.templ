@@ -1989,6 +1989,7 @@ templ editorContent(data domain.EditorData) {
             try {
                 var resp = await fetch("/file/save", {
                     method: "POST",
+                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 if (resp.ok || resp.status === 303) {
@@ -2053,6 +2054,7 @@ templ editorContent(data domain.EditorData) {
                 try {
                     var renameResp = await fetch("/file/rename", {
                         method: "POST",
+                        headers: getAuthHeaders(),
                         body: renameFd,
                     });
                     if (!renameResp.ok) {
@@ -2074,6 +2076,7 @@ templ editorContent(data domain.EditorData) {
             try {
                 var saveResp = await fetch("/file/save", {
                     method: "POST",
+                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 if (saveResp.ok || saveResp.status === 303) {
@@ -2105,7 +2108,7 @@ templ editorContent(data domain.EditorData) {
             // O servidor ja deleta o arquivo e faz um redirect 303.
             // O fetch segue o redirect automaticamente (recebe HTML).
             // Nao tentamos parsear JSON — apenas redirecionamos para a home.
-            fetch("/file/delete", { method: "POST", body: fd })
+            fetch("/file/delete", { method: "POST", body: fd, headers: getAuthHeaders() })
                 .then(function () {
                     window.location.href = "/";
                 })
@@ -2123,7 +2126,7 @@ templ editorContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
+            fetch("/api/note/duplicate", { method: "POST", body: fd, headers: getAuthHeaders() })
                 .then(function (r) {
                     if (!r.ok) {
                         return r.text().then(function (t) { throw new Error(t); });
@@ -2186,6 +2189,7 @@ templ editorContent(data domain.EditorData) {
             try {
                 var resp = await fetch("/api/upload-image", {
                     method: "POST",
+                    headers: getAuthHeaders(),
                     body: fd,
                 });
                 var data = await resp.json();
