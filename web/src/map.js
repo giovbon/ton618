@@ -88,7 +88,7 @@
         '<button onclick="window._mapRenameMarker(' + id + ')" ' +
         'style="flex:1;padding:5px 10px;font-size:11px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;transition:background 0.2s;" ' +
         'onmouseover="this.style.background=\'#0369a1\'" onmouseout="this.style.background=\'#0284c7\'">✎ Renomear</button>' +
-        '<button onclick="var m=window._mapGetMarker(' + id + ');m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange();document.querySelector(\'.leaflet-popup-close-button\').click()" ' +
+        '<button onclick="var m=window._mapGetMarker(' + id + ');if(m){if(typeof m.closePopup===\'function\')m.closePopup();if(m._map)m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange()}" ' +
         'style="flex:1;padding:5px 10px;font-size:11px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;transition:background 0.2s;" ' +
         'onmouseover="this.style.background=\'#b91c1c\'" onmouseout="this.style.background=\'#dc2626\'">🗑️ Excluir</button>' +
       '</div>' +

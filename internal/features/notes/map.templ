@@ -262,7 +262,7 @@ templ mapContent(data domain.EditorData) {
         if (!filename.endsWith(".md")) filename += ".md";
         if (!filename.startsWith("notes/")) filename = "notes/" + filename;
         if (!confirm('Excluir "' + filename + '"?')) return;
-        fetch("/file/delete", { method: "POST", body: new FormData() })
+        EditorCommon.httpDelete(filename)
             .then(function () { window.location.href = "/"; })
             .catch(function () { window.location.href = "/"; });
     }
