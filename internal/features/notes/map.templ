@@ -67,9 +67,44 @@ templ mapContent(data domain.EditorData) {
     .map-marker-label::before {
         border-top-color: rgba(0, 0, 0, 0.75) !important;
     }
+    
+    /* Estilização Premium Dark para os Popups do Leaflet */
+    .leaflet-popup-content-wrapper {
+        background: #18181b !important; /* zinc-900 */
+        color: #f4f4f5 !important; /* zinc-100 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        border-radius: 12px !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5) !important;
+        padding: 2px !important;
+    }
+    .leaflet-popup-tip {
+        background: #18181b !important;
+        border: 1px solid #27272a !important;
+        box-shadow: none !important;
+    }
+    .leaflet-popup-content {
+        margin: 12px !important;
+        line-height: 1.5 !important;
+    }
+    .leaflet-popup-close-button {
+        color: #a1a1aa !important; /* zinc-400 */
+        padding: 8px 10px 0 0 !important;
+    }
+    .leaflet-popup-close-button:hover {
+        color: #f4f4f5 !important;
+        background: transparent !important;
+    }
+    
+    /* Filtro CSS para transformar OSM em tema escuro localmente */
+    .map-tiles-dark {
+        filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%) !important;
+    }
+    .leaflet-container {
+        background: #09090b !important;
+    }
 </style>
 <script src="/static/leaflet.js"></script>
-<script src="/static/map.js?v=2"></script>
+<script src="/static/map.js?v=4"></script>
 
 <script>
 (function(){

@@ -12,12 +12,23 @@
     popupAnchor: [0, -36],
   });
 
+  function escapeHTML(str) {
+    if (!str) return "";
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   window.initMap = function (container, markersData, onChange) {
     const map = L.map(container, { zoomControl: true }).setView([-23.5505, -46.6333], 12);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  let baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://openstreetmap.org">OSM</a>',
     maxZoom: 19,
+    className: 'map-tiles-dark'
   }).addTo(map);
 
   const markers = [];
@@ -30,10 +41,67 @@
   let measurePolyline = null;
   let measurePopup = null;
 
+  window._mapRenameMarker = function (id) {
+    var marker = window._mapGetMarker(id);
+    if (!marker) return;
+    var currentName = marker._data.name || "Marcador";
+    var n = prompt("Renomear:", currentName);
+    if (n !== null) {
+      n = n.trim();
+      if (n === "") n = "Marcador";
+      marker._data.name = n;
+      marker.setTooltipContent(n);
+      
+      var popup = marker.getPopup();
+      if (popup && popup.isOpen()) {
+        var popupEl = popup.getElement();
+        if (popupEl) {
+          var titleEl = popupEl.querySelector(".popup-title");
+          if (titleEl) titleEl.textContent = n;
+        }
+      }
+      
+      var address = marker._data.address || "Buscando endereco...";
+      var pos = marker.getLatLng();
+      marker.setPopupContent(getPopupHTML(n, address, pos.lat.toFixed(6), pos.lng.toFixed(6), id, marker._data.desc));
+      
+      onChange(getData());
+    }
+  };
+
+  function getPopupHTML(name, address, lat, lng, id, desc) {
+    var escapedDesc = escapeHTML(desc || "");
+    return '<div id="popup-' + id + '" style="font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.5;min-width:240px;color:#f4f4f5">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<b class="popup-title" style="font-size:15px;color:#f4f4f5;font-weight:700">' + escapeHTML(name) + '</b>' +
+      '</div>' +
+      '<div class="popup-address" style="color:#a1a1aa;font-size:12px;margin-bottom:2px">' + escapeHTML(address) + '</div>' +
+      '<div style="color:#71717a;font-size:11px;font-family:monospace;margin-bottom:8px">' + lat + ', ' + lng + '</div>' +
+      '<div style="margin-bottom:10px">' +
+        '<label style="display:block;font-size:11px;color:#a1a1aa;font-weight:600;margin-bottom:4px">Observações</label>' +
+        '<textarea oninput="var m=window._mapGetMarker(' + id + ');if(m){m._data.desc=this.value;window._mapOnChange()}" ' +
+          'placeholder="Digite observações para este local..." ' +
+          'style="width:100%;height:70px;font-family:Inter,system-ui,sans-serif;font-size:12px;border:1px solid #3f3f46;border-radius:6px;padding:6px;box-sizing:border-box;resize:vertical;outline:none;background:#27272a;color:#f4f4f5;transition:border-color 0.2s;" ' +
+          'onfocus="this.style.borderColor=\'#38bdf8\'" onblur="this.style.borderColor=\'#3f3f46\'">' + escapedDesc + '</textarea>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
+        '<button onclick="window._mapRenameMarker(' + id + ')" ' +
+        'style="flex:1;padding:5px 10px;font-size:11px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;transition:background 0.2s;" ' +
+        'onmouseover="this.style.background=\'#0369a1\'" onmouseout="this.style.background=\'#0284c7\'">✎ Renomear</button>' +
+        '<button onclick="var m=window._mapGetMarker(' + id + ');m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange();document.querySelector(\'.leaflet-popup-close-button\').click()" ' +
+        'style="flex:1;padding:5px 10px;font-size:11px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;transition:background 0.2s;" ' +
+        'onmouseover="this.style.background=\'#b91c1c\'" onmouseout="this.style.background=\'#dc2626\'">🗑️ Excluir</button>' +
+      '</div>' +
+    '</div>';
+  }
+
   function addMarker(data, draggable) {
     const marker = L.marker([data.lat, data.lng], { draggable, icon: mapIcon }).addTo(map);
     marker._mapId = currentId++;
     marker._data = data;
+    if (!marker._data.address) {
+      marker._data.address = "";
+    }
 
     // Label permanente com o nome (sempre visível)
     marker.bindTooltip(data.name || "Marcador", {
@@ -53,60 +121,85 @@
       const pos = marker.getLatLng();
       data.lat = pos.lat;
       data.lng = pos.lng;
+      marker._data.address = ""; // força nova busca ao mover
       onChange(getData());
     });
 
-    function getPopupHTML(name, address, lat, lng, id) {
-      return '<div id="popup-' + id + '" style="font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.5;min-width:200px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center">' +
-          '<b style="font-size:15px;color:#222">' + name + '</b>' +
-        '</div>' +
-        '<div style="color:#666;margin-top:4px;font-size:12px">' + address + '</div>' +
-        '<div style="color:#999;margin-top:2px;font-size:11px">' + lat + ', ' + lng + '</div>' +
-        '<div style="margin-top:8px;display:flex;gap:6px">' +
-          '<button onclick="var n=prompt(\'Renomear:\',\'' + name + '\');if(n){var m=window._mapGetMarker(' + id + ');m._data.name=n;m.setTooltipContent(n);document.querySelector(\'#popup-' + id + ' b\').textContent=n;window._mapOnChange()}" ' +
-          'style="flex:1;padding:3px 10px;font-size:11px;background:#3388ff;color:#fff;border:none;border-radius:4px;cursor:pointer">✎ Renomear</button>' +
-          '<button onclick="var m=window._mapGetMarker(' + id + ');m._map.removeLayer(m);m._data._deleted=true;window._mapOnChange();document.querySelector(\'.leaflet-popup-close-button\').click()" ' +
-          'style="flex:1;padding:3px 10px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑️ Excluir</button>' +
-        '</div>' +
-      '</div>';
-    }
+    // Impede propagação de teclado/clique nos campos de entrada do popup
+    marker.on("popupopen", (e) => {
+      const popupEl = e.popup.getElement();
+      if (popupEl) {
+        const textareas = popupEl.querySelectorAll("textarea, input");
+        textareas.forEach((el) => {
+          L.DomEvent.disableClickPropagation(el);
+          L.DomEvent.disableScrollPropagation(el);
+          L.DomEvent.on(el, "keydown keypress keyup", (ev) => {
+            ev.stopPropagation();
+          });
+        });
+      }
+    });
 
     marker.on("click", () => {
       const pos = marker.getLatLng();
       const lat = pos.lat.toFixed(6);
       const lng = pos.lng.toFixed(6);
 
+      const currentAddress = marker._data.address || "Buscando endereco...";
+
       // Abre o popup imediatamente
-      marker.bindPopup(getPopupHTML(data.name, "Buscando endereco...", lat, lng, marker._mapId)).openPopup();
+      marker.bindPopup(getPopupHTML(data.name, currentAddress, lat, lng, marker._mapId, data.desc)).openPopup();
 
-      // Busca endereço via Nominatim (OpenStreetMap) em segundo plano
-      (async () => {
-        try {
-          var resp = await fetch("https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&addressdetails=1&accept-language=pt");
-          var data2 = await resp.json();
-          if (data2 && data2.display_name) {
-            var addr = data2.address || {};
-            var parts = [];
-            if (addr.road) parts.push(addr.road);
-            if (addr.suburb) parts.push(addr.suburb);
-            if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
-            if (addr.postcode) parts.push("CEP: " + addr.postcode);
-            var street = parts.join(", ") || data2.display_name.split(",").slice(0, 3).join(",");
-            
-            // Sugere o endereco como nome se o marcador ainda tem nome padrao
-            if (!data.name || data.name === "Novo ponto" || data.name === "Marcador") {
-              data.name = addr.road || addr.suburb || "Ponto";
-              marker.setTooltipContent(data.name);
-              onChange(getData());
+      // Busca endereço via Nominatim se ainda não possuir
+      if (!marker._data.address) {
+        (async () => {
+          try {
+            var resp = await fetch("https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lng + "&format=json&addressdetails=1&accept-language=pt");
+            var data2 = await resp.json();
+            if (data2 && data2.display_name) {
+              var addr = data2.address || {};
+              var parts = [];
+              if (addr.road) parts.push(addr.road);
+              if (addr.suburb) parts.push(addr.suburb);
+              if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
+              if (addr.postcode) parts.push("CEP: " + addr.postcode);
+              var street = parts.join(", ") || data2.display_name.split(",").slice(0, 3).join(",");
+              
+              marker._data.address = street;
+
+              // Sugere o endereco como nome se o marcador ainda tem nome padrao
+              if (!data.name || data.name === "Novo ponto" || data.name === "Marcador") {
+                data.name = addr.road || addr.suburb || "Ponto";
+                marker.setTooltipContent(data.name);
+                onChange(getData());
+              }
+
+              const popup = marker.getPopup();
+              if (popup && popup.isOpen()) {
+                const popupEl = popup.getElement();
+                if (popupEl) {
+                  const addrEl = popupEl.querySelector(".popup-address");
+                  if (addrEl) addrEl.textContent = street;
+                  const titleEl = popupEl.querySelector(".popup-title");
+                  if (titleEl) titleEl.textContent = data.name;
+                }
+              }
+              marker.setPopupContent(getPopupHTML(data.name, street, lat, lng, marker._mapId, data.desc));
             }
-
-            marker.setPopupContent(getPopupHTML(data.name, street, lat, lng, marker._mapId));
+          } catch(e) {
+            marker._data.address = "Endereco indisponivel";
+            const popup = marker.getPopup();
+            if (popup && popup.isOpen()) {
+              const popupEl = popup.getElement();
+              if (popupEl) {
+                const addrEl = popupEl.querySelector(".popup-address");
+                if (addrEl) addrEl.textContent = marker._data.address;
+              }
+            }
+            marker.setPopupContent(getPopupHTML(data.name, marker._data.address, lat, lng, marker._mapId, data.desc));
           }
-        } catch(e) {
-          marker.setPopupContent(getPopupHTML(data.name, "Endereco indisponivel", lat, lng, marker._mapId));
-        }
-      })();
+        })();
+      }
     });
 
     markers.push(marker);
@@ -328,19 +421,21 @@
   var satelliteLayer = null;
   window._mapToggleSatellite = function () {
     if (satelliteLayer) {
-      // Volta para OSM
+      // Volta para Dark (OSM com filtro CSS)
       map.removeLayer(satelliteLayer);
       satelliteLayer = null;
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://openstreetmap.org">OSM</a>',
         maxZoom: 19,
+        className: 'map-tiles-dark'
       }).addTo(map);
       return "mapa";
     } else {
       // Muda para satélite
-      map.eachLayer((layer) => {
-        if (layer._url && layer._url.includes("openstreetmap")) map.removeLayer(layer);
-      });
+      if (baseLayer) {
+        map.removeLayer(baseLayer);
+        baseLayer = null;
+      }
       satelliteLayer = L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 19, attribution: "&copy; Esri" }
