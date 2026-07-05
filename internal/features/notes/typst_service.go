@@ -2,6 +2,7 @@ package notes
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log/slog"
@@ -131,16 +132,17 @@ func (s *TypstService) prepareContent(content string) string {
 	return "#set page(paper: \"a4\")\n" + body
 }
 
-// preprocessTypstImages localiza URLs de imagens no conteúdo e baixa-as no
-// diretório temporário, substituindo as URLs pelos nomes dos arquivos locais.
 func preprocessTypstImages(content string, tmpDir string) string {
-	re := regexp.MustCompile(`#image\("([^"]+)"\)`)
+	re := regexp.MustCompile(`(?:#)?image\((?:"(https?://[^\s"]+)"|'(https?://[^\s']+)')(?:,\s*[^)]*)?\)`)
 	return re.ReplaceAllStringFunc(content, func(match string) string {
 		parts := re.FindStringSubmatch(match)
-		if len(parts) < 2 {
+		if len(parts) < 3 {
 			return match
 		}
 		imageURL := parts[1]
+		if imageURL == "" {
+			imageURL = parts[2]
+		}
 
 		if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
 			return match
@@ -150,7 +152,12 @@ func preprocessTypstImages(content string, tmpDir string) string {
 		if err != nil {
 			return match
 		}
-		fileName := filepath.Base(parsedURL.Path)
+		hash := sha256.Sum256([]byte(imageURL))
+		ext := filepath.Ext(parsedURL.Path)
+		if ext == "" {
+			ext = ".png"
+		}
+		fileName := fmt.Sprintf("%x%s", hash, ext)
 		localPath := filepath.Join(tmpDir, fileName)
 
 		resp, err := http.Get(imageURL)
@@ -169,6 +176,6 @@ func preprocessTypstImages(content string, tmpDir string) string {
 		}
 
 		slog.Debug("imagem typst baixada", "url", imageURL, "local", localPath)
-		return fmt.Sprintf(`#image("%s")`, fileName)
+		return strings.Replace(match, imageURL, fileName, 1)
 	})
 }

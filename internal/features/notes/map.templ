@@ -10,41 +10,43 @@ templ MapNote(data domain.EditorData) {
 templ mapContent(data domain.EditorData) {
 <div class="editor-root flex flex-col" id="map-root"
      style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 0; border-radius: 0;">
-    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800">
+    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative">
         <input id="file-name" type="text" value={ data.DisplayName }
             data-filename={ data.Filename }
             class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
             spellcheck="false" />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
-        <button id="add-marker-btn" onclick="addMarkerMode()"
-            class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1 rounded-lg border border-zinc-700 hover:border-sky-600 transition-colors">
-            ＋ Adicionar
-        </button>
-        <button onclick="toggleSatellite()"
-            class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1 rounded-lg border border-zinc-700 hover:border-sky-600 transition-colors">
-            🛰 Satélite
-        </button>
-        <button id="measure-btn" onclick="toggleMeasureMode()"
-            class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1 rounded-lg border border-zinc-700 hover:border-sky-600 transition-colors">
-            📏 Rota
-        </button>
-        <div class="relative" id="search-wrapper">
-            <button id="search-btn" onclick="toggleSearch()"
-                class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1 rounded-lg border border-zinc-700 hover:border-sky-600 transition-colors">
-                🔍 Buscar
+        
+        <!-- Dropdown de Opções Unificado -->
+        <div class="relative" id="map-actions-wrapper">
+            <button id="map-actions-btn" onclick="toggleMapActions()"
+                class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-750 bg-zinc-900/60 hover:bg-zinc-900 transition-all flex items-center gap-1.5 select-none cursor-pointer">
+                ⚙️ Opções <span class="text-[10px] text-zinc-500">▼</span>
             </button>
-            <div id="search-container" class="hidden absolute right-0 top-full mt-2 w-72 max-w-none bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-[10000] overflow-hidden" style="min-width: 288px;">
-                <input id="search-input" type="text" placeholder="Buscar endereco ou local..." autocomplete="off"
-                    class="w-full px-4 py-2.5 text-sm bg-zinc-800 text-zinc-200 placeholder-zinc-500 border-b border-zinc-700 focus:outline-none" />
-                <div id="search-results" class="max-h-48 overflow-y-auto"></div>
+            <div id="map-actions-dropdown" class="hidden absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[10000] overflow-hidden py-1">
+                <button id="add-marker-btn" onclick="addMarkerModeDropdown()" class="text-zinc-400">＋ Adicionar Ponto</button>
+                <button id="measure-btn" onclick="toggleMeasureModeDropdown()" class="text-zinc-400">📏 Rota</button>
+                <button id="satellite-btn" onclick="toggleSatelliteDropdown()" class="text-zinc-400"><span id="satellite-btn-icon">🛰</span> <span id="satellite-btn-text">Satélite</span></button>
+                <button id="search-btn-trigger" onclick="toggleSearchDropdown()" class="text-zinc-400">🔍 Buscar</button>
             </div>
         </div>
+
         <button id="save-btn" onclick="saveMap()"
             class="text-zinc-500 hover:text-sky-400 transition-colors text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60" title="Salvar">💾</button>
         <button onclick="duplicateCurrentNote()"
             class="text-zinc-700 hover:text-sky-400 transition-colors text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60" title="Duplicar">⧉</button>
         <button onclick="deleteCurrentNote()"
             class="text-zinc-700 hover:text-red-400 transition-colors text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60" title="Excluir">🗑️</button>
+
+        <!-- Container de Busca Flutuante -->
+        <div id="search-container" class="hidden absolute right-6 top-full mt-2 w-72 max-w-none bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[10000] overflow-hidden" style="min-width: 288px;">
+            <div class="flex items-center bg-zinc-850 border-b border-zinc-800 pr-3">
+                <input id="search-input" type="text" placeholder="Buscar endereço ou local..." autocomplete="off"
+                    class="flex-1 px-4 py-2.5 text-sm bg-transparent text-zinc-200 placeholder-zinc-500 focus:outline-none" />
+                <button onclick="toggleSearch()" class="text-zinc-500 hover:text-zinc-300 text-xs font-bold cursor-pointer">✕</button>
+            </div>
+            <div id="search-results" class="max-h-48 overflow-y-auto"></div>
+        </div>
     </div>
     <div id="map-container" class="flex-1 w-full" style="min-height: 300px;"></div>
     <textarea id="content-output" class="hidden">{ data.Content }</textarea>
@@ -101,6 +103,33 @@ templ mapContent(data domain.EditorData) {
     }
     .leaflet-container {
         background: #09090b !important;
+    }
+    
+    /* Estilos do Dropdown de Ações */
+    #map-actions-dropdown button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        padding: 10px 16px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        color: #d4d4d8 !important; /* zinc-300 */
+        transition: all 0.2s ease;
+        cursor: pointer;
+        white-space: nowrap !important;
+    }
+    #map-actions-dropdown button:hover {
+        background: rgba(39, 39, 42, 0.6) !important; /* zinc-800/60 */
+        color: #38bdf8 !important; /* sky-400 */
+    }
+    #map-actions-dropdown button.text-sky-400 {
+        color: #38bdf8 !important;
+        background: rgba(56, 189, 248, 0.1) !important; /* sky-500/10 */
     }
 </style>
 <script src="/static/leaflet.js"></script>
@@ -268,29 +297,74 @@ templ mapContent(data domain.EditorData) {
     }
 
     window.saveMap = doSave;
-    window.addMarkerMode = function() { if (window._mapAddMode) window._mapAddMode(); };
-    window.toggleMeasureMode = function() { if (window._mapToggleMeasureMode) window._mapToggleMeasureMode(); };
-    window.toggleSatellite = function() {
-        var mode = window._mapToggleSatellite();
-        var btn = document.querySelector('[onclick="toggleSatellite()"]');
-        if (btn) btn.textContent = mode === "satellite" ? "🗺️ Mapa" : "🛰 Satélite";
+    
+    window.toggleMapActions = function() {
+        var dropdown = document.getElementById("map-actions-dropdown");
+        if (dropdown.classList.contains("hidden")) {
+            dropdown.classList.remove("hidden");
+            document.getElementById("search-container").classList.add("hidden");
+        } else {
+            dropdown.classList.add("hidden");
+        }
     };
+
+    window.addMarkerModeDropdown = function() {
+        if (window._mapAddMode) window._mapAddMode();
+        toggleMapActions();
+    };
+
+    window.toggleMeasureModeDropdown = function() {
+        if (window._mapToggleMeasureMode) window._mapToggleMeasureMode();
+        toggleMapActions();
+    };
+
+    window.toggleSatelliteDropdown = function() {
+        var mode = window._mapToggleSatellite();
+        var label = document.getElementById("satellite-btn-text");
+        var icon = document.getElementById("satellite-btn-icon");
+        if (label && icon) {
+            label.textContent = mode === "satellite" ? "Mapa" : "Satélite";
+            icon.textContent = mode === "satellite" ? "🗺️" : "🛰";
+        }
+        toggleMapActions();
+    };
+
+    window.toggleSearchDropdown = function() {
+        toggleSearch();
+        toggleMapActions();
+    };
+
+    // Fechar dropdown/busca ao clicar fora
+    document.addEventListener("click", function(e) {
+        var wrapper = document.getElementById("map-actions-wrapper");
+        if (wrapper && !wrapper.contains(e.target)) {
+            var dropdown = document.getElementById("map-actions-dropdown");
+            if (dropdown) dropdown.classList.add("hidden");
+        }
+        var searchContainer = document.getElementById("search-container");
+        var actionsBtn = document.getElementById("map-actions-btn");
+        if (searchContainer && !searchContainer.classList.contains("hidden")) {
+            var isClickInside = searchContainer.contains(e.target) || 
+                                (wrapper && wrapper.contains(e.target)) ||
+                                (actionsBtn && actionsBtn.contains(e.target));
+            if (!isClickInside) {
+                searchContainer.classList.add("hidden");
+            }
+        }
+    });
 
     // ── Busca ──
     var searchTimer = null;
     window.toggleSearch = function() {
         var container = document.getElementById("search-container");
-        var btn = document.getElementById("search-btn");
         if (container.classList.contains("hidden")) {
             container.classList.remove("hidden");
-            btn.textContent = "✕ Fechar";
             var inp = document.getElementById("search-input");
             inp.value = "";
             inp.focus();
             document.getElementById("search-results").innerHTML = "";
         } else {
             container.classList.add("hidden");
-            btn.textContent = "🔍 Buscar";
         }
     };
 
@@ -316,7 +390,7 @@ templ mapContent(data domain.EditorData) {
                 var html = "";
                 results.forEach(function(r) {
                     var safeLabel = r.label.replace(/'/g, "").replace(/"/g, "");
-                    html += '<div onclick="window._mapGoToLocation(' + r.lat + ',' + r.lng + ',\'' + safeLabel + '\');document.getElementById(\'search-container\').classList.add(\'hidden\');document.getElementById(\'search-btn\').textContent=\'🔍 Buscar\'" ' +
+                    html += '<div onclick="window._mapGoToLocation(' + r.lat + ',' + r.lng + ',\'' + safeLabel + '\');document.getElementById(\'search-container\').classList.add(\'hidden\')" ' +
                         'class="px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0">' +
                         r.label + '</div>';
                 });

@@ -120,7 +120,7 @@ func (ctx *HandlerContext) HandleTypstPDF(w http.ResponseWriter, r *http.Request
 	}
 
 	content, err := ctx.Store.GetNote(filename)
-	if err != nil {
+	if err != nil || !ctx.Store.NoteExists(filename) {
 		http.Error(w, "Nota não encontrada", http.StatusNotFound)
 		return
 	}
