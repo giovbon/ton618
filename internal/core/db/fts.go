@@ -60,10 +60,10 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 	var total int
 	var countErr error
 	if query == "" {
-		countErr = s.DB.QueryRow("SELECT COUNT(*) FROM docs_fts").Scan(&total)
+		countErr = s.DB.QueryRow("SELECT COUNT(*) FROM docs_fts WHERE tags NOT LIKE '%drawing%'").Scan(&total)
 	} else {
 		countErr = s.DB.QueryRow(
-			"SELECT COUNT(*) FROM docs_fts WHERE docs_fts MATCH ?",
+			"SELECT COUNT(*) FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'",
 			query,
 		).Scan(&total)
 	}
@@ -77,13 +77,14 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 		rows, err = s.DB.Query(`
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 			FROM docs_fts
+			WHERE tags NOT LIKE '%drawing%'
 			ORDER BY rowid DESC
 			LIMIT ? OFFSET ?`, size, from)
 	} else {
 		rows, err = s.DB.Query(`
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, -1, '<b>', '</b>', '...', 64) as snippet_text
 			FROM docs_fts
-			WHERE docs_fts MATCH ?
+			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'
 			ORDER BY rank
 			LIMIT ? OFFSET ?`, query, size, from)
 	}
@@ -112,14 +113,14 @@ func (s *Store) SearchFTSLike(term string, from, size int) ([]FTSResult, int, er
 	var total int
 	s.DB.QueryRow(`
 		SELECT COUNT(*) FROM documents
-		WHERE LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?`,
+		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'`,
 		pattern, pattern, pattern,
 	).Scan(&total)
 
 	rows, err := s.DB.Query(`
 		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 		FROM documents
-		WHERE LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?
+		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'
 		LIMIT ? OFFSET ?`,
 		pattern, pattern, pattern, size, from)
 	if err != nil {

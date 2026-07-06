@@ -30,7 +30,9 @@ func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, syn
 	}
 
 	// ── FRASE EXATA: % do BM25 base (não acumulado) ──
-	if len(strings.Fields(cleanedQuery)) > 1 && strings.Contains(textoBaixo, cleanedQuery) {
+	cleanedQueryNorm := removeAccents(cleanedQuery)
+	textoBaixoNorm := removeAccents(textoBaixo)
+	if len(strings.Fields(cleanedQuery)) > 1 && strings.Contains(textoBaixoNorm, cleanedQueryNorm) {
 		val := baseScore * 0.5 // +50% do BM25 base
 		score += val
 		details["frase_exata"] = val
@@ -79,9 +81,9 @@ func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, syn
 // O caller multiplica por 0.5 para obter a fração do BM25.
 func scoreTitle(secao string, terms []string) float64 {
 	parts := strings.Split(secao, " › ")
-	last := strings.ToLower(parts[len(parts)-1])
+	last := removeAccents(strings.ToLower(parts[len(parts)-1]))
 	for _, term := range terms {
-		t := strings.ToLower(term)
+		t := removeAccents(strings.ToLower(term))
 		if stopwords[t] || len(t) < 3 {
 			continue
 		}
@@ -97,10 +99,10 @@ func scoreTitle(secao string, terms []string) float64 {
 
 // scorePath retorna +0.5 por termo encontrado no nome do arquivo.
 func scorePath(arquivo string, terms []string) float64 {
-	base := strings.ToLower(arquivo)
+	base := removeAccents(strings.ToLower(arquivo))
 	boost := 0.0
 	for _, term := range terms {
-		t := strings.ToLower(term)
+		t := removeAccents(strings.ToLower(term))
 		if stopwords[t] || len(t) < 3 {
 			continue
 		}

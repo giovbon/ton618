@@ -600,58 +600,10 @@ func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {
 	}
 
 	queryLower := strings.ToLower(query)
-	var tagQueries []string
-
-	// Extrai as tags da busca (ex: #artigo)
-	for _, part := range strings.Fields(queryLower) {
-		if strings.HasPrefix(part, "#") {
-			tagQueries = append(tagQueries, strings.TrimPrefix(part, "#"))
-		}
-	}
-
-	nameSearch := ""
-	for _, part := range strings.Fields(queryLower) {
-		if !strings.HasPrefix(part, "#") {
-			nameSearch += part + " "
-		}
-	}
-	nameSearch = strings.TrimSpace(nameSearch)
-
-	matchesTags := func(n domain.NoteItem) bool {
-		if len(tagQueries) == 0 {
-			return true
-		}
-		for _, tq := range tagQueries {
-			found := false
-			for _, nt := range n.Tags {
-				if strings.ToLower(nt) == tq {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		}
-		return true
-	}
-
-	if nameSearch == "" {
-		var filtered []domain.NoteItem
-		for _, n := range noteList {
-			if matchesTags(n) {
-				filtered = append(filtered, n)
-			}
-		}
-		return filtered
-	}
+	nameSearch := strings.TrimSpace(queryLower)
 
 	var nameMatches []domain.NoteItem
-
 	for _, n := range noteList {
-		if !matchesTags(n) {
-			continue
-		}
 		filenameLower := strings.ToLower(n.Arquivo)
 		if strings.Contains(filenameLower, nameSearch) {
 			nameMatches = append(nameMatches, n)

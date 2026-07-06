@@ -22,9 +22,38 @@ func NewTypstService() *TypstService {
 	return &TypstService{}
 }
 
+// resolvePath retorna o caminho absoluto para o executável 'typst' se ele existir em locais comuns ou no PATH.
+func (s *TypstService) resolvePath() string {
+	path, err := exec.LookPath("typst")
+	if err == nil {
+		return path
+	}
+
+	// Fallback para $HOME/.local/bin/typst
+	if home, err := os.UserHomeDir(); err == nil {
+		localPath := filepath.Join(home, ".local", "bin", "typst")
+		if _, err := os.Stat(localPath); err == nil {
+			return localPath
+		}
+	}
+
+	// Fallback para caminhos comuns adicionais
+	for _, p := range []string{"/usr/local/bin/typst", "/usr/bin/typst", "/bin/typst"} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	return "typst"
+}
+
 // CheckAvailability verifica se o binário 'typst' está instalado.
 func (s *TypstService) CheckAvailability() error {
-	_, err := exec.LookPath("typst")
+	resolved := s.resolvePath()
+	if filepath.IsAbs(resolved) {
+		return nil
+	}
+	_, err := exec.LookPath(resolved)
 	return err
 }
 
@@ -58,7 +87,7 @@ func (s *TypstService) RenderToSVG(content string) *RenderResult {
 		return &RenderResult{Error: "Erro interno ao salvar fonte do Typst: " + err.Error()}
 	}
 
-	cmd := exec.Command("typst", "compile", "main.typ", "page-{p}.svg")
+	cmd := exec.Command(s.resolvePath(), "compile", "main.typ", "page-{p}.svg")
 	cmd.Dir = tmpDir
 
 	var stderr bytes.Buffer
@@ -104,7 +133,7 @@ func (s *TypstService) RenderToPDF(content string) ([]byte, error) {
 		return nil, fmt.Errorf("erro ao escrever fonte: %w", err)
 	}
 
-	cmd := exec.Command("typst", "compile", "main.typ", "output.pdf")
+	cmd := exec.Command(s.resolvePath(), "compile", "main.typ", "output.pdf")
 	cmd.Dir = tmpDir
 
 	var stderr bytes.Buffer
@@ -165,6 +194,10 @@ func preprocessTypstImages(content string, tmpDir string) string {
 			return match
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return match
+		}
 
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {

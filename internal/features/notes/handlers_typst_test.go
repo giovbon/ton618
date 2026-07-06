@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,9 +38,7 @@ func TestHandleTypst(t *testing.T) {
 func TestHandleTypstRender(t *testing.T) {
 	ctx := newTestContext(t)
 
-	// Testa comportamento quando o compilador 'typst' pode ou não estar instalado
-	_, err := exec.LookPath("typst")
-	hasTypst := err == nil
+	hasTypst := ctx.Typst.CheckAvailability() == nil
 
 	formData := url.Values{}
 	formData.Set("content", "= Ola do Typst")
@@ -88,8 +85,7 @@ func TestHandleTypstPDF(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	ctx.HandleTypstPDF(rr2, req2)
 
-	_, err := exec.LookPath("typst")
-	hasTypst := err == nil
+	hasTypst := ctx.Typst.CheckAvailability() == nil
 
 	if hasTypst {
 		if rr2.Code != http.StatusOK {

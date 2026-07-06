@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"ton618/internal/core/db"
 )
@@ -57,17 +58,26 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		return listAll(store, from, size)
 	}
 
+	// Extrai tags e a query restante
+	queryTags, remainingQuery := extractTags(rawQuery)
+	remainingQuery = strings.TrimSpace(remainingQuery)
+
 	// 1. Try FTS5 first
 	ftsQuery := buildFTSQuery(rawQuery)
-	results, total, err := store.SearchFTS(ftsQuery, from, size*3) // Get more for re-ranking
+	// Se a busca textual é vazia mas temos tags, buscamos mais resultados para filtrar em Go
+	limitSize := size * 3
+	if remainingQuery == "" && len(queryTags) > 0 {
+		limitSize = 99999
+	}
+	results, total, err := store.SearchFTS(ftsQuery, from, limitSize)
 	if err != nil {
 		log.Printf("[Search] FTS5 error: %v, falling back to LIKE\n", err)
-		results, total, _ = store.SearchFTSLike(rawQuery, 0, size*3)
+		results, total, _ = store.SearchFTSLike(remainingQuery, 0, limitSize)
 	}
 
 	// 2. If few results, expand with LIKE (fuzzy fallback)
-	if total < 3 {
-		likeResults, likeTotal, _ := store.SearchFTSLike(rawQuery, 0, size*3)
+	if total < 3 && remainingQuery != "" {
+		likeResults, likeTotal, _ := store.SearchFTSLike(remainingQuery, 0, size*3)
 		// Merge, deduplicating
 		seen := make(map[string]bool)
 		for _, r := range results {
@@ -93,6 +103,25 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		doc, _ := store.GetDocument(r.DocID)
 		if doc == nil {
 			continue
+		}
+
+		// Filtro de tags como segunda linha de defesa (garante exatidão)
+		if len(queryTags) > 0 {
+			docTags := db.TagsToSlice(doc.Tags)
+			docTagMap := make(map[string]bool)
+			for _, dt := range docTags {
+				docTagMap[strings.ToLower(dt)] = true
+			}
+			hasAllTags := true
+			for _, qt := range queryTags {
+				if !docTagMap[strings.ToLower(qt)] {
+					hasAllTags = false
+					break
+				}
+			}
+			if !hasAllTags {
+				continue
+			}
 		}
 
 		hit := SearchHit{
@@ -156,47 +185,76 @@ func buildFTSQuery(raw string) string {
 		return ""
 	}
 
+	// Extrai tags e a query restante
+	tags, remaining := extractTags(raw)
+	remaining = strings.TrimSpace(remaining)
+
 	var parts []string
 
-	// Extract exact quoted phrases — aplica a todas as colunas
-	quotes := quoteRegex.FindAllStringSubmatch(raw, -1)
-	for _, q := range quotes {
-		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
-			ph := `"` + strings.TrimSpace(q[1]) + `"`
-			parts = append(parts, `(tags:`+ph+` OR arquivo:`+ph+` OR secao:`+ph+` OR texto:`+ph+`)`)
-		}
-		raw = strings.Replace(raw, q[0], " ", 1)
-	}
-
-	// Extract proximity phrases in single quotes
-	proximity := singleQuoteRegex.FindAllStringSubmatch(raw, -1)
-	for _, q := range proximity {
-		if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
-			ph := buildProximityExpression(strings.TrimSpace(q[1]))
-			if ph != "" {
-				parts = append(parts, ph)
+	// Adiciona restrições de tags no formato FTS5 tags:"nome_da_tag"
+	for _, tag := range tags {
+		tag = sanitizeFTS5Term(tag)
+		// Filtra apenas caracteres válidos para tag
+		tag = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' {
+				return r
 			}
+			return -1
+		}, tag)
+		if tag != "" {
+			parts = append(parts, `tags:"`+tag+`"`)
 		}
-		raw = strings.Replace(raw, q[0], " ", 1)
 	}
 
-	// Remove tag filters
-	raw = tagFilterRegex.ReplaceAllString(raw, " ")
+	if remaining != "" {
+		// Extract exact quoted phrases — aplica a todas as colunas
+		quotes := quoteRegex.FindAllStringSubmatch(remaining, -1)
+		for _, q := range quotes {
+			if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
+				phClean := sanitizeFTS5Term(strings.TrimSpace(q[1]))
+				if phClean != "" {
+					ph := `"` + phClean + `"`
+					parts = append(parts, `(tags:`+ph+` OR arquivo:`+ph+` OR secao:`+ph+` OR texto:`+ph+`)`)
+				}
+			}
+			remaining = strings.Replace(remaining, q[0], " ", 1)
+		}
 
-	// Process remaining words
-	words := strings.Fields(raw)
-	for _, w := range words {
-		w = strings.Trim(w, "?,;.:!+-")
-		w = sanitizeFTS5Term(w)
-		if w == "" || stopwords[strings.ToLower(w)] {
-			continue
+		// Extract proximity phrases in single quotes
+		proximity := singleQuoteRegex.FindAllStringSubmatch(remaining, -1)
+		for _, q := range proximity {
+			if len(q) == 2 && strings.TrimSpace(q[1]) != "" {
+				ph := buildProximityExpression(strings.TrimSpace(q[1]))
+				if ph != "" {
+					parts = append(parts, ph)
+				}
+			}
+			remaining = strings.Replace(remaining, q[0], " ", 1)
 		}
-		wLower := strings.ToLower(w)
-		if len(wLower) > 2 {
-			wLower += "*"
+
+		// Substitui hífens e outros caracteres especiais por espaços na busca por palavras soltas,
+		// permitindo que palavras como "e-mail" ou "go-lang" sejam divididas em termos FTS5 válidos.
+		remainingCleaned := strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				return r
+			}
+			return ' '
+		}, remaining)
+
+		// Process remaining words
+		words := strings.Fields(remainingCleaned)
+		for _, w := range words {
+			w = sanitizeFTS5Term(w)
+			if w == "" || stopwords[strings.ToLower(w)] {
+				continue
+			}
+			wLower := strings.ToLower(w)
+			if len(wLower) > 2 {
+				wLower += "*"
+			}
+			// Column weights: tags > arquivo > secao > texto
+			parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
 		}
-		// Column weights: tags > arquivo > secao > texto
-		parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
 	}
 
 	if len(parts) == 0 {
@@ -321,6 +379,25 @@ func extractTags(raw string) (tags []string, remaining string) {
 		}
 	}
 	return tags, remaining
+}
+
+// removeAccents remove acentos e diacríticos de uma string.
+func removeAccents(s string) string {
+	r := strings.NewReplacer(
+		"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+		"é", "e", "è", "e", "ê", "e", "ë", "e",
+		"í", "i", "ì", "i", "î", "i", "ï", "i",
+		"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+		"ú", "u", "ù", "u", "û", "u", "ü", "u",
+		"ç", "c",
+		"Á", "a", "À", "a", "Â", "a", "Ã", "a", "Ä", "a",
+		"É", "e", "È", "e", "Ê", "e", "Ë", "e",
+		"Í", "i", "Ì", "i", "Î", "i", "Ï", "i",
+		"Ó", "o", "Ò", "o", "Ô", "o", "õ", "o", "Ö", "o",
+		"Ú", "u", "Ù", "u", "Û", "u", "Ü", "u",
+		"Ç", "c",
+	)
+	return r.Replace(s)
 }
 
 

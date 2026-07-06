@@ -15,7 +15,7 @@ BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 DATA_DIR="$BASE_DIR/data"
 
 # Centraliza caminhos do Go para o sistema e ambiente do usuário
-export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"
+export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin:$HOME/.local/bin"
 
 # Carregar .env se existir
 if [ -f "$BASE_DIR/.env" ]; then

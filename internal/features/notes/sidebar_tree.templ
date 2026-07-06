@@ -177,22 +177,11 @@ func getVisibleTags(tags []string) []string {
 }
 
 func highlightText(text, query string) templ.Component {
-    // For now, return plain text. To fully emulate the highlighter, we can build custom HTML.
-    // If query is empty, just return the text
     if query == "" {
         return templ.Raw(templ.EscapeString(text))
     }
     
-    queryLower := strings.ToLower(query)
-    // Strip hashtags from query
-    queryClean := ""
-    for _, part := range strings.Fields(queryLower) {
-        if !strings.HasPrefix(part, "#") {
-            queryClean += part + " "
-        }
-    }
-    queryClean = strings.TrimSpace(queryClean)
-    
+    queryClean := strings.TrimSpace(strings.ToLower(query))
     if queryClean == "" {
         return templ.Raw(templ.EscapeString(text))
     }

@@ -151,9 +151,9 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 // GetDocumentsPaginated returns a page of documents, along with the total count.
 func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
 	var total int
-	s.DB.QueryRow("SELECT COUNT(*) FROM documents").Scan(&total)
+	s.DB.QueryRow("SELECT COUNT(*) FROM documents WHERE tags NOT LIKE '%drawing%'").Scan(&total)
 
-	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
+	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents WHERE tags NOT LIKE '%drawing%' ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
 	if err != nil {
 		return nil, 0, err
 	}

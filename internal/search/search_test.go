@@ -603,3 +603,215 @@ func TestBuildFTSQuery_MixedQuotes(t *testing.T) {
 		t.Errorf("esperado termo de proximidade, got %q", result)
 	}
 }
+
+func TestSearch_ExcludesDrawingNotes(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// 1. Insert a drawing note (contains "drawing" in tags)
+	store.InsertDocument(db.Document{
+		ID:        "doc-drawing",
+		Tipo:      "markdown",
+		Arquivo:   "notas/desenho.md",
+		Secao:     "Geral",
+		Texto:     "um belo desenho de teste excalidraw",
+		Tags:      "tag1,drawing",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-drawing", "markdown", "notas/desenho.md", "Geral", "um belo desenho de teste excalidraw", "tag1,drawing")
+
+	// 2. Insert a regular markdown note (no "drawing" in tags)
+	store.InsertDocument(db.Document{
+		ID:        "doc-markdown",
+		Tipo:      "markdown",
+		Arquivo:   "notas/comum.md",
+		Secao:     "Geral",
+		Texto:     "um texto comum de teste",
+		Tags:      "tag1,urgente",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-markdown", "markdown", "notas/comum.md", "Geral", "um texto comum de teste", "tag1,urgente")
+
+	// 3. Search for "teste" - matches both documents in FTS
+	results, err := Search(context.Background(), store, "teste", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+
+	// 4. Verify that the drawing note is excluded, but the regular note is found
+	foundMarkdown := false
+	foundDrawing := false
+	for _, h := range results.Hits {
+		if h.ID == "doc-markdown" {
+			foundMarkdown = true
+		}
+		if h.ID == "doc-drawing" {
+			foundDrawing = true
+		}
+	}
+
+	if !foundMarkdown {
+		t.Error("esperado encontrar a nota comum, mas não foi retornada")
+	}
+	if foundDrawing {
+		t.Error("nota do tipo desenho não deveria ser retornada nos resultados de busca")
+	}
+}
+
+func TestSearch_TagFiltering(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota com tag "urgente" e texto "reuniao de pauta"
+	store.InsertDocument(db.Document{
+		ID:        "doc-urgente",
+		Tipo:      "markdown",
+		Arquivo:   "notas/urgente.md",
+		Secao:     "Geral",
+		Texto:     "esta e uma reuniao muito importante",
+		Tags:      "urgente,trabalho",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-urgente", "markdown", "notas/urgente.md", "Geral", "esta e uma reuniao muito importante", "urgente,trabalho")
+
+	// Nota sem tag "urgente" com texto "reuniao de pauta"
+	store.InsertDocument(db.Document{
+		ID:        "doc-comum",
+		Tipo:      "markdown",
+		Arquivo:   "notas/comum.md",
+		Secao:     "Geral",
+		Texto:     "outra reuniao de pauta tranquila",
+		Tags:      "ideias",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-comum", "markdown", "notas/comum.md", "Geral", "outra reuniao de pauta tranquila", "ideias")
+
+	// Caso 1: Buscar "tags:urgente" (apenas filtro de tag)
+	res1, err := Search(context.Background(), store, "tags:urgente", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente, obtido %d hits", len(res1.Hits))
+	}
+
+	// Caso 2: Buscar "#trabalho" (filtro de tag por hashtag)
+	res2, err := Search(context.Background(), store, "#trabalho", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res2.Hits) != 1 || res2.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente para hashtag, obtido %v", res2.Hits)
+	}
+
+	// Caso 3: Buscar "tags:urgente reuniao" (tag + termo termo)
+	res3, err := Search(context.Background(), store, "tags:urgente reuniao", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res3.Hits) != 1 || res3.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente para tag+termo, obtido %v", res3.Hits)
+	}
+}
+
+func TestSearch_AccentInsensitivity(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota contendo palavra com acento
+	store.InsertDocument(db.Document{
+		ID:        "doc-acento",
+		Tipo:      "markdown",
+		Arquivo:   "notas/computacao.md",
+		Secao:     "Tecnologia",
+		Texto:     "A ciência da computação é fantástica.",
+		Tags:      "estudos",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-acento", "markdown", "notas/computacao.md", "Tecnologia", "A ciência da computação é fantástica.", "estudos")
+
+	// Caso 1: Buscar sem acento
+	res1, err := Search(context.Background(), store, "computacao", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca sem acento falhou. Esperado encontrar doc-acento, obtido %d hits", len(res1.Hits))
+	}
+
+	// Caso 2: Buscar com acento exato
+	res2, err := Search(context.Background(), store, "computação", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res2.Hits) != 1 || res2.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca com acento exato falhou. Esperado encontrar doc-acento, obtido %d hits", len(res2.Hits))
+	}
+
+	// Caso 3: Buscar com caixa alta e acento
+	res3, err := Search(context.Background(), store, "COMPUTAÇÃO", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res3.Hits) != 1 || res3.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca com caixa alta e acento falhou. Esperado encontrar doc-acento, obtido %d hits", len(res3.Hits))
+	}
+}
+
+func TestSearch_HyphenatedWordMatch(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota com hífen
+	store.InsertDocument(db.Document{
+		ID:        "doc-hifen",
+		Tipo:      "markdown",
+		Arquivo:   "notas/hifen.md",
+		Secao:     "Geral",
+		Texto:     "Por favor envie um e-mail para confirmar a vaga.",
+		Tags:      "comunicacao",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-hifen", "markdown", "notas/hifen.md", "Geral", "Por favor envie um e-mail para confirmar a vaga.", "comunicacao")
+
+	// Caso 1: Buscar com hífen
+	res1, err := Search(context.Background(), store, "e-mail", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-hifen" {
+		t.Errorf("Busca de termo com hífen falhou. Esperado encontrar doc-hifen, obtido %d hits", len(res1.Hits))
+	}
+}
