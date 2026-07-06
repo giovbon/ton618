@@ -158,6 +158,24 @@ templ editorContent(data domain.EditorData) {
         <button id="bubble-link" class="bubble-btn">🔗</button>
     </div>
 
+    <!-- Table contextual menu -->
+    <div
+        id="table-bubble-menu"
+        class="fixed hidden z-50 flex items-center gap-0.5 px-1.5 py-1 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl"
+    >
+        <button data-cmd="addRowBefore" class="table-bubble-btn" title="Adicionar linha acima">+ Linha ⬆</button>
+        <button data-cmd="addRowAfter" class="table-bubble-btn" title="Adicionar linha abaixo">+ Linha ⬇</button>
+        <button data-cmd="addColumnBefore" class="table-bubble-btn" title="Adicionar coluna antes">+ Col ⬅</button>
+        <button data-cmd="addColumnAfter" class="table-bubble-btn" title="Adicionar coluna depois">+ Col ➡</button>
+        <div class="w-px h-4 bg-zinc-800 mx-1"></div>
+        <button data-cmd="mergeCells" class="table-bubble-btn" title="Mesclar células">Mesclar</button>
+        <button data-cmd="splitCell" class="table-bubble-btn" title="Dividir célula">Dividir</button>
+        <div class="w-px h-4 bg-zinc-800 mx-1"></div>
+        <button data-cmd="deleteRow" class="table-bubble-btn text-red-400" title="Excluir linha">Del Linha ❌</button>
+        <button data-cmd="deleteColumn" class="table-bubble-btn text-red-400" title="Excluir coluna">Del Col ❌</button>
+        <button data-cmd="deleteTable" class="table-bubble-btn text-red-500 font-bold" title="Excluir tabela">🗑️ Tabela</button>
+    </div>
+
     <div
         id="slash-menu"
         class="fixed hidden z-50 min-w-[160px] max-w-[90vw] bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl overflow-hidden"
@@ -195,6 +213,27 @@ templ editorContent(data domain.EditorData) {
         background: rgba(255, 255, 255, 0.06);
     }
     .bubble-btn.is-active {
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+    }
+    .table-bubble-btn {
+        padding: 3px 6px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #a1a1aa;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        line-height: 1.2;
+        transition: all 0.12s;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .table-bubble-btn:hover {
+        color: #e4e4e7;
+        background: rgba(255, 255, 255, 0.06);
+    }
+    .table-bubble-btn.is-active {
         color: #38bdf8;
         background: rgba(56, 189, 248, 0.12);
     }
@@ -550,6 +589,7 @@ templ editorContent(data domain.EditorData) {
         var statusEl = document.getElementById("editor-status");
         var filenameInput = document.getElementById("file-name");
         var bubbleEl = document.getElementById("bubble-menu");
+        var tableBubbleEl = document.getElementById("table-bubble-menu");
         var slashEl = document.getElementById("slash-menu");
         var slashItems = document.getElementById("slash-items");
 
@@ -721,6 +761,70 @@ templ editorContent(data domain.EditorData) {
                         slashFilterText = "";
                     }
                     organizeHeadings();
+                },
+            },
+            {
+                id: "addRowBefore",
+                icon: "➕⬆️",
+                label: "Adicionar linha acima",
+                tableOnly: true,
+                action: makeSlashAction("addRowBefore"),
+            },
+            {
+                id: "addRowAfter",
+                icon: "➕⬇️",
+                label: "Adicionar linha abaixo",
+                tableOnly: true,
+                action: makeSlashAction("addRowAfter"),
+            },
+            {
+                id: "addColumnBefore",
+                icon: "➕⬅️",
+                label: "Adicionar coluna antes",
+                tableOnly: true,
+                action: makeSlashAction("addColumnBefore"),
+            },
+            {
+                id: "addColumnAfter",
+                icon: "➕➡️",
+                label: "Adicionar coluna depois",
+                tableOnly: true,
+                action: makeSlashAction("addColumnAfter"),
+            },
+            {
+                id: "deleteRow",
+                icon: "🗑️⬇️",
+                label: "Excluir linha",
+                tableOnly: true,
+                action: makeSlashAction("deleteRow"),
+            },
+            {
+                id: "deleteColumn",
+                icon: "🗑️➡️",
+                label: "Excluir coluna",
+                tableOnly: true,
+                action: makeSlashAction("deleteColumn"),
+            },
+            {
+                id: "deleteTable",
+                icon: "🗑️",
+                label: "Excluir tabela",
+                tableOnly: true,
+                action: function () {
+                    hideSlashMenu();
+                    if (slashPos !== null && editor) {
+                        var $to = editor.state.selection.$from;
+                        editor
+                            .chain()
+                            .focus()
+                            .deleteRange({ from: slashPos, to: $to.pos })
+                            .run();
+                        slashPos = null;
+                        slashFilterText = "";
+                    }
+                    if (editor && confirm("Excluir esta tabela?")) {
+                        editor.chain().focus().deleteTable().run();
+                    }
                 },
             },
         ];
@@ -993,6 +1097,7 @@ templ editorContent(data domain.EditorData) {
             onSelectionUpdate: function () {
                 if (!slashEl.classList.contains("hidden")) return;
                 updateBubble();
+                updateTableBubble();
             },
             onUpdate: function () {
                 // Pula o primeiro onUpdate (disparado ao carregar o conteudo)
@@ -1495,16 +1600,126 @@ templ editorContent(data domain.EditorData) {
             if (btn.id === "bubble-link") promptLink();
         });
 
+        // ── Table Bubble Menu ──
+        function updateTableBubble() {
+            if (!editor || editor.isDestroyed || !tableBubbleEl) {
+                hideTableBubble();
+                return;
+            }
+            if (!editor.isActive("table")) {
+                hideTableBubble();
+                return;
+            }
+            var sel = window.getSelection();
+            if (!sel || !sel.rangeCount) {
+                hideTableBubble();
+                return;
+            }
+            var cells = document.querySelectorAll('.selectedCell');
+            if (cells.length <= 1) {
+                hideTableBubble();
+                return;
+            }
+            tableBubbleEl.classList.remove("hidden");
+            var left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+            cells.forEach(function(c) {
+                var r = c.getBoundingClientRect();
+                if (r.left < left) left = r.left;
+                if (r.top < top) top = r.top;
+                if (r.right > right) right = r.right;
+                if (r.bottom > bottom) bottom = r.bottom;
+            });
+            var rect = {
+                left: left,
+                top: top,
+                right: right,
+                bottom: bottom,
+                width: right - left,
+                height: bottom - top
+            };
+            var bw = tableBubbleEl.offsetWidth;
+            var menuLeft = rect.left + rect.width / 2 - bw / 2;
+            var menuTop = rect.top - tableBubbleEl.offsetHeight - 8;
+            if (menuTop < 8) {
+                menuTop = rect.bottom + 8;
+            }
+            if (menuLeft < 8) menuLeft = 8;
+            if (menuLeft + bw > window.innerWidth - 8) {
+                menuLeft = window.innerWidth - bw - 8;
+            }
+            tableBubbleEl.style.left = menuLeft + "px";
+            tableBubbleEl.style.top = menuTop + "px";
+
+            // Atualiza estado ativo dos botões se aplicável
+            tableBubbleEl.querySelectorAll(".table-bubble-btn").forEach(function (btn) {
+                var cmd = btn.dataset.cmd;
+                if (cmd) {
+                    btn.classList.toggle("is-active", editor.isActive(cmd));
+                }
+            });
+        }
+
+        function hideTableBubble() {
+            if (tableBubbleEl) tableBubbleEl.classList.add("hidden");
+        }
+
+        if (tableBubbleEl) {
+            tableBubbleEl.addEventListener("mousedown", function (e) {
+                var btn = e.target.closest(".table-bubble-btn");
+                if (!btn) return;
+                e.preventDefault();
+                var cmd = btn.dataset.cmd;
+                if (cmd && editor) {
+                    var chain = editor.chain().focus();
+                    switch (cmd) {
+                        case "addRowBefore":
+                            chain.addRowBefore();
+                            break;
+                        case "addRowAfter":
+                            chain.addRowAfter();
+                            break;
+                        case "addColumnBefore":
+                            chain.addColumnBefore();
+                            break;
+                        case "addColumnAfter":
+                            chain.addColumnAfter();
+                            break;
+                        case "deleteRow":
+                            chain.deleteRow();
+                            break;
+                        case "deleteColumn":
+                            chain.deleteColumn();
+                            break;
+                        case "deleteTable":
+                            if (confirm("Excluir esta tabela?")) {
+                                chain.deleteTable();
+                            }
+                            break;
+                        case "mergeCells":
+                            chain.mergeCells();
+                            break;
+                        case "splitCell":
+                            chain.splitCell();
+                            break;
+                    }
+                    chain.run();
+                    setTimeout(updateTableBubble, 50);
+                }
+            });
+        }
+
         window.addEventListener(
             "scroll",
             function () {
                 if (!bubbleEl.classList.contains("hidden")) updateBubble();
+                if (tableBubbleEl && !tableBubbleEl.classList.contains("hidden")) updateTableBubble();
             },
             true,
         );
 
         window.addEventListener("resize", function () {
             if (!bubbleEl.classList.contains("hidden")) updateBubble();
+            if (tableBubbleEl && !tableBubbleEl.classList.contains("hidden")) updateTableBubble();
         });
 
         // ── Slash Menu ──
@@ -1538,7 +1753,9 @@ templ editorContent(data domain.EditorData) {
 
         function renderSlashItems(filter) {
             var f = filter.toLowerCase();
+            var isInTable = editor && editor.isActive("table");
             var items = SLASH_COMMANDS.filter(function (c) {
+                if (c.tableOnly && !isInTable) return false;
                 return c.label.toLowerCase().indexOf(f) !== -1;
             });
             slashItems.innerHTML = "";
@@ -1665,6 +1882,27 @@ templ editorContent(data domain.EditorData) {
                     break;
                 case "horizontalRule":
                     chain.setHorizontalRule();
+                    break;
+                case "addRowBefore":
+                    chain.addRowBefore();
+                    break;
+                case "addRowAfter":
+                    chain.addRowAfter();
+                    break;
+                case "addColumnBefore":
+                    chain.addColumnBefore();
+                    break;
+                case "addColumnAfter":
+                    chain.addColumnAfter();
+                    break;
+                case "deleteRow":
+                    chain.deleteRow();
+                    break;
+                case "deleteColumn":
+                    chain.deleteColumn();
+                    break;
+                case "deleteTable":
+                    chain.deleteTable();
                     break;
                 default:
                     return;
@@ -2151,6 +2389,14 @@ templ editorContent(data domain.EditorData) {
                 !slashEl.contains(e.target)
             )
                 hideSlashMenu();
+            if (
+                tableBubbleEl &&
+                !tableBubbleEl.classList.contains("hidden") &&
+                !tableBubbleEl.contains(e.target) &&
+                !e.target.closest(".ProseMirror")
+            ) {
+                hideTableBubble();
+            }
             var wm = document.getElementById("wikilink-menu");
             if (
                 !wm.classList.contains("hidden") &&
