@@ -46,13 +46,18 @@ templ typstContent(data domain.EditorData) {
         if (evt.detail.target && evt.detail.target.id === "typst-preview-container") {
             var errorDiv = evt.detail.target.querySelector(".bg-red-950\\/85");
             var errorBanner = document.getElementById("typst-error-banner");
+            var errorContent = document.getElementById("typst-error-content");
             if (errorBanner) {
                 if (errorDiv) {
-                    errorBanner.innerHTML = errorDiv.outerHTML;
+                    if (errorContent) {
+                        errorContent.innerHTML = errorDiv.innerHTML;
+                    }
                     errorBanner.classList.remove("hidden");
-                    evt.detail.target.innerHTML = `<div class="text-red-400/80 text-xs py-20 font-mono flex items-center gap-1.5 justify-center">⚠️ Erro de compilação</div>`;
+                    evt.detail.target.innerHTML = errorDiv.outerHTML;
                 } else {
-                    errorBanner.innerHTML = "";
+                    if (errorContent) {
+                        errorContent.innerHTML = "";
+                    }
                     errorBanner.classList.add("hidden");
                 }
             }
@@ -156,7 +161,15 @@ templ typstContent(data domain.EditorData) {
                 >{ data.Content }</div>
             </div>
             <!-- Banner de Erros de Sintaxe -->
-            <div id="typst-error-banner" class="hidden mt-2 shrink-0"></div>
+            <div id="typst-error-banner" class="hidden mt-2 shrink-0 border border-red-900/50 rounded-lg bg-zinc-950/90 backdrop-blur-md overflow-hidden flex flex-col shadow-lg shadow-red-950/20">
+                <div class="flex items-center justify-between px-3 py-1.5 bg-red-950/40 border-b border-red-900/30 text-[11px] font-bold uppercase tracking-wider text-red-400 select-none">
+                    <span class="flex items-center gap-1.5">
+                        <span class="text-xs">⚠️</span> Erros de Compilação
+                    </span>
+                    <button onclick="document.getElementById('typst-error-banner').classList.add('hidden')" class="hover:text-red-200 transition-colors text-xs font-mono w-5 h-5 flex items-center justify-center rounded hover:bg-red-900/20">✕</button>
+                </div>
+                <div id="typst-error-content" class="max-h-48 overflow-y-auto p-3.5 font-mono text-xs text-red-300/90 whitespace-pre-wrap leading-relaxed select-text"></div>
+            </div>
         </div>
 
         <!-- Painel Direito: Visualizador de Preview -->
@@ -178,6 +191,23 @@ templ typstContent(data domain.EditorData) {
 
 
 <style>
+    /* Scrollbar customizada para o painel de erros */
+    #typst-error-content::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+        background: transparent !important;
+    }
+
+    #typst-error-content::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #typst-error-content::-webkit-scrollbar-thumb {
+        background-color: #451a1a !important;
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
     /* Estilo de "folha de papel" para cada página SVG renderizada do Typst */
     .typst-page {
         background-color: #ffffff;
