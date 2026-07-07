@@ -247,7 +247,7 @@ templ mindmapContent(data domain.EditorData) {
 <script src="/static/mindmap.js?v=3"></script>
 
 <script type="module">
-    import { CodeJar } from '/static/codejar.js?v=3';
+    import { CodeJar } from '/static/codejar.js?v=5';
 
     (function () {
         "use strict";
@@ -277,7 +277,7 @@ templ mindmapContent(data domain.EditorData) {
             var id = 0;
             var tokenPrefix = "TK" + Math.random().toString(36).substring(2) + "X";
             function addToken(text, className) {
-                var tokenPlace = tokenPrefix + (id++);
+                var tokenPlace = tokenPrefix + (id++) + "Y";
                 tokens.push({ id: tokenPlace, html: '<span class="' + className + '">' + text + '</span>' });
                 return tokenPlace;
             }
@@ -308,7 +308,7 @@ templ mindmapContent(data domain.EditorData) {
             });
 
             // Restore tokens
-            var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)", "g");
+            var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
             html = html.replace(tokenRegExp, function(match, tokenId) {
                 var idx = parseInt(tokenId, 10);
                 return tokens[idx] ? tokens[idx].html : match;

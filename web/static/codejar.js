@@ -289,22 +289,107 @@ export function CodeJar(editor, highlight, opt = {}) {
     function handleTabCharacters(event) {
         if (event.key === 'Tab') {
             preventDefault(event);
-            if (event.shiftKey) {
-                const before = beforeCursor();
-                let [padding, start,] = findPadding(before);
-                if (padding.length > 0) {
-                    const pos = save();
-                    // Remove full length tab or just remaining padding
-                    const len = Math.min(options.tab.length, padding.length);
-                    restore({ start, end: start + len });
-                    document.execCommand('delete');
-                    pos.start -= len;
-                    pos.end -= len;
-                    restore(pos);
-                }
-            }
-            else {
+            const code = toString();
+            const pos = save();
+            const min = Math.min(pos.start, pos.end);
+            const max = Math.max(pos.start, pos.end);
+
+            const shouldIndentLines = (pos.start !== pos.end) || event.shiftKey;
+
+            if (!shouldIndentLines) {
                 insert(options.tab);
+                return;
+            }
+
+            const allLines = code.split('\n');
+            let currentOffset = 0;
+            const newLines = [];
+            let newStart = pos.start;
+            let newEnd = pos.end;
+
+            for (let i = 0; i < allLines.length; i++) {
+                const line = allLines[i];
+                const lineStart = currentOffset;
+                const lineEnd = currentOffset + line.length;
+
+                let isIntersected = false;
+                if (min === max) {
+                    isIntersected = lineStart <= min && min <= lineEnd;
+                } else {
+                    isIntersected = max > lineStart && min <= lineEnd;
+                }
+
+                let newLine = line;
+                let change = 0;
+
+                if (isIntersected) {
+                    if (event.shiftKey) {
+                        let charsRemoved = 0;
+                        if (line.startsWith(options.tab)) {
+                            newLine = line.substring(options.tab.length);
+                            charsRemoved = options.tab.length;
+                        } else if (line.startsWith(' ')) {
+                            const spaceCount = options.tab === '\t' ? 4 : options.tab.length;
+                            let count = 0;
+                            while (count < spaceCount && line[count] === ' ') {
+                                count++;
+                            }
+                            if (count > 0) {
+                                newLine = line.substring(count);
+                                charsRemoved = count;
+                            }
+                        } else if (line.startsWith('\t')) {
+                            newLine = line.substring(1);
+                            charsRemoved = 1;
+                        }
+                        change = -charsRemoved;
+                    } else {
+                        newLine = options.tab + line;
+                        change = options.tab.length;
+                    }
+
+                    if (change !== 0) {
+                        if (pos.start > lineEnd) {
+                            newStart += change;
+                        } else if (pos.start > lineStart && pos.start <= lineEnd) {
+                            if (change > 0) {
+                                newStart += change;
+                            } else {
+                                const charsRemoved = -change;
+                                if (pos.start > lineStart + charsRemoved) {
+                                    newStart += change;
+                                } else {
+                                    newStart += (lineStart - pos.start);
+                                }
+                            }
+                        }
+
+                        if (pos.end > lineEnd) {
+                            newEnd += change;
+                        } else if (pos.end > lineStart && pos.end <= lineEnd) {
+                            if (change > 0) {
+                                newEnd += change;
+                            } else {
+                                const charsRemoved = -change;
+                                if (pos.end > lineStart + charsRemoved) {
+                                    newEnd += change;
+                                } else {
+                                    newEnd += (lineStart - pos.end);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                newLines.push(newLine);
+                currentOffset += line.length + 1;
+            }
+
+            const newCode = newLines.join('\n');
+            if (newCode !== code) {
+                restore({ start: 0, end: code.length });
+                insert(newCode);
+                restore({ start: newStart, end: newEnd, dir: pos.dir });
             }
         }
     }
