@@ -30,6 +30,8 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("GET /api/health", sysCtx.HandleHealth)
 	mux.HandleFunc("GET /api/help/markdown", sysCtx.HandleHelpMarkdown)
 	mux.HandleFunc("GET /api/todos", sysCtx.HandleListTodos)
+	mux.HandleFunc("GET /api/settings/ntfy", sysCtx.HandleGetNtfySettings)
+	mux.HandleFunc("POST /api/settings/ntfy", sysCtx.HandlePostNtfySettings)
 
 	// NOTES (Editor e Arquivos)
 	mux.HandleFunc("GET /editor", sysCtx.HandleEditor)

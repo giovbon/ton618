@@ -53,6 +53,12 @@ templ SettingsModal() {
                     class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
                     📅 Agenda
                 </button>
+                <button data-tab="ntfy" onclick="
+                            switchSettingsTab('ntfy');
+                        "
+                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                    🔔 Ntfy
+                </button>
             </div>
 
             <!-- Tab Content -->
@@ -264,6 +270,20 @@ templ SettingsModal() {
                             <p class="text-[10px] text-zinc-500 mt-2">
                                 Define as coordenadas para calcular o nascer e pôr do sol no gráfico. O padrão é America/Sao_Paulo.
                             </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ntfy Tab -->
+                <div id="tab-ntfy" class="settings-tab hidden space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Configure as notificações de agendamentos enviadas via Ntfy (1 dia antes e resumo semanal aos domingos).
+                    </p>
+
+                    <div hx-get="/api/settings/ntfy" hx-trigger="intersect once" id="ntfy-settings-container">
+                        <div class="text-center py-8">
+                            <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                            <p class="text-xs text-zinc-600">Carregando configurações Ntfy...</p>
                         </div>
                     </div>
                 </div>

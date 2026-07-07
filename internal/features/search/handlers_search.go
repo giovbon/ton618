@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"ton618/internal/core/db"
 	"ton618/internal/core/domain"
@@ -26,6 +25,52 @@ import (
 	
 	"ton618/internal/watcher"
 )
+
+// extractSearchTerms extrai os termos de busca da query, ignorando filtros e operadores.
+func extractSearchTerms(query string) []string {
+	var terms []string
+	remaining := query
+
+	// 1. Extrai frases entre aspas duplas ou simples
+	quotedRe := regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
+	for {
+		m := quotedRe.FindStringSubmatch(remaining)
+		if m == nil {
+			break
+		}
+		phrase := m[1]
+		if phrase == "" {
+			phrase = m[2]
+		}
+		phrase = strings.TrimSpace(phrase)
+		if len(phrase) > 1 {
+			terms = append(terms, phrase)
+		}
+		remaining = strings.Replace(remaining, m[0], " ", 1)
+	}
+
+	// 2. Extrai termos individuais do restante
+	rawTerms := strings.Fields(remaining)
+	for _, t := range rawTerms {
+		t = strings.TrimSpace(t)
+		if len(t) <= 1 {
+			continue
+		}
+		// Ignora termos de exclusão (-termo), tags do FTS (+tags:nome) e hashtags nativas (#tag)
+		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+tags:") || strings.HasPrefix(t, "#") {
+			continue
+		}
+		
+		// Remove aspas adicionais se sobrarem nas bordas
+		t = strings.Trim(t, `"'`)
+		if len(t) <= 1 {
+			continue
+		}
+		
+		terms = append(terms, t)
+	}
+	return terms
+}
 
 // buildContextSnippet gera um trecho do texto com contexto ao redor de termos encontrados.
 // Suporta "frases exatas" entre aspas como termo único.
@@ -37,48 +82,7 @@ func buildContextSnippet(query, text string) string {
 		return "..."
 	}
 
-	// Extrai frases exatas e termos individuais
-	var terms []string
-	remaining := query
-
-	// Primeiro: extrai frases entre aspas
-	quotedRe := regexp.MustCompile(`"([^"]+)"`)
-	for {
-		m := quotedRe.FindStringSubmatch(remaining)
-		if m == nil {
-			break
-		}
-		phrase := strings.TrimSpace(m[1])
-		if len(phrase) > 1 {
-			terms = append(terms, phrase)
-		}
-		remaining = strings.Replace(remaining, m[0], " ", 1)
-	}
-
-	// Depois: extrai termos individuais do restante
-	rawTerms := strings.Fields(remaining)
-	for _, t := range rawTerms {
-		t = strings.TrimSpace(t)
-		if len(t) <= 1 {
-			continue
-		}
-		if t[0] == '-' || t[0] == '#' || strings.HasPrefix(t, "+tags:") {
-			continue
-		}
-		t = strings.Trim(t, `"`)
-		if len(t) <= 1 {
-			continue
-		}
-		cleaned := strings.Map(func(r rune) rune {
-			if unicode.IsLetter(r) || unicode.IsDigit(r) {
-				return r
-			}
-			return -1
-		}, t)
-		if len(cleaned) > 1 {
-			terms = append(terms, cleaned)
-		}
-	}
+	terms := extractSearchTerms(query)
 
 	if len(terms) == 0 {
 		if len(text) > 250 {
@@ -382,7 +386,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	SearchResults(data).Render(r.Context(), w)
 }
 
-// findQueryLine encontra a primeira linha no conteúdo da nota que contém o termo buscado.
+// findQueryLine encontra a primeira linha no conteúdo da nota que contém os termos buscados.
 func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
 	if query == "" {
 		return 0
@@ -392,8 +396,16 @@ func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
 		return 0
 	}
 
-	queryLower := strings.ToLower(query)
-	terms := strings.Fields(queryLower)
+	terms := extractSearchTerms(query)
+	if len(terms) == 0 {
+		return 0
+	}
+
+	// Lowercase and remove accents for matching
+	var normalizedTerms []string
+	for _, term := range terms {
+		normalizedTerms = append(normalizedTerms, removeAccents(strings.ToLower(term)))
+	}
 
 	lines := strings.Split(content, "\n")
 	// Skip frontmatter
@@ -408,11 +420,11 @@ func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
 	}
 
 	for i := startIdx; i < len(lines); i++ {
-		lineLower := strings.ToLower(lines[i])
-		// Check if all query terms appear in this line
+		lineNormalized := removeAccents(strings.ToLower(lines[i]))
+		// Check if all normalized query terms appear in this line
 		allMatch := true
-		for _, term := range terms {
-			if !strings.Contains(lineLower, term) {
+		for _, term := range normalizedTerms {
+			if !strings.Contains(lineNormalized, term) {
 				allMatch = false
 				break
 			}
@@ -422,7 +434,15 @@ func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
 		}
 	}
 
-	// Fallback: return the section's approximate position
+	// Se não encontrar uma única linha com todos os termos, busca a linha com o primeiro termo
+	for i := startIdx; i < len(lines); i++ {
+		lineNormalized := removeAccents(strings.ToLower(lines[i]))
+		if strings.Contains(lineNormalized, normalizedTerms[0]) {
+			return i + 1
+		}
+	}
+
+	// Fallback: retorna a posição aproximada após o frontmatter
 	return startIdx + 1
 }
 

@@ -143,6 +143,17 @@ func initSchema(database *sql.DB) error {
 		week_number INTEGER DEFAULT 0,
 		created_at TEXT DEFAULT ''
 	);
+
+	CREATE TABLE IF NOT EXISTS settings (
+		key TEXT PRIMARY KEY,
+		value TEXT DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS notifications_log (
+		id TEXT PRIMARY KEY,
+		type TEXT,
+		sent_at TEXT
+	);
 	`
 
 	_, err := database.Exec(schema)

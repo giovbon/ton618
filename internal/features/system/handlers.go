@@ -1140,3 +1140,31 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 
 	w.WriteHeader(http.StatusOK)
 }
+
+func (ctx *HandlerContext) HandleGetNtfySettings(w http.ResponseWriter, r *http.Request) {
+	url, _ := ctx.Store.GetSetting("ntfy_url")
+	topic, _ := ctx.Store.GetSetting("ntfy_topic")
+	user, _ := ctx.Store.GetSetting("ntfy_user")
+	pass, _ := ctx.Store.GetSetting("ntfy_pass")
+
+	NtfySettings(url, topic, user, pass, false).Render(r.Context(), w)
+}
+
+func (ctx *HandlerContext) HandlePostNtfySettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	url := r.FormValue("ntfy_url")
+	topic := r.FormValue("ntfy_topic")
+	user := r.FormValue("ntfy_user")
+	pass := r.FormValue("ntfy_pass")
+
+	ctx.Store.SetSetting("ntfy_url", url)
+	ctx.Store.SetSetting("ntfy_topic", topic)
+	ctx.Store.SetSetting("ntfy_user", user)
+	ctx.Store.SetSetting("ntfy_pass", pass)
+
+	NtfySettings(url, topic, user, pass, true).Render(r.Context(), w)
+}

@@ -135,7 +135,7 @@ templ indexContent() {
             remaining = remaining.replace(m[0], " ");
         }
         var words = remaining.split(/\s+/).filter(function (w) {
-            return w.length > 1 && w !== '"';
+            return w.length > 1 && w !== '"' && !w.startsWith('-') && !w.startsWith('+tags:') && !w.startsWith('#');
         });
         terms = terms.concat(words);
 

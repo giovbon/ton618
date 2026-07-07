@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"ton618/internal/core/db"
 )
 
 // ── buildContextSnippet ─────────────────────────────────────────
@@ -74,6 +77,81 @@ func TestBuildContextSnippet_FarApartTerms(t *testing.T) {
 	result := buildContextSnippet("first Go", text)
 	if !strings.Contains(result, "first") || !strings.Contains(result, "Go") {
 		t.Errorf("snippet deve conter ambos os termos separados, got %q", result)
+	}
+}
+
+func TestExtractSearchTerms(t *testing.T) {
+	tests := []struct {
+		query    string
+		expected []string
+	}{
+		{"C++", []string{"C++"}},
+		{"C#", []string{"C#"}},
+		{".NET", []string{".NET"}},
+		{"\"programming language\" C++", []string{"programming language", "C++"}},
+		{"-exclude #tag +tags:something C++", []string{"C++"}},
+		{"a", nil}, // single character terms should be ignored
+	}
+
+	for _, tc := range tests {
+		result := extractSearchTerms(tc.query)
+		if len(result) != len(tc.expected) {
+			t.Errorf("para %q, esperado %v, got %v", tc.query, tc.expected, result)
+			continue
+		}
+		for i, v := range result {
+			if v != tc.expected[i] {
+				t.Errorf("para %q, no índice %d esperado %q, got %q", tc.query, i, tc.expected[i], v)
+			}
+		}
+	}
+}
+
+func TestBuildContextSnippet_SpecialCharacters(t *testing.T) {
+	text := "In this class we will learn C++ and how it differs from C# and Java."
+	result := buildContextSnippet("C++", text)
+	if !strings.Contains(result, "C++") {
+		t.Errorf("snippet deve conter 'C++', got %q", result)
+	}
+
+	result2 := buildContextSnippet("C#", text)
+	if !strings.Contains(result2, "C#") {
+		t.Errorf("snippet deve conter 'C#', got %q", result2)
+	}
+}
+
+func TestFindQueryLine_SpecialCharactersAndMultipleTerms(t *testing.T) {
+	ctx := newTestContext(t)
+	noteContent := `---
+title: Test Note
+---
+This is a test note.
+Let's learn C++ coding on line 5.
+We also write C# on line 6.
+And web apps with .NET on line 7.`
+	
+	saveTestNote(t, ctx, "notes/test-spec.md", noteContent, "")
+
+	// 1. Single term with special character
+	line := findQueryLine(ctx, "notes/test-spec.md", "C++")
+	if line != 5 {
+		t.Errorf("esperado linha 5 para 'C++', got %d", line)
+	}
+
+	lineCsharp := findQueryLine(ctx, "notes/test-spec.md", "C#")
+	if lineCsharp != 6 {
+		t.Errorf("esperado linha 6 para 'C#', got %d", lineCsharp)
+	}
+
+	lineDotnet := findQueryLine(ctx, "notes/test-spec.md", ".NET")
+	if lineDotnet != 7 {
+		t.Errorf("esperado linha 7 para '.NET', got %d", lineDotnet)
+	}
+
+	// 2. Multiple terms (some not on same line, should fallback to first term line)
+	lineMulti := findQueryLine(ctx, "notes/test-spec.md", "C++ Java")
+	if lineMulti != 5 {
+		t.Errorf("esperado linha 5 para 'C++ Java' (fallback para primeiro termo), got %d", lineMulti)
 	}
 }
 
@@ -334,5 +412,48 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 	// Arquivo restaurado no banco
 	if !ctx.Store.NoteExists("notes/restore-test.md") {
 		t.Error("nota deveria ter sido restaurada no banco")
+	}
+}
+
+func TestHandleSearch_IntegrationSpecialCharacters(t *testing.T) {
+	ctx := newTestContext(t)
+	
+	// 1. Create and save note
+	noteContent := "Let's learn and code in C++ today. It is a powerful language."
+	saveTestNote(t, ctx, "notes/test-cpp.md", noteContent, "estudos")
+	
+	// Index in FTS manually for the search subsystem to find it
+	now := time.Now().Format(time.RFC3339)
+	ctx.Store.InsertDocument(db.Document{
+		ID:        "doc-cpp",
+		Tipo:      "markdown",
+		Arquivo:   "notes/test-cpp.md",
+		Secao:     "Geral",
+		Texto:     noteContent,
+		Tags:      "estudos",
+		Timestamp: now,
+	})
+	ctx.Store.IndexFTS("doc-cpp", "markdown", "notes/test-cpp.md", "Geral", noteContent, "estudos")
+	
+	// 2. Perform HTTP search request
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/search?q=C%2B%2B", nil) // Q is "C++" encoded
+	
+	ctx.HandleSearch(rec, req)
+	
+	if rec.Code != 200 {
+		t.Errorf("esperado status 200, got %d", rec.Code)
+	}
+	
+	bodyStr := rec.Body.String()
+	
+	// 3. Verify snippet and file name are in the HTML output
+	if !strings.Contains(bodyStr, "test-cpp.md") {
+		t.Errorf("esperado encontrar o arquivo 'test-cpp.md' no output HTML, got %q", bodyStr)
+	}
+	
+	// The snippet must contain the context containing "C++"
+	if !strings.Contains(bodyStr, "code in C++ today") {
+		t.Errorf("esperado encontrar o snippet contendo 'code in C++ today' no output HTML, got %q", bodyStr)
 	}
 }

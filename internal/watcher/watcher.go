@@ -11,6 +11,7 @@ import (
 
 	"ton618/internal/core/config"
 	"ton618/internal/core/db"
+	"ton618/internal/core/services"
 	"ton618/internal/processor"
 
 	"github.com/fsnotify/fsnotify"
@@ -100,6 +101,8 @@ type Watcher struct {
 	// é enviado ao canal `events` para processamento.
 	debounceMu    sync.Mutex
 	debounceTimers map[string]*time.Timer
+
+	ntfyService *services.NtfyService
 }
 
 // NewWatcher creates a new watcher instance.
@@ -109,6 +112,7 @@ func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
 		store:          store,
 		events:         make(chan FileEvent, 100),
 		debounceTimers: make(map[string]*time.Timer),
+		ntfyService:    services.NewNtfyService(store),
 	}
 }
 
@@ -560,4 +564,10 @@ func (w *Watcher) pollAll() {
 			}
 		}
 	}
+
+	// 3. Verifica se precisa enviar notificações do calendário
+	go func() {
+		w.ntfyService.CheckAndSendDailyAppointments()
+		w.ntfyService.CheckAndSendWeeklySummary()
+	}()
 }
