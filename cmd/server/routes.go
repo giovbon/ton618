@@ -34,9 +34,9 @@ func SetupRoutes(mux *http.ServeMux, sysCtx *system.HandlerContext, notesCtx *no
 	mux.HandleFunc("POST /api/settings/ntfy", sysCtx.HandlePostNtfySettings)
 
 	// NOTES (Editor e Arquivos)
-	mux.HandleFunc("GET /editor", sysCtx.HandleEditor)
-	mux.HandleFunc("GET /spreadsheet", sysCtx.HandleSpreadsheet)
-	mux.HandleFunc("GET /drawing", sysCtx.HandleDrawing)
+	mux.HandleFunc("GET /editor", notesCtx.HandleEditor)
+	mux.HandleFunc("GET /spreadsheet", notesCtx.HandleSpreadsheet)
+	mux.HandleFunc("GET /drawing", notesCtx.HandleDrawing)
 	mux.HandleFunc("GET /typst", notesCtx.HandleTypst)
 	mux.HandleFunc("GET /mermaid", notesCtx.HandleMermaid)
 	mux.HandleFunc("GET /mindmap", notesCtx.HandleMindmap)

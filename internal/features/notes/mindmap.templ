@@ -20,9 +20,7 @@ templ mindmapContent(data domain.EditorData) {
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
-        
-
-
+        @BacklinksPopover(data.Backlinks)
         <button
             id="save-btn"
             onclick="saveMindmap()"

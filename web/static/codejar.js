@@ -387,9 +387,13 @@ export function CodeJar(editor, highlight, opt = {}) {
 
             const newCode = newLines.join('\n');
             if (newCode !== code) {
+                const scrollTop = editor.scrollTop;
+                const scrollLeft = editor.scrollLeft;
                 restore({ start: 0, end: code.length });
                 insert(newCode);
                 restore({ start: newStart, end: newEnd, dir: pos.dir });
+                editor.scrollTop = scrollTop;
+                editor.scrollLeft = scrollLeft;
             }
         }
     }

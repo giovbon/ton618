@@ -3,7 +3,6 @@ package notes
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"ton618/internal/core/domain"
@@ -17,72 +16,19 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, err := ctx.Store.GetNote(fileParam)
-	if err != nil {
-		content = `---
-type: typst
----
+	nd, _ := ctx.loadNoteData(fileParam)
 
-= Titulo
-
-Escreva seu conteudo Typst aqui.`
-	}
-
-	tags, _ := ctx.Store.GetFileTags(fileParam)
-
-	var userTags []string
-	for _, t := range tags {
-		t = strings.ToLower(t)
-		if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" && t != "mindmap" && t != "markmap" && t != "keywords" {
-			userTags = append(userTags, t)
+	if !nd.Exists {
+		nd.Content = "---\ntype: typst\n---\n\n= Titulo\n\nEscreva seu conteudo Typst aqui."
+	} else {
+		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, fileParam)
+		if redirectIfWrongEditor(w, r, noteType, "/typst", fileParam) {
+			return
 		}
 	}
 
-	typstType := false
-	for _, t := range tags {
-		if strings.ToLower(t) == "typst" {
-			typstType = true
-			break
-		}
-	}
-
-	if !typstType && content != "" {
-		frontmatter, _, _ := ParseFrontmatter(content)
-		if frontmatter != nil {
-			noteType, _ := frontmatter["type"].(string)
-			noteType = strings.ToLower(noteType)
-			var redirect string
-			switch noteType {
-			case "spreadsheet", "planilha":
-				redirect = "/spreadsheet?file=" + url.QueryEscape(fileParam)
-			case "drawing", "desenho":
-				redirect = "/drawing?file=" + url.QueryEscape(fileParam)
-			case "mermaid":
-				redirect = "/mermaid?file=" + url.QueryEscape(fileParam)
-			case "mindmap", "markmap":
-				redirect = "/mindmap?file=" + url.QueryEscape(fileParam)
-			default:
-				redirect = "/editor?file=" + url.QueryEscape(fileParam)
-			}
-			if redirect != "" {
-				http.Redirect(w, r, redirect, http.StatusFound)
-				return
-			}
-		}
-	}
-
-	allTags, _ := ctx.Store.GetAllTags()
 	displayName := domain.DisplayName(fileParam)
-
-	data := domain.EditorData{
-		Title:       displayName + " — TON-618",
-		Filename:    fileParam,
-		DisplayName: displayName,
-		Content:     content,
-		Tags:        tags,
-		AllTags:     allTags,
-	}
-
+	data := buildEditorData(displayName+" — TON-618", fileParam, nd)
 	Typst(data).Render(r.Context(), w)
 }
 

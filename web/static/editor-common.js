@@ -124,7 +124,27 @@
                 headers: this.getAuthHeaders()
             });
             return r.json();
+        },
+
+        // toggleBacklinksPopover: abre/fecha o popup de backlinks
+        toggleBacklinksPopover: function (event) {
+            if (event) event.stopPropagation();
+            var popover = document.getElementById('backlinks-popover');
+            if (popover) {
+                popover.classList.toggle('hidden');
+            }
         }
     };
+
+    // Close backlinks popover clicking outside
+    document.addEventListener('click', function(event) {
+        var popover = document.getElementById('backlinks-popover');
+        var btn = document.getElementById('backlink-badge-btn');
+        if (popover && !popover.classList.contains('hidden')) {
+            if (btn && !btn.contains(event.target) && !popover.contains(event.target)) {
+                popover.classList.add('hidden');
+            }
+        }
+    });
 
 })();

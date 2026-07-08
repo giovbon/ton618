@@ -210,87 +210,14 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 			tags = strings.Split(item.Tags, ",")
 		}
 
-		noteType := "nota"
-		isDrawing := false
-		isSpreadsheet := false
-		isTypst := false
-		isMermaid := false
-		isMarkmap := false
-		isMap := false
-		isYoutube := false
-		isArticle := false
-		isCapture := false
-		for _, t := range tags {
-			lowerT := strings.ToLower(t)
-			switch lowerT {
-			case "drawing":
-				isDrawing = true
-			case "spreadsheet":
-				isSpreadsheet = true
-			case "typst":
-				isTypst = true
-			case "mermaid":
-				isMermaid = true
-			case "mindmap", "markmap":
-				isMarkmap = true
-			case "map", "mapa":
-				isMap = true
-			case "youtube":
-				isYoutube = true
-			case "artigo", "article":
-				isArticle = true
-			case "captura", "capture":
-				isCapture = true
-			}
-		}
-		lowerFile := strings.ToLower(item.Arquivo)
-		if !isMarkmap && (strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap")) {
-			isMarkmap = true
-		}
-		if !isMap && (strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map")) {
-			isMap = true
-		}
-
-		if isDrawing {
-			noteType = "desenho"
-		} else if isSpreadsheet {
-			noteType = "planilha"
-		} else if isTypst {
-			noteType = "typst"
-		} else if isMermaid {
-			noteType = "mermaid"
-		} else if isMarkmap {
-			noteType = "markmap"
-		} else if isMap {
-			noteType = "mapa"
-		} else if isYoutube {
-			noteType = "youtube"
-		} else if isArticle {
-			noteType = "artigo"
-		} else if isCapture {
-			noteType = "captura"
-		} else if strings.HasPrefix(item.Arquivo, "pdfs/") {
-			noteType = "pdf"
-		} else if strings.HasPrefix(item.Arquivo, "attachments/") {
-			noteType = "anexo"
-		} else if strings.HasPrefix(item.Arquivo, "archives/") {
-			noteType = "arquivo"
-		}
-
-		// Filtra tags de tipo de nota para ocultá-las da interface do usuário
-		var userTags []string
-		for _, t := range tags {
-			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" && lowerT != "map" && lowerT != "mapa" {
-				userTags = append(userTags, t)
-			}
-		}
+		noteType := domain.DetectNoteType(tags, "", item.Arquivo)
+		userTags := domain.FilterUserTags(tags)
 
 		items = append(items, domain.NoteItem{
 			Arquivo: item.Arquivo,
 			Tags:    userTags,
 			Mtime:   item.Mtime,
-			Type:    noteType,
+			Type:    string(noteType),
 		})
 	}
 	return items, nil
