@@ -1,8 +1,10 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"strings"
+	"ton618/internal/core/db/generated"
 )
 
 // Document represents a single document/chunk stored in the database.
@@ -20,21 +22,6 @@ type Document struct {
 	Hash       string
 }
 
-func docColumns() string {
-	return "id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash"
-}
-
-type scanner interface {
-	Scan(dest ...any) error
-}
-
-func scanDocument(s scanner) (Document, error) {
-	var doc Document
-	err := s.Scan(&doc.ID, &doc.Tipo, &doc.Arquivo, &doc.Secao, &doc.Texto,
-		&doc.Tags, &doc.Pagina, &doc.Ordem, &doc.Timestamp, &doc.CreatedAt, &doc.Hash)
-	return doc, err
-}
-
 // TagsToSlice converts a comma-separated tag string to a slice.
 func TagsToSlice(tags string) []string {
 	if tags == "" {
@@ -48,161 +35,151 @@ func SliceToTags(tags []string) string {
 	return strings.Join(tags, ",")
 }
 
+// fromDBGen converts a dbgen.Document to a db.Document
+func fromDBGen(d dbgen.Document) Document {
+	return Document{
+		ID:        d.ID,
+		Tipo:      d.Tipo.String,
+		Arquivo:   d.Arquivo.String,
+		Secao:     d.Secao.String,
+		Texto:     d.Texto.String,
+		Tags:      d.Tags.String,
+		Pagina:    int(d.Pagina.Int64),
+		Ordem:     int(d.Ordem.Int64),
+		Timestamp: d.Timestamp.String,
+		CreatedAt: d.CreatedAt.String,
+		Hash:      d.Hash.String,
+	}
+}
+
 // InsertDocument inserts a new document or replaces an existing one with the same ID.
 func (s *Store) InsertDocument(doc Document) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec(`
-		INSERT OR REPLACE INTO documents
-		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, doc.Tags,
-		doc.Pagina, doc.Ordem, doc.Timestamp, doc.CreatedAt, doc.Hash,
-	)
-	return err
+	return s.Q.InsertDocument(context.Background(), dbgen.InsertDocumentParams{
+		ID:        doc.ID,
+		Tipo:      sql.NullString{String: doc.Tipo, Valid: true},
+		Arquivo:   sql.NullString{String: doc.Arquivo, Valid: true},
+		Secao:     sql.NullString{String: doc.Secao, Valid: true},
+		Texto:     sql.NullString{String: doc.Texto, Valid: true},
+		Tags:      sql.NullString{String: doc.Tags, Valid: true},
+		Pagina:    sql.NullInt64{Int64: int64(doc.Pagina), Valid: true},
+		Ordem:     sql.NullInt64{Int64: int64(doc.Ordem), Valid: true},
+		Timestamp: sql.NullString{String: doc.Timestamp, Valid: true},
+		CreatedAt: sql.NullString{String: doc.CreatedAt, Valid: true},
+		Hash:      sql.NullString{String: doc.Hash, Valid: true},
+	})
 }
 
 // DeleteDocument removes a single document by ID.
 func (s *Store) DeleteDocument(id string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM documents WHERE id = ?", id)
-	return err
+	return s.Q.DeleteDocument(context.Background(), id)
 }
 
 // DeleteDocumentsByFile removes all documents associated with a given file path.
 func (s *Store) DeleteDocumentsByFile(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM documents WHERE arquivo = ?", arquivo)
-	return err
+	return s.Q.DeleteDocumentsByFile(context.Background(), sql.NullString{String: arquivo, Valid: true})
 }
 
 // GetDocument returns a single document by ID, or nil if not found.
 func (s *Store) GetDocument(id string) (*Document, error) {
-	row := s.DB.QueryRow(`SELECT `+docColumns()+` FROM documents WHERE id = ?`, id)
-	doc, err := scanDocument(row)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	row, err := s.Q.GetDocument(context.Background(), id)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
+	doc := fromDBGen(row)
 	return &doc, nil
 }
 
 // GetDocumentsByFile returns all documents belonging to a file, ordered by position.
 func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
-	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents WHERE arquivo = ? ORDER BY ordem ASC`, arquivo)
+	rows, err := s.Q.GetDocumentsByFile(context.Background(), sql.NullString{String: arquivo, Valid: true})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var docs []Document
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
+	for _, r := range rows {
+		docs = append(docs, fromDBGen(r))
 	}
-	return docs, rows.Err()
+	return docs, nil
 }
 
 // GetAllDocumentsByFile returns all documents grouped by their file path.
 func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
-	rows, err := s.DB.Query(`SELECT ` + docColumns() + ` FROM documents ORDER BY arquivo, ordem ASC`)
+	rows, err := s.Q.GetAllDocumentsByFile(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	result := make(map[string][]Document)
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
+	for _, r := range rows {
+		doc := fromDBGen(r)
 		result[doc.Arquivo] = append(result[doc.Arquivo], doc)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GetAllDocuments returns every document in the database.
 func (s *Store) GetAllDocuments() ([]Document, error) {
-	rows, err := s.DB.Query(`SELECT ` + docColumns() + ` FROM documents ORDER BY arquivo, ordem ASC`)
+	rows, err := s.Q.GetAllDocuments(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var docs []Document
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
+	for _, r := range rows {
+		docs = append(docs, fromDBGen(r))
 	}
-	return docs, rows.Err()
+	return docs, nil
 }
 
 // GetDocumentsPaginated returns a page of documents, along with the total count.
 func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
-	var total int
-	s.DB.QueryRow("SELECT COUNT(*) FROM documents WHERE tags NOT LIKE '%drawing%'").Scan(&total)
-
-	rows, err := s.DB.Query(`SELECT `+docColumns()+` FROM documents WHERE tags NOT LIKE '%drawing%' ORDER BY arquivo, ordem ASC LIMIT ? OFFSET ?`, size, from)
+	total, err := s.Q.CountDocumentsWithoutDrawing(context.Background())
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-
-	var docs []Document
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, 0, err
-		}
-		docs = append(docs, doc)
+	rows, err := s.Q.GetDocumentsPaginated(context.Background(), dbgen.GetDocumentsPaginatedParams{
+		Limit:  int64(size),
+		Offset: int64(from),
+	})
+	if err != nil {
+		return nil, int(total), err
 	}
-	return docs, total, rows.Err()
+	var docs []Document
+	for _, r := range rows {
+		docs = append(docs, fromDBGen(r))
+	}
+	return docs, int(total), nil
 }
 
 // GetDocumentCount returns the total number of documents in the database.
 func (s *Store) GetDocumentCount() int {
-	var count int
-	s.DB.QueryRow("SELECT COUNT(*) FROM documents").Scan(&count)
-	return count
+	count, _ := s.Q.GetDocumentCount(context.Background())
+	return int(count)
 }
 
 // GetDistinctFiles returns all unique file paths that have documents.
 func (s *Store) GetDistinctFiles() ([]string, error) {
-	rows, err := s.DB.Query("SELECT DISTINCT arquivo FROM documents ORDER BY arquivo")
+	rows, err := s.Q.GetDistinctFiles(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var files []string
-	for rows.Next() {
-		var f string
-		if err := rows.Scan(&f); err != nil {
-			return nil, err
-		}
-		files = append(files, f)
+	for _, f := range rows {
+		files = append(files, f.String)
 	}
-	return files, rows.Err()
+	return files, nil
 }
 
 // SearchDocumentText returns the count of documents whose texto column contains the given substring.
 // Usado para verificar se uma imagem ainda é referenciada por alguma nota.
 func (s *Store) SearchDocumentText(substring string) (int, error) {
-	var count int
-	err := s.DB.QueryRow(
-		"SELECT COUNT(*) FROM documents WHERE texto LIKE ?",
-		"%"+substring+"%",
-	).Scan(&count)
-	return count, err
+	count, err := s.Q.SearchDocumentText(context.Background(), sql.NullString{String: "%" + substring + "%", Valid: true})
+	return int(count), err
 }

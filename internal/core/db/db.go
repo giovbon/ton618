@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"sync"
 
+	"ton618/internal/core/db/generated"
+
 	_ "modernc.org/sqlite"
 )
 
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
 	DB      *sql.DB
+	Q       *dbgen.Queries
 	WriteMu sync.Mutex
 }
 
@@ -48,7 +51,9 @@ func NewStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("db schema: %w", err)
 	}
 
-	return &Store{DB: database}, nil
+	q := dbgen.New(database)
+
+	return &Store{DB: database, Q: q}, nil
 }
 
 // initSchema cria as tabelas necessárias se ainda não existirem.

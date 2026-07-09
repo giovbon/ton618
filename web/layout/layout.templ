@@ -23,41 +23,30 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
     <script src="/static/js/vendor/htmx.min.js?v=2" defer></script>
-    <script src="/static/js/vendor/alpine.min.js?v=2" defer></script>
+    <script src="/static/js/app.js?v=6" defer></script>
+    <script src="/static/js/vendor/alpine.min.js?v=3" defer></script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('settings', {
+                open: false,
+                activeTab: 'arquivamento',
+                openTab(tabName) {
+                    this.open = true;
+                    this.activeTab = tabName;
+                    if (tabName === "marcadores" && typeof loadMarcadores === "function") loadMarcadores();
+                    if (tabName === "stopwords" && typeof loadStopwords === "function") loadStopwords();
+                    if (tabName === "restaurar" && typeof loadArchives === "function") loadArchives();
+                },
+                close() {
+                    this.open = false;
+                }
+            });
+        });
+    </script>
     <!-- Helpers compartilhados entre todos os editores (generateHash, setStatus, HTTP wrappers) -->
     <script src="/static/editor-common.js?v=1"></script>
     <link rel="stylesheet" href="/static/app.css?v=5" />
-    <script>
-        // Menus Dropdown (Inlined para evitar cache persistente de arquivo estático js)
-        window.toggleCriarMenu = function(e) {
-            e.stopPropagation();
-            const menu = document.getElementById('criar-menu');
-            if (menu) menu.classList.toggle('hidden');
-        };
-        window.closeCriarMenu = function() {
-            const menu = document.getElementById('criar-menu');
-            if (menu) menu.classList.add('hidden');
-        };
-        window.toggleCapturaMenu = function(e) {
-            e.stopPropagation();
-            const menu = document.getElementById('captura-menu');
-            if (menu) menu.classList.toggle('hidden');
-        };
-        window.closeCapturaMenu = function() {
-            const menu = document.getElementById('captura-menu');
-            if (menu) menu.classList.add('hidden');
-        };
-        document.addEventListener('click', function(e) {
-            const cWrapper = document.getElementById('criar-dropdown-wrapper');
-            if (cWrapper && !cWrapper.contains(e.target)) {
-                closeCriarMenu();
-            }
-            const capWrapper = document.getElementById('captura-dropdown-wrapper');
-            if (capWrapper && !capWrapper.contains(e.target)) {
-                closeCapturaMenu();
-            }
-        });
-    </script>
+
     if loadTipTap {
     <script src="/static/editor.js?v=2"></script>
     }
@@ -207,8 +196,6 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
 
     @SettingsModal()
 </body>
-
-<script src="/static/js/app.js?v=4" defer></script>
 
 </html>
 }

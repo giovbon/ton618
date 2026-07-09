@@ -1,8 +1,11 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"time"
 	"ton618/internal/core/domain"
+	"ton618/internal/core/db/generated"
 )
 
 // CreateAppointment inserts a new appointment into the database.
@@ -14,11 +17,15 @@ func (s *Store) CreateAppointment(a domain.Appointment) error {
 		a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
-	_, err := s.DB.Exec(
-		"INSERT INTO appointments (id, description, event_date, year, month, week_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		a.ID, a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.CreatedAt,
-	)
-	return err
+	return s.Q.CreateAppointment(context.Background(), dbgen.CreateAppointmentParams{
+		ID:          a.ID,
+		Description: sql.NullString{String: a.Description, Valid: true},
+		EventDate:   sql.NullString{String: a.EventDate, Valid: true},
+		Year:        sql.NullInt64{Int64: int64(a.Year), Valid: true},
+		Month:       sql.NullInt64{Int64: int64(a.Month), Valid: true},
+		WeekNumber:  sql.NullInt64{Int64: int64(a.WeekNumber), Valid: true},
+		CreatedAt:   sql.NullString{String: a.CreatedAt, Valid: true},
+	})
 }
 
 // UpdateAppointment updates an existing appointment.
@@ -26,11 +33,14 @@ func (s *Store) UpdateAppointment(a domain.Appointment) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	_, err := s.DB.Exec(
-		"UPDATE appointments SET description = ?, event_date = ?, year = ?, month = ?, week_number = ? WHERE id = ?",
-		a.Description, a.EventDate, a.Year, a.Month, a.WeekNumber, a.ID,
-	)
-	return err
+	return s.Q.UpdateAppointment(context.Background(), dbgen.UpdateAppointmentParams{
+		Description: sql.NullString{String: a.Description, Valid: true},
+		EventDate:   sql.NullString{String: a.EventDate, Valid: true},
+		Year:        sql.NullInt64{Int64: int64(a.Year), Valid: true},
+		Month:       sql.NullInt64{Int64: int64(a.Month), Valid: true},
+		WeekNumber:  sql.NullInt64{Int64: int64(a.WeekNumber), Valid: true},
+		ID:          a.ID,
+	})
 }
 
 // DeleteAppointment removes an appointment by ID.
@@ -38,8 +48,7 @@ func (s *Store) DeleteAppointment(id string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	_, err := s.DB.Exec("DELETE FROM appointments WHERE id = ?", id)
-	return err
+	return s.Q.DeleteAppointment(context.Background(), id)
 }
 
 // DeleteOldAppointments removes all appointments whose event_date is before the given time.
@@ -47,25 +56,30 @@ func (s *Store) DeleteOldAppointments(before time.Time) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	_, err := s.DB.Exec("DELETE FROM appointments WHERE event_date < ?", before.UTC().Format(time.RFC3339))
-	return err
+	return s.Q.DeleteOldAppointments(context.Background(), sql.NullString{
+		String: before.UTC().Format(time.RFC3339),
+		Valid:  true,
+	})
 }
 
 // GetAppointments returns all appointments, optionally filtered or ordered.
 func (s *Store) GetAppointments() ([]domain.Appointment, error) {
-	rows, err := s.DB.Query("SELECT id, description, event_date, year, month, week_number, created_at FROM appointments ORDER BY year ASC, month ASC, week_number ASC, event_date ASC")
+	rows, err := s.Q.GetAppointments(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var apps []domain.Appointment
-	for rows.Next() {
-		var a domain.Appointment
-		if err := rows.Scan(&a.ID, &a.Description, &a.EventDate, &a.Year, &a.Month, &a.WeekNumber, &a.CreatedAt); err != nil {
-			return nil, err
-		}
-		apps = append(apps, a)
+	for _, a := range rows {
+		apps = append(apps, domain.Appointment{
+			ID:          a.ID,
+			Description: a.Description.String,
+			EventDate:   a.EventDate.String,
+			Year:        int(a.Year.Int64),
+			Month:       int(a.Month.Int64),
+			WeekNumber:  int(a.WeekNumber.Int64),
+			CreatedAt:   a.CreatedAt.String,
+		})
 	}
-	return apps, rows.Err()
+	return apps, nil
 }

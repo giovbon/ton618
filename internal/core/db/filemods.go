@@ -1,55 +1,56 @@
 package db
 
+import (
+	"context"
+	"database/sql"
+	"ton618/internal/core/db/generated"
+)
+
 // ---------------------------------------------------------------------------
 // file_mods
 // ---------------------------------------------------------------------------
 
 // GetFileMod returns the stored modification time for a file, or empty string if not found.
 func (s *Store) GetFileMod(arquivo string) (string, error) {
-	var mtime string
-	err := s.DB.QueryRow("SELECT mtime FROM file_mods WHERE arquivo = ?", arquivo).Scan(&mtime)
+	mtime, err := s.Q.GetFileMod(context.Background(), arquivo)
 	if err != nil {
-		// sql.ErrNoRows is not an error worth surfacing — just return empty.
-		return "", nil
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
 	}
-	return mtime, nil
+	return mtime.String, nil
 }
 
 // SetFileMod inserts or updates the modification time for a file.
 func (s *Store) SetFileMod(arquivo, mtime string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec(
-		"INSERT OR REPLACE INTO file_mods (arquivo, mtime) VALUES (?, ?)", arquivo, mtime,
-	)
-	return err
+	return s.Q.SetFileMod(context.Background(), dbgen.SetFileModParams{
+		Arquivo: arquivo,
+		Mtime:   sql.NullString{String: mtime, Valid: true},
+	})
 }
 
 // DeleteFileMod removes the modification-time record for a file.
 func (s *Store) DeleteFileMod(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM file_mods WHERE arquivo = ?", arquivo)
-	return err
+	return s.Q.DeleteFileMod(context.Background(), arquivo)
 }
 
 // GetAllFileMods returns all stored file modification times as a map.
 func (s *Store) GetAllFileMods() (map[string]string, error) {
-	rows, err := s.DB.Query("SELECT arquivo, mtime FROM file_mods")
+	rows, err := s.Q.GetAllFileMods(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	result := make(map[string]string)
-	for rows.Next() {
-		var arquivo, mtime string
-		if err := rows.Scan(&arquivo, &mtime); err != nil {
-			return nil, err
-		}
-		result[arquivo] = mtime
+	for _, r := range rows {
+		result[r.Arquivo] = r.Mtime.String
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // FileModTag represents a file's modification time and its associated tags (comma separated).
@@ -61,25 +62,18 @@ type FileModTag struct {
 
 // GetFilesModsAndTags returns all files with their mtime and concatenated tags in a single query.
 func (s *Store) GetFilesModsAndTags() ([]FileModTag, error) {
-	query := `
-		SELECT f.arquivo, f.mtime, IFNULL(GROUP_CONCAT(t.tag, ','), '') as tags
-		FROM file_mods f
-		LEFT JOIN tags t ON f.arquivo = t.arquivo
-		GROUP BY f.arquivo, f.mtime
-	`
-	rows, err := s.DB.Query(query)
+	rows, err := s.Q.GetFilesModsAndTags(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var result []FileModTag
-	for rows.Next() {
-		var item FileModTag
-		if err := rows.Scan(&item.Arquivo, &item.Mtime, &item.Tags); err != nil {
-			return nil, err
-		}
-		result = append(result, item)
+	for _, r := range rows {
+		result = append(result, FileModTag{
+			Arquivo: r.Arquivo,
+			Mtime:   r.Mtime.String,
+			Tags:    r.Tags,
+		})
 	}
-	return result, rows.Err()
+	return result, nil
 }

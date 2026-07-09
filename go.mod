@@ -7,6 +7,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
 	github.com/a-h/templ v0.3.1020
 	github.com/fsnotify/fsnotify v1.10.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.8

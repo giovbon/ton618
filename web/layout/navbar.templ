@@ -1,7 +1,7 @@
 package layout
 
 templ Navbar() {
-    <nav class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+    <nav x-data="{ mobileMenuOpen: false }" class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
             <div class="flex flex-col shrink-0 items-start">
                 <a href="/" class="flex items-center gap-2.5 group" title="TON-618 — Sistema de Gestão de Conhecimento">
@@ -37,29 +37,38 @@ templ Navbar() {
                         class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
                 </a>
                 <!-- Progress Bar -->
-                <div id="upload-progress-container" class="w-full h-1 bg-zinc-900/50 border border-zinc-800/50 rounded-full mt-1 overflow-hidden opacity-0 transition-opacity duration-300 pointer-events-none">
-                    <div id="upload-progress-bar" class="h-full bg-sky-500 rounded-full transition-all duration-150 ease-out relative overflow-hidden" style="width: 0%;">
-                        <div id="upload-progress-glow" class="absolute inset-0 progress-shimmer hidden"></div>
+                <div id="upload-progress-container" x-data="{ uploading: false, progress: 0 }"
+                    @htmx:xhr:progress.window="uploading = true; progress = Math.round($event.detail.loaded / $event.detail.total * 100)"
+                    @htmx:after-request.window="uploading = false; progress = 0"
+                    :class="{ 'opacity-100': uploading, 'opacity-0': !uploading }"
+                    class="w-full h-1 bg-zinc-900/50 border border-zinc-800/50 rounded-full mt-1 overflow-hidden opacity-0 transition-opacity duration-300 pointer-events-none">
+                    <div id="upload-progress-bar" class="h-full bg-sky-500 rounded-full transition-all duration-150 ease-out relative overflow-hidden" style="width: 0%;" :style="'width: ' + progress + '%'">
+                        <div id="upload-progress-glow" class="absolute inset-0 progress-shimmer" :class="progress >= 100 ? 'block' : 'hidden'"></div>
                     </div>
                 </div>
             </div>
             <!-- ── hidden file inputs (always present) ── -->
-            <input id="pdf-file-input" type="file" accept=".pdf" class="hidden" />
-            <input id="zip-file-input" type="file" multiple class="hidden" />
+            <input id="pdf-file-input" type="file" name="file" accept=".pdf" class="hidden" 
+                hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
+                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
+            <input id="zip-file-input" type="file" name="files" multiple class="hidden" 
+                hx-post="/api/upload-attachment" hx-trigger="change" hx-encoding="multipart/form-data" 
+                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
 
             <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
 
                 <!-- ＋ CRIAR dropdown -->
-                <div class="relative" id="criar-dropdown-wrapper">
+                <div class="relative" id="criar-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
                     <button id="criar-btn"
-                        onclick="toggleCriarMenu(event)"
+                        @click="open = !open"
                         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                         Criar
                     </button>
                     <div id="criar-menu"
-                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 hidden">
-                        <a href="#" onclick="closeCriarMenu(); return createNewNote();"
+                        x-show="open" x-cloak
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                        <a href="/editor" @click="open = false"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             📄 <span>+ Nota</span>
                         </a>
@@ -91,31 +100,25 @@ templ Navbar() {
                 </div>
 
                 <!-- 🌐 CAPTURA dropdown -->
-                <div class="relative" id="captura-dropdown-wrapper">
+                <div class="relative" id="captura-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
                     <button id="captura-btn"
-                        onclick="toggleCapturaMenu(event)"
+                        @click="open = !open"
                         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                         Captura
                     </button>
                     <div id="captura-menu"
-                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 hidden">
-                        <a href="#" id="pdf-upload-link" onclick="
-                                closeCapturaMenu();
-                                activePdfUploadButton = this;
-                                document.getElementById('pdf-file-input').click();
-                                return false;"
+                        x-show="open" x-cloak
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                        <a href="#" id="pdf-upload-link" @click.prevent="open = false; document.getElementById('pdf-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
                             📕 <span>Upload PDF</span>
                         </a>
-                        <a href="#" id="zip-upload-link" onclick="
-                                closeCapturaMenu();
-                                document.getElementById('zip-file-input').click();
-                                return false;"
+                        <a href="#" id="zip-upload-link" @click.prevent="open = false; document.getElementById('zip-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
                             📦 <span>Upload Anexo</span>
                         </a>
-                        <a href="#" id="capture-link" onclick="closeCapturaMenu(); return promptCapture(this);"
+                        <a href="#" id="capture-link" @click.prevent="open = false; promptCapture(this);"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
                             🌐 <span>Web Capture</span>
                         </a>
@@ -132,14 +135,14 @@ templ Navbar() {
 
                 <!-- Utility icons (icon only + tooltip) -->
                 <a href="/help" class="text-zinc-500 hover:text-sky-400 transition-colors text-base" title="Ajuda">❓</a>
-                <button onclick="openSettings()"
+                <button @click="$store.settings.openTab('arquivamento')"
                     class="text-zinc-500 hover:text-white transition-colors cursor-pointer text-base" title="Configurações">⚙️</button>
                 <button onclick="logout()"
                     class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer text-base" title="Sair">➜]</button>
             </div>
-            <button id="mobile-menu-toggle"
+            <button id="mobile-menu-toggle" @click="mobileMenuOpen = !mobileMenuOpen"
                 class="md:hidden text-zinc-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
-                aria-expanded="false" aria-controls="mobile-menu" title="Abrir menu">
+                :aria-expanded="mobileMenuOpen.toString()" aria-controls="mobile-menu" title="Abrir menu">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     <path d="M4 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
@@ -147,16 +150,13 @@ templ Navbar() {
                 </svg>
             </button>
         </div>
-        <div id="mobile-menu"
-            class="md:hidden hidden border-t border-zinc-900/50 bg-zinc-950/98 px-4 py-3.5 space-y-3.5">
+        <div id="mobile-menu" x-show="mobileMenuOpen" x-cloak
+            class="md:hidden border-t border-zinc-900/50 bg-zinc-950/98 px-4 py-3.5 space-y-3.5">
             <!-- Seção: Criar -->
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Criar</div>
                 <div class="grid grid-cols-2 gap-1.5">
-                    <a href="#" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                return createNewNote();
-                            "
+                    <a href="/editor" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
                         <span class="text-sm">📄</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Nota</span>
@@ -198,31 +198,17 @@ templ Navbar() {
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Capturar</div>
                 <div class="grid grid-cols-2 gap-1.5">
-                    <a href="#" id="mobile-pdf-link" onclick="
-                                activePdfUploadButton = this;
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
-                                document.getElementById('pdf-file-input').click();
-                                return false;
-                            "
+                    <a href="#" id="mobile-pdf-link" @click.prevent="mobileMenuOpen = false; document.getElementById('pdf-file-input').click();"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
                         <span class="text-sm">📕</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ PDF</span>
                     </a>
-                    <a href="#" id="mobile-zip-link" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
-                                document.getElementById('zip-file-input').click();
-                                return false;
-                            "
+                    <a href="#" id="mobile-zip-link" @click.prevent="mobileMenuOpen = false; document.getElementById('zip-file-input').click();"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
                         <span class="text-sm">📦</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
                     </a>
-                    <button id="mobile-capture-link" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                return promptCapture(this);
-                            "
+                    <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture(this);"
                         class="col-span-2 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
                         <span class="text-sm">🌐</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>
@@ -234,42 +220,31 @@ templ Navbar() {
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Navegação</div>
                 <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
-                    <a id="mobile-nav-agenda" href="/agenda" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden')
-                            "
+                    <a id="mobile-nav-agenda" href="/agenda" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
                         <span class="text-sm">📅</span>
                         <span class="text-[11px] font-bold tracking-wider">AGENDA</span>
                     </a>
                     
-                    <a id="mobile-nav-todos" href="/todos" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden')
-                            "
+                    <a id="mobile-nav-todos" href="/todos" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
                         <span class="text-sm">🚧</span>
                         <span class="text-[11px] font-bold tracking-wider">TASK</span>
                     </a>
                     
-                    <a id="mobile-nav-database" href="/database" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden')
-                            "
+                    <a id="mobile-nav-database" href="/database" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors">
                         <span class="text-sm">🗃️</span>
                         <span class="text-[11px] font-bold tracking-wider">TABULATOR</span>
                     </a>
 
-                    <a href="/help" onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden')
-                            "
+                    <a href="/help" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
                         <span class="text-sm">📖</span>
                         <span class="text-[11px] font-bold tracking-wider">TUTORIAL</span>
                     </a>
 
-                    <button onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                openSettings();
-                            "
+                    <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
                         class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">
                         <span class="text-sm">⚙️</span>
                         <span class="text-[11px] font-bold tracking-wider">CONFIGURAÇÕES</span>
@@ -277,10 +252,7 @@ templ Navbar() {
                     
                     <div class="border-t border-zinc-800/80 my-1"></div>
                     
-                    <button onclick="
-                                document.getElementById('mobile-menu').classList.add('hidden');
-                                logout();
-                            "
+                    <button @click="mobileMenuOpen = false; logout()"
                         class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900/50 transition-colors text-left font-bold">
                         <span class="text-sm">➜]</span>
                         <span class="text-[11px] font-bold tracking-wider">SAIR</span>

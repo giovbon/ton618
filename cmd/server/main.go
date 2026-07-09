@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"ton618/internal/core/config"
 	"ton618/internal/core/db"
@@ -109,72 +111,36 @@ func main() {
 		slog.Error("erro ao sincronizar banco de dados", "error", err)
 	}
 
-	mux := http.NewServeMux()
-	SetupRoutes(mux, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx)
+	r := chi.NewRouter()
 
-	staticFS := http.FileServer(http.Dir(cfg.WebDir + "/static"))
-	staticHandler := http.StripPrefix("/static/", staticFS)
+	// Aplica middlewares globais em todas as requisições
+	r.Use(middleware.LoggingMiddleware)
+	r.Use(middleware.Recovery)
+	r.Use(middleware.SecurityHeadersMiddleware)
+	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
-	// Protege as rotas dinâmicas do mux com BasicAuth
-	var appHandler http.Handler = mux
-	appHandler = middleware.BasicAuthMiddleware(appHandler, cfg.AuthUser, cfg.AuthPass)
-
-	// Define o roteador principal (arquivos estáticos vs rotas dinâmicas)
-	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) >= 8 && r.URL.Path[:8] == "/static/" {
-			if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
-				relPath := strings.TrimPrefix(r.URL.Path, "/static/")
-				basePath := filepath.Join(cfg.WebDir, "static", relPath)
-
-				// 1. Define cabeçalhos de content-type
-				if strings.HasSuffix(r.URL.Path, ".js") {
-					w.Header().Set("Content-Type", "application/javascript")
-				} else {
-					w.Header().Set("Content-Type", "text/css")
-				}
-
-				// 2. Cache longo se o parâmetro de versão 'v' estiver presente
-				if r.URL.Query().Get("v") != "" {
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				} else {
-					w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-				}
-
-				// 3. Tenta servir Brotli (.br) se suportado pelo cliente
-				if strings.Contains(r.Header.Get("Accept-Encoding"), "br") {
-					brPath := basePath + ".br"
-					if _, err := os.Stat(brPath); err == nil {
-						w.Header().Set("Content-Encoding", "br")
-						http.ServeFile(w, r, brPath)
-						return
-					}
-				}
-
-				// 4. Fallback para Gzip (.gz) se suportado pelo cliente
-				if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-					gzPath := basePath + ".gz"
-					if _, err := os.Stat(gzPath); err == nil {
-						w.Header().Set("Content-Encoding", "gzip")
-						http.ServeFile(w, r, gzPath)
-						return
-					}
-				}
-			}
-			staticHandler.ServeHTTP(w, r)
-			return
+	// Arquivos estáticos
+	staticFS := http.FileServer(http.Dir(filepath.Join(cfg.WebDir, "static")))
+	r.Handle("/static/*", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		}
-		appHandler.ServeHTTP(w, r)
-	})
+		staticFS.ServeHTTP(w, req)
+	})))
 
-	// Aplica middlewares globais em todas as requisições (incluindo estáticos)
-	var globalHandler http.Handler = mainHandler
-	globalHandler = middleware.LoggingMiddleware(globalHandler)
-	globalHandler = middleware.Recovery(globalHandler)
-	globalHandler = middleware.SecurityHeadersMiddleware(globalHandler)
+	// Protege as rotas dinâmicas com BasicAuth
+	r.Group(func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
+		})
+		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx)
+	})
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: globalHandler,
+		Handler: r,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

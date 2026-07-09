@@ -1,9 +1,12 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"time"
+
+	"ton618/internal/core/db/generated"
 	"ton618/internal/processor"
 )
 
@@ -11,14 +14,14 @@ import (
 func (s *Store) DeleteTodosByFile(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM todos WHERE file = ?", filename)
-	return err
+	return s.Q.DeleteTodosByFile(context.Background(), filename)
 }
 
 // SaveFileTodos exclui os TODOs antigos de um arquivo e insere os novos em lote.
 func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error {
 	return s.RunInTx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
+		qtx := s.Q.WithTx(tx)
+		if err := qtx.DeleteTodosByFile(context.Background(), filename); err != nil {
 			return err
 		}
 
@@ -26,15 +29,18 @@ func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error
 			return nil
 		}
 
-		stmt, err := tx.Prepare("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-		if err != nil {
-			return err
-		}
-		defer stmt.Close()
-
 		for _, t := range todos {
 			createdStr := t.Created.UTC().Format(time.RFC3339)
-			if _, err := stmt.Exec(t.ID, t.File, t.Section, t.Type, t.Status, t.Text, t.Line, createdStr); err != nil {
+			if err := qtx.CreateTodo(context.Background(), dbgen.CreateTodoParams{
+				ID:        t.ID,
+				File:      t.File,
+				Section:   sql.NullString{String: t.Section, Valid: true},
+				Type:      sql.NullString{String: t.Type, Valid: true},
+				Status:    sql.NullString{String: t.Status, Valid: true},
+				Text:      sql.NullString{String: t.Text, Valid: true},
+				Line:      sql.NullInt64{Int64: int64(t.Line), Valid: true},
+				CreatedAt: sql.NullString{String: createdStr, Valid: true},
+			}); err != nil {
 				return err
 			}
 		}

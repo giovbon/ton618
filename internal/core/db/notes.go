@@ -1,106 +1,99 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"ton618/internal/core/db/generated"
 )
 
 // GetNote returns the content of a note by filename.
 func (s *Store) GetNote(filename string) (string, error) {
-	var content string
-	err := s.DB.QueryRow("SELECT content FROM notes WHERE filename = ?", filename).Scan(&content)
+	content, err := s.Q.GetNote(context.Background(), filename)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
-	return content, err
+	return content.String, err
 }
 
 // SaveNote inserts or updates a note's content and modification time.
 func (s *Store) SaveNote(filename, content, mtime string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec(
-		"INSERT OR REPLACE INTO notes (filename, content, mtime) VALUES (?, ?, ?)",
-		filename, content, mtime,
-	)
-	return err
+	return s.Q.SaveNote(context.Background(), dbgen.SaveNoteParams{
+		Filename: filename,
+		Content:  sql.NullString{String: content, Valid: true},
+		Mtime:    sql.NullString{String: mtime, Valid: true},
+	})
 }
 
 // DeleteNote removes a note by filename.
 func (s *Store) DeleteNote(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM notes WHERE filename = ?", filename)
-	return err
+	return s.Q.DeleteNote(context.Background(), filename)
 }
 
 // RenameNote renames a note from old to new filename.
 func (s *Store) RenameNote(old, new string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("UPDATE notes SET filename = ? WHERE filename = ?", new, old)
-	return err
+	return s.Q.RenameNote(context.Background(), dbgen.RenameNoteParams{
+		Filename:   new,
+		Filename_2: old,
+	})
 }
 
 // GetAllNotes returns all note filenames and their mtimes, ordered by mtime desc.
 func (s *Store) GetAllNotes() (map[string]string, error) {
-	rows, err := s.DB.Query("SELECT filename, mtime FROM notes ORDER BY mtime DESC")
+	rows, err := s.Q.GetAllNotes(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	result := make(map[string]string)
-	for rows.Next() {
-		var filename, mtime string
-		if err := rows.Scan(&filename, &mtime); err != nil {
-			continue
-		}
-		result[filename] = mtime
+	for _, r := range rows {
+		result[r.Filename] = r.Mtime.String
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GetAllNotesPaginated returns a paginated list of notes.
 func (s *Store) GetAllNotesPaginated(from, size int) (map[string]string, int, error) {
-	var total int
-	s.DB.QueryRow("SELECT COUNT(*) FROM notes").Scan(&total)
-
-	rows, err := s.DB.Query(
-		"SELECT filename, mtime FROM notes ORDER BY mtime DESC LIMIT ? OFFSET ?",
-		size, from,
-	)
+	count, err := s.Q.CountNotes(context.Background())
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-	result := make(map[string]string)
-	for rows.Next() {
-		var filename, mtime string
-		if err := rows.Scan(&filename, &mtime); err != nil {
-			continue
-		}
-		result[filename] = mtime
+
+	rows, err := s.Q.GetAllNotesPaginated(context.Background(), dbgen.GetAllNotesPaginatedParams{
+		Limit:  int64(size),
+		Offset: int64(from),
+	})
+	if err != nil {
+		return nil, 0, err
 	}
-	return result, total, rows.Err()
+	result := make(map[string]string)
+	for _, r := range rows {
+		result[r.Filename] = r.Mtime.String
+	}
+	return result, int(count), nil
 }
 
 // GetNoteMtime returns just the mtime for a note.
 func (s *Store) GetNoteMtime(filename string) (string, error) {
-	var mtime string
-	err := s.DB.QueryRow("SELECT mtime FROM notes WHERE filename = ?", filename).Scan(&mtime)
+	mtime, err := s.Q.GetNoteMtime(context.Background(), filename)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
-	return mtime, err
+	return mtime.String, err
 }
 
 // NoteExists checks if a note exists.
 func (s *Store) NoteExists(filename string) bool {
-	var count int
-	s.DB.QueryRow("SELECT COUNT(*) FROM notes WHERE filename = ?", filename).Scan(&count)
+	count, _ := s.Q.NoteExists(context.Background(), filename)
 	return count > 0
 }
 
@@ -109,74 +102,49 @@ func (s *Store) SetNoteKeywords(filename string, keywords []string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 	kw := strings.Join(keywords, ",")
-	_, err := s.DB.Exec("UPDATE notes SET keywords = ? WHERE filename = ?", kw, filename)
-	return err
+	return s.Q.SetNoteKeywords(context.Background(), dbgen.SetNoteKeywordsParams{
+		Keywords: sql.NullString{String: kw, Valid: true},
+		Filename: filename,
+	})
 }
 
 // GetNoteKeywords retorna as keywords extraídas de uma nota.
 // Retorna slice vazio se não houver keywords ou a nota não existir.
 func (s *Store) GetNoteKeywords(filename string) ([]string, error) {
-	var kw string
-	err := s.DB.QueryRow("SELECT keywords FROM notes WHERE filename = ?", filename).Scan(&kw)
+	kw, err := s.Q.GetNoteKeywords(context.Background(), filename)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if kw == "" {
+	if kw.String == "" {
 		return nil, nil
 	}
-	return strings.Split(kw, ","), nil
+	return strings.Split(kw.String, ","), nil
 }
 
 // GetAllNotesKeywords returns a map of all note filenames to their list of keywords.
 func (s *Store) GetAllNotesKeywords() (map[string][]string, error) {
-	rows, err := s.DB.Query("SELECT filename, keywords FROM notes WHERE keywords IS NOT NULL AND keywords != ''")
+	rows, err := s.Q.GetAllNotesKeywords(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	result := make(map[string][]string)
-	for rows.Next() {
-		var filename, keywords string
-		if err := rows.Scan(&filename, &keywords); err != nil {
-			return nil, err
-		}
-		if keywords != "" {
-			result[filename] = strings.Split(keywords, ",")
+	for _, r := range rows {
+		if r.Keywords.String != "" {
+			result[r.Filename] = strings.Split(r.Keywords.String, ",")
 		}
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
 func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
-	query := `
-		SELECT n.filename
-		FROM notes n
-		WHERE (n.content LIKE '%type: markmap%' OR n.content LIKE '%type: mindmap%')
-		  AND n.filename NOT IN (
-			  SELECT arquivo FROM tags WHERE tag IN ('markmap', 'mindmap')
-		  )
-	`
-	rows, err := s.DB.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []string
-	for rows.Next() {
-		var filename string
-		if err := rows.Scan(&filename); err != nil {
-			return nil, err
-		}
-		result = append(result, filename)
-	}
-	return result, rows.Err()
+	return s.Q.GetNotesNeedingMarkmapTag(context.Background())
 }
+
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
 // It skips files that already exist in the DB (by filename).
 // Returns the count of imported notes.
@@ -223,19 +191,13 @@ func (s *Store) MigrateNotesFromDisk(docsDir string) (int, error) {
 
 // GetAllNotesContent returns all note filenames and their content in a single query.
 func (s *Store) GetAllNotesContent() (map[string]string, error) {
-	rows, err := s.DB.Query("SELECT filename, content FROM notes")
+	rows, err := s.Q.GetAllNotesContent(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	result := make(map[string]string)
-	for rows.Next() {
-		var filename, content string
-		if err := rows.Scan(&filename, &content); err != nil {
-			return nil, err
-		}
-		result[filename] = content
+	for _, r := range rows {
+		result[r.Filename] = r.Content.String
 	}
-	return result, rows.Err()
+	return result, nil
 }
-

@@ -1,8 +1,12 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"math"
 	"time"
+
+	"ton618/internal/core/db/generated"
 )
 
 // ---------------------------------------------------------------------------
@@ -11,9 +15,8 @@ import (
 
 // GetPopularity returns the access count for a file (Legacy).
 func (s *Store) GetPopularity(arquivo string) int {
-	var count int
-	s.DB.QueryRow("SELECT count FROM popularity WHERE arquivo = ?", arquivo).Scan(&count)
-	return count
+	count, _ := s.Q.GetPopularity(context.Background(), arquivo)
+	return int(count.Int64)
 }
 
 // IncrementPopularity increases the access count for a file by 1.
@@ -24,30 +27,23 @@ func (s *Store) IncrementPopularity(arquivo string) error {
 
 // GetAllPopularity returns all popularity records as a map of file -> count.
 func (s *Store) GetAllPopularity() (map[string]int, error) {
-	rows, err := s.DB.Query("SELECT arquivo, count FROM popularity")
+	rows, err := s.Q.GetAllPopularity(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	result := make(map[string]int)
-	for rows.Next() {
-		var arquivo string
-		var count int
-		if err := rows.Scan(&arquivo, &count); err != nil {
-			return nil, err
-		}
-		result[arquivo] = count
+	for _, r := range rows {
+		result[r.Arquivo] = int(r.Count.Int64)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // ResetPopularity deletes the popularity record for a file.
 func (s *Store) ResetPopularity(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM popularity WHERE arquivo = ?", arquivo)
-	return err
+	return s.Q.ResetPopularity(context.Background(), arquivo)
 }
 
 // ApplyInteractionReward aplica recompensas baseadas em interações implícitas e explícitas (RLHF)
@@ -69,33 +65,22 @@ func (s *Store) ApplyInteractionReward(arquivo string, interactionType string) e
 		return nil
 	}
 
-	// Insere se não existir (inicia com 1.0 + recompensa) ou atualiza acumulando o peso
-	// Mantemos o campo 'count' incrementando para retrocompatibilidade
-	_, err := s.DB.Exec(`
-		INSERT INTO popularity (arquivo, count, weight, last_interacted_at) 
-		VALUES (?, 1, 1.0 + ?, ?)
-		ON CONFLICT(arquivo) DO UPDATE SET 
-			count = count + 1,
-			weight = MAX(0.1, weight + ?), 
-			last_interacted_at = ?`,
-		arquivo, reward, time.Now().Format(time.RFC3339),
-		reward, time.Now().Format(time.RFC3339),
-	)
-	return err
+	return s.Q.ApplyInteractionReward(context.Background(), dbgen.ApplyInteractionRewardParams{
+		Arquivo:          arquivo,
+		Reward:           reward,
+		LastInteractedAt: sql.NullString{String: time.Now().Format(time.RFC3339), Valid: true},
+	})
 }
 
 // GetSynapticWeight calcula o peso sináptico atual aplicando o Forgetting Curve (decaimento logarítmico)
 func (s *Store) GetSynapticWeight(arquivo string) float64 {
-	var weight float64
-	var lastInteractedStr string
-
-	// Usamos COALESCE e valores default caso as colunas weight existam mas estejam NULL ou vazias
-	err := s.DB.QueryRow("SELECT COALESCE(weight, 1.0), COALESCE(last_interacted_at, '') FROM popularity WHERE arquivo = ?", arquivo).
-		Scan(&weight, &lastInteractedStr)
-	
+	row, err := s.Q.GetSynapticWeight(context.Background(), arquivo)
 	if err != nil {
 		return 1.0 // Peso neutro padrão
 	}
+
+	weight := row.Weight
+	lastInteractedStr := row.LastInteractedAt
 
 	if lastInteractedStr == "" {
 		return weight

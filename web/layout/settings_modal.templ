@@ -2,8 +2,8 @@ package layout
 
 templ SettingsModal() {
     <!-- Settings Modal -->
-    <div id="settings-modal"
-        class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div id="settings-modal" x-data x-show="$store.settings.open" x-cloak
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
         <div
             class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl md:max-w-3xl mx-4 max-h-[85vh] flex flex-col">
             <!-- Header -->
@@ -11,7 +11,7 @@ templ SettingsModal() {
                 <h2 class="text-base font-bold text-zinc-200">
                     ⚙️ Configurações
                 </h2>
-                <button onclick="closeSettings()"
+                <button @click="$store.settings.close()"
                     class="text-zinc-500 hover:text-white transition-colors text-xl leading-none">
                     &times;
                 </button>
@@ -20,43 +20,39 @@ templ SettingsModal() {
             <!-- Tabs -->
             <div class="settings-tabs-container flex gap-0 px-6 pt-4 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scroll-smooth whitespace-nowrap flex-nowrap"
                 style="-webkit-overflow-scrolling:touch;">
-                <button data-tab="arquivamento" onclick="switchSettingsTab('arquivamento')"
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-white border-b-2 border-sky-500 transition-colors">
+                <button @click="$store.settings.openTab('arquivamento')"
+                    :class="$store.settings.activeTab === 'arquivamento' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     🗂️ Arquivamento
                 </button>
-                <button data-tab="restaurar" onclick="
-                            switchSettingsTab('restaurar');
-                            loadArchives();
-                        "
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('restaurar')"
+                    :class="$store.settings.activeTab === 'restaurar' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     📦 Restaurar
                 </button>
-                <button data-tab="backup" onclick="switchSettingsTab('backup')"
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('backup')"
+                    :class="$store.settings.activeTab === 'backup' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     💾 Backup
                 </button>
-                <button data-tab="stopwords" onclick="
-                            switchSettingsTab('stopwords');
-                        "
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('stopwords')"
+                    :class="$store.settings.activeTab === 'stopwords' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     🚫 Stopwords
                 </button>
-                <button data-tab="marcadores" onclick="
-                            switchSettingsTab('marcadores');
-                        "
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('marcadores')"
+                    :class="$store.settings.activeTab === 'marcadores' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     🔖 Marcadores
                 </button>
-                <button data-tab="agenda" onclick="
-                            switchSettingsTab('agenda');
-                        "
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('agenda')"
+                    :class="$store.settings.activeTab === 'agenda' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     📅 Agenda
                 </button>
-                <button data-tab="ntfy" onclick="
-                            switchSettingsTab('ntfy');
-                        "
-                    class="settings-tab-btn px-4 py-2 text-sm font-semibold text-zinc-400 border-b-2 border-transparent transition-colors">
+                <button @click="$store.settings.openTab('ntfy')"
+                    :class="$store.settings.activeTab === 'ntfy' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     🔔 Ntfy
                 </button>
             </div>
@@ -64,7 +60,7 @@ templ SettingsModal() {
             <!-- Tab Content -->
             <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
                 <!-- Arquivamento Tab -->
-                <div id="tab-arquivamento" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'arquivamento'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Selecione filtros para encontrar notas, marque quais arquivar e clique em "Arquivar Selecionadas".
                         As notas serão zipadas e movidas para a pasta de arquivos mortos.
@@ -126,7 +122,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Restaurar Tab -->
-                <div id="tab-restaurar" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'restaurar'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Aqui estão os pacotes de arquivos que você arquivou anteriormente. 
                         Ao restaurar, eles voltarão para os diretórios originais e ficarão disponíveis nas buscas.
@@ -141,7 +137,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Backup Tab -->
-                <div id="tab-backup" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'backup'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Escolha o tipo de backup ideal para você. O backup rápido contém apenas as notas (incluindo desenhos e planilhas). O completo inclui também arquivos pesados.
                         Arquivos da pasta
@@ -214,7 +210,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Stopwords Tab -->
-                <div id="tab-stopwords" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'stopwords'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Adicione palavras que devem ser ignoradas na
                         extração de palavras-chave (RAKE). As stopwords
@@ -231,7 +227,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Marcadores Tab -->
-                <div id="tab-marcadores" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'marcadores'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Configure quais palavras-chave aparecem como TODOs na página
                         <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
@@ -247,7 +243,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Agenda Tab -->
-                <div id="tab-agenda" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'agenda'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Configure as opções de visualização da sua agenda e linha do tempo.
                     </p>
@@ -275,7 +271,7 @@ templ SettingsModal() {
                 </div>
 
                 <!-- Ntfy Tab -->
-                <div id="tab-ntfy" class="settings-tab hidden space-y-6">
+                <div x-show="$store.settings.activeTab === 'ntfy'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
                         Configure as notificações de agendamentos enviadas via Ntfy (1 dia antes e resumo semanal aos domingos).
                     </p>

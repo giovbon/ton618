@@ -285,52 +285,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Configurações (⚙️ Settings Modal) ──
-function openSettings() {
-    const modal = document.getElementById("settings-modal");
-    if (modal) modal.classList.remove("hidden");
-    switchSettingsTab("arquivamento");
-}
-
-/**
- * @param {string} tabName 
- */
-function openSettingsTab(tabName) {
-    openSettings();
-    switchSettingsTab(tabName);
-    // Load tab-specific data
-    // @ts-ignore
-    if (tabName === "marcadores" && typeof loadMarcadores === "function") loadMarcadores();
-    // @ts-ignore
-    if (tabName === "stopwords" && typeof loadStopwords === "function") loadStopwords();
-    // @ts-ignore
-    if (tabName === "restaurar" && typeof loadArchives === "function") loadArchives();
-}
-
-function closeSettings() {
-    const modal = document.getElementById("settings-modal");
-    if (modal) modal.classList.add("hidden");
-}
-
-/**
- * @param {string} name 
- */
-function switchSettingsTab(name) {
-    document.querySelectorAll(".settings-tab").forEach(function (el) {
-        el.classList.add("hidden");
-    });
-    const targetTab = document.getElementById("tab-" + name);
-    if (targetTab) targetTab.classList.remove("hidden");
-
-    document.querySelectorAll(".settings-tab-btn").forEach(function (el) {
-        el.classList.remove("text-white", "border-sky-500");
-        el.classList.add("text-zinc-400", "border-transparent");
-    });
-    var btn = document.querySelector('[data-tab="' + name + '"]');
-    if (btn) {
-        btn.classList.add("text-white", "border-sky-500");
-        btn.classList.remove("text-zinc-400", "border-transparent");
-    }
-}
+// Registrado inline no layout.templ para evitar condições de corrida com o Alpine.js
 
 // ── Age slider: update display live ──
 document.addEventListener("DOMContentLoaded", function () {
@@ -467,3 +422,4 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 });
+

@@ -1,112 +1,72 @@
 package db
 
-import "strings"
-
-// ---------------------------------------------------------------------------
-// links
-// ---------------------------------------------------------------------------
+import (
+	"context"
+	"strings"
+	"ton618/internal/core/db/generated"
+)
 
 // AddLink creates a directed link from one file to another.
 func (s *Store) AddLink(fromFile, toFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec(
-		"INSERT OR IGNORE INTO links (from_file, to_file) VALUES (?, ?)", fromFile, toFile,
-	)
-	return err
+	return s.Q.AddLink(context.Background(), dbgen.AddLinkParams{
+		FromFile: fromFile,
+		ToFile:   toFile,
+	})
 }
 
 // RemoveLink deletes a directed link between two files.
 func (s *Store) RemoveLink(fromFile, toFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec(
-		"DELETE FROM links WHERE from_file = ? AND to_file = ?", fromFile, toFile,
-	)
-	return err
+	return s.Q.RemoveLink(context.Background(), dbgen.RemoveLinkParams{
+		FromFile: fromFile,
+		ToFile:   toFile,
+	})
 }
 
 // GetLinks returns all outbound links from a file.
 func (s *Store) GetLinks(fromFile string) ([]string, error) {
-	rows, err := s.DB.Query(
-		"SELECT to_file FROM links WHERE from_file = ? ORDER BY to_file", fromFile,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var links []string
-	for rows.Next() {
-		var to string
-		if err := rows.Scan(&to); err != nil {
-			return nil, err
-		}
-		links = append(links, to)
-	}
-	return links, rows.Err()
+	return s.Q.GetLinks(context.Background(), fromFile)
 }
 
 // GetLinkCount returns the number of outbound links from a file.
 func (s *Store) GetLinkCount(fromFile string) int {
-	var count int
-	s.DB.QueryRow("SELECT COUNT(*) FROM links WHERE from_file = ?", fromFile).Scan(&count)
-	return count
+	count, _ := s.Q.GetLinkCount(context.Background(), fromFile)
+	return int(count)
 }
 
 // GetBacklinks returns all files that link to the given file.
 func (s *Store) GetBacklinks(toFile string) ([]string, error) {
-	rows, err := s.DB.Query(
-		"SELECT from_file FROM links WHERE to_file = ? ORDER BY from_file", strings.ToLower(toFile),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var links []string
-	for rows.Next() {
-		var from string
-		if err := rows.Scan(&from); err != nil {
-			return nil, err
-		}
-		links = append(links, from)
-	}
-	return links, rows.Err()
+	return s.Q.GetBacklinks(context.Background(), strings.ToLower(toFile))
 }
 
 // GetBacklinkCount returns the number of files that link to the given file.
 func (s *Store) GetBacklinkCount(toFile string) int {
-	var count int
-	s.DB.QueryRow("SELECT COUNT(*) FROM links WHERE to_file = ?", strings.ToLower(toFile)).Scan(&count)
-	return count
+	count, _ := s.Q.GetBacklinkCount(context.Background(), strings.ToLower(toFile))
+	return int(count)
 }
 
 // GetAllLinks returns all links as a map of from_file -> []to_file.
 func (s *Store) GetAllLinks() (map[string][]string, error) {
-	rows, err := s.DB.Query("SELECT from_file, to_file FROM links ORDER BY from_file, to_file")
+	rows, err := s.Q.GetAllLinks(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	result := make(map[string][]string)
-	for rows.Next() {
-		var from, to string
-		if err := rows.Scan(&from, &to); err != nil {
-			return nil, err
-		}
-		result[from] = append(result[from], to)
+	for _, r := range rows {
+		result[r.FromFile] = append(result[r.FromFile], r.ToFile)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // ClearLinks removes all links originating from a file.
 func (s *Store) ClearLinks(fromFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	_, err := s.DB.Exec("DELETE FROM links WHERE from_file = ?", fromFile)
-	return err
+	return s.Q.ClearLinks(context.Background(), fromFile)
 }
 
 // GetLinksByFiles returns all unique files that the given files link TO.
@@ -115,38 +75,23 @@ func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]
 	if len(fromFiles) == 0 {
 		return nil, nil
 	}
-	// Normaliza exclude keys para lowercase
+	
+	rows, err := s.Q.GetLinksByFiles(context.Background(), fromFiles)
+	if err != nil {
+		return nil, err
+	}
+	
 	normExclude := make(map[string]bool, len(exclude))
 	for k, v := range exclude {
 		normExclude[strings.ToLower(k)] = v
 	}
-	query := "SELECT DISTINCT to_file FROM links WHERE from_file IN ("
-	args := make([]interface{}, 0, len(fromFiles))
-	for i, f := range fromFiles {
-		if i > 0 {
-			query += ","
-		}
-		query += "?"
-		args = append(args, f)
-	}
-	query += ") ORDER BY to_file"
-
-	rows, err := s.DB.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
 	var links []string
-	for rows.Next() {
-		var to string
-		if err := rows.Scan(&to); err != nil {
-			return nil, err
-		}
+	for _, to := range rows {
 		if exclude != nil && normExclude[to] {
 			continue
 		}
 		links = append(links, to)
 	}
-	return links, rows.Err()
+	return links, nil
 }
