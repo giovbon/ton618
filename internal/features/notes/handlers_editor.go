@@ -2,7 +2,6 @@ package notes
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 
 	"ton618/internal/core/domain"
@@ -19,14 +18,14 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 
 	// ZIPs → download direto
 	if strings.HasSuffix(strings.ToLower(filename), ".zip") {
-		http.Redirect(w, r, "/file/download?name="+url.QueryEscape(filename), http.StatusFound)
+		http.Redirect(w, r, "/file/download?name="+SafeFileQueryEscape(filename), http.StatusFound)
 		return
 	}
 
 	// Normaliza o filename
 	sanitized := NoteFilename(filename)
 	if sanitized != filename {
-		http.Redirect(w, r, "/editor?file="+url.QueryEscape(sanitized), http.StatusFound)
+		http.Redirect(w, r, "/editor?file="+SafeFileQueryEscape(sanitized), http.StatusFound)
 		return
 	}
 
@@ -35,7 +34,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	// Redireciona para o editor especializado se necessário
 	noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
 	if noteType.EditorRoute() != "/editor" {
-		http.Redirect(w, r, noteType.EditorRoute()+"?file="+url.QueryEscape(filename), http.StatusFound)
+		http.Redirect(w, r, noteType.EditorRoute()+"?file="+SafeFileQueryEscape(filename), http.StatusFound)
 		return
 	}
 

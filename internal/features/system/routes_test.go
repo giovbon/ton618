@@ -13,7 +13,6 @@ func TestSetupRoutes_RegistraTodasAsRotas(t *testing.T) {
 
 	// Registra rotas manuais de teste (subconjunto das rotas reais)
 	mux.HandleFunc("GET /", ctx.HandleIndex)
-	mux.HandleFunc("GET /editor", ctx.HandleEditor)
 	mux.HandleFunc("GET /login", ctx.HandleLogin)
 	mux.HandleFunc("GET /api/status", ctx.HandleStatus)
 	mux.HandleFunc("GET /api/health", ctx.HandleHealth)

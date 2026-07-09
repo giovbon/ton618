@@ -87,17 +87,17 @@ func TestFormatDescription(t *testing.T) {
 		{
 			name:     "Wikilink default",
 			input:    "See [[my-note]] here",
-			expected: `See <a href="/editor?file=notes%2Fmy-note.md" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">my-note</a> here`,
+			expected: `See <a href="/editor?file=notes/my-note.md" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">my-note</a> here`,
 		},
 		{
 			name:     "Wikilink with alias",
 			input:    "See [[my-note|Alternative Name]] here",
-			expected: `See <a href="/editor?file=notes%2Fmy-note.md" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Alternative Name</a> here`,
+			expected: `See <a href="/editor?file=notes/my-note.md" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Alternative Name</a> here`,
 		},
 		{
 			name:     "Wikilink with custom folder or extension",
 			input:    "See [[notes/another.typ|Another]] here",
-			expected: `See <a href="/editor?file=notes%2Fanother.typ" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Another</a> here`,
+			expected: `See <a href="/editor?file=notes/another.typ" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Another</a> here`,
 		},
 		{
 			name:     "Simple Tag matching",
@@ -135,7 +135,7 @@ func TestFormatDescription(t *testing.T) {
 		{
 			name:     "Wikilink with .sheet extension",
 			input:    "See [[budget.sheet|Budget]] here",
-			expected: `See <a href="/editor?file=notes%2Fbudget.sheet" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Budget</a> here`,
+			expected: `See <a href="/editor?file=notes/budget.sheet" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">Budget</a> here`,
 		},
 		{
 			name:     "Plain text without markup",

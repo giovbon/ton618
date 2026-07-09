@@ -3,8 +3,7 @@ package notes
 import (
 	"fmt"
 	"net/http"
-	"net/url"
-
+	
 	"ton618/internal/core/domain"
 	"ton618/internal/processor"
 )
@@ -15,7 +14,7 @@ func (ctx *HandlerContext) HandleMap(w http.ResponseWriter, r *http.Request) {
 		// Mapas usam um prefixo especial "mapa-" para identificação via nome
 		slug := processor.GenerateCUID2()
 		fileParam = fmt.Sprintf("notes/mapa-%s.md", slug)
-		http.Redirect(w, r, "/map?file="+url.QueryEscape(fileParam), http.StatusFound)
+		http.Redirect(w, r, "/map?file="+SafeFileQueryEscape(fileParam), http.StatusFound)
 		return
 	}
 

@@ -75,7 +75,7 @@ func FormatDescription(desc string) string {
 			targetFile = "notes/" + targetFile
 		}
 		
-		urlPath := fmt.Sprintf("/editor?file=%s", url.QueryEscape(targetFile))
+		urlPath := fmt.Sprintf("/editor?file=%s", strings.ReplaceAll(url.QueryEscape(targetFile), "%2F", "/"))
 		return fmt.Sprintf(`<a href="%s" class="text-sky-400 hover:text-sky-300 underline font-medium transition-colors cursor-pointer" onclick="event.stopPropagation();">%s</a>`, urlPath, displayName)
 	})
 	

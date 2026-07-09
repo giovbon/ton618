@@ -560,7 +560,7 @@ func TestGetISOWeekEdgeCases(t *testing.T) {
 	}
 }
 
-// TestFrontendDateParser invokes the node-based test suite for appointments.js
+// TestFrontendDateParser invokes the node-based test suite for the agenda date parser
 // to ensure no regressions occur on frontend date normalization and parsing.
 func TestFrontendDateParser(t *testing.T) {
 	nodePath, err := exec.LookPath("node")

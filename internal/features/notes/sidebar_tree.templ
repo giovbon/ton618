@@ -3,8 +3,7 @@ package notes
 import "ton618/internal/core/domain"
 
 import (
-        "strings"
-    "net/url"
+    "strings"
 )
 
 templ SidebarTree(notes []domain.NoteItem, query string) {
@@ -24,7 +23,7 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
 templ SidebarNoteItem(n domain.NoteItem, query string) {
     <div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">
         <div class="flex-1 min-w-0">
-            <a href={ templ.SafeURL(getNoteLink(n.Arquivo)) } target={ getTarget(n.Arquivo) } class="block">
+            <a href={ templ.SafeURL(getNoteLink(n)) } target={ getTarget(n.Arquivo) } class="block">
                 <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">
                     <span class="mr-1.5">{ getNoteIcon(n.Arquivo, n.Type, n.Tags) }</span>@highlightText(getFilename(n.Arquivo), query)
                 </span>
@@ -64,25 +63,17 @@ func getFilename(path string) string {
     return path
 }
 
-func getNoteLink(path string) string {
+func getNoteLink(n domain.NoteItem) string {
+    path := n.Arquivo
     if strings.HasPrefix(path, "pdfs/") {
-        return "/file?name=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
-        return "/file/download?name=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/spreadsheet") || strings.HasPrefix(path, "spreadsheet") {
-        return "/spreadsheet?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/drawing") || strings.HasPrefix(path, "drawing") {
-        return "/drawing?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/typst") || strings.HasPrefix(path, "typst") {
-        return "/typst?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/mermaid") || strings.HasPrefix(path, "mermaid") {
-        return "/mermaid?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/mindmap") || strings.HasPrefix(path, "notes/markmap") || strings.HasPrefix(path, "mindmap") || strings.HasPrefix(path, "markmap") {
-        return "/mindmap?file=" + url.QueryEscape(path)
-    } else if strings.HasPrefix(path, "notes/map") || strings.HasPrefix(path, "map") {
-        return "/map?file=" + url.QueryEscape(path)
+        return "/file?name=" + SafeFileQueryEscape(path)
     }
-    return "/editor?file=" + url.QueryEscape(path)
+    if strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
+        return "/file/download?name=" + SafeFileQueryEscape(path)
+    }
+    noteType := domain.DetectNoteType(n.Tags, "", path)
+    route := noteType.EditorRoute()
+    return route + "?file=" + SafeFileQueryEscape(path)
 }
 
 func getTarget(path string) string {

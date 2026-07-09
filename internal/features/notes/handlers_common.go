@@ -4,10 +4,16 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"ton618/internal/core/domain"
 	"ton618/internal/processor"
 )
+
+// SafeFileQueryEscape escapes a file path for a query string but keeps slashes intact to avoid reverse proxy (e.g. Cloudflare) blocks.
+func SafeFileQueryEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "%2F", "/")
+}
 
 // noteLoadResult agrupa todos os dados necessários para renderizar qualquer editor de nota.
 type noteLoadResult struct {
@@ -57,7 +63,7 @@ func ensureNoteFilename(w http.ResponseWriter, r *http.Request, route string) (s
 	}
 	sanitized := NoteFilename(filename)
 	if sanitized != filename {
-		http.Redirect(w, r, route+"?file="+url.QueryEscape(sanitized), http.StatusFound)
+		http.Redirect(w, r, route+"?file="+SafeFileQueryEscape(sanitized), http.StatusFound)
 		return sanitized, true
 	}
 	return sanitized, false
@@ -69,7 +75,7 @@ func ensureNoteFilename(w http.ResponseWriter, r *http.Request, route string) (s
 func redirectIfWrongEditor(w http.ResponseWriter, r *http.Request, noteType domain.NoteType, currentRoute, filename string) bool {
 	correctRoute := noteType.EditorRoute()
 	if correctRoute != currentRoute {
-		http.Redirect(w, r, correctRoute+"?file="+url.QueryEscape(filename), http.StatusFound)
+		http.Redirect(w, r, correctRoute+"?file="+SafeFileQueryEscape(filename), http.StatusFound)
 		return true
 	}
 	return false

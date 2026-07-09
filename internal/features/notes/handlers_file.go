@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +86,26 @@ var compressedExts = map[string]bool{
 }
 
 // ── Helpers de normalizacao ──
+
+
+// copyFile copies a file from src to dst path, creating parent dirs as needed.
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
 
 // noteFilename garante que o nome do arquivo:
 // 1. Tenha extensao .md
@@ -214,6 +233,19 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	http.ServeFile(w, r, fullPath)
 }
 
+// doSaveNote é o helper interno compartilhado entre HandleFileSave e HandleNoteSaveJSON.
+// Retorna (unchanged bool, err error). unchanged=true quando o conteúdo é idêntico ao salvo.
+func (ctx *HandlerContext) doSaveNote(filename, content, tags string) (unchanged bool, err error) {
+	if current, e := ctx.Store.GetNote(filename); e == nil && current == content {
+		return true, nil
+	}
+	tagList := strings.Split(tags, ",")
+	if e := ctx.Notes.Save(filename, content, tagList); e != nil {
+		return false, e
+	}
+	return false, nil
+}
+
 // HandleFileSave saves a note to the database and processes its content.
 func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -222,34 +254,20 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 	}
 
 	raw := r.FormValue("filename")
-	content := r.FormValue("content")
-	tags := r.FormValue("tags")
-
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
 	filename := NoteFilename(raw)
-
-	// Otimização: verifica se o conteúdo enviado é igual ao atual para evitar I/O
-	if currentContent, err := ctx.Store.GetNote(filename); err == nil {
-		if currentContent == content {
-			http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
-			return
-		}
-	}
-
-	// Delega para o NoteService (salva + reindexa + tags + links)
-	tagList := strings.Split(tags, ",")
-	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
+	unchanged, err := ctx.doSaveNote(filename, r.FormValue("content"), r.FormValue("tags"))
+	if err != nil {
 		slog.Error("save note", "file", filename, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-
-	http.Redirect(w, r, "/editor?file="+url.QueryEscape(filename), http.StatusSeeOther)
+	_ = unchanged
+	http.Redirect(w, r, "/editor?file="+SafeFileQueryEscape(filename), http.StatusSeeOther)
 }
 
 // HandleNoteSaveJSON salva uma nota e retorna JSON (para chamadas via fetch/XHR).
@@ -260,38 +278,23 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 	}
 
 	raw := r.FormValue("filename")
-	content := r.FormValue("content")
-	tags := r.FormValue("tags")
-
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
 	filename := NoteFilename(raw)
-
-	if currentContent, err := ctx.Store.GetNote(filename); err == nil {
-		if currentContent == content {
-			w.Header().Set("HX-Redirect", "/editor?file="+url.QueryEscape(filename))
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-	}
-
-	tagList := strings.Split(tags, ",")
-	if err := ctx.Notes.Save(filename, content, tagList); err != nil {
+	unchanged, err := ctx.doSaveNote(filename, r.FormValue("content"), r.FormValue("tags"))
+	if err != nil {
 		slog.Error("save note json", "file", filename, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-
-	if r.FormValue("silent") == "true" {
+	if unchanged || r.FormValue("silent") == "true" {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-
-	w.Header().Set("HX-Redirect", "/editor?file="+url.QueryEscape(filename))
+	w.Header().Set("HX-Redirect", "/editor?file="+SafeFileQueryEscape(filename))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -349,13 +352,9 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 				for dbFile := range allNotes {
 					if strings.ToValidUTF8(dbFile, "\uFFFD") == filename {
 						ctx.Store.DeleteNote(dbFile)
-						ctx.Store.DeleteDocumentsByFile(dbFile)
-						ctx.Store.DeleteFTSByFile(dbFile)
-						ctx.Store.DeleteTodosByFile(dbFile)
-						ctx.Store.DeleteFileMod(dbFile)
-						ctx.Store.ResetPopularity(dbFile)
-						ctx.Store.SetFileTags(dbFile, nil)
-						ctx.Store.ClearLinks(dbFile)
+						if e := ctx.Store.DeleteAllFileRecords(dbFile); e != nil {
+							slog.Error("delete all records (fallback utf8)", "file", dbFile, "error", e)
+						}
 						
 						fPath := filepath.Join(ctx.Cfg.DocsDir, dbFile)
 						os.Remove(fPath)
@@ -365,15 +364,10 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Remove from DB (common cleanup for all types)
-	ctx.Store.DeleteDocumentsByFile(filename)
-	ctx.Store.DeleteFTSByFile(filename)
-	ctx.Store.DeleteTodosByFile(filename)
-	ctx.Store.DeleteFileMod(filename)
-	ctx.Store.ResetPopularity(filename)
-	ctx.Store.SetFileTags(filename, nil)
-	ctx.Store.ClearLinks(filename)
-
+	// Remove from DB (common cleanup for all types, atomically)
+	if err := ctx.Store.DeleteAllFileRecords(filename); err != nil {
+		slog.Error("delete all file records", "file", filename, "error", err)
+	}
 
 	w.Header().Set("HX-Trigger", "reload-sidebar")
 	w.WriteHeader(http.StatusOK)
@@ -466,12 +460,9 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 
 	// Update DB: delete old indexes for PDF/ZIP; notes já foram tratados pelo Notes.Rename
 	if isPdf || isZip {
-		ctx.Store.DeleteDocumentsByFile(oldName)
-		ctx.Store.DeleteFTSByFile(oldName)
-		ctx.Store.DeleteFileMod(oldName)
-		ctx.Store.ResetPopularity(oldName)
-		ctx.Store.SetFileTags(oldName, nil)
-		ctx.Store.ClearLinks(oldName)
+		if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
+			slog.Error("delete old file records on rename", "file", oldName, "error", err)
+		}
 		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
 		info, err := os.Stat(newPath)
 		if err == nil {
@@ -479,11 +470,6 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 				Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
 			})
 		}
-	}
-
-	if oldName != "" {
-	}
-	if newName != "" {
 	}
 
 	w.Header().Set("HX-Trigger", "reload-sidebar")
@@ -720,7 +706,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	})
 
 
-	imageURL := "/file?name=" + url.QueryEscape(filename)
+	imageURL := "/file?name=" + SafeFileQueryEscape(filename)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -856,26 +842,8 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 				oldFilename = sd + "/" + basename
 				newFilename = sd + "/copia-" + basename
 				
-				src, err := os.Open(testPath)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				defer src.Close()
-
 				dstPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
-				if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				dst, err := os.Create(dstPath)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				defer dst.Close()
-
-				if _, err := io.Copy(dst, src); err != nil {
+				if err := copyFile(testPath, dstPath); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
@@ -895,26 +863,7 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 		newFilename = "attachments/copia-" + basename
 		oldPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
 		newPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", "copia-"+basename)
-
-		src, err := os.Open(oldPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer src.Close()
-
-		if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		dst, err := os.Create(newPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, src); err != nil {
+		if err := copyFile(oldPath, newPath); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
