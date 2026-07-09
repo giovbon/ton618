@@ -157,7 +157,7 @@ templ mermaidContent(data domain.EditorData) {
 
 <!-- Load Mermaid locally (Lazy Loading via JS) -->
 <script type="module">
-    import { CodeJar } from '/static/codejar.js?v=5';
+    import { CodeJar } from '/static/codejar.js?v=6';
 
     (function () {
         "use strict";
@@ -275,6 +275,7 @@ templ mermaidContent(data domain.EditorData) {
         };
 
         const jar = CodeJar(editorEl, highlight, { tab: "  " });
+        EditorCommon.setupCodeJarActiveLine(editorEl);
 
         function setStatus(s) {
             currentStatus = s;

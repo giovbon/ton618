@@ -20,6 +20,10 @@ type FTSResult struct {
 
 // IndexFTS inserts or updates a document in the FTS5 index.
 // It first deletes any existing entry for the same doc_id to avoid duplicates.
+//
+// ATENÇÃO: este método adquire WriteMu de forma independente. Não chame de dentro
+// de outro método que já segure WriteMu (ex: ReplaceFileIndexes), pois causará deadlock.
+// Dentro de transações, use tx.Exec diretamente em vez de chamar este método.
 func (s *Store) IndexFTS(docID, tipo, arquivo, secao, texto, tags string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()

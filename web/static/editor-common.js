@@ -133,6 +133,101 @@
             if (popover) {
                 popover.classList.toggle('hidden');
             }
+        },
+
+        // ── setupCodeJarActiveLine: highlights active line in CodeJar editor ──
+        setupCodeJarActiveLine: function (editorEl) {
+            if (!editorEl) return;
+
+            // Create highlight overlay element
+            var highlight = document.createElement("div");
+            highlight.className = "codejar-active-line";
+            highlight.style.position = "absolute";
+            highlight.style.left = "1px";
+            highlight.style.right = "1px";
+            highlight.style.pointerEvents = "none";
+            highlight.style.backgroundColor = "rgba(56, 189, 248, 0.035)"; // very light sky blue
+            highlight.style.borderLeft = "2.5px solid #38bdf8"; // premium sky-blue bar
+            highlight.style.transition = "top 0.08s ease-out, height 0.08s ease-out, opacity 0.15s ease";
+            highlight.style.opacity = "0";
+            highlight.style.zIndex = "15"; 
+
+            // Insert as sibling of the editor inside its relative container
+            if (editorEl.parentNode) {
+                editorEl.parentNode.appendChild(highlight);
+            }
+
+            function updateHighlight() {
+                if (document.activeElement !== editorEl) {
+                    highlight.style.opacity = "0";
+                    return;
+                }
+
+                var sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) {
+                    highlight.style.opacity = "0";
+                    return;
+                }
+
+                var range = sel.getRangeAt(0);
+                if (!editorEl.contains(range.startContainer)) {
+                    highlight.style.opacity = "0";
+                    return;
+                }
+
+                // Hide highlight when there is a text selection block active
+                if (!range.collapsed) {
+                    highlight.style.opacity = "0";
+                    return;
+                }
+
+                var rect = null;
+                var rects = range.getClientRects();
+                if (rects.length > 0) {
+                    rect = rects[0];
+                }
+
+                // Fallback for empty lines
+                if (!rect || rect.height === 0) {
+                    var node = range.startContainer;
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        node = node.parentNode;
+                    }
+                    if (node && node !== editorEl) {
+                        rect = node.getBoundingClientRect();
+                    }
+                }
+
+                if (rect && rect.height > 0) {
+                    var editorRect = editorEl.getBoundingClientRect();
+                    var relativeTop = rect.top - editorRect.top;
+                    
+                    highlight.style.top = (relativeTop + editorEl.offsetTop) + "px";
+                    highlight.style.height = rect.height + "px";
+                    highlight.style.opacity = "1";
+                } else {
+                    highlight.style.opacity = "0";
+                }
+            }
+
+            // Bind all selection and layout change events
+            editorEl.addEventListener("click", updateHighlight);
+            editorEl.addEventListener("keyup", updateHighlight);
+            editorEl.addEventListener("focus", function() {
+                setTimeout(updateHighlight, 10);
+            });
+            editorEl.addEventListener("blur", function() {
+                highlight.style.opacity = "0";
+            });
+            editorEl.addEventListener("scroll", updateHighlight);
+            
+            document.addEventListener("selectionchange", function() {
+                if (document.activeElement === editorEl) {
+                    updateHighlight();
+                }
+            });
+
+            window.addEventListener("resize", updateHighlight);
         }
     };
 

@@ -38,7 +38,7 @@ func (s *Store) RunInTx(fn func(tx *sql.Tx) error) error {
 
 // NewStore abre (ou cria) o banco e inicializa o schema.
 func NewStore(path string) (*Store, error) {
-	database, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	database, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("db open: %w", err)
 	}

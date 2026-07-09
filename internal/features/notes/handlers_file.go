@@ -14,7 +14,7 @@ import (
 
 	"ton618/internal/core/db"
 	"ton618/internal/processor"
-			"ton618/internal/watcher"
+	"ton618/internal/watcher"
 )
 
 var compressedExts = map[string]bool{
@@ -135,6 +135,20 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("name")
 	if raw == "" {
 		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+
+	// Segurança: só permite subdiretórios conhecidos, previne path traversal
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/"}
+	hasPrefix := false
+	for _, p := range allowedPrefixes {
+		if strings.HasPrefix(raw, p) {
+			hasPrefix = true
+			break
+		}
+	}
+	if !hasPrefix {
+		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
@@ -260,13 +274,11 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 	}
 
 	filename := NoteFilename(raw)
-	unchanged, err := ctx.doSaveNote(filename, r.FormValue("content"), r.FormValue("tags"))
-	if err != nil {
+	if _, err := ctx.doSaveNote(filename, r.FormValue("content"), r.FormValue("tags")); err != nil {
 		slog.Error("save note", "file", filename, "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = unchanged
 	http.Redirect(w, r, "/editor?file="+SafeFileQueryEscape(filename), http.StatusSeeOther)
 }
 
@@ -338,10 +350,10 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		fullPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
 		os.Remove(fullPath)
 	} else {
-		// Note: delete from DB
+		// Note: DeleteAllFileRecords (abaixo) apaga atomicamente todas as tabelas,
+		// incluindo notes — nenhum DeleteNote separado é necessário aqui.
 		filename = NoteFilename(raw)
-		ctx.Store.DeleteNote(filename)
-		// Also remove any file on disk (for backwards compat during migration)
+		// Remove o arquivo físico do disco (compatibilidade com migração)
 		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 		os.Remove(fullPath)
 
@@ -351,11 +363,9 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 			if err == nil {
 				for dbFile := range allNotes {
 					if strings.ToValidUTF8(dbFile, "\uFFFD") == filename {
-						ctx.Store.DeleteNote(dbFile)
 						if e := ctx.Store.DeleteAllFileRecords(dbFile); e != nil {
 							slog.Error("delete all records (fallback utf8)", "file", dbFile, "error", e)
 						}
-						
 						fPath := filepath.Join(ctx.Cfg.DocsDir, dbFile)
 						os.Remove(fPath)
 					}

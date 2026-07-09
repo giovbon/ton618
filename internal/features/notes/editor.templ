@@ -505,10 +505,16 @@ templ editorContent(data domain.EditorData) {
         text-decoration: line-through;
     }
     /* ── Tabelas ── */
+    .tableWrapper {
+        overflow-x: auto;
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
+        margin: 0.8em 0;
+    }
     .ProseMirror table {
         width: 100%;
         border-collapse: collapse;
-        margin: 0.8em 0;
+        margin: 0;
         overflow: hidden;
     }
     .ProseMirror th,
