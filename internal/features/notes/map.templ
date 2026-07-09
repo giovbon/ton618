@@ -10,7 +10,7 @@ templ MapNote(data domain.EditorData) {
 templ mapContent(data domain.EditorData) {
 <div class="editor-root flex flex-col" id="map-root"
      style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 0; border-radius: 0;">
-    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative">
+    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative z-20">
         <input id="file-name" type="text" value={ data.DisplayName }
             data-filename={ data.Filename }
             class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"

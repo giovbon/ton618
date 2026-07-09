@@ -66,7 +66,7 @@ templ typstContent(data domain.EditorData) {
 </script>
 <div class="editor-root flex flex-col" id="typst-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
     <!-- Topbar -->
-    <div class="flex items-center gap-3 mb-3 shrink-0" id="typst-topbar">
+    <div class="flex items-center gap-3 mb-3 shrink-0 relative z-20" id="typst-topbar">
         <input
             id="file-name"
             type="text"
