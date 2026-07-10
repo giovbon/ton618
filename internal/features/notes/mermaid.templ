@@ -257,12 +257,16 @@ templ mermaidContent(data domain.EditorData) {
                 return addToken(match, "text-pink-400 font-bold");
             });
 
-            // Restore tokens
+            // Restore tokens recursively to handle nested highlights
             var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
-            html = html.replace(tokenRegExp, function(match, tokenId) {
-                var idx = parseInt(tokenId, 10);
-                return tokens[idx] ? tokens[idx].html : match;
-            });
+            var lastHtml;
+            do {
+                lastHtml = html;
+                html = html.replace(tokenRegExp, function(match, tokenId) {
+                    var idx = parseInt(tokenId, 10);
+                    return tokens[idx] ? tokens[idx].html : match;
+                });
+            } while (html !== lastHtml);
 
             if (code.endsWith("\n")) {
                 html += " ";

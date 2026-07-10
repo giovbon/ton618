@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // TypstService compila código Typst para SVG e PDF.
@@ -87,7 +88,11 @@ func (s *TypstService) RenderToSVG(content string) *RenderResult {
 		return &RenderResult{Error: "Erro interno ao salvar fonte do Typst: " + err.Error()}
 	}
 
-	cmd := exec.Command(s.resolvePath(), "compile", "main.typ", "page-{p}.svg")
+	args := []string{"compile", "main.typ", "page-{p}.svg"}
+	if os.Getenv("TYPST_IGNORE_SYSTEM_FONTS") != "false" {
+		args = append(args, "--ignore-system-fonts")
+	}
+	cmd := exec.Command(s.resolvePath(), args...)
 	cmd.Dir = tmpDir
 
 	var stderr bytes.Buffer
@@ -133,7 +138,11 @@ func (s *TypstService) RenderToPDF(content string) ([]byte, error) {
 		return nil, fmt.Errorf("erro ao escrever fonte: %w", err)
 	}
 
-	cmd := exec.Command(s.resolvePath(), "compile", "main.typ", "output.pdf")
+	args := []string{"compile", "main.typ", "output.pdf"}
+	if os.Getenv("TYPST_IGNORE_SYSTEM_FONTS") != "false" {
+		args = append(args, "--ignore-system-fonts")
+	}
+	cmd := exec.Command(s.resolvePath(), args...)
 	cmd.Dir = tmpDir
 
 	var stderr bytes.Buffer
@@ -189,19 +198,48 @@ func preprocessTypstImages(content string, tmpDir string) string {
 		fileName := fmt.Sprintf("%x%s", hash, ext)
 		localPath := filepath.Join(tmpDir, fileName)
 
-		resp, err := http.Get(imageURL)
-		if err != nil {
-			return match
+		userCacheDir, err := os.UserCacheDir()
+		var cachePath string
+		var useCached bool
+		if err == nil {
+			cacheDir := filepath.Join(userCacheDir, "ton618-typst-cache")
+			_ = os.MkdirAll(cacheDir, 0755)
+			cachePath = filepath.Join(cacheDir, fileName)
+			if info, err := os.Stat(cachePath); err == nil {
+				// Re-download if cached file is older than 24 hours
+				if time.Since(info.ModTime()) < 24*time.Hour {
+					useCached = true
+				}
+			}
 		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			return match
+		var data []byte
+		if useCached {
+			data, err = os.ReadFile(cachePath)
+			if err != nil {
+				useCached = false
+			}
 		}
 
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return match
+		if !useCached {
+			resp, err := http.Get(imageURL)
+			if err != nil {
+				return match
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return match
+			}
+
+			data, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return match
+			}
+
+			if cachePath != "" {
+				_ = os.WriteFile(cachePath, data, 0644)
+			}
 		}
 
 		if err := os.WriteFile(localPath, data, 0644); err != nil {
