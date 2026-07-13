@@ -1,9 +1,6 @@
 # ─── Estágio 1: Build do bundle web ────────────────
 FROM node:20-alpine AS web-builder
 
-# Instala ferramentas de compressão nativas do Linux no Alpine (muito mais rápidas que JS)
-RUN apk add --no-cache gzip brotli
-
 WORKDIR /web
 
 # 1. Instala dependências de forma isolada
@@ -14,27 +11,18 @@ RUN npm install --legacy-peer-deps
 COPY web/download_model.js ./
 COPY web/static/models/download-ort.js ./static/models/
 
-# 3. Executa o download dos modelos de IA
+# 3. Executa o download E a compressão dos modelos de IA e tokenizers
+# Como o script nativamente já gera as versões .gz e .br, esta única camada
+# resolve o download e a compactação de forma totalmente cacheável pelo GHA.
 RUN node download_model.js
 RUN node static/models/download-ort.js
 
-# 4. COMPRIME OS MODELOS AQUI (Fica salvo no cache do Docker/GitHub Actions)
-# Isso gera os arquivos .gz e .br nativamente e os deixa salvos na pasta.
-# O find busca todos os arquivos .onnx e .bin dentro de static/models/ e os comprime.
-RUN find static/models/ -type f \( -name "*.onnx" -o -name "*.bin" \) | while read file; do \
-      echo "Pré-comprimindo modelo cacheado: $file"; \
-      gzip -9 -c "$file" > "$file.gz" && \
-      brotli -q 11 -c "$file" > "$file.br"; \
-    done
-
-# 5. Copia o resto do código fonte do frontend e do backend
-# Como os .gz e .br já existem na pasta, o COPY não vai sobrescrevê-los se o .dockerignore estiver correto.
+# 4. Copia o resto do código fonte do frontend e do backend
 COPY web/ .
 COPY internal/ ./internal/
 
-# 6. Compila os assets estáticos do seu código (app.css, editor.js, etc.)
-# IMPORTANTE: Garanta que o seu web/build.js apenas ignore arquivos .onnx/.bin se eles já possuírem
-# os equivalentes .gz/.br na pasta, ou configure-o para pular a pasta static/models/
+# 5. Compila os assets estáticos do seu código (app.css, editor.js, etc.)
+# Certifique-se de que o build.js ignore a pasta static/models para não reprocessar.
 RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
@@ -52,7 +40,7 @@ RUN go install github.com/a-h/templ/cmd/templ@latest
 ARG TARGETARCH
 COPY . .
 
-# Copia o bundle compilado (contendo os modelos .onnx originais + .gz + .br)
+# Copia o bundle compilado (contendo os modelos originais + .gz + .br)
 COPY --from=web-builder /web/static ./web/static
 
 # Gerar código do templ antes de compilar
@@ -66,10 +54,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 # Compacta o binário com UPX
 RUN upx --best --lzma /ton618
 
-# Baixa as fontes Fira Sans Regular e Bold diretamente do repositório Google Fonts
+# Otimização: Baixa os subsets latinos leves das fontes (~300KB cada) em vez do repositório inteiro
 RUN mkdir -p /app/fonts && \
-    curl -sSL -o /app/fonts/FiraSans-Regular.ttf https://github.com/google/fonts/raw/main/ofl/firasans/FiraSans-Regular.ttf && \
-    curl -sSL -o /app/fonts/FiraSans-Bold.ttf https://github.com/google/fonts/raw/main/ofl/firasans/FiraSans-Bold.ttf
+    curl -sSL -o /app/fonts/FiraSans-Regular.ttf "https://fonts.gstatic.com/s/firasans/v17/va9E4kDNxGzdMffhnd631w.ttf" && \
+    curl -sSL -o /app/fonts/FiraSans-Bold.ttf "https://fonts.gstatic.com/s/firasans/v17/va9B4kDNxGzdMffhnd631u04wA.ttf"
 
 # ─── Estágio 3: Runtime ──────────────────────────────
 FROM alpine:3.21
@@ -84,8 +72,14 @@ RUN adduser -D -h /app appuser
 WORKDIR /app
 
 COPY --from=builder /ton618 .
-COPY --from=builder /app/web ./web
 COPY entrypoint.sh .
+
+# Otimização: Copia estritamente a pasta static compilada e os metadados.
+# Isso impede que o node_modules de desenvolvimento infle os 271 MB da imagem.
+RUN mkdir -p /app/web/static
+COPY --from=builder /app/web/static /app/web/static
+COPY --from=builder /app/web/package.json /app/web/package.json
+COPY --from=builder /app/entrypoint.sh .
 
 RUN mkdir -p /app/docs /app/data && chmod 777 /app/docs /app/data && chmod +x /app/entrypoint.sh
 
