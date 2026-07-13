@@ -84,7 +84,10 @@ echo -e "${GREEN}🚀 Servidor rodando em http://localhost:$PORT${NC}"
 echo -e "📄 Logs em: $LOG_FILE"
 echo -e "--------------------------------------------"
 
+# Atualiza a referência em segundo plano de forma silenciosa se o repomix estiver disponível
+if command -v repomix &> /dev/null; then
+    repomix --remove-comments --compress --ignore "**/*_test.go,**/*.html,data/**/*,docs/**/*,documents/**/*,node_modules/**/*,web/static/**/*,ton618,server" &> /dev/null &
+fi
+
 # Executa e joga pro log mantendo o output limpo
 ./ton618 2>&1 | tee -a "$LOG_FILE"
-
-# repomix --remove-comments --compress --ignore "**/*_test.go,**/*.html,web/**/*"

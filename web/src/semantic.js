@@ -1,5 +1,16 @@
 /**
- * semantic.js
+ * semantic.js — SOURCE FILE
+ *
+ * Este é o ARQUIVO FONTE. Edite AQUI, nunca em web/static/semantic.js.
+ *
+ * BUILD: `npm run build` (executa web/build.js com esbuild)
+ *   → web/static/semantic.js     (minificado, IIFE para <script>)
+ *   → web/static/semantic.js.gz  (gzip, servido preferencialmente)
+ *   → web/static/semantic.js.br  (brotli)
+ *
+ * O server em cmd/server/main.go faz file server do diretório web/static/
+ * e serve arquivos .br com Content-Encoding: br quando disponíveis.
+ *
  * Módulo UNIFICADO de embeddings semânticos — usado por todas as páginas.
  *
  * Responsabilidades:
@@ -265,39 +276,53 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
   });
 
   var self = this;
-  var payloadChunks = [];
 
-  // 4. Processamento sequencial das embeddings
+  // 4. Gera embeddings SEQUENCIALMENTE (evita travar o Worker com chamadas concorrentes)
   function embedNext(idx) {
     if (idx >= chunksText.length) {
-      // Envia todos os chunks prontos para o backend salvar em transação única
-      var payload = {
-        filename: filename,
-        chunks: payloadChunks
-      };
-      return fetch(SAVE_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).then(function(r) {
-        if (!r.ok) console.debug("[SemanticIndex] indexNote HTTP error:", r.status);
-      });
+      return Promise.resolve([]);
     }
-
     return self.embed(chunksText[idx]).then(function(embedding) {
-      payloadChunks.push({
+      // Valida NaN/Inf antes de incluir no resultado
+      for (var ei = 0; ei < embedding.length; ei++) {
+        if (!isFinite(embedding[ei]) || isNaN(embedding[ei])) {
+          console.warn("[SemanticIndex] NaN/Inf no chunk", idx, "- pulando");
+          return null;
+        }
+      }
+      return {
         chunk_id: filename + "#" + idx,
         filename: filename,
         index: idx,
         content: chunksText[idx],
         embedding: embedding
+      };
+    }).then(function(chunk) {
+      // Processa próximo chunk e acumula resultados
+      return embedNext(idx + 1).then(function(rest) {
+        var result = chunk ? [chunk] : [];
+        return result.concat(rest);
       });
-      return embedNext(idx + 1); // Vetoriza o próximo chunk
     });
   }
 
-  return embedNext(0).catch(function(err) {
+  return embedNext(0).then(function(chunks) {
+    if (chunks.length === 0) return;
+
+    var payload = {
+      filename: filename,
+      chunks: chunks
+    };
+    return fetch(SAVE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(function(r) {
+      if (!r.ok) console.debug("[SemanticIndex] indexNote HTTP error:", r.status);
+    });
+  }).catch(function(err) {
     console.debug("[SemanticIndex] indexNote error:", err);
+    // NÃO rejeita — sempre resolve para o caller continuar o progresso
   });
 };
 
@@ -400,8 +425,9 @@ SemanticIndex.prototype.indexPending = function(onProgressFn) {
   this._indexingPromise = waitForModel().then(function() {
     return self.getStatus();
   }).then(function(status) {
-    var total = status.pending_notes;
+    var total = status.pending_notes + status.stale_notes;
     var indexed = 0;
+    var attempted = new Set(); // <-- Fix: Prevent infinite loop of failing notes
 
     if (total === 0) { return; }
 
@@ -410,12 +436,20 @@ SemanticIndex.prototype.indexPending = function(onProgressFn) {
         .then(function(r) { return r.json(); })
         .then(function(notes) {
           if (!notes || notes.length === 0) { return; }
+
+          // Remove notes already attempted in this indexPending run
+          var newNotes = notes.filter(function(n) { return !attempted.has(n.filename); });
+          if (newNotes.length === 0) { return; } // Avoid looping on same failing notes
+
           var i = 0;
           function nextNote() {
-            if (i >= notes.length) {
+            if (i >= newNotes.length) {
               return new Promise(function(r) { setTimeout(r, 200); }).then(processBatch);
             }
-            return self.indexNote(notes[i].filename, notes[i].content)
+            var note = newNotes[i];
+            attempted.add(note.filename);
+
+            return self.indexNote(note.filename, note.content)
               .then(function() {
                 indexed++;
                 if (self._activeProgressFn) self._activeProgressFn(indexed, total);

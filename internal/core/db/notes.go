@@ -31,11 +31,19 @@ func (s *Store) SaveNote(filename, content, mtime string) error {
 	})
 }
 
-// DeleteNote removes a note by filename.
+// DeleteNote removes a note by filename and cleans up its FTS documents, chunks and embeddings.
 func (s *Store) DeleteNote(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.DeleteNote(context.Background(), filename)
+	
+	if err := s.Q.DeleteNote(context.Background(), filename); err != nil {
+		return err
+	}
+	if err := s.Q.DeleteNoteChunks(context.Background(), filename); err != nil {
+		return err
+	}
+	_, err := s.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`)
+	return err
 }
 
 // RenameNote renames a note from old to new filename.

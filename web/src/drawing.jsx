@@ -10,6 +10,7 @@ const safeGetSceneVersion = (elements) => {
     return (elements || []).reduce((acc, el) => acc + (el.version || 0), 0) + (elements || []).length;
 };
 
+
 function DrawingEditor({ initialState, onChange, onReady }) {
     const excalidrawRef = useRef(null);
     const onChangeRef = useRef(onChange);
@@ -81,7 +82,17 @@ function DrawingEditor({ initialState, onChange, onReady }) {
     );
 }
 
-// Inicializa a aplicação React no container HTML
+/**
+ * Inicializa o componente DrawingEditor dentro de um container HTML.
+ * Cria a raiz React e renderiza o Excalidraw.
+ * 
+ * @param {HTMLElement} containerEl - Elemento DOM que conterá o editor
+ * @param {Object} options
+ * @param {Object|string} [options.initialState] - Estado inicial do desenho
+ * @param {Function} options.onChange - Callback de alteração
+ * @param {Function} [options.onReady] - Callback de prontidão
+ * @returns {Object|null} Raiz React ou null em caso de erro
+ */
 window.initDrawing = (containerEl, options) => {
     try {
         const root = createRoot(containerEl);

@@ -1,11 +1,14 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"math"
 
+	dbgen "ton618/internal/core/db/generated"
 	"ton618/internal/core/domain"
 )
 
@@ -24,6 +27,7 @@ type EmbeddingStatus struct {
 	IndexedNotes int `json:"indexed_notes"`
 	PendingNotes int `json:"pending_notes"`
 	StaleNotes   int `json:"stale_notes"`
+	EmbeddingDim int `json:"embedding_dim"`
 }
 
 // serializeEmbedding converte []float32 para []byte no formato little-endian float32,
@@ -65,11 +69,11 @@ func (s *Store) SaveEmbedding(chunkID string, embedding []float32) error {
 
 // ChunkInfo representa um chunk de nota para indexação semântica.
 type ChunkInfo struct {
-	ChunkID      string    `json:"chunk_id"`
-	Filename     string    `json:"filename"`
-	ChunkIndex   int       `json:"chunk_index"`
-	Content      string    `json:"content"`
-	Embedding    []float32 `json:"embedding"`
+	ChunkID    string    `json:"chunk_id"`
+	Filename   string    `json:"filename"`
+	ChunkIndex int       `json:"chunk_index"`
+	Content    string    `json:"content"`
+	Embedding  []float32 `json:"embedding"`
 }
 
 // SaveNoteChunks salva todos os chunks de uma nota em transação atômica.
@@ -85,6 +89,8 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	}
 	defer tx.Rollback()
 
+	qtx := s.Q.WithTx(tx)
+
 	// 0. Obtém o mtime atual da nota para detectar alterações futuras
 	var indexedMtime string
 	if err := tx.QueryRow(`SELECT mtime FROM notes WHERE filename = ?`, filename).Scan(&indexedMtime); err != nil {
@@ -92,7 +98,7 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	}
 
 	// 1. Remove chunks antigos do filename
-	if _, err := tx.Exec(`DELETE FROM note_chunks WHERE filename = ?`, filename); err != nil {
+	if err := qtx.DeleteNoteChunks(context.Background(), filename); err != nil {
 		return fmt.Errorf("delete old chunks: %w", err)
 	}
 
@@ -103,10 +109,13 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 
 	// 3. Insere novos chunks e embeddings
 	for _, ch := range chunks {
-		if _, err := tx.Exec(
-			`INSERT INTO note_chunks(chunk_id, filename, chunk_index, content, indexed_mtime) VALUES (?, ?, ?, ?, ?)`,
-			ch.ChunkID, ch.Filename, ch.ChunkIndex, ch.Content, indexedMtime,
-		); err != nil {
+		if err := qtx.InsertNoteChunk(context.Background(), dbgen.InsertNoteChunkParams{
+			ChunkID:      ch.ChunkID,
+			Filename:     ch.Filename,
+			ChunkIndex:   int64(ch.ChunkIndex),
+			Content:      ch.Content,
+			IndexedMtime: sql.NullString{String: indexedMtime, Valid: true},
+		}); err != nil {
 			return fmt.Errorf("insert chunk %s: %w", ch.ChunkID, err)
 		}
 
@@ -131,7 +140,7 @@ func (s *Store) DeleteEmbedding(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	if _, err := s.DB.Exec(`DELETE FROM note_chunks WHERE filename = ?`, filename); err != nil {
+	if err := s.Q.DeleteNoteChunks(context.Background(), filename); err != nil {
 		return err
 	}
 	_, err := s.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`)
@@ -140,8 +149,10 @@ func (s *Store) DeleteEmbedding(filename string) error {
 
 // HasEmbedding verifica se uma nota ja possui embedding indexado (qualquer chunk).
 func (s *Store) HasEmbedding(filename string) bool {
-	var count int
-	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks WHERE filename = ?`, filename).Scan(&count)
+	count, err := s.Q.HasNoteEmbedding(context.Background(), filename)
+	if err != nil {
+		return false
+	}
 	return count > 0
 }
 
@@ -225,52 +236,40 @@ func (s *Store) IsNoteEmbeddable(filename string, tags []string) bool {
 }
 
 // GetEmbeddingStatus retorna quantas notas tem embedding vs. total de notas no banco.
+// Usa SQL para contagem eficiente em vez de carregar todas as notas em memória.
 func (s *Store) GetEmbeddingStatus() (EmbeddingStatus, error) {
 	var status EmbeddingStatus
+	status.EmbeddingDim = EmbeddingDim
 
-	// 1. Busca todas as tags do banco para definir tipos
-	allTags, err := s.GetAllFileTags()
+	// 1. Conta total de notas indexáveis
+	total, err := s.Q.CountEmbeddableNotes(context.Background())
 	if err != nil {
 		return status, err
 	}
+	status.TotalNotes = int(total)
 
-	// 2. Busca todas as notas para contar o total indexável
-	allNotes, err := s.GetAllNotes()
+	// 2. Conta notas que possuem pelo menos um chunk indexado
+	indexed, err := s.Q.CountIndexedNotes(context.Background())
 	if err != nil {
 		return status, err
 	}
+	status.IndexedNotes = int(indexed)
 
-	totalEmbeddable := 0
-	for filename := range allNotes {
-		tags := allTags[filename]
-		if s.isNoteEmbeddable(filename, tags) {
-			totalEmbeddable++
-		}
-	}
-	status.TotalNotes = totalEmbeddable
-
-	// 3. Busca a contagem de notas que possuem pelo menos um chunk indexado
-	if err := s.DB.QueryRow(`SELECT COUNT(DISTINCT filename) FROM note_chunks`).Scan(&status.IndexedNotes); err != nil {
-		return status, err
-	}
-
-	// 4. Calcula pendentes (assegura que não seja negativo)
+	// 3. Calcula pendentes
 	status.PendingNotes = status.TotalNotes - status.IndexedNotes
 	if status.PendingNotes < 0 {
 		status.PendingNotes = 0
 	}
 
-	// 5. Conta notas com chunks desatualizados (mtime mudou desde a última indexação)
-	if err := s.DB.QueryRow(`
-		SELECT COUNT(DISTINCT nc.filename)
-		FROM note_chunks nc
-		JOIN notes n ON n.filename = nc.filename
-		WHERE n.mtime != nc.indexed_mtime
-	`).Scan(&status.StaleNotes); err != nil {
+	// 4. Conta notas com chunks desatualizados
+	stale, err := s.Q.CountStaleNotes(context.Background())
+	if err != nil {
 		status.StaleNotes = 0
+	} else {
+		status.StaleNotes = int(stale)
 	}
 
-	// 6. Adiciona notas desatualizadas (stale) aos pendentes, pois elas precisam ser reindexadas
+	// 5. Adiciona stale notes aos pendentes
 	status.PendingNotes += status.StaleNotes
 
 	return status, nil
@@ -283,72 +282,43 @@ type PendingNote struct {
 }
 
 // GetPendingEmbeddingNotes retorna notas sem chunks indexados, em batches de `limit`.
+// Usa SQL para filtrar notas não-indexáveis, eliminando overfetch desnecessário.
 func (s *Store) GetPendingEmbeddingNotes(limit int) ([]PendingNote, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
-	// 1. Busca todas as tags
-	allTags, err := s.GetAllFileTags()
+	rows, err := s.Q.GetPendingEmbeddingNotes(context.Background(), int64(limit))
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Busca candidatos pendentes (notas que não têm chunks ou que têm chunks desatualizados)
-	rows, err := s.DB.Query(`
-		SELECT filename, content
-		FROM notes n
-		WHERE (
-			filename NOT IN (SELECT DISTINCT filename FROM note_chunks)
-			OR EXISTS (
-				SELECT 1 FROM note_chunks nc
-				WHERE nc.filename = n.filename AND nc.indexed_mtime != n.mtime
-			)
-		)
-		  AND content != ''
-		ORDER BY mtime DESC
-		LIMIT ?
-	`, limit*10)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []PendingNote
-	for rows.Next() {
-		var p PendingNote
-		if err := rows.Scan(&p.Filename, &p.Content); err != nil {
-			continue
+	result := make([]PendingNote, 0, len(rows))
+	for _, r := range rows {
+		content := ""
+		if r.Content.Valid {
+			content = r.Content.String
 		}
-
-		tags := allTags[p.Filename]
-		if s.isNoteEmbeddable(p.Filename, tags) {
-			result = append(result, p)
-			if len(result) >= limit {
-				break
-			}
-		}
+		result = append(result, PendingNote{
+			Filename: r.Filename,
+			Content:  content,
+		})
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GetEmbeddedFiles retorna o conjunto de nomes de arquivo que possuem chunks indexados.
 func (s *Store) GetEmbeddedFiles() (map[string]bool, error) {
-	rows, err := s.DB.Query("SELECT DISTINCT filename FROM note_chunks")
+	filenames, err := s.Q.GetEmbeddedFiles(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	result := make(map[string]bool)
-	for rows.Next() {
-		var fname string
-		if err := rows.Scan(&fname); err != nil {
-			continue
-		}
+	result := make(map[string]bool, len(filenames))
+	for _, fname := range filenames {
 		result[fname] = true
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GetNoteEmbeddings recupera e deserializa todos os vetores de embedding (float32) de uma nota.

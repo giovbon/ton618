@@ -92,6 +92,7 @@ func (ctx *HandlerContext) HandleEmbeddingSave(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -181,6 +182,7 @@ func (ctx *HandlerContext) HandleEmbeddingPending(w http.ResponseWriter, r *http
 	for _, p := range pending {
 		c := p.Content
 		if len(c) > 10000 {
+			slog.Debug("conteudo truncado para chunking semantic", "file", p.Filename, "original_len", len(c), "truncated_to", 10000)
 			c = c[:10000]
 		}
 		items = append(items, pendingItem{Filename: p.Filename, Content: c})

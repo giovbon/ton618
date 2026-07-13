@@ -1,5 +1,13 @@
 /**
- * semantic-worker.js
+ * semantic-worker.js — SOURCE FILE
+ *
+ * Este é o ARQUIVO FONTE. Edite AQUI, nunca em web/static/semantic-worker.js.
+ *
+ * BUILD: `npm run build` (executa web/build.js com esbuild)
+ *   → web/static/semantic-worker.js     (minificado, ESM para Worker)
+ *   → web/static/semantic-worker.js.gz  (gzip)
+ *   → web/static/semantic-worker.js.br  (brotli)
+ *
  * Web Worker que executa inferência de embeddings com Transformers.js.
  * Roda em thread separada para não bloquear a UI.
  *
@@ -49,6 +57,30 @@ let modelLoaded = false;
 
 /** @type {string|null} Mensagem de erro se o carregamento falhou */
 let loadError = null;
+
+/** @type {Array<{id: number, text: string}>} Fila de embeddings serializada */
+let embedQueue = [];
+/** @type {boolean} Se já está processando a fila */
+let processingQueue = false;
+
+/**
+ * Processa a fila de embeddings sequencialmente — um por vez.
+ * ONNX não lida bem com chamadas concorrentes no mesmo pipeline.
+ */
+async function processEmbedQueue() {
+  if (processingQueue) return;
+  processingQueue = true;
+  while (embedQueue.length > 0) {
+    const { id, text } = embedQueue.shift();
+    try {
+      const embedding = await embed(text);
+      self.postMessage({ type: "embedding", id, data: embedding });
+    } catch (err) {
+      self.postMessage({ type: "embed_error", id, message: err.message });
+    }
+  }
+  processingQueue = false;
+}
 
 /**
  * Obtém (ou inicializa) a pipeline de feature-extraction do Transformers.js.
@@ -118,12 +150,8 @@ self.onmessage = async (event) => {
 
   switch (type) {
     case "embed":
-      try {
-        const embedding = await embed(text);
-        self.postMessage({ type: "embedding", id, data: embedding });
-      } catch (err) {
-        self.postMessage({ type: "embed_error", id, message: err.message });
-      }
+      embedQueue.push({ id, text });
+      processEmbedQueue();
       break;
 
     case "ping":

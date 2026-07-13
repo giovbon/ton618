@@ -118,7 +118,7 @@ templ Navbar() {
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
                             📦 <span>Upload Anexo</span>
                         </a>
-                        <a href="#" id="capture-link" @click.prevent="open = false; promptCapture(this);"
+                        <a href="#" id="capture-link" @click.prevent="open = false; promptCapture($el);"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
                             🌐 <span>Web Capture</span>
                         </a>
@@ -208,7 +208,7 @@ templ Navbar() {
                         <span class="text-sm">📦</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
                     </a>
-                    <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture(this);"
+                    <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture($el);"
                         class="col-span-2 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
                         <span class="text-sm">🌐</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>

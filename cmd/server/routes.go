@@ -86,8 +86,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)
 	mux.With(searchLimiter.Middleware).Get("/search", searchCtx.HandleSearch)
 	// SEMANTIC EMBEDDINGS (gerados no browser via Transformers.js — apenas desktop)
-	mux.With(embLimiter.Middleware).Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
 	mux.With(embLimiter.Middleware).Post("/api/embeddings/search", embeddingsCtx.HandleEmbeddingSearch)
+	mux.Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
 	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
 	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
 

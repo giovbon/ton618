@@ -246,43 +246,7 @@ function logout() {
     window.location.href = "/login";
 }
 
-// ── + Criar Dropdown ──
-/**
- * @param {Event} e 
- */
-function toggleCriarMenu(e) {
-    e.stopPropagation();
-    const menu = document.getElementById('criar-menu');
-    if (menu) menu.classList.toggle('hidden');
-}
-function closeCriarMenu() {
-    const menu = document.getElementById('criar-menu');
-    if (menu) menu.classList.add('hidden');
-}
-// ── + Captura Dropdown ──
-/**
- * @param {Event} e 
- */
-function toggleCapturaMenu(e) {
-    e.stopPropagation();
-    const menu = document.getElementById('captura-menu');
-    if (menu) menu.classList.toggle('hidden');
-}
-function closeCapturaMenu() {
-    const menu = document.getElementById('captura-menu');
-    if (menu) menu.classList.add('hidden');
-}
-document.addEventListener('click', function(e) {
-    const wrapper = document.getElementById('criar-dropdown-wrapper');
-    const target = /** @type {Node} */ (e.target);
-    if (wrapper && !wrapper.contains(target)) {
-        closeCriarMenu();
-    }
-    const capWrapper = document.getElementById('captura-dropdown-wrapper');
-    if (capWrapper && !capWrapper.contains(target)) {
-        closeCapturaMenu();
-    }
-});
+
 
 // ── Configurações (⚙️ Settings Modal) ──
 // Registrado inline no layout.templ para evitar condições de corrida com o Alpine.js

@@ -1,3 +1,24 @@
+/**
+ * @module mapEditor
+ * @description Editor de mapas com Leaflet.
+ * 
+ * Dependências:
+ *   - Leaflet (global L) de /static/leaflet.js
+ *   - Nominatim (OpenStreetMap) para geocoding reverso
+ *   - OSRM para cálculo de rotas
+ * 
+ * Expõe no window:
+ *   - initMap(container, markersData, onChange)
+ *   - _mapAddMode()
+ *   - _mapToggleMeasureMode()
+ *   - _mapToggleSatellite()
+ *   - _mapSearch(query)
+ *   - _mapGoToLocation(lat, lng, label)
+ *   - _mapGetMarker(id)
+ *   - _mapRenameMarker(id)
+ *   - _mapOnChange()
+ */
+
 // web/src/map.js — Editor de mapas (usa Leaflet global L do /static/leaflet.js)
 
 (function () {
@@ -22,6 +43,14 @@
       .replace(/'/g, "&#039;");
   }
 
+  /**
+   * Inicializa o mapa Leaflet no container especificado.
+   * 
+   * @param {HTMLElement|string} container - Elemento DOM ou ID do container
+   * @param {Array<{lat: number, lng: number, name?: string, desc?: string}>} [markersData] - Marcadores iniciais
+   * @param {Function} onChange - Callback disparado a cada alteração (add, move, rename, delete)
+   * @returns {{map: L.Map, getData: Function, addMarker: Function}}
+   */
   window.initMap = function (container, markersData, onChange) {
     const map = L.map(container, { zoomControl: true }).setView([-23.5505, -46.6333], 12);
 
@@ -455,6 +484,11 @@
   // ── Busca de localizacao (geocoding via Nominatim) ──
   var searchControl = null;
 
+  /**
+   * Busca localizações via Nominatim (OpenStreetMap).
+   * @param {string} query - Texto da busca (mínimo 3 caracteres)
+   * @returns {Promise<Array<{label: string, lat: number, lng: number}>>}
+   */
   window._mapSearch = function (query) {
     if (!query || query.length < 3) return Promise.resolve([]);
 
@@ -479,6 +513,12 @@
       });
   };
 
+  /**
+   * Centraliza o mapa em uma localização e adiciona um marcador.
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @param {string} [label] - Nome do marcador
+   */
   window._mapGoToLocation = function (lat, lng, label) {
     map.setView([lat, lng], 15);
     var data2 = { lat: lat, lng: lng, name: label || "Local", desc: "" };

@@ -192,3 +192,68 @@ SELECT COUNT(*) FROM notifications_log WHERE id = ?;
 
 -- name: RecordNotificationSent :exec
 INSERT INTO notifications_log (id, type, sent_at) VALUES (?, ?, ?);
+
+-- name: HasNoteEmbedding :one
+SELECT COUNT(*) FROM note_chunks WHERE filename = ?;
+
+-- name: GetEmbeddedFiles :many
+SELECT DISTINCT filename FROM note_chunks;
+
+-- name: CountEmbeddableNotes :one
+SELECT COUNT(*) FROM notes n
+WHERE n.content != ''
+  AND n.filename NOT LIKE 'pdfs/%'
+  AND n.filename NOT LIKE 'attachments/%'
+  AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE '%mapa-%'
+  AND n.filename NOT LIKE '%mapa.%'
+  AND n.filename NOT LIKE '%/map'
+  AND NOT EXISTS (
+    SELECT 1 FROM tags t
+    WHERE t.arquivo = n.filename
+      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+  );
+
+-- name: CountIndexedNotes :one
+SELECT COUNT(DISTINCT nc.filename)
+FROM note_chunks nc
+WHERE EXISTS (
+  SELECT 1 FROM notes n WHERE n.filename = nc.filename
+);
+
+-- name: CountStaleNotes :one
+SELECT COUNT(DISTINCT nc.filename)
+FROM note_chunks nc
+JOIN notes n ON n.filename = nc.filename
+WHERE n.mtime != nc.indexed_mtime;
+
+-- name: GetPendingEmbeddingNotes :many
+SELECT n.filename, n.content
+FROM notes n
+WHERE (
+  n.filename NOT IN (SELECT DISTINCT filename FROM note_chunks)
+  OR EXISTS (
+    SELECT 1 FROM note_chunks nc
+    WHERE nc.filename = n.filename AND nc.indexed_mtime != n.mtime
+  )
+)
+  AND n.content != ''
+  AND n.filename NOT LIKE 'pdfs/%'
+  AND n.filename NOT LIKE 'attachments/%'
+  AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE '%mapa-%'
+  AND n.filename NOT LIKE '%mapa.%'
+  AND n.filename NOT LIKE '%/map'
+  AND NOT EXISTS (
+    SELECT 1 FROM tags t
+    WHERE t.arquivo = n.filename
+      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+  )
+ORDER BY n.mtime DESC
+LIMIT ?;
+
+-- name: DeleteNoteChunks :exec
+DELETE FROM note_chunks WHERE filename = ?;
+
+-- name: InsertNoteChunk :exec
+INSERT INTO note_chunks(chunk_id, filename, chunk_index, content, indexed_mtime) VALUES (?, ?, ?, ?, ?);

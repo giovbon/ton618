@@ -58,6 +58,14 @@ type Note struct {
 	Keywords sql.NullString `json:"keywords"`
 }
 
+type NoteChunk struct {
+	ChunkID      string         `json:"chunk_id"`
+	Filename     string         `json:"filename"`
+	ChunkIndex   int64          `json:"chunk_index"`
+	Content      string         `json:"content"`
+	IndexedMtime sql.NullString `json:"indexed_mtime"`
+}
+
 type NotificationsLog struct {
 	ID     string         `json:"id"`
 	Type   sql.NullString `json:"type"`

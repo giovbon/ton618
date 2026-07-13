@@ -79,12 +79,64 @@ func (q *Queries) CountDocumentsWithoutDrawing(ctx context.Context) (int64, erro
 	return count, err
 }
 
+const countEmbeddableNotes = `-- name: CountEmbeddableNotes :one
+SELECT COUNT(*) FROM notes n
+WHERE n.content != ''
+  AND n.filename NOT LIKE 'pdfs/%'
+  AND n.filename NOT LIKE 'attachments/%'
+  AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE '%mapa-%'
+  AND n.filename NOT LIKE '%mapa.%'
+  AND n.filename NOT LIKE '%/map'
+  AND NOT EXISTS (
+    SELECT 1 FROM tags t
+    WHERE t.arquivo = n.filename
+      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+  )
+`
+
+func (q *Queries) CountEmbeddableNotes(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEmbeddableNotes)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countIndexedNotes = `-- name: CountIndexedNotes :one
+SELECT COUNT(DISTINCT nc.filename)
+FROM note_chunks nc
+WHERE EXISTS (
+  SELECT 1 FROM notes n WHERE n.filename = nc.filename
+)
+`
+
+func (q *Queries) CountIndexedNotes(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countIndexedNotes)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countNotes = `-- name: CountNotes :one
 SELECT COUNT(*) FROM notes
 `
 
 func (q *Queries) CountNotes(ctx context.Context) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countNotes)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countStaleNotes = `-- name: CountStaleNotes :one
+SELECT COUNT(DISTINCT nc.filename)
+FROM note_chunks nc
+JOIN notes n ON n.filename = nc.filename
+WHERE n.mtime != nc.indexed_mtime
+`
+
+func (q *Queries) CountStaleNotes(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countStaleNotes)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -197,6 +249,15 @@ DELETE FROM notes WHERE filename = ?
 
 func (q *Queries) DeleteNote(ctx context.Context, filename string) error {
 	_, err := q.db.ExecContext(ctx, deleteNote, filename)
+	return err
+}
+
+const deleteNoteChunks = `-- name: DeleteNoteChunks :exec
+DELETE FROM note_chunks WHERE filename = ?
+`
+
+func (q *Queries) DeleteNoteChunks(ctx context.Context, filename string) error {
+	_, err := q.db.ExecContext(ctx, deleteNoteChunks, filename)
 	return err
 }
 
@@ -754,6 +815,33 @@ func (q *Queries) GetDocumentsPaginated(ctx context.Context, arg GetDocumentsPag
 	return items, nil
 }
 
+const getEmbeddedFiles = `-- name: GetEmbeddedFiles :many
+SELECT DISTINCT filename FROM note_chunks
+`
+
+func (q *Queries) GetEmbeddedFiles(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getEmbeddedFiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var filename string
+		if err := rows.Scan(&filename); err != nil {
+			return nil, err
+		}
+		items = append(items, filename)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFileMod = `-- name: GetFileMod :one
 SELECT mtime FROM file_mods WHERE arquivo = ?
 `
@@ -984,6 +1072,60 @@ func (q *Queries) GetNotesNeedingMarkmapTag(ctx context.Context) ([]string, erro
 	return items, nil
 }
 
+const getPendingEmbeddingNotes = `-- name: GetPendingEmbeddingNotes :many
+SELECT n.filename, n.content
+FROM notes n
+WHERE (
+  n.filename NOT IN (SELECT DISTINCT filename FROM note_chunks)
+  OR EXISTS (
+    SELECT 1 FROM note_chunks nc
+    WHERE nc.filename = n.filename AND nc.indexed_mtime != n.mtime
+  )
+)
+  AND n.content != ''
+  AND n.filename NOT LIKE 'pdfs/%'
+  AND n.filename NOT LIKE 'attachments/%'
+  AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE '%mapa-%'
+  AND n.filename NOT LIKE '%mapa.%'
+  AND n.filename NOT LIKE '%/map'
+  AND NOT EXISTS (
+    SELECT 1 FROM tags t
+    WHERE t.arquivo = n.filename
+      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+  )
+ORDER BY n.mtime DESC
+LIMIT ?
+`
+
+type GetPendingEmbeddingNotesRow struct {
+	Filename string         `json:"filename"`
+	Content  sql.NullString `json:"content"`
+}
+
+func (q *Queries) GetPendingEmbeddingNotes(ctx context.Context, limit int64) ([]GetPendingEmbeddingNotesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPendingEmbeddingNotes, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPendingEmbeddingNotesRow
+	for rows.Next() {
+		var i GetPendingEmbeddingNotesRow
+		if err := rows.Scan(&i.Filename, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPopularity = `-- name: GetPopularity :one
 SELECT count FROM popularity WHERE arquivo = ?
 `
@@ -1020,6 +1162,17 @@ func (q *Queries) GetSynapticWeight(ctx context.Context, arquivo string) (GetSyn
 	var i GetSynapticWeightRow
 	err := row.Scan(&i.Weight, &i.LastInteractedAt)
 	return i, err
+}
+
+const hasNoteEmbedding = `-- name: HasNoteEmbedding :one
+SELECT COUNT(*) FROM note_chunks WHERE filename = ?
+`
+
+func (q *Queries) HasNoteEmbedding(ctx context.Context, filename string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasNoteEmbedding, filename)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const hasNotificationBeenSent = `-- name: HasNotificationBeenSent :one
@@ -1066,6 +1219,29 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 		arg.Timestamp,
 		arg.CreatedAt,
 		arg.Hash,
+	)
+	return err
+}
+
+const insertNoteChunk = `-- name: InsertNoteChunk :exec
+INSERT INTO note_chunks(chunk_id, filename, chunk_index, content, indexed_mtime) VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertNoteChunkParams struct {
+	ChunkID      string         `json:"chunk_id"`
+	Filename     string         `json:"filename"`
+	ChunkIndex   int64          `json:"chunk_index"`
+	Content      string         `json:"content"`
+	IndexedMtime sql.NullString `json:"indexed_mtime"`
+}
+
+func (q *Queries) InsertNoteChunk(ctx context.Context, arg InsertNoteChunkParams) error {
+	_, err := q.db.ExecContext(ctx, insertNoteChunk,
+		arg.ChunkID,
+		arg.Filename,
+		arg.ChunkIndex,
+		arg.Content,
+		arg.IndexedMtime,
 	)
 	return err
 }

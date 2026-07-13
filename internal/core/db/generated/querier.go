@@ -15,7 +15,10 @@ type Querier interface {
 	ApplyInteractionReward(ctx context.Context, arg ApplyInteractionRewardParams) error
 	ClearLinks(ctx context.Context, fromFile string) error
 	CountDocumentsWithoutDrawing(ctx context.Context) (int64, error)
+	CountEmbeddableNotes(ctx context.Context) (int64, error)
+	CountIndexedNotes(ctx context.Context) (int64, error)
 	CountNotes(ctx context.Context) (int64, error)
+	CountStaleNotes(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) error
 	CreateTodo(ctx context.Context, arg CreateTodoParams) error
 	DeleteAppointment(ctx context.Context, id string) error
@@ -24,6 +27,7 @@ type Querier interface {
 	DeleteFileMod(ctx context.Context, arquivo string) error
 	DeleteFileTags(ctx context.Context, arquivo string) error
 	DeleteNote(ctx context.Context, filename string) error
+	DeleteNoteChunks(ctx context.Context, filename string) error
 	DeleteOldAppointments(ctx context.Context, eventDate sql.NullString) error
 	DeleteTodosByFile(ctx context.Context, file string) error
 	GetAllDocuments(ctx context.Context) ([]Document, error)
@@ -44,6 +48,7 @@ type Querier interface {
 	GetDocumentCount(ctx context.Context) (int64, error)
 	GetDocumentsByFile(ctx context.Context, arquivo sql.NullString) ([]Document, error)
 	GetDocumentsPaginated(ctx context.Context, arg GetDocumentsPaginatedParams) ([]Document, error)
+	GetEmbeddedFiles(ctx context.Context) ([]string, error)
 	GetFileMod(ctx context.Context, arquivo string) (sql.NullString, error)
 	GetFileTags(ctx context.Context, arquivo string) ([]string, error)
 	GetFilesByTag(ctx context.Context, tag string) ([]string, error)
@@ -54,11 +59,14 @@ type Querier interface {
 	GetNote(ctx context.Context, filename string) (sql.NullString, error)
 	GetNoteMtime(ctx context.Context, filename string) (sql.NullString, error)
 	GetNotesNeedingMarkmapTag(ctx context.Context) ([]string, error)
+	GetPendingEmbeddingNotes(ctx context.Context, limit int64) ([]GetPendingEmbeddingNotesRow, error)
 	GetPopularity(ctx context.Context, arquivo string) (sql.NullInt64, error)
 	GetSetting(ctx context.Context, key string) (sql.NullString, error)
 	GetSynapticWeight(ctx context.Context, arquivo string) (GetSynapticWeightRow, error)
+	HasNoteEmbedding(ctx context.Context, filename string) (int64, error)
 	HasNotificationBeenSent(ctx context.Context, id string) (int64, error)
 	InsertDocument(ctx context.Context, arg InsertDocumentParams) error
+	InsertNoteChunk(ctx context.Context, arg InsertNoteChunkParams) error
 	NoteExists(ctx context.Context, filename string) (int64, error)
 	RecordNotificationSent(ctx context.Context, arg RecordNotificationSentParams) error
 	RemoveLink(ctx context.Context, arg RemoveLinkParams) error

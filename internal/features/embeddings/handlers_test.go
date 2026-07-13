@@ -179,6 +179,9 @@ func TestHandleEmbeddingStatus_Sucesso(t *testing.T) {
 	if status.TotalNotes != 0 {
 		t.Fatalf("TotalNotes esperado 0, got %d", status.TotalNotes)
 	}
+	if status.EmbeddingDim != db.EmbeddingDim {
+		t.Fatalf("EmbeddingDim esperado %d, got %d", db.EmbeddingDim, status.EmbeddingDim)
+	}
 
 	// Verifica Cache-Control
 	cacheControl := rr.Header().Get("Cache-Control")

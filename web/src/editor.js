@@ -51,7 +51,7 @@ const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
   },
 });
 
-// Custom Paragraph extension to serialize empty paragraphs as &nbsp;
+// Extensão customizada do Paragraph que serializa parágrafos vazios como &nbsp;
 const CustomParagraph = Paragraph.extend({
   addStorage() {
     return {
@@ -73,7 +73,35 @@ const CustomParagraph = Paragraph.extend({
   },
 });
 
-// Expõe no window para uso no editor.html
+/**
+ * @namespace TipTapEditor
+ * @description Módulo de configuração do editor TipTap.
+ * Expõe todas as extensões e utilitários necessários para inicializar
+ * o editor de markdown no browser.
+ * 
+ * @property {Object} Editor - Classe principal do TipTap
+ * @property {Object} StarterKit - Extensão base (negrito, itálico, listas, etc.)
+ * @property {Object} Placeholder - Placeholder para campos vazios
+ * @property {Object} Table - Tabelas
+ * @property {Object} TableRow - Linha de tabela
+ * @property {Object} TableCell - Célula de tabela
+ * @property {Object} TableHeader - Cabeçalho de tabela
+ * @property {Object} ImageExt - Imagens
+ * @property {Object} TaskList - Lista de tarefas
+ * @property {Object} TaskItem - Item de tarefa
+ * @property {Object} Underline - Sublinhado
+ * @property {Object} TextStyle - Estilo de texto
+ * @property {Object} FontFamily - Família de fonte
+ * @property {Object} Highlight - Marcação (highlights)
+ * @property {Object} Link - Links (customizado, inclusive: false)
+ * @property {Object} Mention - Menções (@)
+ * @property {Object} Suggestion - Sistema de sugestões
+ * @property {Object} Markdown - Parse/serialização markdown
+ * @property {Object} marked - Biblioteca marked
+ * @property {Object} CodeBlockLowlightExt - Bloco de código com syntax highlight
+ * @property {Object} lowlight - Instância lowlight para highlight
+ * @property {Object} CustomParagraph - Parágrafo customizado (&nbsp;)
+ */
 window.TipTapEditor = {
   Editor,
   StarterKit,

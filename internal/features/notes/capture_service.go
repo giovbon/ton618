@@ -59,7 +59,7 @@ func (s *CaptureService) captureYouTube(rawURL string) (*CaptureResult, error) {
 	}
 
 	markdown := fmt.Sprintf(`---
-tags: [keywords]
+tags: []
 ---
 
 # %s
@@ -105,7 +105,7 @@ func (s *CaptureService) captureArticle(rawURL string) (*CaptureResult, error) {
 	mdContent = cleanupMarkdown(mdContent)
 
 	markdown := fmt.Sprintf(`---
-tags: [keywords]
+tags: []
 ---
 
 # %s

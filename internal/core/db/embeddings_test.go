@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 	"testing"
@@ -100,6 +101,38 @@ func TestSaveEmbedding_NaN(t *testing.T) {
 	err := s.SaveEmbedding("notes/test.md#0", embedding)
 	if err == nil {
 		t.Fatal("esperado erro para embedding com NaN")
+	}
+}
+
+func TestSaveEmbedding_SucessoIndividual(t *testing.T) {
+	s := newTestStore(t)
+	embedding := make([]float32, EmbeddingDim)
+	for i := range embedding {
+		embedding[i] = float32(i) * 0.1
+	}
+
+	err := s.SaveEmbedding("notes/individual.md#0", embedding)
+	if err != nil {
+		t.Fatalf("SaveEmbedding individual falhou: %v", err)
+	}
+
+	// Verifica via query direta que o blob foi inserido
+	var blob []byte
+	err = s.DB.QueryRow(`SELECT embedding FROM note_embeddings WHERE chunk_id = ?`, "notes/individual.md#0").Scan(&blob)
+	if err != nil {
+		t.Fatalf("SELECT falhou: %v", err)
+	}
+	if len(blob) != EmbeddingDim*4 {
+		t.Fatalf("tamanho do blob esperado %d, got %d", EmbeddingDim*4, len(blob))
+	}
+
+	// Deserializa e verifica valores
+	restored := deserializeEmbedding(blob)
+	for i, v := range restored {
+		expected := float32(i) * 0.1
+		if v != expected {
+			t.Fatalf("pos %d: esperado %f, got %f", i, expected, v)
+		}
 	}
 }
 
@@ -507,7 +540,7 @@ func TestSearchSimilar_ChunkGrouping(t *testing.T) {
 	filenameA := "notes/longa_a.md"
 	s.SaveNote(filenameA, "# Nota Longa A", "2024-01-01T00:00:00Z")
 	s.SetFileTags(filenameA, []string{})
-	
+
 	filenameB := "notes/curta_b.md"
 	s.SaveNote(filenameB, "# Nota Curta B", "2024-01-01T00:00:00Z")
 	s.SetFileTags(filenameB, []string{})
@@ -545,6 +578,107 @@ func TestSearchSimilar_ChunkGrouping(t *testing.T) {
 	}
 }
 
+// deserializeEmbedding é o inverso de serializeEmbedding — usado apenas em testes.
+func deserializeEmbedding(blob []byte) []float32 {
+	if len(blob)%4 != 0 {
+		return nil
+	}
+	emb := make([]float32, len(blob)/4)
+	for i := range emb {
+		bits := binary.LittleEndian.Uint32(blob[i*4 : (i+1)*4])
+		emb[i] = math.Float32frombits(bits)
+	}
+	return emb
+}
+
+// ── Round-trip serialize/deserialize ──
+
+func TestSerializeDeserialize_RoundTrip_Zeros(t *testing.T) {
+	original := make([]float32, EmbeddingDim)
+	blob, err := serializeEmbedding(original)
+	if err != nil {
+		t.Fatalf("serialize falhou: %v", err)
+	}
+	restored := deserializeEmbedding(blob)
+	for i, v := range restored {
+		if v != 0 {
+			t.Fatalf("pos %d: esperado 0, got %f", i, v)
+		}
+	}
+}
+
+func TestSerializeDeserialize_RoundTrip_Negativos(t *testing.T) {
+	original := make([]float32, EmbeddingDim)
+	original[0] = -3.14
+	original[100] = -0.001
+	original[200] = -1e10
+	original[383] = -1.0
+
+	blob, err := serializeEmbedding(original)
+	if err != nil {
+		t.Fatalf("serialize falhou: %v", err)
+	}
+	restored := deserializeEmbedding(blob)
+
+	if restored[0] != -3.14 {
+		t.Fatalf("pos 0: esperado -3.14, got %f", restored[0])
+	}
+	if restored[100] != -0.001 {
+		t.Fatalf("pos 100: esperado -0.001, got %f", restored[100])
+	}
+	if restored[200] != -1e10 {
+		t.Fatalf("pos 200: esperado -1e10, got %f", restored[200])
+	}
+	if restored[383] != -1.0 {
+		t.Fatalf("pos 383: esperado -1.0, got %f", restored[383])
+	}
+}
+
+func TestSerializeDeserialize_RoundTrip_Denormalizados(t *testing.T) {
+	// Valores float32 denormalizados (muito próximos de zero)
+	original := make([]float32, EmbeddingDim)
+	original[50] = math.Float32frombits(0x00000001) // menor denormalizado positivo
+	original[150] = 1.4e-45                         // menor float32 subnormal
+	original[250] = -1.4e-45                        // menor float32 subnormal negativo
+
+	blob, err := serializeEmbedding(original)
+	if err != nil {
+		t.Fatalf("serialize denormalizados falhou: %v", err)
+	}
+	restored := deserializeEmbedding(blob)
+
+	if restored[50] != original[50] {
+		t.Fatalf("pos 50: round-trip denormalizado falhou: got %x", math.Float32bits(restored[50]))
+	}
+	if restored[150] != original[150] {
+		t.Fatalf("pos 150: round-trip subnormal falhou")
+	}
+	if restored[250] != original[250] {
+		t.Fatalf("pos 250: round-trip subnormal negativo falhou")
+	}
+}
+
+func TestSerializeDeserialize_RoundTrip_Positivos(t *testing.T) {
+	original := make([]float32, EmbeddingDim)
+	for i := range original {
+		original[i] = float32(i) * 0.05
+	}
+
+	blob, err := serializeEmbedding(original)
+	if err != nil {
+		t.Fatalf("serialize falhou: %v", err)
+	}
+	restored := deserializeEmbedding(blob)
+
+	for i := range original {
+		if original[i] != restored[i] {
+			t.Fatalf("pos %d: esperado %f, got %f", i, original[i], restored[i])
+		}
+	}
+}
+
+// ── GetNoteEmbeddings (via DB) ──
+
 func TestGetNoteEmbeddings(t *testing.T) {
 	s := newTestStore(t)
 	filename := "notes/get_embeddings_test.md"
@@ -579,3 +713,222 @@ func TestGetNoteEmbeddings(t *testing.T) {
 		t.Fatalf("esperado 56.78 no index 0, got %f", embeddings[1][0])
 	}
 }
+
+// ── GetNoteEmbeddings com valores extremos via DB ──
+
+func TestGetNoteEmbeddings_ValoresExtremos(t *testing.T) {
+	s := newTestStore(t)
+	filename := "notes/extreme_embeddings.md"
+
+	s.SaveNote(filename, "# Extreme", "2024-01-01T00:00:00Z")
+	s.SetFileTags(filename, []string{})
+
+	// Cria chunks com valores extremos
+	chunk0 := makeChunk(filename, 0, "Zero", 0)
+	chunk1P := makeChunk(filename, 1, "Positivo", 3.1415)
+	chunk2N := makeChunk(filename, 2, "Negativo", -2.718)
+	chunks := []ChunkInfo{chunk0, chunk1P, chunk2N}
+
+	s.SaveNoteChunks(filename, chunks)
+
+	embeddings, err := s.GetNoteEmbeddings(filename)
+	if err != nil {
+		t.Fatalf("GetNoteEmbeddings falhou: %v", err)
+	}
+	if len(embeddings) != 3 {
+		t.Fatalf("esperado 3 embeddings, got %d", len(embeddings))
+	}
+	if embeddings[0][0] != 0 {
+		t.Fatalf("zero: esperado 0, got %f", embeddings[0][0])
+	}
+	if embeddings[1][0] != 3.1415 {
+		t.Fatalf("positivo: esperado 3.1415, got %f", embeddings[1][0])
+	}
+	if embeddings[2][0] != -2.718 {
+		t.Fatalf("negativo: esperado -2.718, got %f", embeddings[2][0])
+	}
+}
+
+// TestIsNoteEmbeddableMatchesSQL garante que a lógica de exclusão em Go (isNoteEmbeddable)
+// e a lógica de filtragem nas queries SQL (CountEmbeddableNotes e GetPendingEmbeddingNotes)
+// estão perfeitamente sincronizadas.
+func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
+	s := newTestStore(t)
+
+	// Definimos casos de teste cobrindo os diferentes tipos de notas
+	tests := []struct {
+		filename string
+		content  string
+		tags     []string
+		expected bool // true se deve ser indexável/embeddable
+	}{
+		// Indexáveis
+		{"notes/normal.md", "# Nota normal", []string{}, true},
+		{"notes/com-tag-inutil.md", "# Nota", []string{"estudos"}, true},
+		{"notes/typst-nota.md", "# Typst", []string{"typst"}, true},
+		{"notes/mindmap-nota.md", "# Mindmap", []string{"mindmap"}, true},
+		{"notes/markmap-nota.md", "# Markmap", []string{"markmap"}, true},
+		{"notes/youtube-nota.md", "# YouTube", []string{"youtube"}, true},
+		{"notes/article-nota.md", "# Artigo", []string{"artigo"}, true},
+		{"notes/capture-nota.md", "# Captura", []string{"capture"}, true},
+
+		// Não indexáveis por prefixo de caminho
+		{"pdfs/livro.pdf", "# PDF content", []string{}, false},
+		{"attachments/imagem.png", "# Anexo", []string{}, false},
+		{"archives/velho.md", "# Arquivado", []string{}, false},
+
+		// Não indexáveis por tags
+		{"notes/desenho.md", "# Desenho", []string{"drawing"}, false},
+		{"notes/planilha.md", "# Planilha", []string{"spreadsheet"}, false},
+		{"notes/fluxo.md", "# Mermaid", []string{"mermaid"}, false},
+		{"notes/mapa-tag.md", "# Mapa", []string{"map"}, false},
+		{"notes/mapa-tag-pt.md", "# Mapa", []string{"mapa"}, false},
+
+		// Nota: Casos com frontmatter (conteúdo) sem tags associadas são considerados 
+		// embeddable tanto no Go (IsNoteEmbeddable não abre o arquivo por performance) 
+		// quanto no SQL (não faz busca no texto completo por performance).
+		// Na prática, a aplicação sincroniza as tags baseadas no frontmatter ao salvar a nota.
+		{"notes/desenho-fm.md", "type: drawing\n# Desenho", []string{}, true},
+		{"notes/planilha-fm.md", "type: spreadsheet\n# Planilha", []string{}, true},
+		{"notes/fluxo-fm.md", "type: mermaid\n# Mermaid", []string{}, true},
+		{"notes/fm-map.md", "type: map\n# Mapa", []string{}, true},
+		{"notes/fm-mapa.md", "type: mapa\n# Mapa", []string{}, false},
+
+		// Não indexáveis por heurística de nome de arquivo
+		{"notes/mapa-exato.md", "# Mapa", []string{}, false},
+		{"notes/mapa.md", "# Mapa", []string{}, false},
+	}
+
+	// 1. Salva todas as notas e suas tags no banco de teste
+	for _, tc := range tests {
+		if err := s.SaveNote(tc.filename, tc.content, "2024-01-01T00:00:00Z"); err != nil {
+			t.Fatalf("SaveNote falhou para %s: %v", tc.filename, err)
+		}
+		if err := s.SetFileTags(tc.filename, tc.tags); err != nil {
+			t.Fatalf("SetFileTags falhou para %s: %v", tc.filename, err)
+		}
+	}
+
+	// 2. Valida a consistência de cada nota individualmente
+	for _, tc := range tests {
+		// A. Verifica o método Go
+		isGoEmbeddable := s.IsNoteEmbeddable(tc.filename, tc.tags)
+		if isGoEmbeddable != tc.expected {
+			t.Errorf("Go IsNoteEmbeddable discorcorda para %s: esperado %t, got %t", tc.filename, tc.expected, isGoEmbeddable)
+		}
+	}
+
+	// B. Verifica a contagem do SQL (CountEmbeddableNotes)
+	status, err := s.GetEmbeddingStatus()
+	if err != nil {
+		t.Fatalf("GetEmbeddingStatus falhou: %v", err)
+	}
+
+	// Conta quantos no teste deveriam ser indexáveis
+	expectedCount := 0
+	for _, tc := range tests {
+		if tc.expected {
+			expectedCount++
+		}
+	}
+
+	if status.TotalNotes != expectedCount {
+		t.Errorf("SQL CountEmbeddableNotes discorda: esperado %d notas indexáveis, total no status foi %d", expectedCount, status.TotalNotes)
+	}
+
+	// C. Verifica o conjunto retornado por GetPendingEmbeddingNotes
+	pending, err := s.GetPendingEmbeddingNotes(100)
+	if err != nil {
+		t.Fatalf("GetPendingEmbeddingNotes falhou: %v", err)
+	}
+
+	// Cria mapa com os arquivos retornados pelo SQL
+	sqlPendingSet := make(map[string]bool)
+	for _, p := range pending {
+		sqlPendingSet[p.Filename] = true
+	}
+
+	// Garante que todas as notas marcadas como embeddable (e apenas elas) estão na lista retornada pelo SQL
+	for _, tc := range tests {
+		inSQL := sqlPendingSet[tc.filename]
+		if tc.expected && !inSQL {
+			t.Errorf("SQL falhou em retornar a nota indexável %s nos pendentes", tc.filename)
+		}
+		if !tc.expected && inSQL {
+			t.Errorf("SQL incorretamente retornou a nota não-indexável %s nos pendentes", tc.filename)
+		}
+	}
+}
+
+// TestDeleteNoteCleansEmbeddingsAndOrphanStatus garante que a deleção de nota limpa seus
+// chunks/embeddings e que o cálculo de status ignora orfãos pré-existentes.
+func TestDeleteNoteCleansEmbeddingsAndOrphanStatus(t *testing.T) {
+	s := newTestStore(t)
+	filename := "notes/delete_test.md"
+
+	// 1. Cria a nota e salva chunks
+	if err := s.SaveNote(filename, "# Nota para deletar", "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("SaveNote falhou: %v", err)
+	}
+	if err := s.SetFileTags(filename, []string{}); err != nil {
+		t.Fatalf("SetFileTags falhou: %v", err)
+	}
+	
+	chunks := []ChunkInfo{
+		makeChunk(filename, 0, "Chunk 1", 0.5),
+	}
+	if err := s.SaveNoteChunks(filename, chunks); err != nil {
+		t.Fatalf("SaveNoteChunks falhou: %v", err)
+	}
+
+	// Verifica que está tudo indexado
+	status, err := s.GetEmbeddingStatus()
+	if err != nil {
+		t.Fatalf("GetEmbeddingStatus falhou: %v", err)
+	}
+	if status.TotalNotes != 1 || status.IndexedNotes != 1 {
+		t.Fatalf("Status inicial incorreto: Total=%d, Indexed=%d", status.TotalNotes, status.IndexedNotes)
+	}
+
+	// 2. Executa a deleção através do DeleteNote
+	if err := s.DeleteNote(filename); err != nil {
+		t.Fatalf("DeleteNote falhou: %v", err)
+	}
+
+	// 3. Garante que os chunks e embeddings foram deletados do banco
+	var chunksCount int
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks WHERE filename = ?`, filename).Scan(&chunksCount)
+	if chunksCount != 0 {
+		t.Errorf("Orfão de note_chunks persistiu: got %d", chunksCount)
+	}
+
+	var embCount int
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`).Scan(&embCount)
+	if embCount != 0 {
+		t.Errorf("Orfão de note_embeddings persistiu: got %d", embCount)
+	}
+
+	// 4. Teste de resiliência: se o órfão de alguma forma existisse (ex: inserido diretamente no SQL),
+	// o GetEmbeddingStatus deve ignorar
+	filenameOrphan := "notes/orphan.md"
+	_, err = s.DB.Exec(`INSERT INTO note_chunks (chunk_id, filename, chunk_index, content, indexed_mtime) VALUES (?, ?, ?, ?, ?)`,
+		filenameOrphan+"#0", filenameOrphan, 0, "Conteúdo órfão", "2024-01-01T00:00:00Z")
+	if err != nil {
+		t.Fatalf("Falha ao forçar órfão no banco de teste: %v", err)
+	}
+
+	statusOrphan, err := s.GetEmbeddingStatus()
+	if err != nil {
+		t.Fatalf("GetEmbeddingStatus falhou: %v", err)
+	}
+
+	// Como a nota orphan.md não existe na tabela notes,
+	// TotalNotes deve ser 0 e IndexedNotes deve ser 0 (ignorando o órfão)
+	if statusOrphan.TotalNotes != 0 {
+		t.Errorf("TotalNotes deveria ser 0 (ignorando órfão), got %d", statusOrphan.TotalNotes)
+	}
+	if statusOrphan.IndexedNotes != 0 {
+		t.Errorf("IndexedNotes deveria ser 0 (ignorando órfão), got %d", statusOrphan.IndexedNotes)
+	}
+}
+
