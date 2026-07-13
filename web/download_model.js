@@ -23,8 +23,9 @@ function downloadFile(url, destPath) {
     // Handle redirects
     function get(fileUrl) {
       http.get(fileUrl, (res) => {
-        if (res.statusCode === 302 || res.statusCode === 301) {
-          get(res.headers.location);
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          const redirectUrl = new URL(res.headers.location, fileUrl).toString();
+          get(redirectUrl);
           return;
         }
         if (res.statusCode !== 200) {
@@ -76,4 +77,7 @@ async function run() {
   console.log('Model download and compression complete!');
 }
 
-run().catch(console.error);
+run().catch((err) => {
+  console.error("FATAL ERROR:", err);
+  process.exit(1);
+});
