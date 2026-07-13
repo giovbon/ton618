@@ -1,6 +1,10 @@
 // @ts-check
 import { Transformer } from "markmap-lib";
-import { Markmap } from "markmap-view";
+import * as markmap from "markmap-view";
+const { Markmap, loadCSS, loadJS } = markmap;
+
+// Expose markmap globally for plugins
+window.markmap = markmap;
 
 const transformer = new Transformer();
 
@@ -21,6 +25,39 @@ const transformer = new Transformer();
 window.initMindmap = function (svgEl, initialMarkdown) {
   /** @type {any} */
   let mmInstance = null;
+  let hljsCssText = null;
+
+  /**
+   * Loads the local highlight.js CSS once and caches it.
+   * Injects it as a <style> inside the SVG <defs> so it works inside foreignObject.
+   */
+  async function ensureHljsStyleInSvg() {
+    // Load CSS text once
+    if (hljsCssText === null) {
+      try {
+        const resp = await fetch("/static/hljs-github-dark.min.css");
+        hljsCssText = await resp.text();
+      } catch (e) {
+        console.warn("[Markmap] Não foi possível carregar hljs CSS:", e);
+        hljsCssText = "";
+      }
+    }
+    if (!hljsCssText) return;
+
+    // Inject or update a <style> inside SVG <defs>
+    let defs = svgEl.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      svgEl.prepend(defs);
+    }
+    let styleEl = defs.querySelector("style[data-hljs]");
+    if (!styleEl) {
+      styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+      styleEl.setAttribute("data-hljs", "1");
+      defs.appendChild(styleEl);
+    }
+    styleEl.textContent = hljsCssText;
+  }
 
   function getFilename() {
     const filenameInput = document.getElementById("file-name");
@@ -106,37 +143,51 @@ window.initMindmap = function (svgEl, initialMarkdown) {
    * 
    * @param {string} markdown 
    */
-  function update(markdown) {
-    let compileBody = markdown;
-    const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-    const fmMatch = markdown.match(FRONTMATTER_REGEX);
-    if (fmMatch) {
-      compileBody = fmMatch[2];
-    }
+  async function update(markdown) {
+    try {
+      let compileBody = markdown;
+      const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+      const fmMatch = markdown.match(FRONTMATTER_REGEX);
+      if (fmMatch) {
+        compileBody = fmMatch[2];
+      }
 
-    const { root } = transformer.transform(compileBody);
-    
-    console.log("[Markmap] update: transformer returned root tree. Applying fold state.");
-    applyFoldState(root);
+      const { root, features } = transformer.transform(compileBody);
+      
+      // Load assets dynamically for features (like Prism for syntax highlighting or KaTeX for math)
+      const { styles, scripts } = transformer.getUsedAssets(features);
+      if (styles) loadCSS(styles);
+      if (scripts) await loadJS(scripts, { getMarkmap: () => markmap });
 
-    if (!mmInstance) {
-      console.log("[Markmap] Creating mmInstance");
-      mmInstance = Markmap.create(svgEl, {
-        autoFit: true,
-      }, root);
+      console.log("[Markmap] update: transformer returned root tree. Applying fold state.");
+      applyFoldState(root);
 
-      // Intercept fold changes
-      const originalToggleNode = mmInstance.toggleNode;
-      mmInstance.toggleNode = async function(...args) {
-        console.log("[Markmap] toggleNode intercepted");
-        const res = await originalToggleNode.apply(this, args);
-        saveFoldState();
-        return res;
-      };
-    } else {
-      console.log("[Markmap] Updating data in existing mmInstance");
-      mmInstance.setData(root);
-      mmInstance.fit();
+      if (!mmInstance) {
+        console.log("[Markmap] Creating mmInstance");
+        mmInstance = Markmap.create(svgEl, {
+          autoFit: true,
+        }, root);
+
+        // Intercept fold changes
+        const originalToggleNode = mmInstance.toggleNode;
+        mmInstance.toggleNode = async function(...args) {
+          console.log("[Markmap] toggleNode intercepted");
+          const res = await originalToggleNode.apply(this, args);
+          saveFoldState();
+          return res;
+        };
+      } else {
+        console.log("[Markmap] Updating data in existing mmInstance");
+        mmInstance.setData(root);
+        mmInstance.fit();
+      }
+
+      // Inject hljs CSS into SVG after render (works inside foreignObject)
+      if (features && features.hljs) {
+        await ensureHljsStyleInSvg();
+      }
+    } catch (e) {
+      console.error("[Markmap] Erro ao renderizar / atualizar mapa mental:", e);
     }
   }
 

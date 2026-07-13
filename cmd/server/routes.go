@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"ton618/internal/features/appointments"
+	"ton618/internal/features/embeddings"
 	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
 	"ton618/internal/features/system"
@@ -14,9 +15,10 @@ import (
 )
 
 // SetupRoutes registra todas as rotas no chi.Router.
-func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext) {
+func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext, embeddingsCtx *embeddings.HandlerContext) {
 	// Rate limiters para endpoints pesados
 	searchLimiter := middleware.NewRateLimiter(30, time.Minute)
+	embLimiter := middleware.NewRateLimiter(30, time.Minute)
 
 	// Páginas HTML (server-side rendered) - SYSTEM
 	mux.Get("/", sysCtx.HandleIndex)
@@ -61,7 +63,6 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 
 	mux.Post("/api/capture", notesCtx.HandleCapture)
 	mux.Get("/api/tags", sysCtx.HandleGetTags)
-	mux.Get("/api/keywords", sysCtx.HandleGetKeywords)
 	mux.Post("/api/note/duplicate", notesCtx.HandleDuplicateNote)
 	mux.Get("/api/notes", sysCtx.HandleGetAllNotes)
 	mux.Get("/api/sidebar", sysCtx.HandleGetSidebar)
@@ -84,9 +85,11 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	// SEARCH (Global Search e Stopwords)
 	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)
 	mux.With(searchLimiter.Middleware).Get("/search", searchCtx.HandleSearch)
-	mux.Get("/api/stopwords", searchCtx.HandleGetStopwords)
-	mux.Post("/api/stopwords/add", searchCtx.HandleAddStopword)
-	mux.Delete("/api/stopwords/remove", searchCtx.HandleRemoveStopword)
+	// SEMANTIC EMBEDDINGS (gerados no browser via Transformers.js — apenas desktop)
+	mux.With(embLimiter.Middleware).Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
+	mux.With(embLimiter.Middleware).Post("/api/embeddings/search", embeddingsCtx.HandleEmbeddingSearch)
+	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
+	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
 
 	// APPOINTMENTS
 	mux.Get("/agenda", appointmentsCtx.HandleAgendaPage)

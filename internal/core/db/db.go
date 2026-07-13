@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sync"
 
-	"ton618/internal/core/db/generated"
+	dbgen "ton618/internal/core/db/generated"
 
 	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite/vec"
 )
 
 // Store gerencia a conexão com o banco SQLite e todas as operações.
@@ -159,6 +160,22 @@ func initSchema(database *sql.DB) error {
 		type TEXT,
 		sent_at TEXT
 	);
+
+	-- Tabela de chunks de notas para busca semântica
+	CREATE TABLE IF NOT EXISTS note_chunks (
+		chunk_id    TEXT PRIMARY KEY,
+		filename    TEXT NOT NULL,
+		chunk_index INTEGER NOT NULL,
+		content     TEXT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_note_chunks_filename ON note_chunks(filename);
+
+	-- sqlite-vec: tabela virtual para busca semântica por similaridade de vetores
+	-- Cada chunk tem seu próprio embedding, referenciado por chunk_id (ex: "notes/foo.md#0")
+	CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
+		chunk_id TEXT PRIMARY KEY,
+		embedding FLOAT[384]
+	);
 	`
 
 	_, err := database.Exec(schema)
@@ -199,6 +216,68 @@ func migrate(database *sql.DB) {
 		// coluna já existe — ignorado
 	}
 	if _, err := database.Exec("ALTER TABLE popularity ADD COLUMN last_interacted_at TEXT DEFAULT ''"); err != nil {
+		// coluna já existe — ignorado
+	}
+
+	// v3: cria tabela virtual sqlite-vec para embeddings semânticos (idempotente)
+	database.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
+		filename TEXT PRIMARY KEY,
+		embedding FLOAT[384]
+	)`)
+
+	// v4: limpa embeddings legados de notas não-indexáveis (mapas, desenhos, planilhas)
+	database.Exec(`
+		DELETE FROM note_embeddings
+		WHERE filename LIKE '%mapa-%' 
+		   OR filename LIKE '%mapa.%' 
+		   OR filename LIKE '%.map'
+		   OR filename IN (
+		       SELECT arquivo FROM tags 
+		       WHERE tag IN ('desenho', 'drawing', 'mapa', 'map', 'planilha', 'spreadsheet', 'mermaid')
+		   )
+	`)
+
+	// v5: remove duplicatas de embeddings virtuais em Go
+	if rows, err := database.Query("SELECT filename, COUNT(*) as c FROM note_embeddings GROUP BY filename HAVING c > 1"); err == nil {
+		defer rows.Close()
+		var dupFiles []string
+		for rows.Next() {
+			var filename string
+			var count int
+			if err := rows.Scan(&filename, &count); err == nil {
+				dupFiles = append(dupFiles, filename)
+			}
+		}
+		if len(dupFiles) > 0 {
+			for _, filename := range dupFiles {
+				database.Exec("DELETE FROM note_embeddings WHERE filename = ?", filename)
+			}
+		}
+	}
+
+	// v6: migra schema de note_embeddings para usar chunk_id
+	// Tenta recriar a tabela com chunk_id como PK (a migração dropa e recria).
+	// Primeiro tenta verificar se ja esta no schema novo.
+	var colCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM pragma_table_info('note_embeddings') WHERE name='chunk_id'").Scan(&colCount); err == nil && colCount == 0 {
+		// Drop e recria - dados serao reindexados
+		database.Exec("DROP TABLE IF EXISTS note_embeddings")
+		database.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
+			chunk_id TEXT PRIMARY KEY,
+			embedding FLOAT[384]
+		)`)
+		// Cria tabela note_chunks
+		database.Exec(`CREATE TABLE IF NOT EXISTS note_chunks (
+			chunk_id    TEXT PRIMARY KEY,
+			filename    TEXT NOT NULL,
+			chunk_index INTEGER NOT NULL,
+			content     TEXT NOT NULL
+		)`)
+		database.Exec("CREATE INDEX IF NOT EXISTS idx_note_chunks_filename ON note_chunks(filename)")
+	}
+
+	// v7: adiciona coluna indexed_mtime à tabela note_chunks para detectar notas alteradas
+	if _, err := database.Exec("ALTER TABLE note_chunks ADD COLUMN indexed_mtime TEXT DEFAULT ''"); err != nil {
 		// coluna já existe — ignorado
 	}
 }

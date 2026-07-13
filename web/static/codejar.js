@@ -328,22 +328,93 @@ export function CodeJar(editor, highlight, opt = {}) {
     function handleTabCharacters(event) {
         if (event.key === 'Tab') {
             preventDefault(event);
-            if (event.shiftKey) {
-                const before = beforeCursor();
-                let [padding, start] = findPadding(before);
-                if (padding.length > 0) {
-                    const pos = save();
-                    // Remove full length tab or just remaining padding
-                    const len = Math.min(options.tab.length, padding.length);
-                    restore({ start, end: start + len });
-                    document.execCommand('delete');
-                    pos.start -= len;
-                    pos.end -= len;
-                    restore(pos);
+            const text = toString();
+            const pos = save();
+            let selStart = Math.min(pos.start, pos.end);
+            let selEnd = Math.max(pos.start, pos.end);
+            const isMultiLine = text.substring(selStart, selEnd).includes('\n');
+            if (isMultiLine || event.shiftKey) {
+                if (selEnd > selStart && text[selEnd - 1] === '\n') {
+                    selEnd--;
                 }
-            }
-            else {
+                const startLineOffset = text.lastIndexOf('\n', selStart - 1) + 1;
+                let endLineOffset = text.indexOf('\n', selEnd);
+                if (endLineOffset === -1) {
+                    endLineOffset = text.length;
+                }
+                const targetText = text.substring(startLineOffset, endLineOffset);
+                const lines = targetText.split('\n');
+                let newLines = [];
+                let cumulativeShift = 0;
+                let newSelStart = selStart;
+                let newSelEnd = selEnd;
+                let currentOriginalOffset = startLineOffset;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const lineLength = line.length;
+                    let newLine = line;
+                    let change = 0;
+                    if (event.shiftKey) {
+                        if (line.startsWith(options.tab)) {
+                            newLine = line.substring(options.tab.length);
+                            change = -options.tab.length;
+                        } else {
+                            const spaceMatch = line.match(/^[ ]+/);
+                            if (spaceMatch) {
+                                const spacesCount = Math.min(spaceMatch[0].length, options.tab.length);
+                                newLine = line.substring(spacesCount);
+                                change = -spacesCount;
+                            }
+                        }
+                    } else {
+                        newLine = options.tab + line;
+                        change = options.tab.length;
+                    }
+                    newLines.push(newLine);
+                    if (selStart >= currentOriginalOffset && selStart <= currentOriginalOffset + lineLength) {
+                        const relativePos = selStart - currentOriginalOffset;
+                        const newLineStart = currentOriginalOffset + cumulativeShift;
+                        if (relativePos === 0) {
+                            newSelStart = newLineStart;
+                        } else {
+                            newSelStart = newLineStart + Math.max(0, relativePos + change);
+                        }
+                    }
+                    if (selEnd >= currentOriginalOffset && selEnd <= currentOriginalOffset + lineLength) {
+                        const relativePos = selEnd - currentOriginalOffset;
+                        const newLineStart = currentOriginalOffset + cumulativeShift;
+                        if (relativePos === 0) {
+                            newSelEnd = newLineStart;
+                        } else {
+                            newSelEnd = newLineStart + Math.max(0, relativePos + change);
+                        }
+                    }
+                    cumulativeShift += change;
+                    currentOriginalOffset += lineLength + 1;
+                }
+                const newLinesText = newLines.join('\n');
+                recordHistory();
+                restore({ start: startLineOffset, end: endLineOffset });
+                insert(newLinesText);
+                const newPos = {
+                    start: pos.dir === '<-' ? newSelEnd : newSelStart,
+                    end: pos.dir === '<-' ? newSelStart : newSelEnd,
+                    dir: pos.dir
+                };
+                restore(newPos);
+                recordHistory();
+                if (prev !== toString()) {
+                    doHighlight(editor);
+                    onUpdate(toString());
+                }
+            } else {
+                recordHistory();
                 insert(options.tab);
+                recordHistory();
+                if (prev !== toString()) {
+                    doHighlight(editor);
+                    onUpdate(toString());
+                }
             }
         }
     }

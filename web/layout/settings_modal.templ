@@ -35,11 +35,6 @@ templ SettingsModal() {
                     class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     💾 Backup
                 </button>
-                <button @click="$store.settings.openTab('stopwords')"
-                    :class="$store.settings.activeTab === 'stopwords' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    🚫 Stopwords
-                </button>
                 <button @click="$store.settings.openTab('marcadores')"
                     :class="$store.settings.activeTab === 'marcadores' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
                     class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
@@ -209,22 +204,6 @@ templ SettingsModal() {
                     </div>
                 </div>
 
-                <!-- Stopwords Tab -->
-                <div x-show="$store.settings.activeTab === 'stopwords'" class="space-y-6">
-                    <p class="text-sm text-zinc-400">
-                        Adicione palavras que devem ser ignoradas na
-                        extração de palavras-chave (RAKE). As stopwords
-                        personalizadas são salvas em
-                        <code class="text-zinc-500">docs/stopwords-custom.json</code>.
-                    </p>
-
-                    <div hx-get="/api/stopwords" hx-trigger="intersect once">
-                        <div class="text-center py-4">
-                            <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-                            <span class="text-xs text-zinc-500">Carregando stopwords...</span>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Marcadores Tab -->
                 <div x-show="$store.settings.activeTab === 'marcadores'" class="space-y-6">

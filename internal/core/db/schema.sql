@@ -97,3 +97,20 @@ CREATE TABLE IF NOT EXISTS notifications_log (
     type TEXT,
     sent_at TEXT
 );
+
+-- Tabela de chunks de notas para busca semântica
+CREATE TABLE IF NOT EXISTS note_chunks (
+    chunk_id    TEXT PRIMARY KEY,
+    filename    TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content     TEXT NOT NULL,
+    indexed_mtime TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_note_chunks_filename ON note_chunks(filename);
+
+-- sqlite-vec: tabela virtual para busca semântica por similaridade de vetores
+-- Cada chunk tem seu próprio embedding, referenciado por chunk_id (ex: "notes/foo.md#0")
+CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
+    chunk_id TEXT PRIMARY KEY,
+    embedding FLOAT[384]
+);

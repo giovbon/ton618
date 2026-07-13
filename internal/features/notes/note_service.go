@@ -319,34 +319,7 @@ func (s *NoteService) processAndSave(filename, content string, modTime time.Time
 		content = string(contentBytes)
 		docs, links, fileTags = processor.ProcessMarkdownContent(contentBytes, filename, modTime, modTime)
 	}
-	// 1. Extrai keywords via RAKE (apenas se keywords: true ou #keywords)
-	var newContent = content
-	var extractedKeywords []string
-	var hasKeywordsTag = processor.HasKeywords(fileTags)
-	if hasKeywordsTag {
-		extractedKeywords = processor.ExtractKeywords(content, processor.KeywordsCount(content))
-		if len(extractedKeywords) > 0 {
-			if updated, err := UpdateFrontmatterProperty(newContent, "keywords", strings.Join(extractedKeywords, ", ")); err == nil {
-				newContent = updated
-			}
-		} else {
-			if updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil); err == nil {
-				newContent = updated
-			}
-		}
-	} else {
-		if updated, err := UpdateFrontmatterProperty(newContent, "keywords", nil); err == nil {
-			newContent = updated
-		}
-	}
 
-	// Se o conteúdo mudou (injetado keyword), reprocessa as tags e docs para garantir consistência
-	if newContent != content {
-		content = newContent
-		docs, links, fileTags = processor.ProcessMarkdownContent(
-			[]byte(content), filename, modTime, modTime,
-		)
-	}
 
 	// 2. Extrai TODOs estruturados
 	var todos []processor.TodoItem
@@ -362,7 +335,7 @@ func (s *NoteService) processAndSave(filename, content string, modTime time.Time
 	}
 
 	// 3. Prepara Tags limpas
-	cleanTags := processor.FilterKeywords(fileTags)
+	cleanTags := fileTags
 
 	// 4. Salva a nota no banco 
 	mtimeStr := modTime.UTC().Format(time.RFC3339)
@@ -370,16 +343,7 @@ func (s *NoteService) processAndSave(filename, content string, modTime time.Time
 		return fmt.Errorf("save note: %w", err)
 	}
 
-	// 5. Salva as keywords na coluna do banco (precisa ser depois de SaveNote por causa do INSERT OR REPLACE)
-	if hasKeywordsTag {
-		if err := s.store.SetNoteKeywords(filename, extractedKeywords); err != nil {
-			slog.Error("set keywords", "file", filename, "error", err)
-		}
-	} else {
-		if err := s.store.SetNoteKeywords(filename, nil); err != nil {
-			slog.Error("clear keywords", "file", filename, "error", err)
-		}
-	}
+
 
 	// 6. Submete tudo para a transação única de FTS e índices
 	if err := s.store.ReplaceFileIndexes(filename, docs, links, cleanTags, todos, modTime); err != nil {

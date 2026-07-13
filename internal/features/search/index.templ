@@ -10,29 +10,42 @@ templ indexContent() {
 <div>
     <!-- Search toggle + bar -->
     <div class="flex items-center gap-3 mb-4">
-        <button
-            id="mode-toggle"
-            onclick="toggleMode()"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30"
-            title="Alternar modo de busca"
-        >
-            <span id="mode-icon">
-                <svg
-                    class="w-3.5 h-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2.5"
-                        d="M4 6h16M4 12h16m-7 6h7"
-                    />
+        <div class="flex items-center gap-1.5">
+            <button
+                id="mode-toggle"
+                onclick="toggleMode()"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30"
+                title="Alternar modo de busca"
+            >
+                <span id="mode-icon">
+                    <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2.5"
+                            d="M4 6h16M4 12h16m-7 6h7"
+                        />
+                    </svg>
+                </span>
+                <span id="mode-label">Notas</span>
+            </button>
+            <button
+                id="mode-semantic"
+                onclick="toggleSemantic()"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50"
+                title="Busca semântica por similaridade (IA)"
+            >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                 </svg>
-            </span>
-            <span id="mode-label">Notas</span>
-        </button>
+                <span>Semântica</span>
+            </button>
+        </div>
 
         <div class="relative flex-1">
             <input
@@ -57,6 +70,14 @@ templ indexContent() {
                 hx-target="#global-container"
                 class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all hidden"
             />
+            <input
+                id="search-semantic"
+                type="text"
+                placeholder="Busca por similaridade (IA)..."
+                name="q"
+                autocomplete="off"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-600 transition-all hidden"
+            />
             <div
                 id="spinner"
                 class="absolute right-3 top-1/2 -translate-y-1/2 htmx-indicator"
@@ -74,19 +95,85 @@ templ indexContent() {
         </div>
     </div>
 
+    <!-- Status do modelo semântico -->
+    <div id="semantic-panel" class="hidden mb-4">
+        <div class="flex items-center justify-between gap-3 p-3 rounded-lg bg-violet-950/30 border border-violet-800/30">
+            <div class="flex items-center gap-2">
+                <div id="model-indicator" class="w-2 h-2 rounded-full bg-zinc-600 animate-pulse"></div>
+                <span id="model-status-text" class="text-[11px] text-zinc-400">Inicializando modelo...</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="index-status-text" class="text-[10px] text-zinc-500"></span>
+                <button
+                    id="btn-reindex"
+                    onclick="semanticReindexAll()"
+                    class="hidden px-2.5 py-1 text-[10px] font-medium rounded-md bg-violet-600/20 text-violet-300 border border-violet-600/30 hover:bg-violet-600/30 transition-all"
+                >
+                    Indexar tudo
+                </button>
+            </div>
+        </div>
+        <!-- Progress bar de reindexação -->
+        <div id="reindex-progress" class="hidden mt-2">
+            <div class="flex justify-between text-[10px] text-zinc-500 mb-1">
+                <span>Indexando notas...</span>
+                <span id="reindex-progress-text">0 / 0</span>
+            </div>
+            <div class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div id="reindex-progress-bar" class="h-full bg-violet-500 transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+        <!-- Botão forçar reindexação -->
+        <div class="flex items-center gap-2 mt-2">
+            <button
+                id="btn-force-reindex"
+                onclick="forceReindex()"
+                class="px-2.5 py-1 text-[10px] font-medium rounded-md bg-amber-600/20 text-amber-300 border border-amber-600/30 hover:bg-amber-600/30 transition-all"
+            >
+                ↻ Reindexar pendentes
+            </button>
+            <span id="reindex-feedback" class="text-[10px] text-zinc-600"></span>
+        </div>
+    </div>
+
     <!-- Results -->
     <div id="results">
         <div id="compact-container">
             <div id="contentArea"></div>
         </div>
         <div id="global-container" class="hidden"></div>
+        <div id="semantic-container" class="hidden">
+            <div id="semantic-results"></div>
+        </div>
     </div>
 </div>
 
 <script>
+    // Esconde o botão Semântica em mobile — flag vem do semantic.js
+    (function() {
+        if (window._semanticDesktopOnly === false) {
+            var btn = document.getElementById("mode-semantic");
+            if (btn) btn.style.display = "none";
+        }
+    })();
+
+    // Auto-indexação silenciosa ao carregar a página (não precisa clicar em "Semântica")
+    (function() {
+        var idx = window.semanticIndex;
+        if (!idx) return;
+        idx.getStatus().then(function(status) {
+            if (status.pending_notes > 0) {
+                idx.indexPending();
+            }
+        }).catch(function() {});
+    })();
+
     var isCompact = true;
+    var isSemantic = false;
 
     function toggleMode() {
+        if (isSemantic) toggleSemantic();
+
         isCompact = !isCompact;
         var btn = document.getElementById("mode-toggle");
         var label = document.getElementById("mode-label");
@@ -98,34 +185,321 @@ templ indexContent() {
             btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
             label.textContent = "Notas";
             icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"/></svg>';
-            
+
             localInput.classList.remove("hidden");
             globalInput.classList.add("hidden");
             document.getElementById("compact-container").classList.remove("hidden");
             document.getElementById("global-container").classList.add("hidden");
-            
-            // Refocus and re-trigger search if needed
             localInput.focus();
         } else {
             btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
             label.textContent = "Busca";
             icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
-            
+
             localInput.classList.add("hidden");
             globalInput.classList.remove("hidden");
             document.getElementById("compact-container").classList.add("hidden");
             document.getElementById("global-container").classList.remove("hidden");
-            
             globalInput.focus();
         }
     }
 
+    // ── Semantic Mode (usa o singleton compartilhado semanticIndex) ──
+
+    var semanticSearchTimeout = null;
+
+    function toggleSemantic() {
+        if (window._semanticDesktopOnly === false) return;
+        isSemantic = !isSemantic;
+
+        var btn = document.getElementById("mode-semantic");
+        var panel = document.getElementById("semantic-panel");
+        var semanticInput = document.getElementById("search-semantic");
+        var localInput = document.getElementById("search-local");
+        var globalInput = document.getElementById("search-global");
+
+        if (isSemantic) {
+            isCompact = false;
+            localInput.classList.add("hidden");
+            globalInput.classList.add("hidden");
+            document.getElementById("compact-container").classList.add("hidden");
+            document.getElementById("global-container").classList.add("hidden");
+
+            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-violet-500/20 text-violet-300 border-violet-500/40";
+            document.getElementById("mode-toggle").className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
+            document.getElementById("mode-label").textContent = "Notas";
+
+            semanticInput.classList.remove("hidden");
+            panel.classList.remove("hidden");
+            document.getElementById("semantic-container").classList.remove("hidden");
+            semanticInput.focus();
+
+            initSemanticUI();
+            loadIndexStatus();
+        } else {
+            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
+            semanticInput.classList.add("hidden");
+            panel.classList.add("hidden");
+            document.getElementById("semantic-container").classList.add("hidden");
+
+            isCompact = true;
+            localInput.classList.remove("hidden");
+            document.getElementById("compact-container").classList.remove("hidden");
+            document.getElementById("mode-toggle").className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
+            document.getElementById("mode-label").textContent = "Notas";
+        }
+    }
+
+    // Inicializa a UI com o singleton compartilhado (sem criar worker próprio)
+    function initSemanticUI() {
+        var idx = window.semanticIndex;
+        if (!idx) return;
+
+        setModelStatus("loading", "Inicializando modelo de IA...");
+
+        // Timeout de 60s: se o modelo não carregar, mostra dica de troubleshooting
+        var loadTimeout = setTimeout(function() {
+            if (!idx.isReady) {
+                setModelStatus("error", "O modelo demorou muito. Recarregue a página ou veja o console (F12)");
+            }
+        }, 60000);
+
+        // Registra callbacks de progresso e prontidão
+        idx.onProgress(function(msg) {
+            var pct = msg.total > 0 ? Math.round((msg.loaded / msg.total) * 100) : 0;
+            setModelStatus("loading", "Baixando modelo: " + pct + "%");
+        });
+
+        idx.onError(function(msg) {
+            clearTimeout(loadTimeout);
+            setModelStatus("error", "Erro: " + msg);
+        });
+
+        idx.onReady(function() {
+            clearTimeout(loadTimeout);
+            setModelStatus("ready", "Modelo pronto ✓");
+            document.getElementById("btn-reindex").classList.remove("hidden");
+
+            // Se já tinha texto digitado, executa a busca automaticamente
+            var pendingQuery = document.getElementById("search-semantic").value.trim();
+            if (pendingQuery) {
+                runSemanticSearch(pendingQuery);
+            }
+        });
+
+        // Warm-up: pré-carrega o modelo (se já estiver pronto, onReady dispara imediatamente)
+        idx.warmup();
+    }
+
+    function setModelStatus(state, text) {
+        var indicator = document.getElementById("model-indicator");
+        var statusText = document.getElementById("model-status-text");
+        statusText.textContent = text;
+
+        indicator.className = "w-2 h-2 rounded-full ";
+        if (state === "ready") {
+            indicator.className += "bg-green-500";
+        } else if (state === "error") {
+            indicator.className += "bg-red-500";
+        } else {
+            indicator.className += "bg-yellow-500 animate-pulse";
+        }
+    }
+
+    function loadIndexStatus() {
+        fetch("/api/embeddings/status")
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var statusEl = document.getElementById("index-status-text");
+                var idx = window.semanticIndex;
+
+                if (data.pending_notes > 0 || data.stale_notes > 0) {
+                    var msg = data.indexed_notes + "/" + data.total_notes + " indexadas";
+                    if (data.stale_notes > 0) msg += ", " + data.stale_notes + " desatualizadas";
+                    msg += " — indexando pendentes...";
+                    statusEl.textContent = msg;
+                    document.getElementById("btn-reindex").classList.add("hidden");
+                    var progressEl = document.getElementById("reindex-progress");
+                    progressEl.classList.remove("hidden");
+                    updateReindexProgress(0, data.pending_notes);
+
+                    if (idx) {
+                        idx.indexPending(function(indexed, total) {
+                            updateReindexProgress(indexed, total);
+                        }).then(function() {
+                            loadIndexStatus();
+                        });
+                    } else {
+                        statusEl.textContent = "Erro: semanticIndex não carregado (F12)";
+                        console.error("[SemanticSearch] window.semanticIndex is undefined");
+                    }
+                } else if (data.total_notes > 0) {
+                    var msg = "Todas " + data.total_notes + " notas indexadas ✓";
+                    if (data.stale_notes > 0) {
+                        msg = data.indexed_notes + "/" + data.total_notes + " indexadas, " + data.stale_notes + " desatualizadas — reindexe";
+                    }
+                    statusEl.textContent = msg;
+                    document.getElementById("reindex-progress").classList.add("hidden");
+                } else {
+                    statusEl.textContent = "Nenhuma nota encontrada";
+                    document.getElementById("reindex-progress").classList.add("hidden");
+                }
+            })
+            .catch(function(err) {
+                console.error("[SemanticSearch] loadIndexStatus error:", err);
+                var statusEl = document.getElementById("index-status-text");
+                if (statusEl) statusEl.textContent = "Erro ao conectar: " + err.message;
+            });
+    }
+
+    function updateReindexProgress(indexed, total) {
+        var pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
+        document.getElementById("reindex-progress-text").textContent = indexed + " / " + total;
+        document.getElementById("reindex-progress-bar").style.width = pct + "%";
+    }
+
+    // Input handler para busca semântica — usa semanticIndex.search()
+    document.getElementById("search-semantic").addEventListener("input", function(e) {
+        var query = e.target.value.trim();
+        clearTimeout(semanticSearchTimeout);
+
+        if (!query) {
+            document.getElementById("semantic-results").innerHTML = "";
+            return;
+        }
+
+        var idx = window.semanticIndex;
+        if (!idx || !idx.isReady) {
+            document.getElementById("semantic-results").innerHTML =
+                '<p class="text-xs text-zinc-500 text-center py-4">Aguardando carregamento do modelo...</p>';
+            return;
+        }
+
+        semanticSearchTimeout = setTimeout(function() {
+            var resultsEl = document.getElementById("semantic-results");
+            resultsEl.innerHTML = '<p class="text-xs text-zinc-500 text-center py-4 animate-pulse">Buscando...</p>';
+
+            idx.search(query, 15)
+                .then(function(results) {
+                    renderSemanticResults(results, query);
+                })
+                .catch(function(err) {
+                    resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
+                });
+        }, 400);
+    });
+
+    function renderSemanticResults(results, query) {
+        var el = document.getElementById("semantic-results");
+
+        if (!results.length) {
+            el.innerHTML = '<p class="text-xs text-zinc-500 text-center py-8">Nenhuma nota similar encontrada.<br><span class="text-zinc-600">Tente indexar as notas primeiro.</span></p>';
+            return;
+        }
+
+        var html = '<div class="space-y-1.5">';
+        results.forEach(function(r) {
+            var name = r.filename.replace(/^notes\//, "").replace(/\.md$/, "");
+            var simVal = 1 - (r.distance * r.distance) / 2;
+            if (simVal < 0) simVal = 0;
+            var similarity = Math.round(simVal * 100);
+            var similarityColor = similarity > 75 ? "text-green-400" : similarity > 50 ? "text-yellow-400" : "text-zinc-500";
+
+            html += '<a href="/editor?file=' + encodeURIComponent(r.filename) + '"' +
+                ' class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/60 hover:border-violet-700/40 hover:bg-violet-950/20 transition-all group">' +
+                '<div class="flex items-center gap-2 min-w-0">' +
+                '<svg class="w-3.5 h-3.5 text-zinc-600 group-hover:text-violet-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>' +
+                '</svg>' +
+                '<span class="text-[13px] text-zinc-200 truncate">' + escapeHtml(name) + '</span>' +
+                '</div>' +
+                '<span class="text-[10px] font-mono ' + similarityColor + ' flex-shrink-0">' + similarity + '%</span>' +
+                '</a>';
+        });
+        html += "</div>";
+
+        el.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // ── Force Reindex (botão visível sempre) ──
+    function forceReindex() {
+        var btn = document.getElementById("btn-force-reindex");
+        var feedback = document.getElementById("reindex-feedback");
+        btn.disabled = true;
+        btn.textContent = "↻ Indexando...";
+        feedback.textContent = "";
+
+        var idx = window.semanticIndex;
+        if (!idx) {
+            feedback.textContent = "semanticIndex não carregado";
+            btn.disabled = false;
+            btn.textContent = "↻ Reindexar pendentes";
+            return;
+        }
+
+        idx.indexPending(function(indexed, total) {
+            feedback.textContent = indexed + " / " + total;
+        }).then(function() {
+            btn.disabled = false;
+            btn.textContent = "↻ Reindexar pendentes";
+            feedback.textContent = "✓ Concluído";
+            setTimeout(function() { feedback.textContent = ""; }, 3000);
+            // Atualiza status do painel semântico se estiver visível
+            loadIndexStatus();
+        }).catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = "↻ Reindexar pendentes";
+            feedback.textContent = "Erro: " + err.message;
+        });
+    }
+
+    // ── Reindex All (usa o singleton compartilhado) ──
+    function semanticReindexAll() {
+        var idx = window.semanticIndex;
+        if (!idx || !idx.isReady) {
+            alert("Aguarde o modelo carregar.");
+            return;
+        }
+
+        var btn = document.getElementById("btn-reindex");
+        var progressDiv = document.getElementById("reindex-progress");
+        var progressText = document.getElementById("reindex-progress-text");
+        var progressBar = document.getElementById("reindex-progress-bar");
+
+        btn.disabled = true;
+        btn.textContent = "Indexando...";
+        progressDiv.classList.remove("hidden");
+
+        idx.reindexAll(
+            function(indexed, total) {
+                var pct = Math.min(100, Math.round((indexed / total) * 100));
+                progressBar.style.width = pct + "%";
+                progressText.textContent = indexed + " / " + total;
+            },
+            function(err) {
+                btn.disabled = false;
+                btn.textContent = "Indexar tudo";
+                if (err) {
+                    alert("Erro: " + err.message);
+                } else {
+                    progressText.textContent = "Concluído ✓";
+                    loadIndexStatus();
+                }
+            }
+        );
+    }
+
+    // ── Original FTS5 search highlight ──
     function highlightSearchTerms(query) {
         if (!query) return;
 
         var terms = [];
         var remaining = query;
-        var quoteRe = /"([^"]*)"|'([^']*)'/g;
+        var quoteRe = /"([^"]*)"|\'([^']*)'/g;
         var m;
         while ((m = quoteRe.exec(query)) !== null) {
             var phrase = m[1] || m[2];
@@ -142,26 +516,11 @@ templ indexContent() {
         if (!terms.length) return;
         document.querySelectorAll(".snippet-text, #global-container a[href^='/editor']").forEach(function (el) {
             var html = el.innerHTML;
-            var textOnly = el.textContent;
-            
-            // To prevent replacing inside HTML tags, a safe approach for basic layout:
-            // Since snippet-text is simple text, we can just replace textContent.
-            // For links with icons, we might need a safer regex. For now, simple text replacement:
-            var replacedText = textOnly;
             terms.forEach(function (w) {
-                var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
-                replacedText = replacedText.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
+                var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>|[^<>]*<\/)", "gi");
+                html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
             });
-            if (replacedText !== textOnly) {
-                // If the element has children (like the icon span), we might destroy it.
-                // The previous implementation used innerHTML naively. We'll stick to it if it was working.
-                html = el.innerHTML;
-                terms.forEach(function (w) {
-                    var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>|[^<>]*<\/)", "gi");
-                    html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
-                });
-                el.innerHTML = html;
-            }
+            el.innerHTML = html;
         });
     }
 

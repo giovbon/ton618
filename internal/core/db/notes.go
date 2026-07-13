@@ -97,48 +97,7 @@ func (s *Store) NoteExists(filename string) bool {
 	return count > 0
 }
 
-// SetNoteKeywords atualiza as keywords extraídas de uma nota.
-func (s *Store) SetNoteKeywords(filename string, keywords []string) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
-	kw := strings.Join(keywords, ",")
-	return s.Q.SetNoteKeywords(context.Background(), dbgen.SetNoteKeywordsParams{
-		Keywords: sql.NullString{String: kw, Valid: true},
-		Filename: filename,
-	})
-}
 
-// GetNoteKeywords retorna as keywords extraídas de uma nota.
-// Retorna slice vazio se não houver keywords ou a nota não existir.
-func (s *Store) GetNoteKeywords(filename string) ([]string, error) {
-	kw, err := s.Q.GetNoteKeywords(context.Background(), filename)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if kw.String == "" {
-		return nil, nil
-	}
-	return strings.Split(kw.String, ","), nil
-}
-
-// GetAllNotesKeywords returns a map of all note filenames to their list of keywords.
-func (s *Store) GetAllNotesKeywords() (map[string][]string, error) {
-	rows, err := s.Q.GetAllNotesKeywords(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[string][]string)
-	for _, r := range rows {
-		if r.Keywords.String != "" {
-			result[r.Filename] = strings.Split(r.Keywords.String, ",")
-		}
-	}
-	return result, nil
-}
 
 // GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
 func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {

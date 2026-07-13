@@ -241,6 +241,16 @@ templ databaseContent() {
                     if (savedVisibility[c.field] !== undefined) {
                         c.visible = savedVisibility[c.field];
                     }
+                    if (c.field === "embeded") {
+                        c.formatter = function(cell) {
+                            var rowData = cell.getRow().getData();
+                            var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
+                            if (typeStr === "desenho" || typeStr === "planilha" || typeStr === "mapa" || typeStr === "mermaid" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo") {
+                                return "N/A";
+                            }
+                            return cell.getValue() ? "true" : "false";
+                        };
+                    }
                     // Action Link Formatter
                     if (c.field === "abrir_link") {
                         c.formatter = function(cell) {

@@ -56,3 +56,6 @@ web/static/spreadsheet.js
 web/static/spreadsheet.js.gz
 web/static/drawing.js
 web/static/drawing.js.gz
+
+# Local IA Models (Downloaded via download_model.js)
+web/static/models/

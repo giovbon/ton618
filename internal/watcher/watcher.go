@@ -291,7 +291,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo (apenas para markdown)
 	if tipo == "markdown" {
-		cleanTags := processor.FilterKeywords(fileTags)
+		cleanTags := fileTags
 		if len(cleanTags) > 0 {
 			store.SetFileTags(filename, cleanTags)
 		} else {

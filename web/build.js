@@ -29,7 +29,7 @@ try {
 
 
 await esbuild.build({
-  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx", "src/mindmap.js", "src/map.js"],
+  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx", "src/mindmap.js", "src/map.js", "src/semantic.js"],
   bundle: true,
   minify: true,
   outdir: "static",
@@ -43,6 +43,20 @@ await esbuild.build({
     ".svg": "dataurl"
   },
 });
+
+// Build separado para o Web Worker de embeddings semânticos.
+// Usa format: "esm" pois Web Workers com módulos precisam de ESM.
+await esbuild.build({
+  entryPoints: ["src/semantic-worker.js"],
+  bundle: true,
+  minify: true,
+  outfile: "static/semantic-worker.js",
+  format: "esm",
+  sourcemap: false,
+  target: "es2020",
+});
+
+console.log("Semantic worker compilado com sucesso!");
 
 console.log("Comprimindo assets estáticos (Gzip & Brotli)...");
 

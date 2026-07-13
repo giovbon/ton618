@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"mime"
+	"strings"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,11 +20,11 @@ import (
 	"ton618/internal/core/services"
 	"ton618/internal/features/appointments"
 	"ton618/internal/features/notes"
+	"ton618/internal/features/embeddings"
 	"ton618/internal/features/search"
 	"ton618/internal/features/system"
 	"ton618/internal/features/todos"
 	"ton618/internal/middleware"
-	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
 
@@ -57,15 +59,7 @@ func main() {
 
 	slog.Info("Templates carregados")
 
-	// 3.5. Carrega stopwords personalizadas do usuário
-	if err := processor.LoadCustomStopwords(cfg.DocsDir); err != nil {
-		slog.Error("carregar stopwords custom", "error", err)
-	} else {
-		customWords := processor.GetCustomStopwords()
-		if len(customWords) > 0 {
-			slog.Info("Stopwords custom carregadas", "count", len(customWords))
-		}
-	}
+
 
 	// 4. Watcher
 	w := watcher.NewWatcher(cfg, store)
@@ -105,6 +99,7 @@ func main() {
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
+	embeddingsCtx := embeddings.NewHandlerContext(cfg, store)
 
 	slog.Info("Sincronizando notas do banco de dados...")
 	if err := notesCtx.Notes.SyncDatabase(); err != nil {
@@ -119,14 +114,72 @@ func main() {
 	r.Use(middleware.SecurityHeadersMiddleware)
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
-	// Arquivos estáticos
-	staticFS := http.FileServer(http.Dir(filepath.Join(cfg.WebDir, "static")))
+	// Arquivos estáticos (com suporte a arquivos pré-comprimidos Gzip/Brotli)
+	staticDir := filepath.Join(cfg.WebDir, "static")
+	staticFS := http.FileServer(http.Dir(staticDir))
 	r.Handle("/static/*", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Cache control
 		if req.URL.Query().Get("v") != "" {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		}
+
+		filePath := filepath.Clean(req.URL.Path)
+		if strings.HasPrefix(filePath, "/") {
+			filePath = filePath[1:]
+		}
+		fullPath := filepath.Join(staticDir, filePath)
+
+		// Evita processar diretórios para compressão
+		if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+			staticFS.ServeHTTP(w, req)
+			return
+		}
+
+		acceptEncoding := req.Header.Get("Accept-Encoding")
+
+		// 1. Tenta servir Brotli (.br)
+		if strings.Contains(acceptEncoding, "br") {
+			brPath := fullPath + ".br"
+			if _, err := os.Stat(brPath); err == nil {
+				w.Header().Set("Content-Encoding", "br")
+				ext := filepath.Ext(filePath)
+				contentType := mime.TypeByExtension(ext)
+				if contentType == "" {
+					if ext == ".onnx" {
+						contentType = "application/octet-stream"
+					} else {
+						contentType = "application/octet-stream"
+					}
+				}
+				w.Header().Set("Content-Type", contentType)
+				http.ServeFile(w, req, brPath)
+				return
+			}
+		}
+
+		// 2. Tenta servir Gzip (.gz)
+		if strings.Contains(acceptEncoding, "gzip") {
+			gzPath := fullPath + ".gz"
+			if _, err := os.Stat(gzPath); err == nil {
+				w.Header().Set("Content-Encoding", "gzip")
+				ext := filepath.Ext(filePath)
+				contentType := mime.TypeByExtension(ext)
+				if contentType == "" {
+					if ext == ".onnx" {
+						contentType = "application/octet-stream"
+					} else {
+						contentType = "application/octet-stream"
+					}
+				}
+				w.Header().Set("Content-Type", contentType)
+				http.ServeFile(w, req, gzPath)
+				return
+			}
+		}
+
+		// 3. Fallback: serve arquivo não comprimido
 		staticFS.ServeHTTP(w, req)
 	})))
 
@@ -135,7 +188,7 @@ func main() {
 		r.Use(func(next http.Handler) http.Handler {
 			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
 		})
-		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx)
+		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx, embeddingsCtx)
 	})
 
 	srv := &http.Server{

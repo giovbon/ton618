@@ -27,8 +27,6 @@ func (ctx *HandlerContext) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	search.Index("TON-618").Render(r.Context(), w)
 }
 
-
-
 func (ctx *HandlerContext) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -70,46 +68,6 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	filtered := domain.FilterUserTags(tags)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"tags": filtered,
-	})
-}
-
-func (ctx *HandlerContext) HandleGetKeywords(w http.ResponseWriter, r *http.Request) {
-	allKeywords, err := ctx.Store.GetAllNotesKeywords()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	freq := make(map[string]int)
-	for _, keywords := range allKeywords {
-		for _, kw := range keywords {
-			freq[kw]++
-		}
-	}
-
-	type kwEntry struct {
-		Word  string `json:"word"`
-		Count int    `json:"count"`
-	}
-	var list []kwEntry
-	for w, c := range freq {
-		list = append(list, kwEntry{w, c})
-	}
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].Count == list[j].Count {
-			return list[i].Word < list[j].Word
-		}
-		return list[i].Count > list[j].Count
-	})
-
-	if list == nil {
-		list = []kwEntry{}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"keywords": list,
-		"total":    len(list),
 	})
 }
 
@@ -332,6 +290,13 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Carrega todas as notas indexadas para busca semântica em lote
+	embeddedFiles, err := ctx.Store.GetEmbeddedFiles()
+	if err != nil {
+		slog.Warn("erro ao obter arquivos com embedding", "error", err)
+		embeddedFiles = make(map[string]bool)
+	}
+
 	// Pré-carrega o conteúdo de todas as notas em uma única query para evitar o problema N+1
 	notesContent, err := ctx.Store.GetAllNotesContent()
 	if err != nil {
@@ -403,7 +368,6 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			row["type"] = n.Type
 			row["Type"] = n.Type
 
-
 			// Guardar no mapa temporário para atualizar o cache em lote depois
 			newCacheEntries[n.Arquivo] = dbCacheEntry{
 				Mtime: n.Mtime,
@@ -411,9 +375,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		}
 
+		// Injeta o status de embedding dinamicamente (garante dados em tempo real sem expirar o cache do arquivo)
+		row["embeded"] = embeddedFiles[n.Arquivo]
+
 		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global
 		for k := range row {
-			if k != "tags" && k != "title" && k != "titulo" {
+			if k != "tags" && k != "title" && k != "titulo" && k != "embeded" {
 				columnSet[k] = true
 			}
 		}
@@ -438,6 +405,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
+	columns = append(columns, map[string]interface{}{"title": "Embeded", "field": "embeded", "editor": false, "width": 110, "hozAlign": "center"})
 
 	for col := range columnSet {
 		lowerCol := strings.ToLower(col)

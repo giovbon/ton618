@@ -15,6 +15,7 @@
 - JSDoc (Tipagem de variáveis no JS) - https://jsdoc.app/
 - Markmap (Editor e renderizador de mapas mentais) - https://markmap.js.org/
 - Leaflet (Editor e renderizador de mapas) - https://leafletjs.com/
+- Transformers.js (Framework de aprendizado de máquina para executado no navegador, usado para processar modelos de linguagem e realizar tarefas como embeddings e classificação de texto) - https://huggingface.co/docs/transformers.js/index
 
 Fórmulas possíveis: https://jspreadsheet.com/docs/formulas/functions
 

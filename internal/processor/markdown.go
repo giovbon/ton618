@@ -189,7 +189,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				}
 				// Serializa demais campos do frontmatter para indexacao FTS
 				for k, v := range fm {
-					if k == "tags" || k == "no_keywords" {
+					if k == "tags" || k == "keywords" {
 						continue
 					}
 					metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
@@ -358,7 +358,6 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
 	}
 
-	fileTags = detectKeywords(fm, fileTags)
 	for i := range docs {
 		docs[i].Tags = fileTags
 	}
@@ -411,82 +410,7 @@ func ExtractTitle(content, filename string) string {
 	return strings.TrimSuffix(parts[len(parts)-1], ".md")
 }
 
-// ── No-Keywords Flag ──
-// A propriedade no_keywords: true no frontmatter YAML ou a tag "no-keywords"
-// desabilita a extração de palavras-chave (RAKE) para esta nota.
 
-const keywordsSentinel = "__keywords__"
-
-// HasNoKeywords verifica se o slice de tags contém o sentinel
-// que indica que a extração de keywords deve ser ignorada.
-func HasKeywords(fileTags []string) bool {
-	for _, t := range fileTags {
-		if t == keywordsSentinel {
-			return true
-		}
-	}
-	return false
-}
-
-// FilterNoKeywords remove o sentinel __no_keywords__ de fileTags
-// para que ele não seja persistido como tag real no banco.
-func FilterKeywords(fileTags []string) []string {
-	filtered := make([]string, 0, len(fileTags))
-	for _, t := range fileTags {
-		if t != keywordsSentinel {
-			filtered = append(filtered, t)
-		}
-	}
-	return filtered
-}
-
-// detectNoKeywords verifica se a propriedade no_keywords: true está presente
-// no frontmatter YAML, ou se a tag "no-keywords" está na lista de tags.
-// Se detectado, adiciona o sentinel __no_keywords__ a fileTags.
-func detectKeywords(fm map[string]interface{}, fileTags []string) []string {
-	// Verifica propriedade keywords no frontmatter
-	if fm != nil {
-		if v, ok := fm["keywords"]; ok {
-			isActive := false
-			if b, ok := v.(bool); ok && b {
-				isActive = true
-			} else if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
-				isActive = true
-			}
-
-			if isActive {
-				hasSentinel := false
-				for _, t := range fileTags {
-					if t == keywordsSentinel {
-						hasSentinel = true
-						break
-					}
-				}
-				if !hasSentinel {
-					fileTags = append(fileTags, keywordsSentinel)
-				}
-				return fileTags
-			}
-		}
-	}
-	// Verifica se a tag "keywords" está presente (como hashtag #keywords)
-	for _, t := range fileTags {
-		if t == "keywords" {
-			hasSentinel := false
-			for _, ft := range fileTags {
-				if ft == keywordsSentinel {
-					hasSentinel = true
-					break
-				}
-			}
-			if !hasSentinel {
-				fileTags = append(fileTags, keywordsSentinel)
-			}
-			return fileTags
-		}
-	}
-	return fileTags
-}
 
 // TodoItem representa um TODO, FIXME, BUG ou checkbox encontrado em uma nota.
 type TodoItem struct {

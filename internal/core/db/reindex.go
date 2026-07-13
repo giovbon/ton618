@@ -97,6 +97,16 @@ func (s *Store) ReplaceFileIndexes(
 		}
 	}
 
+	// 3.5. Clean up chunks and embeddings if it became non-embeddable
+	if !s.isNoteEmbeddable(filename, tags) {
+		if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("DELETE FROM note_embeddings WHERE chunk_id LIKE ?", filename+`#%`); err != nil {
+			return err
+		}
+	}
+
 	// 4. Todos
 	if _, err := tx.Exec("DELETE FROM todos WHERE file = ?", filename); err != nil {
 		return err
@@ -157,6 +167,12 @@ func (s *Store) DeleteAllFileRecords(filename string) error {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM notes WHERE filename = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM note_embeddings WHERE chunk_id LIKE ?", filename+`#%`); err != nil {
 		return err
 	}
 

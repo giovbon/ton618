@@ -25,15 +25,6 @@ SELECT mtime FROM notes WHERE filename = ? LIMIT 1;
 -- name: NoteExists :one
 SELECT COUNT(*) FROM notes WHERE filename = ?;
 
--- name: SetNoteKeywords :exec
-UPDATE notes SET keywords = ? WHERE filename = ?;
-
--- name: GetNoteKeywords :one
-SELECT keywords FROM notes WHERE filename = ? LIMIT 1;
-
--- name: GetAllNotesKeywords :many
-SELECT filename, keywords FROM notes WHERE keywords IS NOT NULL AND keywords != '';
-
 -- name: GetNotesNeedingMarkmapTag :many
 SELECT n.filename
 FROM notes n
@@ -128,8 +119,8 @@ INSERT INTO popularity (arquivo, count, weight, last_interacted_at)
 VALUES (?, 1, 1.0 + CAST(sqlc.arg(reward) AS REAL), sqlc.arg(last_interacted_at))
 ON CONFLICT(arquivo) DO UPDATE SET 
 	count = count + 1,
-	weight = MAX(0.1, weight + CAST(sqlc.arg(reward) AS REAL)), 
-	last_interacted_at = sqlc.arg(last_interacted_at);
+	weight = MAX(0.1, weight + CAST(excluded.weight AS REAL) - 1.0), 
+	last_interacted_at = excluded.last_interacted_at;
 
 -- name: GetSynapticWeight :one
 SELECT COALESCE(weight, 1.0) AS weight, COALESCE(last_interacted_at, '') AS last_interacted_at FROM popularity WHERE arquivo = ? LIMIT 1;
