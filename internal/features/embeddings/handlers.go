@@ -191,3 +191,22 @@ func (ctx *HandlerContext) HandleEmbeddingPending(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(items)
 }
+
+// HandleEmbeddingReset apaga todos os chunks e embeddings do banco.
+// Usado pela aba "Semântica" nas Configurações para resetar o índice.
+// POST /api/embeddings/reset
+func (ctx *HandlerContext) HandleEmbeddingReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := ctx.Store.ResetAllEmbeddings(); err != nil {
+		slog.Error("ResetAllEmbeddings", "error", err)
+		http.Error(w, "erro ao resetar índice semântico: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}

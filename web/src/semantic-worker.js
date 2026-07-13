@@ -95,13 +95,14 @@ async function getModel() {
       dtype: "q8",
       device: "auto",
       progress_callback: (progress) => {
-        if (progress.status === "downloading" || progress.status === "loading") {
+        var p = /** @type {any} */ (progress);
+        if (p.status === "downloading" || p.status === "loading") {
           self.postMessage({
             type: "progress",
-            status: progress.status,
-            file: progress.file || "",
-            loaded: progress.loaded || 0,
-            total: progress.total || 0,
+            status: p.status,
+            file: p.file || "",
+            loaded: p.loaded || 0,
+            total: p.total || 0,
           });
         }
       },

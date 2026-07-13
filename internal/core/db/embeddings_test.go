@@ -784,8 +784,8 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		{"notes/mapa-tag.md", "# Mapa", []string{"map"}, false},
 		{"notes/mapa-tag-pt.md", "# Mapa", []string{"mapa"}, false},
 
-		// Nota: Casos com frontmatter (conteúdo) sem tags associadas são considerados 
-		// embeddable tanto no Go (IsNoteEmbeddable não abre o arquivo por performance) 
+		// Nota: Casos com frontmatter (conteúdo) sem tags associadas são considerados
+		// embeddable tanto no Go (IsNoteEmbeddable não abre o arquivo por performance)
 		// quanto no SQL (não faz busca no texto completo por performance).
 		// Na prática, a aplicação sincroniza as tags baseadas no frontmatter ao salvar a nota.
 		{"notes/desenho-fm.md", "type: drawing\n# Desenho", []string{}, true},
@@ -873,7 +873,7 @@ func TestDeleteNoteCleansEmbeddingsAndOrphanStatus(t *testing.T) {
 	if err := s.SetFileTags(filename, []string{}); err != nil {
 		t.Fatalf("SetFileTags falhou: %v", err)
 	}
-	
+
 	chunks := []ChunkInfo{
 		makeChunk(filename, 0, "Chunk 1", 0.5),
 	}
@@ -932,3 +932,156 @@ func TestDeleteNoteCleansEmbeddingsAndOrphanStatus(t *testing.T) {
 	}
 }
 
+// TestSaveNoteChunksRaceCondition simula a condição de corrida entre o
+// auto-indexador do browser (que gera embeddings em Web Worker) e a
+// deleção de uma nota pelo usuário.
+//
+// Cenário:
+//  1. Nota é criada e indexada (chunks/embeddings salvos)
+//  2. SearchSimilar retorna a nota normalmente
+//  3. Nota é deletada (DeleteAllFileRecords)
+//  4. Browser termina de gerar o embedding e chama SaveNoteChunks (atrasado)
+//  5. SaveNoteChunks DEVE abortar silenciosamente, sem recriar órfãos
+//  6. SearchSimilar NÃO DEVE mais retornar a nota deletada
+func TestSaveNoteChunksRaceCondition(t *testing.T) {
+	s := newTestStore(t)
+	filename := "notes/race_condition_test.md"
+
+	// 1. Cria a nota e salva chunks/embeddings
+	if err := s.SaveNote(filename, "# Nota para teste de race condition\nConteudo.", "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+	if err := s.SetFileTags(filename, []string{}); err != nil {
+		t.Fatalf("SetFileTags: %v", err)
+	}
+
+	chunks := []ChunkInfo{
+		makeChunk(filename, 0, "Conteudo do chunk", 0.5),
+	}
+	if err := s.SaveNoteChunks(filename, chunks); err != nil {
+		t.Fatalf("SaveNoteChunks (1ª vez): %v", err)
+	}
+
+	// 2. Verifica que a nota aparece na busca semântica
+	queryEmb := make([]float32, EmbeddingDim)
+	queryEmb[0] = 0.5
+
+	results, err := s.SearchSimilar(queryEmb, 10)
+	if err != nil {
+		t.Fatalf("SearchSimilar (antes delete): %v", err)
+	}
+	found := false
+	for _, r := range results {
+		if r.Filename == filename {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("nota deveria aparecer nos resultados ANTES da deleção")
+	}
+
+	// 3. Deleta a nota (simula ação do usuário)
+	if err := s.DeleteAllFileRecords(filename); err != nil {
+		t.Fatalf("DeleteAllFileRecords: %v", err)
+	}
+
+	// Verifica que foi limpo
+	var count int
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks WHERE filename = ?`, filename).Scan(&count)
+	if count != 0 {
+		t.Fatalf("note_chunks deveria estar vazio após delete, got %d", count)
+	}
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("note_embeddings deveria estar vazio após delete, got %d", count)
+	}
+
+	// 4. Browser termina de gerar o embedding (atrasado) e tenta salvar
+	//    Isso NÃO deve recriar os chunks/embeddings
+	err = s.SaveNoteChunks(filename, chunks)
+	if err != nil {
+		t.Fatalf("SaveNoteChunks (após delete) retornou erro inesperado: %v", err)
+	}
+
+	// 5. Verifica que NADA foi recriado
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks WHERE filename = ?`, filename).Scan(&count)
+	if count != 0 {
+		t.Fatalf("note_chunks foi recriado após deleção! count=%d — SaveNoteChunks deveria ter abortado", count)
+	}
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("note_embeddings foi recriado após deleção! count=%d — SaveNoteChunks deveria ter abortado", count)
+	}
+
+	// 6. SearchSimilar NÃO deve mais retornar a nota deletada
+	results, err = s.SearchSimilar(queryEmb, 10)
+	if err != nil {
+		t.Fatalf("SearchSimilar (após delete+save atrasado): %v", err)
+	}
+	for _, r := range results {
+		if r.Filename == filename {
+			t.Fatalf("nota deletada NÃO deveria aparecer nos resultados mesmo após SaveNoteChunks tardio! distance=%f", r.Distance)
+		}
+	}
+}
+
+// TestResetAllEmbeddings verifica que ResetAllEmbeddings limpa
+// completamente as tabelas note_chunks e note_embeddings.
+func TestResetAllEmbeddings(t *testing.T) {
+	s := newTestStore(t)
+
+	// Cria algumas notas com chunks/embeddings
+	notes := []string{"notes/a.md", "notes/b.md", "notes/c.md"}
+	for _, n := range notes {
+		s.SaveNote(n, "# Nota "+n, "2024-01-01T00:00:00Z")
+		s.SetFileTags(n, []string{})
+		s.SaveNoteChunks(n, []ChunkInfo{
+			makeChunk(n, 0, "Chunk 0", 0.1),
+			makeChunk(n, 1, "Chunk 1", 0.2),
+		})
+	}
+
+	// Verifica que há dados
+	var chunkCount, embCount int
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks`).Scan(&chunkCount)
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings`).Scan(&embCount)
+	if chunkCount == 0 || embCount == 0 {
+		t.Fatalf("deveria haver dados antes do reset: chunks=%d embeddings=%d", chunkCount, embCount)
+	}
+
+	// Reseta
+	if err := s.ResetAllEmbeddings(); err != nil {
+		t.Fatalf("ResetAllEmbeddings: %v", err)
+	}
+
+	// Verifica que limpou
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_chunks`).Scan(&chunkCount)
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings`).Scan(&embCount)
+	if chunkCount != 0 {
+		t.Errorf("note_chunks deveria estar vazio após reset, got %d", chunkCount)
+	}
+	if embCount != 0 {
+		t.Errorf("note_embeddings deveria estar vazio após reset, got %d", embCount)
+	}
+
+	// Verifica que notas originais continuam intactas
+	for _, n := range notes {
+		content, err := s.GetNote(n)
+		if err != nil {
+			t.Errorf("GetNote(%q) falhou: %v", n, err)
+		}
+		if content == "" {
+			t.Errorf("nota %q deveria continuar existindo após reset", n)
+		}
+	}
+
+	// Status reflete o reset
+	status, _ := s.GetEmbeddingStatus()
+	if status.IndexedNotes != 0 {
+		t.Errorf("IndexedNotes deveria ser 0 após reset, got %d", status.IndexedNotes)
+	}
+	if status.PendingNotes != status.TotalNotes {
+		t.Errorf("PendingNotes (%d) deveria ser igual a TotalNotes (%d) após reset", status.PendingNotes, status.TotalNotes)
+	}
+}

@@ -19,6 +19,7 @@ Serve como referência para manter consistência em contribuições futuras.
 | Busca semântica | sqlite-vec (vizinhos próximos) | Embeddings no próprio SQLite, sem serviço externo |
 | Templates | templ (github.com/a-h/templ) | Type-safe, compilado, substitui html/template |
 | Frontend build | esbuild + Tailwind CSS | Zero config, rápido, tree-shaking nativo |
+| Type checking (JS) | TypeScript via `tsc --noEmit` (checkJs) | Type checking incremental sobre JSDoc, sem transpilação separada |
 | IDs | CUID2 (processor/cuid2.go) | Curto, único, ordenável, sem sequência |
 
 ## 1.2 Tecnologias e Bibliotecas
@@ -84,6 +85,9 @@ Serve como referência para manter consistência em contribuições futuras.
 ### 2.2 Frontend (JavaScript)
 
 - **JSDoc apenas em APIs públicas**: O que é exposto via `window.*` ou exportado como módulo. Funções internas não recebem JSDoc — evita ruído e documentação mentirosa.
+- **TypeScript incremental via `checkJs`**: TypeScript (`tsc --noEmit`) é usado apenas para checagem de tipos em cima de JSDoc, sem transpilação. `npm run typecheck` executa a validação. O build continua exclusivamente com esbuild.
+- **Migração gradual para `.ts`**: Arquivos em `web/src/` podem ser renomeados para `.ts`/`.tsx` conforme forem sendo migrados. O esbuild aceita TypeScript nativamente — basta atualizar o `entryPoints` em `build.js`. O JS inline em arquivos `.templ` não é verificável por TS e permanece como está até ser extraído.
+- **`web/src/global.d.ts`**: Declarações de tipos para globais `window.*` (IIFE exports), bibliotecas sem types (Leaflet, jSuites, markmap) e módulos CSS. Mantenha sincronizado com as funções expostas.
 - **Arquivo fonte em `web/src/`, compilado para `web/static/`**: esbuild compila e minifica. `npm run build` gera os estáticos. **Nunca editar `static/` diretamente.**
 - **IIFE para scripts no browser**: O build do esbuild usa `format: "iife"` para gerar código que não polui o escopo global além do que é explicitamente exposto.
 - **Web Worker para tarefas pesadas**: `semantic-worker.js` (ESM module) executa inferência ONNX em thread separada — não bloqueia UI.
@@ -191,8 +195,4 @@ Usado nos testes JS para silenciar rejeições intencionais (testes de `embed_er
 |----|------|---------|--------|
 | P1 | ~~Migrar queries de embeddings para sqlc~~ | ✅ Feito | `HasEmbedding`, `GetEmbeddedFiles`, `GetEmbeddingStatus`, `GetPendingEmbeddingNotes`, `DeleteEmbedding`, `SaveNoteChunks` migradas para sqlc. `SearchSimilar`, `SaveEmbedding`, `GetNoteEmbeddings` mantidas como SQL cru por usarem a tabela virtual `note_embeddings` (vec0) que sqlc não reconhece. |
 | P2 | **Stemmer pt-BR para FTS5** | Baixo | `unicode61` não faz stemming. "navegador" não encontra "navegação". O fallback LIKE já cobre, mas um stemmer melhoraria precisão. |
-
----
-
-> Este documento deve ser atualizado sempre que uma decisão arquitetural significativa for tomada.
-> Utilize o arquivo `repomix-output.xml` como referência rápida de código, a menos que consultas diretas aos arquivos do workspace por outras ferramentas (como busca textual ou leitura direta) sejam mais adequadas para a tarefa.
+| P3 | ~~Corrigir erros do typecheck (30 erros)~~ | ✅ Feito | JSDoc corrigido em `semantic.js`, `mindmap.js`, `semantic-worker.js`, `map.js`, `drawing.jsx`. Ajustadas declarações em `global.d.ts`. `npm run typecheck` agora passa limpo. |

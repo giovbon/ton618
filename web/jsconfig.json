@@ -1,12 +1,7 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "checkJs": true,
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "allowJs": true,
-    "strict": false,
-    "lib": ["DOM", "ESNext"]
+    "checkJs": true
   },
   "include": [
     "static/js/**/*"

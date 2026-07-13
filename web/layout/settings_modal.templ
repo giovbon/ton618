@@ -50,6 +50,11 @@ templ SettingsModal() {
                     class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
                     🔔 Ntfy
                 </button>
+                <button @click="$store.settings.openTab('semantica')"
+                    :class="$store.settings.activeTab === 'semantica' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
+                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
+                    🧠 Semântica
+                </button>
             </div>
 
             <!-- Tab Content -->
@@ -260,6 +265,30 @@ templ SettingsModal() {
                             <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
                             <p class="text-xs text-zinc-600">Carregando configurações Ntfy...</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Semântica Tab -->
+                <div x-show="$store.settings.activeTab === 'semantica'" class="space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        Gerencie o índice de busca semântica das suas notas.
+                    </p>
+
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <p class="text-sm text-zinc-300 font-bold mb-2">🧠 Índice Semântico</p>
+                        <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                            O índice semântico contém os vetores de cada nota usados para busca por similaridade (IA).
+                            Se notar resultados estranhos ou inconsistentes, você pode resetar o índice e reindexar tudo do zero.
+                            Isso apaga todos os dados de embeddings e chunks, e recria o índice automaticamente.
+                        </p>
+                        <button id="btn-reset-semantica" onclick="resetAndReindexSemantic()"
+                            class="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/>
+                            </svg>
+                            🔄 Resetar Índice e Reindexar Tudo
+                        </button>
+                        <p id="reset-feedback" class="text-xs text-center mt-3 text-zinc-500 hidden"></p>
                     </div>
                 </div>
             </div>

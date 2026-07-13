@@ -48,8 +48,8 @@
    * 
    * @param {HTMLElement|string} container - Elemento DOM ou ID do container
    * @param {Array<{lat: number, lng: number, name?: string, desc?: string}>} [markersData] - Marcadores iniciais
-   * @param {Function} onChange - Callback disparado a cada alteração (add, move, rename, delete)
-   * @returns {{map: L.Map, getData: Function, addMarker: Function}}
+   * @param {Function} [onChange] - Callback disparado a cada alteração (add, move, rename, delete)
+   * @returns {Object}
    */
   window.initMap = function (container, markersData, onChange) {
     const map = L.map(container, { zoomControl: true }).setView([-23.5505, -46.6333], 12);

@@ -10,8 +10,8 @@ const transformer = new Transformer();
 
 /**
  * @typedef {Object} MindmapInstance
- * @property {function(string): void} update - Updates the mindmap with new markdown content.
- * @property {function(): void} fit - Recalculates zoom and fits the mindmap in the SVG container.
+ * @property {Function} update - Updates the mindmap with new markdown content.
+ * @property {Function} fit - Recalculates zoom and fits the mindmap in the SVG container.
  */
 
 /**
@@ -60,7 +60,7 @@ window.initMindmap = function (svgEl, initialMarkdown) {
   }
 
   function getFilename() {
-    const filenameInput = document.getElementById("file-name");
+    const filenameInput = /** @type {HTMLInputElement|null} */ (document.getElementById("file-name"));
     const val = filenameInput ? (filenameInput.getAttribute("data-filename") || filenameInput.dataset.filename || filenameInput.value) : "default";
     console.log("[Markmap] getFilename:", val);
     return val;
@@ -194,12 +194,12 @@ window.initMindmap = function (svgEl, initialMarkdown) {
   // Initial render
   update(initialMarkdown);
 
-  return {
+  return /** @type {MindmapInstance} */ ({
     update: update,
     fit: () => {
       if (mmInstance) {
         mmInstance.fit();
       }
     }
-  };
+  });
 };

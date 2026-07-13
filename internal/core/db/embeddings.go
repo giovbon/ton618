@@ -91,10 +91,15 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 
 	qtx := s.Q.WithTx(tx)
 
-	// 0. Obtém o mtime atual da nota para detectar alterações futuras
+	// 0. Verifica se a nota ainda existe no banco (pode ter sido deletada
+	//    enquanto o browser gerava os embeddings — race condition).
+	//    Se não existir, aborta silenciosamente para evitar chunks órfãos.
 	var indexedMtime string
 	if err := tx.QueryRow(`SELECT mtime FROM notes WHERE filename = ?`, filename).Scan(&indexedMtime); err != nil {
-		indexedMtime = ""
+		// Nota não encontrada: aborta. O DeleteAllFileRecords/DeleteNote
+		// já limpou os chunks/embeddings, e o Rollback desfaz qualquer
+		// writtenção parcial.
+		return nil
 	}
 
 	// 1. Remove chunks antigos do filename
@@ -133,6 +138,22 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	}
 
 	return tx.Commit()
+}
+
+// ResetAllEmbeddings apaga todos os registros de chunks e embeddings
+// das tabelas note_chunks e note_embeddings. Usado para reset completo
+// do índice semântico (ex: pela aba Semântica das Configurações).
+func (s *Store) ResetAllEmbeddings() error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	if _, err := s.DB.Exec("DELETE FROM note_chunks"); err != nil {
+		return fmt.Errorf("delete note_chunks: %w", err)
+	}
+	if _, err := s.DB.Exec("DELETE FROM note_embeddings"); err != nil {
+		return fmt.Errorf("delete note_embeddings: %w", err)
+	}
+	return nil
 }
 
 // DeleteEmbedding remove todos os embeddings e chunks de uma nota.

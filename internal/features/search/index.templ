@@ -121,28 +121,7 @@ templ indexContent() {
                     </div>
                 </div>
 
-                <!-- Botão: Indexar pendentes -->
-                <button
-                    id="btn-force-reindex"
-                    onclick="forceReindex()"
-                    class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 hover:border-amber-500/35 transition-all duration-200"
-                >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg>
-                    Indexar pendentes
-                </button>
-
-                <!-- Botão: Recriar índice (anteriormente Indexar tudo) -->
-                <button
-                    id="btn-reindex"
-                    onclick="semanticReindexAll()"
-                    class="hidden flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-violet-600/10 hover:bg-violet-600/25 text-violet-400 border border-violet-600/20 hover:border-violet-600/35 transition-all duration-200"
-                >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                    Recriar índice
-                </button>
-
-                <!-- Feedback flutuante em caso de erro -->
-                <span id="reindex-feedback" class="text-[10px] text-zinc-500 font-semibold tracking-wide truncate"></span>
+                <!-- Feedback do status (atualizado via refreshStatusOnly) -->
             </div>
         </div>
     </div>
@@ -294,7 +273,7 @@ templ indexContent() {
         idx.onReady(function() {
             clearTimeout(loadTimeout);
             setModelStatus("ready", "Modelo pronto ✓");
-            document.getElementById("btn-reindex").classList.remove("hidden");
+
 
             // Se já tinha texto digitado, executa a busca automaticamente
             var pendingQuery = document.getElementById("search-semantic").value.trim();
@@ -331,16 +310,12 @@ templ indexContent() {
             .then(function(data) {
                 var statusEl = document.getElementById("index-status-text");
                 var idx = window.semanticIndex;
-                var btnForce = document.getElementById("btn-force-reindex");
-                var btnReindex = document.getElementById("btn-reindex");
 
                 if (data.pending_notes > 0 || data.stale_notes > 0) {
                     var msg = data.indexed_notes + "/" + data.total_notes + " indexadas";
                     if (data.stale_notes > 0) msg += ", " + data.stale_notes + " desatualizadas";
                     msg += " — indexando pendentes...";
                     statusEl.textContent = msg;
-                    btnReindex.classList.add("hidden");
-                    btnForce.classList.remove("hidden");
                     var progressEl = document.getElementById("reindex-progress");
                     progressEl.classList.remove("hidden");
                     updateReindexProgress(0, data.pending_notes);
@@ -363,17 +338,13 @@ templ indexContent() {
                 } else if (data.total_notes > 0) {
                     var msg = "Todas " + data.total_notes + " notas indexadas ✓";
                     if (data.stale_notes > 0) {
-                        msg = data.indexed_notes + "/" + data.total_notes + " indexadas, " + data.stale_notes + " desatualizadas — reindexe";
+                        msg = data.indexed_notes + "/" + data.total_notes + " indexadas, " + data.stale_notes + " desatualizadas";
                     }
                     statusEl.textContent = msg;
                     document.getElementById("reindex-progress").classList.add("hidden");
-                    btnReindex.classList.remove("hidden");
-                    btnForce.classList.add("hidden");
                 } else {
                     statusEl.textContent = "Nenhuma nota encontrada";
                     document.getElementById("reindex-progress").classList.add("hidden");
-                    btnReindex.classList.remove("hidden");
-                    btnForce.classList.add("hidden");
                 }
             })
             .catch(function(err) {
@@ -467,92 +438,18 @@ templ indexContent() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var el = document.getElementById("index-status-text");
-                var btnReindex = document.getElementById("btn-reindex");
-                var btnForce = document.getElementById("btn-force-reindex");
                 if (!el) return;
                 if (data.pending_notes === 0 && data.stale_notes === 0) {
                     el.textContent = "Todas " + data.total_notes + " notas indexadas ✓";
                     document.getElementById("reindex-progress").classList.add("hidden");
-                    btnReindex.classList.remove("hidden");
-                    btnForce.classList.add("hidden");
                 } else if (data.total_notes > 0) {
                     el.textContent = data.indexed_notes + "/" + data.total_notes + " indexadas, " + (data.pending_notes + data.stale_notes) + " restantes";
-                    btnReindex.classList.add("hidden");
-                    btnForce.classList.remove("hidden");
                 } else {
                     el.textContent = "Nenhuma nota encontrada";
                 }
             }).catch(function(err) {
                 console.error("[SemanticSearch] refreshStatus error:", err);
             });
-    }
-
-    // ── Force Reindex (botão visível sempre) ──
-    function forceReindex() {
-        var btn = document.getElementById("btn-force-reindex");
-        var feedback = document.getElementById("reindex-feedback");
-        btn.disabled = true;
-        btn.textContent = "↻ Indexando...";
-        feedback.textContent = "";
-
-        var idx = window.semanticIndex;
-        if (!idx) {
-            feedback.textContent = "semanticIndex não carregado";
-            btn.disabled = false;
-            btn.textContent = "↻ Reindexar pendentes";
-            return;
-        }
-
-        idx.indexPending(function(indexed, total) {
-            feedback.textContent = indexed + " / " + total;
-        }).then(function() {
-            btn.disabled = false;
-            btn.textContent = "↻ Reindexar pendentes";
-            feedback.textContent = "✓ Concluído";
-            setTimeout(function() { feedback.textContent = ""; }, 3000);
-            // Só atualiza o texto do status, sem reiniciar indexação
-            refreshStatusOnly();
-        }).catch(function(err) {
-            btn.disabled = false;
-            btn.textContent = "↻ Reindexar pendentes";
-            feedback.textContent = "Erro: " + err.message;
-        });
-    }
-
-    // ── Reindex All (usa o singleton compartilhado) ──
-    function semanticReindexAll() {
-        var idx = window.semanticIndex;
-        if (!idx || !idx.isReady) {
-            alert("Aguarde o modelo carregar.");
-            return;
-        }
-
-        var btn = document.getElementById("btn-reindex");
-        var progressDiv = document.getElementById("reindex-progress");
-        var progressText = document.getElementById("reindex-progress-text");
-        var progressBar = document.getElementById("reindex-progress-bar");
-
-        btn.disabled = true;
-        btn.textContent = "Indexando...";
-        progressDiv.classList.remove("hidden");
-
-        idx.reindexAll(
-            function(indexed, total) {
-                var pct = Math.min(100, Math.round((indexed / total) * 100));
-                progressBar.style.width = pct + "%";
-                progressText.textContent = indexed + " / " + total;
-            },
-            function(err) {
-                btn.disabled = false;
-                btn.textContent = "Indexar tudo";
-                if (err) {
-                    alert("Erro: " + err.message);
-                } else {
-                    progressText.textContent = "Concluído ✓";
-                    loadIndexStatus();
-                }
-            }
-        );
     }
 
     // ── Original FTS5 search highlight ──

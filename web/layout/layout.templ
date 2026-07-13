@@ -36,12 +36,105 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                     if (tabName === "marcadores" && typeof loadMarcadores === "function") loadMarcadores();
                     if (tabName === "stopwords" && typeof loadStopwords === "function") loadStopwords();
                     if (tabName === "restaurar" && typeof loadArchives === "function") loadArchives();
+                    if (tabName === "semantica" && typeof onOpenSemanticaTab === "function") onOpenSemanticaTab();
                 },
                 close() {
                     this.open = false;
                 }
             });
         });
+    </script>
+
+    <script>
+        // ── Aba Semântica (Configurações) ──
+        function onOpenSemanticaTab() {
+            // Atualiza o status do índice quando a aba é aberta
+            var feedback = document.getElementById("reset-feedback");
+            if (feedback) feedback.classList.add("hidden");
+        }
+
+        function resetAndReindexSemantic() {
+            var btn = document.getElementById("btn-reset-semantica");
+            var feedback = document.getElementById("reset-feedback");
+            var idx = window.semanticIndex;
+
+            if (!confirm("Tem certeza? Isso vai apagar todo o índice semântico e reindexar todas as notas do zero.")) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Resetando...';
+            feedback.className = "text-xs text-center mt-3 text-zinc-400";
+            feedback.textContent = "Apagando índice...";
+            feedback.classList.remove("hidden");
+
+            fetch("/api/embeddings/reset", { method: "POST" })
+                .then(function(r) {
+                    if (!r.ok) throw new Error("Erro ao resetar: " + r.statusText);
+                    return r.json();
+                })
+                .then(function() {
+                    feedback.textContent = "Índice apagado. Reindexando notas...";
+
+                    if (!idx) {
+                        feedback.textContent = "⚠️ Modelo semântico não disponível. Recarregue a página e tente novamente.";
+                        feedback.className = "text-xs text-center mt-3 text-amber-400";
+                        btn.disabled = false;
+                        btn.innerHTML =
+                            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                        return;
+                    }
+
+                    // Aguarda o modelo ficar pronto e indexa tudo
+                    if (!idx.isReady) {
+                        idx.onReady(function() {
+                            startReindex(idx, feedback, btn);
+                        });
+                        // timeout de segurança
+                        setTimeout(function() {
+                            if (!idx.isReady) {
+                                feedback.textContent = "⚠️ Modelo não carregou. Indexe manualmente na página de busca.";
+                                feedback.className = "text-xs text-center mt-3 text-amber-400";
+                                btn.disabled = false;
+                                btn.innerHTML =
+                                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                            }
+                        }, 10000);
+                        idx.warmup();
+                    } else {
+                        startReindex(idx, feedback, btn);
+                    }
+                })
+                .catch(function(err) {
+                    feedback.textContent = "❌ " + err.message;
+                    feedback.className = "text-xs text-center mt-3 text-red-400";
+                    btn.disabled = false;
+                    btn.innerHTML =
+                        '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                });
+        }
+
+        function startReindex(idx, feedback, btn) {
+            var total = 0;
+            feedback.textContent = "Indexando... 0 / ?";
+
+            idx.indexPending(function(indexed, totalNotes) {
+                total = totalNotes;
+                feedback.textContent = "Indexando... " + indexed + " / " + total;
+            }).then(function() {
+                feedback.textContent = "✅ Reindexação completa! " + total + " notas processadas.";
+                feedback.className = "text-xs text-center mt-3 text-emerald-400";
+                btn.disabled = false;
+                btn.innerHTML =
+                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+            }).catch(function(err) {
+                feedback.textContent = "❌ Erro na reindexação: " + (err.message || "desconhecido");
+                feedback.className = "text-xs text-center mt-3 text-red-400";
+                btn.disabled = false;
+                btn.innerHTML =
+                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+            });
+        }
     </script>
     <!-- Helpers compartilhados entre todos os editores (generateHash, setStatus, HTTP wrappers) -->
     <script src="/static/editor-common.js?v=3"></script>

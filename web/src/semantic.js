@@ -131,7 +131,7 @@ Object.defineProperty(SemanticIndex.prototype, "isReady", {
 /**
  * Registra callback chamado quando o modelo estiver pronto (ou imediatamente se já estiver).
  * @param {Function} callback
- * @returns {SemanticIndex}
+ * @returns {Object}
  */
 SemanticIndex.prototype.onReady = function(callback) {
   if (this._modelReady) { callback(); }
@@ -141,8 +141,8 @@ SemanticIndex.prototype.onReady = function(callback) {
 
 /**
  * Registra callback para progresso de download do modelo.
- * @param {function(ProgressMessage): void} callback
- * @returns {SemanticIndex}
+ * @param {Function} callback
+ * @returns {Object}
  */
 SemanticIndex.prototype.onProgress = function(callback) {
   this._onProgressCallbacks.push(callback);
@@ -151,8 +151,8 @@ SemanticIndex.prototype.onProgress = function(callback) {
 
 /**
  * Registra callback para erros do worker/modelo.
- * @param {function(string): void} callback
- * @returns {SemanticIndex}
+ * @param {Function} callback
+ * @returns {Object}
  */
 SemanticIndex.prototype.onError = function(callback) {
   this._onErrorCallbacks.push(callback);
@@ -307,7 +307,7 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
   }
 
   return embedNext(0).then(function(chunks) {
-    if (chunks.length === 0) return;
+    if (chunks.length === 0) return Promise.resolve();
 
     var payload = {
       filename: filename,
@@ -363,7 +363,7 @@ SemanticIndex.prototype.getStatus = function() {
 /**
  * Indexa múltiplas notas em lote (com chunking).
  * @param {Array<{filename: string, content: string}>} notes - Lista de notas
- * @param {function(number, number): void} [onProgress] - Callback(indexed, total)
+ * @param {Function} [onProgress] - Callback(indexed, total)
  * @returns {Promise<void>}
  */
 SemanticIndex.prototype.batchIndex = function(notes, onProgress) {
@@ -386,7 +386,7 @@ SemanticIndex.prototype.batchIndex = function(notes, onProgress) {
  * Aguarda o modelo carregar antes de começar.
  * Retorna Promise que resolve quando todas as pendentes forem indexadas.
  *
- * @param {function(number, number): void} [onProgressFn] - Callback(indexed, total)
+ * @param {Function} [onProgressFn] - Callback(indexed, total)
  * @returns {Promise<void>}
  */
 SemanticIndex.prototype.indexPending = function(onProgressFn) {
@@ -405,7 +405,7 @@ SemanticIndex.prototype.indexPending = function(onProgressFn) {
 
   // Aguarda o modelo ficar pronto antes de processar (timeout 60s)
   function waitForModel() {
-    return new Promise(function(resolve, reject) {
+    return /** @type {Promise<void>} */ (new Promise(function(resolve, reject) {
       if (self._modelReady) { resolve(); return; }
 
       var timeout = setTimeout(function() {
@@ -419,7 +419,7 @@ SemanticIndex.prototype.indexPending = function(onProgressFn) {
 
       // Inicia warm-up se necessário
       self._worker.postMessage({ type: "ping" });
-    });
+    }));
   }
 
   this._indexingPromise = waitForModel().then(function() {
@@ -477,8 +477,8 @@ SemanticIndex.prototype.indexPending = function(onProgressFn) {
  * Reindexação manual (via botão "Indexar tudo" na UI).
  * Usa o mesmo fluxo do indexPending, mas com callbacks de progresso.
  *
- * @param {function(number, number): void} onProgressFn - Callback(indexed, total)
- * @param {function(Error=): void} [onDoneFn] - Callback ao terminar (err se falhou)
+ * @param {Function} onProgressFn - Callback(indexed, total)
+ * @param {Function} [onDoneFn] - Callback ao terminar (err se falhou)
  */
 SemanticIndex.prototype.reindexAll = function(onProgressFn, onDoneFn) {
   var self = this;
@@ -495,7 +495,7 @@ window.semanticIndex = new SemanticIndex();
 // ── Bridge: hook global para o editor (usa indexNote com chunking) ──
 window._semanticIndexNote = function(filename, content) {
   if (!filename || !content) return;
-  semanticIndex.indexNote(filename, content).catch(function() {});
+  window.semanticIndex.indexNote(filename, content).catch(function() {});
 };
 
 // ── Mobile detection ──

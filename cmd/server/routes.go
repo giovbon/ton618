@@ -90,6 +90,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
 	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
 	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
+	mux.Post("/api/embeddings/reset", embeddingsCtx.HandleEmbeddingReset)
 
 	// APPOINTMENTS
 	mux.Get("/agenda", appointmentsCtx.HandleAgendaPage)
