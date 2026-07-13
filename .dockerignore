@@ -63,4 +63,5 @@ extract.py
 tmp/
 
 # Local IA Models (rebuilt / downloaded in container)
-web/static/models/
+web/static/models/*
+!web/static/models/*.js
