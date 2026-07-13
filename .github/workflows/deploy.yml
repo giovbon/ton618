@@ -68,6 +68,24 @@ jobs:
             echo "mode=Multi-Arch (AMD64 + ARM64)" >> $GITHUB_OUTPUT
           fi
 
+      # ─── Cache de modelos ONNX para não baixar 120MB toda vez ───
+      - name: ♻️ Restaurar cache dos modelos
+        id: cache-models
+        uses: actions/cache@v4
+        with:
+          path: web/static/models/
+          key: models-${{ hashFiles('web/download_model.js', 'web/package-lock.json') }}
+          restore-keys: |
+            models-
+
+      - name: 📦 Baixar modelos (apenas se cache miss)
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        run: |
+          cd web
+          npm install --legacy-peer-deps
+          node download_model.js
+          node static/models/download-ort.js
+
       - name: 🔨 Build e Push
         uses: docker/build-push-action@v6
         with:

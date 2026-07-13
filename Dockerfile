@@ -7,22 +7,15 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 
-# 2. Copia apenas os scripts de download de modelos
-COPY web/download_model.js ./
-COPY web/static/models/download-ort.js ./static/models/
+# 2. Copia todo o fonte (modelos ONNX em static/models/ podem vir do cache do GHA)
+COPY web/ .
 
-# 3. Executa o download E a compressão dos modelos de IA e tokenizers
-# Como o script nativamente já gera as versões .gz e .br, esta única camada
-# resolve o download e a compactação de forma totalmente cacheável pelo GHA.
+# 3. Baixa modelos se não existirem (cache GHA hit → pula; miss → baixa)
+# O script já verifica se os arquivos .br existem antes de baixar.
 RUN node download_model.js
 RUN node static/models/download-ort.js
 
-# 4. Copia o resto do código fonte do frontend e do backend
-COPY web/ .
-COPY internal/ ./internal/
-
-# 5. Compila os assets estáticos do seu código (app.css, editor.js, etc.)
-# Certifique-se de que o build.js ignore a pasta static/models para não reprocessar.
+# 4. Compila os assets estáticos (app.css, editor.js, etc.)
 RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
