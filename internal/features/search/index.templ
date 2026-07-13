@@ -207,6 +207,7 @@ templ indexContent() {
     // ── Semantic Mode (usa o singleton compartilhado semanticIndex) ──
 
     var semanticSearchTimeout = null;
+    var currentSearchQuery = "";
 
     function toggleSemantic() {
         if (window._semanticDesktopOnly === false) return;
@@ -361,6 +362,7 @@ templ indexContent() {
     // Input handler para busca semântica — usa semanticIndex.search()
     document.getElementById("search-semantic").addEventListener("input", function(e) {
         var query = e.target.value.trim();
+        currentSearchQuery = query;
         clearTimeout(semanticSearchTimeout);
 
         if (!query) {
@@ -381,12 +383,17 @@ templ indexContent() {
 
             idx.search(query, 15)
                 .then(function(results) {
-                    renderSemanticResults(results, query);
+                    // Evita corrida: só renderiza se esta ainda for a query ativa digitada
+                    if (query === currentSearchQuery) {
+                        renderSemanticResults(results, query);
+                    }
                 })
                 .catch(function(err) {
-                    resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
+                    if (query === currentSearchQuery) {
+                        resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
+                    }
                 });
-        }, 400);
+        }, 600);
     });
 
     function renderSemanticResults(results, query) {
