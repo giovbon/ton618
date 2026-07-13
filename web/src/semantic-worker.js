@@ -39,11 +39,12 @@
 
 import { pipeline, env } from "@huggingface/transformers";
 
-// Configura para ler os arquivos de modelo localmente do servidor ton618plus
-env.allowLocalModels = true;
-env.allowRemoteModels = false; // impede qualquer download externo para o Hugging Face
-env.localModelPath = "/static/models/";
-env.useBrowserCache = true; // continua cacheando no IndexedDB para carregamentos instantâneos seguintes
+// Configuração do Transformers.js
+// Modelo baixado pelo navegador via CDN do HuggingFace e cacheado no IndexedDB.
+// Após a primeira carga (~120MB), as visitas seguintes são instantâneas.
+env.allowLocalModels = false;
+env.allowRemoteModels = true; // navegador baixa o modelo do HuggingFace CDN
+env.useBrowserCache = true; // cacheia no IndexedDB após primeira carga
 env.backends.onnx.wasm.wasmPaths = "/static/models/ort/";
 
 /** @type {string} Nome do modelo HuggingFace para embeddings multilingues */

@@ -7,12 +7,11 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 
-# 2. Copia todo o fonte (modelos ONNX em static/models/ podem vir do cache do GHA)
+# 2. Copia todo o fonte
 COPY web/ .
 
-# 3. Baixa modelos se não existirem (cache GHA hit → pula; miss → baixa)
-# O script já verifica se os arquivos .br existem antes de baixar.
-RUN node download_model.js
+# 3. Copia os binários ONNX Runtime WebAssembly (ort-wasm*) de node_modules
+# O modelo de ML em si é baixado pelo navegador via CDN (Transformers.js)
 RUN node static/models/download-ort.js
 
 # 4. Compila os assets estáticos (app.css, editor.js, etc.)
