@@ -61,3 +61,6 @@ deploy.sh
 extract.py
 *.py
 tmp/
+
+# Local IA Models (rebuilt / downloaded in container)
+web/static/models/
