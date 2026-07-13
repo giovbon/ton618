@@ -7,8 +7,9 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
 
-# 2. Copia todo o fonte
+# 2. Copia todo o fonte (web + backend .templ para o Tailwind escanear)
 COPY web/ .
+COPY internal/ ./internal/
 
 # 3. Copia os binários ONNX Runtime WebAssembly (ort-wasm*) de node_modules
 # O modelo de ML em si é baixado pelo navegador via CDN (Transformers.js)
