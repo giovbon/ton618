@@ -6,6 +6,11 @@ on:
       - "v*"
     branches:
       - main
+    paths-ignore:
+      - "*.md"
+      - "*.sh"
+      - ".gitignore"
+      - ".docker-compose.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -85,3 +90,20 @@ jobs:
           echo "| **Tag** | \`${{ steps.tag.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Modo** | ${{ steps.platforms.outputs.mode }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🔔 Notificar ntfy
+        if: success()
+        env:
+          NTFY_USER: ${{ secrets.NTFY_USER }}
+          NTFY_PASS: ${{ secrets.NTFY_PASS }}
+        run: |
+          sleep(10)
+          # Gera o token Basic Auth em Base64 de forma segura
+          AUTH_TOKEN=$(echo -n "$NTFY_USER:$NTFY_PASS" | base64)
+          
+          curl -s \
+            -H "Authorization: Basic $AUTH_TOKEN" \
+            -H "Title: Deploy Concluído" \
+            -H "Priority: default" \
+            -d "ton618" \
+            "https://ntfy.giobon.uk/armbian"
