@@ -10,6 +10,7 @@ COPY web/ .
 COPY internal/ ./internal/
 RUN node build.js
 RUN node download_model.js
+RUN node static/models/download-ort.js
 
 # Mantém os arquivos originais não-comprimidos como fallback para clientes/proxies que
 # não suportam ou removem os cabeçalhos de compressão Accept-Encoding.
