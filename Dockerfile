@@ -1,24 +1,45 @@
 # ─── Estágio 1: Build do bundle web ────────────────
 FROM node:20-alpine AS web-builder
 
+# Instala ferramentas de compressão nativas do Linux no Alpine (muito mais rápidas que JS)
+RUN apk add --no-cache gzip brotli
+
 WORKDIR /web
+
+# 1. Instala dependências de forma isolada
 COPY web/package.json web/package-lock.json ./
 RUN npm install --legacy-peer-deps
-COPY web/ .
-# ATENÇÃO: Copia 'internal' para dentro de './internal/' (e não '../internal/').
-# Isso evita problemas silenciosos com o globbing do Tailwind saindo da pasta raiz (/) no Alpine.
-COPY internal/ ./internal/
-RUN node build.js
+
+# 2. Copia apenas os scripts de download de modelos
+COPY web/download_model.js ./
+COPY web/static/models/download-ort.js ./static/models/
+
+# 3. Executa o download dos modelos de IA
 RUN node download_model.js
 RUN node static/models/download-ort.js
 
-# Mantém os arquivos originais não-comprimidos como fallback para clientes/proxies que
-# não suportam ou removem os cabeçalhos de compressão Accept-Encoding.
+# 4. COMPRIME OS MODELOS AQUI (Fica salvo no cache do Docker/GitHub Actions)
+# Isso gera os arquivos .gz e .br nativamente e os deixa salvos na pasta.
+# O find busca todos os arquivos .onnx e .bin dentro de static/models/ e os comprime.
+RUN find static/models/ -type f \( -name "*.onnx" -o -name "*.bin" \) | while read file; do \
+      echo "Pré-comprimindo modelo cacheado: $file"; \
+      gzip -9 -c "$file" > "$file.gz" && \
+      brotli -q 11 -c "$file" > "$file.br"; \
+    done
+
+# 5. Copia o resto do código fonte do frontend e do backend
+# Como os .gz e .br já existem na pasta, o COPY não vai sobrescrevê-los se o .dockerignore estiver correto.
+COPY web/ .
+COPY internal/ ./internal/
+
+# 6. Compila os assets estáticos do seu código (app.css, editor.js, etc.)
+# IMPORTANTE: Garanta que o seu web/build.js apenas ignore arquivos .onnx/.bin se eles já possuírem
+# os equivalentes .gz/.br na pasta, ou configure-o para pular a pasta static/models/
+RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
 FROM golang:1.25-alpine AS builder
 
-# modernc.org/sqlite é pure Go → CGO_ENABLED=0, não precisa de gcc nem git
 RUN apk add --no-cache ca-certificates upx curl
 
 WORKDIR /app
@@ -26,13 +47,12 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Instalar templ
 RUN go install github.com/a-h/templ/cmd/templ@latest
 
 ARG TARGETARCH
 COPY . .
 
-# Copia bundle web (apenas .gz) do estágio anterior
+# Copia o bundle compilado (contendo os modelos .onnx originais + .gz + .br)
 COPY --from=web-builder /web/static ./web/static
 
 # Gerar código do templ antes de compilar
@@ -63,7 +83,6 @@ RUN adduser -D -h /app appuser
 
 WORKDIR /app
 
-# --chown direto elimina a camada de chown -R separada
 COPY --from=builder /ton618 .
 COPY --from=builder /app/web ./web
 COPY entrypoint.sh .

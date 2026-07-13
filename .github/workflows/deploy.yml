@@ -97,7 +97,7 @@ jobs:
           NTFY_USER: ${{ secrets.NTFY_USER }}
           NTFY_PASS: ${{ secrets.NTFY_PASS }}
         run: |
-          sleep(10)
+          sleep 10
           # Gera o token Basic Auth em Base64 de forma segura
           AUTH_TOKEN=$(echo -n "$NTFY_USER:$NTFY_PASS" | base64)
           
