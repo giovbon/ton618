@@ -6,11 +6,7 @@ on:
       - "v*"
     branches:
       - main
-    paths-ignore:
-      - "*.md"
-      - "*.sh"
-      - ".gitignore"
-      - ".docker-compose.yml"
+
   workflow_dispatch:
     inputs:
       tag:
