@@ -140,6 +140,64 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 - **Paridade Go/SQL:** O método Go `IsNoteEmbeddable` (que valida as gravações) e as queries SQL (`GetPendingEmbeddingNotes` e `CountEmbeddableNotes`) devem estar em perfeita paridade quanto a essa lógica de exclusão de notas. Para manter a performance, a detecção de tipo é baseada apenas no caminho do arquivo, tags e heurísticas de nome de arquivo (ex: conter `mapa.` ou `mapa-` no nome), sem abrir o conteúdo completo das notas.
 - **Garantia via Teste:** O teste de integração `TestIsNoteEmbeddableMatchesSQL` garante que qualquer divergência futura entre Go e SQL na lógica de exclusão de notas quebrará os testes locais e o CI/CD. Adicionalmente, o teste `TestDeleteNoteCleansEmbeddingsAndOrphanStatus` garante que a remoção de notas limpa seus respectivos chunks e embeddings, e que o cálculo de status de indexação é resiliente a registros órfãos pré-existentes.
 
+### 3.6 SimilarNotes — Estratégia do Voto Majoritário
+
+📍 `internal/features/notes/handlers_common.go` — função `loadNoteData`
+
+O recurso **"Notas Semelhantes"** no editor usa os embeddings armazenados para recomendar notas relacionadas. A lógica implementa:
+
+- **Dois mapas**: `minDistMap` (menor distância L2 por candidato) e `matchCounts` (em quantos chunks diferentes o candidato apareceu).
+- **Threshold dinâmico**: Agora configurável pelo usuário na UI (padrão 72% de similaridade de cosseno, traduzido internamente para distância L2).
+- **Voto majoritário**: Se a nota atual tem ≥3 chunks (nota longa), o candidato precisa ter match em ≥2 chunks diferentes para ser recomendado — a menos que a distância seja excepcional (`< 0.60`, ~82%).
+- **Ordenação**: Primária por frequência de matches (decrescente), secundária por distância L2 (crescente). Top 5 resultados exibidos.
+- **Parâmetros**: `similarExcellent = 0.60`, `longNoteMinChunks = 3`, `minMatchLongNote = 2`. O limite `similarThreshold` é obtido dinamicamente das configurações.
+
+### 3.7 Configurações Dinâmicas de Limite Semântico (Threshold)
+
+📍 Rota `/api/settings/semantic-thresholds` | `internal/features/system/handlers.go`
+
+Para dar controle sobre a precisão da IA, adicionou-se sliders de configuração na aba **Semântica**:
+- **Busca Semântica Global**: Define a similaridade mínima exigida na busca geral (padrão 50%). Controla a tolerância de resultados em `internal/features/embeddings/handlers.go`.
+- **Notas Semelhantes**: Define a similaridade mínima para a aba do rodapé do editor (padrão 72%). Controla a exibição em `internal/features/notes/handlers_common.go`.
+- **Persistência**: Ambos os percentuais são armazenados no SQLite na tabela de configurações como `semantic_search_threshold` e `similar_notes_threshold`.
+- **Conversão de Métrica**: O banco de dados utiliza distância euclidiana L2 (sqlite-vec MATCH). A conversão a partir de porcentagem de similaridade de cosseno $c$ ocorre pela fórmula:
+  $$dist_{L2} = \sqrt{2 \times (1 - c)}$$
+- **Alterada em**: 14/07/2026 — implementação dos thresholds dinâmicos e UI de sliders.
+
+> ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
+
+### 3.8 Testes da Funcionalidade de Notas Semelhantes
+
+📍 `internal/features/notes/handlers_common_test.go`
+
+Para garantir a corretude da lógica de voto majoritário e thresholds dinâmicos, foram criados testes unitários e de integração:
+
+**Testes unitários** (`filterAndRankSimilarNotes` — função pura):
+| Teste | O que verifica |
+|-------|---------------|
+| `TestFilterAndRank_Empty` | Mapas vazios/nulos retornam lista vazia |
+| `TestFilterAndRank_OrderByFrequencyThenDistance` | Ordenação: frequência ↓, depois distância ↑ |
+| `TestFilterAndRank_LimitTop5` | Limite máximo de 5 resultados |
+| `TestFilterAndRank_MajorityVoting_BlocksLowMatch` | Nota longa (≥3 chunks) com 1 match e dist ≥0.60 é bloqueada |
+| `TestFilterAndRank_ShortNote_NoMajorityVoting` | Nota curta (≤2 chunks) não sofre voto majoritário |
+| `TestFilterAndRank_ExcellentDistanceBypassesMajority` | Dist excepcional (<0.60) passa mesmo com 1 match |
+| `TestFilterAndRank_PercentageConversion` | Conversão L2 → % de similaridade (~100% a 50%) |
+| `TestFilterAndRank_ThresholdAlreadyApplied` | Threshold é responsabilidade do caller, não da função |
+
+**Testes de integração** (threshold dinâmico + embeddings reais):
+| Teste | O que verifica |
+|-------|---------------|
+| `TestSimilarNotesThreshold_Default` | Sem config no banco → padrão 72% |
+| `TestSimilarNotesThreshold_Custom` | Config `similar_notes_threshold=90` → dist ~0.447 |
+| `TestSimilarNotesThreshold_InvalidValue` | Valor inválido → fallback silencioso |
+| `TestSimilarNotesThreshold_ZeroPercent` | 0% → dist ~1.414 (tudo passa) |
+| `TestSimilarNotesThreshold_HundredPercent` | 100% → dist 0.0 (apenas exatas) |
+| `TestSimilarNotes_EmptyEmbeddings` | Nota sem embeddings → 0 similares |
+| `TestSimilarNotes_WithPlot` | Threshold dinâmico com embeddings reais na vec0 |
+| `TestSimilarNotes_MajorityVotingWithRealEmbeddings` | Voto majoritário com dados reais |
+
+**Total**: 16 testes (8 unit + 8 integração), todos usando banco real (`newTestContext`).
+
 ## 4. Banco de Dados
 
 ### 4.1 Tabelas Principais
@@ -189,6 +247,42 @@ O runtime ONNX tenta WebGPU primeiro (se disponível), depois cai para CPU (WASM
 ### 6.3 `process.on('unhandledRejection')`
 
 Usado nos testes JS para silenciar rejeições intencionais (testes de `embed_error` e timeout). Não usar em produção.
+
+## 6.4 Download do Modelo de IA
+
+📍 `web/download_model.js`
+
+- O modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX q8, ~120MB) é baixado do **HuggingFace** usando `wget`.
+- **`wget` é obrigatório** — lidou melhor com o XetHub/CAS Bridge do que `fetch()` ou `http.get()` do Node. Não substituir.
+- O script gera automaticamente versões comprimidas (`.gz` e `.br`) ao lado do arquivo original.
+- O Dockerfile **não** executa este script. O modelo é baixado pelo navegador via Transformers.js (CDN do HuggingFace + IndexedDB).
+- **Esta decisão não deve ser alterada sem validação manual.** Já houve regressão por mexer neste arquivo.
+
+### Arquivos baixados
+
+| Arquivo | Tamanho |
+|---------|---------|
+| `config.json` | ~700B |
+| `special_tokens_map.json` | ~200B |
+| `tokenizer.json` | ~2.5MB |
+| `tokenizer_config.json` | ~500B |
+| `onnx/model_quantized.onnx` | ~120MB |
+
+### ⚠️ Dependência do CSP para fallback remoto
+
+Se os arquivos do modelo **não estiverem disponíveis localmente** (ex: `download_model.js` não foi executado), o Transformers.js tenta baixá-los via `fetch()` do CDN do HuggingFace. Essa conexão é **bloqueada pelo CSP** em `internal/middleware/middleware.go`:
+
+```
+connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org
+```
+
+`huggingface.co` **não está listado** no `connect-src`, então o download remoto falha silenciosamente. **O modelo só funciona via arquivos locais servidos pelo próprio servidor Go** (`/static/models/`).
+
+Caso no futuro seja necessário suportar fallback remoto, é preciso:
+1. Adicionar `https://huggingface.co` (e possivelmente `https://cdn-lfs.huggingface.co`) ao `connect-src` do CSP.
+2. Testar manualmente, pois o bloqueio do CSP não gera erro no servidor — aparece apenas no console do navegador.
+
+---
 
 ## 7. Pendentes
 

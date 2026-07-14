@@ -37,6 +37,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/settings/ntfy", sysCtx.HandlePostNtfySettings)
 	mux.Get("/api/settings/semantic-device", sysCtx.HandleGetSemanticDevice)
 	mux.Post("/api/settings/semantic-device", sysCtx.HandlePostSemanticDevice)
+	mux.Get("/api/settings/semantic-thresholds", sysCtx.HandleGetSemanticThresholds)
+	mux.Post("/api/settings/semantic-thresholds", sysCtx.HandlePostSemanticThresholds)
 
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)

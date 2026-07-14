@@ -1,3 +1,22 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * ⚠️  CRÍTICO — NÃO ALTERAR A FORMA DE DOWNLOAD
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Este script baixa o modelo de embeddings do HuggingFace usando `wget`.
+ * ATENÇÃO:
+ * - O uso de `wget` é proposital — lida melhor com a CDN (XetHub/CAS Bridge)
+ *   do HuggingFace que alternatives como `fetch()` ou `http.get()` do Node.
+ * - As URLs apontam para o modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2`.
+ * - A lista de arquivos (`files[]`) e o diretório de saída (`MODEL_DIR`)
+ *   NÃO DEVEM ser alterados sem validação completa.
+ *
+ * ⛔ JÁ HOUVE CASO DE ALTERAÇÃO NESTE SCRIPT QUE QUEBROU O DOWNLOAD.
+ *    Se precisar modificar algo, teste manualmente com `node download_model.js`
+ *    antes de commitar.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';

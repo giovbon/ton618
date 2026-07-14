@@ -685,4 +685,70 @@ func (ctx *HandlerContext) HandlePostSemanticDevice(w http.ResponseWriter, r *ht
 	w.Write([]byte(`{"device":"` + body.Device + `"}`))
 }
 
+// HandleGetSemanticThresholds retorna os thresholds configurados para buscas semânticas
+// GET /api/settings/semantic-thresholds
+func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r *http.Request) {
+	searchThreshold := 50 // default: 50%
+	notesThreshold := 72  // default: 72%
+
+	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			searchThreshold = v
+		}
+	}
+	if val, err := ctx.Store.GetSetting("similar_notes_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			notesThreshold = v
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{
+		"search_threshold": searchThreshold,
+		"notes_threshold":  notesThreshold,
+	})
+}
+
+// HandlePostSemanticThresholds salva os thresholds configurados
+// POST /api/settings/semantic-thresholds
+func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		SearchThreshold *int `json:"search_threshold,omitempty"`
+		NotesThreshold  *int `json:"notes_threshold,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "json invalido", http.StatusBadRequest)
+		return
+	}
+
+	if body.SearchThreshold != nil {
+		if *body.SearchThreshold < 0 || *body.SearchThreshold > 100 {
+			http.Error(w, "search_threshold deve ser entre 0 e 100", http.StatusBadRequest)
+			return
+		}
+		if err := ctx.Store.SetSetting("semantic_search_threshold", strconv.Itoa(*body.SearchThreshold)); err != nil {
+			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if body.NotesThreshold != nil {
+		if *body.NotesThreshold < 0 || *body.NotesThreshold > 100 {
+			http.Error(w, "notes_threshold deve ser entre 0 e 100", http.StatusBadRequest)
+			return
+		}
+		if err := ctx.Store.SetSetting("similar_notes_threshold", strconv.Itoa(*body.NotesThreshold)); err != nil {
+			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"success"}`))
+}
+
 // ── Helpers ──

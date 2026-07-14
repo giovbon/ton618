@@ -53,6 +53,8 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             if (feedback) feedback.classList.add("hidden");
             // Carrega a configuração de device
             loadSemanticDevice();
+            // Carrega os limites de similaridade
+            loadSemanticThresholds();
         }
 
         function loadSemanticDevice() {
@@ -73,6 +75,44 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             }).then(function(r) {
                 if (r.ok) {
                     var saved = document.getElementById("semantic-device-saved");
+                    if (saved) {
+                        saved.classList.remove("hidden");
+                        setTimeout(function() { saved.classList.add("hidden"); }, 2000);
+                    }
+                }
+            }).catch(function() {});
+        }
+
+        function loadSemanticThresholds() {
+            fetch("/api/settings/semantic-thresholds")
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var s_search = document.getElementById("semantic-search-threshold");
+                    var s_notes = document.getElementById("similar-notes-threshold");
+                    if (s_search && data.search_threshold) {
+                        s_search.value = data.search_threshold;
+                        document.getElementById("semantic-search-threshold-display").innerText = data.search_threshold + "%";
+                    }
+                    if (s_notes && data.notes_threshold) {
+                        s_notes.value = data.notes_threshold;
+                        document.getElementById("similar-notes-threshold-display").innerText = data.notes_threshold + "%";
+                    }
+                })
+                .catch(function() {});
+        }
+
+        function saveSemanticThreshold(type, value) {
+            var body = {};
+            if (type === 'search') body.search_threshold = parseInt(value, 10);
+            if (type === 'notes') body.notes_threshold = parseInt(value, 10);
+
+            fetch("/api/settings/semantic-thresholds", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            }).then(function(r) {
+                if (r.ok) {
+                    var saved = document.getElementById("semantic-" + type + "-saved");
                     if (saved) {
                         saved.classList.remove("hidden");
                         setTimeout(function() { saved.classList.add("hidden"); }, 2000);

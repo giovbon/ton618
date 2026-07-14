@@ -3,6 +3,7 @@ package embeddings
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -126,8 +127,24 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Carregar o limite configurado (padrão: 50%)
+	searchThresholdPct := 50
+	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			searchThresholdPct = v
+		}
+	}
+	
+	// Converter % para distância L2
+	// cosSim = 1.0 - (dist^2 / 2) => dist = sqrt(2 * (1 - cosSim))
+	cosSimLimit := float64(searchThresholdPct) / 100.0
+	maxDist := math.Sqrt(2.0 * (1.0 - cosSimLimit))
+
 	results := make([]semanticSearchResult, 0, len(hits))
 	for _, h := range hits {
+		if h.Distance > maxDist {
+			continue // filtra itens com similaridade menor que o exigido
+		}
 		results = append(results, semanticSearchResult{
 			Filename: h.Filename,
 			Distance: h.Distance,

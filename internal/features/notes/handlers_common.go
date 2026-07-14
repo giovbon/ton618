@@ -2,9 +2,11 @@ package notes
 
 import (
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ton618/internal/core/domain"
@@ -53,7 +55,30 @@ func (ctx *HandlerContext) loadNoteData(filename string) (noteLoadResult, error)
 	}
 	r.Backlinks = backlinks
 
-	// Carrega Notas Semelhantes usando os embeddings armazenados
+	// ── SimilarNotes: Estratégia do Voto Majoritário ──
+	// Para cada chunk da nota atual, busca vizinhos via sqlite-vec.
+	// Usa dois mapas:
+	//   minDistMap[fname]  = menor distância L2 encontrada
+	//   matchCounts[fname] = em quantos chunks diferentes o candidato apareceu
+	//
+	// Threshold: dist <= 0.75 (~72% similaridade cosseno)
+	// Notas longas (≥3 chunks): exigem ≥2 matches, a menos que dist < 0.60 (~82%)
+	// Ordenação: primária por frequência (decrescente), secundária por distância (crescente)
+
+	// Carrega limite do banco ou assume padrão (72%)
+	similarThresholdPct := 72
+	if val, err := ctx.Store.GetSetting("similar_notes_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			similarThresholdPct = v
+		}
+	}
+
+	// Converte % para distância L2
+	cosSimLimit := float64(similarThresholdPct) / 100.0
+	similarThreshold := math.Sqrt(2.0 * (1.0 - cosSimLimit))
+
+	const similarExcellent = 0.60
+
 	embeddings, err := ctx.Store.GetNoteEmbeddings(filename)
 	if err != nil {
 		slog.Error("loadNoteData: erro ao obter embeddings", "file", filename, "error", err)
@@ -61,7 +86,9 @@ func (ctx *HandlerContext) loadNoteData(filename string) (noteLoadResult, error)
 
 	var similarNotes []domain.SimilarNoteItem
 	if len(embeddings) > 0 {
-		similarMap := make(map[string]float64)
+		minDistMap := make(map[string]float64) // filename → menor distância
+		matchCounts := make(map[string]int)    // filename → quantos chunks deram match
+
 		for _, emb := range embeddings {
 			hits, err := ctx.Store.SearchSimilar(emb, 10)
 			if err != nil {
@@ -71,52 +98,17 @@ func (ctx *HandlerContext) loadNoteData(filename string) (noteLoadResult, error)
 				if hit.Filename == filename {
 					continue // descarta a si mesma
 				}
-				dist, exists := similarMap[hit.Filename]
-				if !exists || hit.Distance < dist {
-					similarMap[hit.Filename] = hit.Distance
+				if hit.Distance > similarThreshold {
+					continue // threshold rigoroso
+				}
+				matchCounts[hit.Filename]++
+				if d, exists := minDistMap[hit.Filename]; !exists || hit.Distance < d {
+					minDistMap[hit.Filename] = hit.Distance
 				}
 			}
 		}
 
-		type tempItem struct {
-			filename string
-			distance float64
-		}
-		var list []tempItem
-		for fname, dist := range similarMap {
-			// sqlite-vec MATCH retorna a distância L2 por padrão.
-			// Para vetores normalizados: dist_L2 = sqrt(2 * (1 - cos_sim))
-			// Uma similaridade de cosseno >= 55% (cos_sim >= 0.55) corresponde a dist_L2 <= sqrt(0.9) = 0.948.
-			if dist <= 0.95 {
-				list = append(list, tempItem{filename: fname, distance: dist})
-			}
-		}
-
-		// Ordena por distância (menor distância = mais similar)
-		sort.Slice(list, func(i, j int) bool {
-			return list[i].distance < list[j].distance
-		})
-
-		// Limita aos top 5
-		limit := 5
-		if len(list) < limit {
-			limit = len(list)
-		}
-		for i := 0; i < limit; i++ {
-			// Converte distância L2 para percentual de similaridade de cosseno
-			cosSim := 1.0 - (list[i].distance * list[i].distance / 2.0)
-			pct := int(cosSim * 100)
-			if pct < 0 {
-				pct = 0
-			} else if pct > 100 {
-				pct = 100
-			}
-			similarNotes = append(similarNotes, domain.SimilarNoteItem{
-				Filename:    list[i].filename,
-				DisplayName: domain.DisplayName(list[i].filename),
-				Percentage:  pct,
-			})
-		}
+		similarNotes = filterAndRankSimilarNotes(minDistMap, matchCounts, len(embeddings), similarThreshold, similarExcellent)
 	}
 	r.SimilarNotes = similarNotes
 
@@ -162,4 +154,78 @@ func buildEditorData(title, filename string, nd noteLoadResult) domain.EditorDat
 		Backlinks:    nd.Backlinks,
 		SimilarNotes: nd.SimilarNotes,
 	}
+}
+
+// filterAndRankSimilarNotes aplica voto majoritário, ordenação e limite aos candidatos.
+// É uma função pura (sem acesso a banco) para facilitar testes unitários.
+//
+// Parâmetros:
+//   - minDistMap: nome do arquivo → menor distância L2 encontrada
+//   - matchCounts: nome do arquivo → em quantos chunks diferentes apareceu
+//   - totalChunks: total de chunks da nota original (para determinar se é "longa")
+//   - threshold: limite de distância L2 (notas com distância maior são descartadas)
+//   - excellent: distância abaixo da qual dispensa voto majoritário
+//
+// Constantes internas:
+//   - longNoteMinChunks = 3 (nota longa)
+//   - minMatchLongNote  = 2 (matches necessários para nota longa)
+func filterAndRankSimilarNotes(
+	minDistMap map[string]float64,
+	matchCounts map[string]int,
+	totalChunks int,
+	threshold float64,
+	excellent float64,
+) []domain.SimilarNoteItem {
+	const longNoteMinChunks = 3
+	const minMatchLongNote = 2
+
+	type tempItem struct {
+		filename string
+		distance float64
+		matches  int
+	}
+	var list []tempItem
+	for fname, dist := range minDistMap {
+		matches := matchCounts[fname]
+
+		// Voto majoritário: notas longas (≥3 chunks) precisam de ≥2 matches,
+		// a menos que a similaridade seja excepcional (dist < excellent)
+		if totalChunks >= longNoteMinChunks && matches < minMatchLongNote && dist >= excellent {
+			continue
+		}
+
+		list = append(list, tempItem{filename: fname, distance: dist, matches: matches})
+	}
+
+	// Ordena primariamente por frequência (mais matches primeiro),
+	// em caso de empate pela menor distância L2
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].matches != list[j].matches {
+			return list[i].matches > list[j].matches
+		}
+		return list[i].distance < list[j].distance
+	})
+
+	// Limita aos top 5
+	limit := 5
+	if len(list) < limit {
+		limit = len(list)
+	}
+	result := make([]domain.SimilarNoteItem, 0, limit)
+	for i := 0; i < limit; i++ {
+		// Converte distância L2 para percentual de similaridade de cosseno
+		cosSim := 1.0 - (list[i].distance*list[i].distance)/2.0
+		pct := int(cosSim * 100)
+		if pct < 0 {
+			pct = 0
+		} else if pct > 100 {
+			pct = 100
+		}
+		result = append(result, domain.SimilarNoteItem{
+			Filename:    list[i].filename,
+			DisplayName: domain.DisplayName(list[i].filename),
+			Percentage:  pct,
+		})
+	}
+	return result
 }
