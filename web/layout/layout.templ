@@ -51,6 +51,34 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             // Atualiza o status do índice quando a aba é aberta
             var feedback = document.getElementById("reset-feedback");
             if (feedback) feedback.classList.add("hidden");
+            // Carrega a configuração de device
+            loadSemanticDevice();
+        }
+
+        function loadSemanticDevice() {
+            fetch("/api/settings/semantic-device")
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var sel = document.getElementById("semantic-device-select");
+                    if (sel && data.device) sel.value = data.device;
+                })
+                .catch(function() {});
+        }
+
+        function saveSemanticDevice(device) {
+            fetch("/api/settings/semantic-device", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ device: device }),
+            }).then(function(r) {
+                if (r.ok) {
+                    var saved = document.getElementById("semantic-device-saved");
+                    if (saved) {
+                        saved.classList.remove("hidden");
+                        setTimeout(function() { saved.classList.add("hidden"); }, 2000);
+                    }
+                }
+            }).catch(function() {});
         }
 
         function resetAndReindexSemantic() {

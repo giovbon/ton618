@@ -149,16 +149,8 @@ templ indexContent() {
         }
     })();
 
-    // Auto-indexação silenciosa ao carregar a página (não precisa clicar em "Semântica")
-    (function() {
-        var idx = window.semanticIndex;
-        if (!idx) return;
-        idx.getStatus().then(function(status) {
-            if (status.pending_notes > 0) {
-                idx.indexPending();
-            }
-        }).catch(function() {});
-    })();
+    // NOTA: Indexação é iniciada apenas quando o usuário clica em "Semântica" (toggleSemantic)
+    // para não baixar o modelo de ~200MB desnecessariamente.
 
     var isCompact = true;
     var isSemantic = false;
@@ -242,6 +234,11 @@ templ indexContent() {
             document.getElementById("compact-container").classList.remove("hidden");
             document.getElementById("mode-toggle").className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
             document.getElementById("mode-label").textContent = "Notas";
+
+            // Libera o worker/modelo ao fechar painel semântico — ninguém mais precisa
+            if (window.semanticIndex && typeof window.semanticIndex.dispose === 'function') {
+                window.semanticIndex.dispose();
+            }
         }
     }
 
@@ -275,10 +272,11 @@ templ indexContent() {
             setModelStatus("ready", "Modelo pronto ✓");
 
 
-            // Se já tinha texto digitado, executa a busca automaticamente
+            // Se já tinha texto digitado, dispara o input para executar a busca
             var pendingQuery = document.getElementById("search-semantic").value.trim();
             if (pendingQuery) {
-                runSemanticSearch(pendingQuery);
+                var evt = new Event("input", { bubbles: true });
+                document.getElementById("search-semantic").dispatchEvent(evt);
             }
         });
 

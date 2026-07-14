@@ -274,6 +274,26 @@ templ SettingsModal() {
                         Gerencie o índice de busca semântica das suas notas.
                     </p>
 
+                    <!-- Device Selector -->
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+                        <p class="text-sm text-zinc-300 font-bold mb-2">⚙️ Modo de Execução</p>
+                        <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                            Define como o modelo de IA é executado no navegador.
+                            <strong class="text-zinc-400">WASM (CPU)</strong> é mais compatível e econômico em RAM.
+                            <strong class="text-zinc-400">Automático</strong> tenta usar GPU (WebGPU) primeiro, caindo para CPU se não disponível.
+                            A alteração tem efeito na próxima vez que a busca semântica for aberta.
+                        </p>
+                        <div class="flex items-center gap-3">
+                            <select id="semantic-device-select"
+                                class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-violet-500 transition-colors"
+                                onchange="saveSemanticDevice(this.value)">
+                                <option value="wasm">🧠 WASM (CPU) — padrão</option>
+                                <option value="auto">⚡ Automático (GPU + fallback CPU)</option>
+                            </select>
+                            <span id="semantic-device-saved" class="text-[10px] text-emerald-500 font-semibold hidden">✓</span>
+                        </div>
+                    </div>
+
                     <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
                         <p class="text-sm text-zinc-300 font-bold mb-2">🧠 Índice Semântico</p>
                         <p class="text-xs text-zinc-500 mb-4 leading-relaxed">

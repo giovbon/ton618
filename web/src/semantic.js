@@ -77,8 +77,28 @@ function SemanticIndex() {
 /** @private Inicializa o Web Worker (lazy — só cria na primeira chamada) */
 SemanticIndex.prototype._ensureWorker = function() {
   if (this._worker) return;
+
+  // Se ainda não temos o device configurado, busca do servidor
+  if (!this._device) {
+    // Fallback síncrono: usa "wasm" enquanto não carrega, depois atualiza
+    this._device = "wasm";
+    var self = this;
+    fetch("/api/settings/semantic-device")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.device && data.device !== self._device) {
+          self._device = data.device;
+          // Se o worker já foi criado, notifica-o da mudança
+          if (self._worker) {
+            self._worker.postMessage({ type: "config", device: self._device });
+          }
+        }
+      })
+      .catch(function() {});
+  }
+
   var self = this;
-  this._worker = new Worker(WORKER_URL, { type: "module" });
+  this._worker = new Worker(WORKER_URL + "?device=" + this._device, { type: "module" });
 
   this._worker.onmessage = function(event) {
     var msg = event.data;
@@ -277,46 +297,49 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
 
   var self = this;
 
-  // 4. Gera embeddings SEQUENCIALMENTE (evita travar o Worker com chamadas concorrentes)
+  // 4. Gera embeddings SEQUENCIALMENTE (evita travar o Worker com chamadas concorrentes).
+  // Usa array compartilhado em vez de acumulação recursiva — reduz pressão no GC.
+  var allChunks = [];
+
   function embedNext(idx) {
     if (idx >= chunksText.length) {
-      return Promise.resolve([]);
+      return Promise.resolve();
     }
     return self.embed(chunksText[idx]).then(function(embedding) {
       // Valida NaN/Inf antes de incluir no resultado
       for (var ei = 0; ei < embedding.length; ei++) {
         if (!isFinite(embedding[ei]) || isNaN(embedding[ei])) {
           console.warn("[SemanticIndex] NaN/Inf no chunk", idx, "- pulando");
-          return null;
+          return;
         }
       }
-      return {
+      allChunks.push({
         chunk_id: filename + "#" + idx,
         filename: filename,
         index: idx,
         content: chunksText[idx],
         embedding: embedding
-      };
-    }).then(function(chunk) {
-      // Processa próximo chunk e acumula resultados
-      return embedNext(idx + 1).then(function(rest) {
-        var result = chunk ? [chunk] : [];
-        return result.concat(rest);
       });
+    }).then(function() {
+      return embedNext(idx + 1);
     });
   }
 
-  return embedNext(0).then(function(chunks) {
-    if (chunks.length === 0) return Promise.resolve();
+  return embedNext(0).then(function() {
+    if (allChunks.length === 0) return;
 
-    var payload = {
+    // POST único (transacional no backend) — libera allChunks após envio
+    var payload = JSON.stringify({
       filename: filename,
-      chunks: chunks
-    };
+      chunks: allChunks
+    });
+    // Zera referência antes do fetch pra ajudar GC
+    allChunks = [];
+
     return fetch(SAVE_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: payload,
     }).then(function(r) {
       if (!r.ok) console.debug("[SemanticIndex] indexNote HTTP error:", r.status);
     });
@@ -487,6 +510,23 @@ SemanticIndex.prototype.reindexAll = function(onProgressFn, onDoneFn) {
   }).catch(function(err) {
     if (onDoneFn) onDoneFn(err);
   });
+};
+
+/**
+ * Libera o Web Worker e o modelo da memória.
+ * O worker será recriado lazy na próxima chamada a embed()/warmup().
+ * Use quando o usuário fechar o painel semântico para economizar ~200-300MB.
+ */
+SemanticIndex.prototype.dispose = function() {
+  if (this._worker) {
+    this._worker.terminate();
+    this._worker = null;
+  }
+  this._modelReady = false;
+  this._pendingCallbacks.clear();
+  this._onReadyCallbacks = [];
+  this._onProgressCallbacks = [];
+  this._onErrorCallbacks = [];
 };
 
 // ── Singleton exposto no window para acesso global ──

@@ -105,6 +105,7 @@ Serve como referência para manter consistência em contribuições futuras.
 
 ```
 Browser (Transformers.js) → POST /api/embeddings/save → SQLite (vec0)
+Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 - Geração **exclusivamente no browser** (Transformers.js no Web Worker). Não há pipeline servidor-side.

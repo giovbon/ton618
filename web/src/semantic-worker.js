@@ -40,15 +40,25 @@
 import { pipeline, env } from "@huggingface/transformers";
 
 // Configuração do Transformers.js
-// Modelo baixado pelo navegador via CDN do HuggingFace e cacheado no IndexedDB.
-// Após a primeira carga (~120MB), as visitas seguintes são instantâneas.
-env.allowLocalModels = false;
-env.allowRemoteModels = true; // navegador baixa o modelo do HuggingFace CDN
+// O modelo está disponível localmente em /static/models/ (servido pelo servidor Go).
+// O worker carrega de lá, sem depender de CDN externo. Se o cache local falhar,
+// tenta como fallback o HuggingFace CDN + IndexedDB.
+env.allowLocalModels = true;
+env.localModelPath = "/static/models/";
+env.allowRemoteModels = true; // fallback: CDN do HuggingFace se local falhar
 env.useBrowserCache = true; // cacheia no IndexedDB após primeira carga
 env.backends.onnx.wasm.wasmPaths = "/static/models/ort/";
 
 /** @type {string} Nome do modelo HuggingFace para embeddings multilingues */
 const MODEL_NAME = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+
+/**
+ * Device de execução: lido da query string (?device=wasm ou ?device=auto).
+ * Padrão: "wasm" (CPU) — mais compatível e econômico em RAM.
+ * "auto" tenta WebGPU (GPU) primeiro, cai para WASM se não disponível.
+ * @type {string}
+ */
+const DEVICE = new URLSearchParams(self.location.search).get("device") || "wasm";
 
 /** @type {Promise<any>|null} Promise da pipeline — lazy init, cacheado após primeira carga */
 let pipelinePromise = null;
@@ -94,7 +104,7 @@ async function getModel() {
   if (!pipelinePromise) {
     pipelinePromise = pipeline("feature-extraction", MODEL_NAME, {
       dtype: "q8",
-      device: "auto",
+      device: DEVICE,
       progress_callback: (progress) => {
         var p = /** @type {any} */ (progress);
         if (p.status === "downloading" || p.status === "loading") {
@@ -151,6 +161,13 @@ self.onmessage = async (event) => {
   const { type, id, text } = event.data;
 
   switch (type) {
+    case "config":
+      // Atualiza configuração em tempo real (ex: device trocado nas settings)
+      // A pipeline já criada mantém o device original; o novo valor vale
+      // após recriação (recarregar a página ou dispose + nova abertura)
+      console.log("[SemanticWorker] Config received:", event.data);
+      break;
+
     case "embed":
       embedQueue.push({ id, text });
       processEmbedQueue();

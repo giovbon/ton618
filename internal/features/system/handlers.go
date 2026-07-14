@@ -647,3 +647,42 @@ func (ctx *HandlerContext) HandlePostNtfySettings(w http.ResponseWriter, r *http
 
 	NtfySettings(url, topic, user, pass, true).Render(r.Context(), w)
 }
+
+// HandleGetSemanticDevice retorna o device configurado para embeddings ("wasm" ou "auto").
+// GET /api/settings/semantic-device
+func (ctx *HandlerContext) HandleGetSemanticDevice(w http.ResponseWriter, r *http.Request) {
+	device := "wasm" // padrão: CPU
+	if val, err := ctx.Store.GetSetting("semantic_device"); err == nil && val != "" {
+		device = val
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"device":"` + device + `"}`))
+}
+
+// HandlePostSemanticDevice salva o device configurado para embeddings.
+// POST /api/settings/semantic-device
+func (ctx *HandlerContext) HandlePostSemanticDevice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Device string `json:"device"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "json invalido", http.StatusBadRequest)
+		return
+	}
+	if body.Device != "wasm" && body.Device != "auto" {
+		http.Error(w, "device deve ser 'wasm' ou 'auto'", http.StatusBadRequest)
+		return
+	}
+	if err := ctx.Store.SetSetting("semantic_device", body.Device); err != nil {
+		http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"device":"` + body.Device + `"}`))
+}
+
+// ── Helpers ──
