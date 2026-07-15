@@ -245,7 +245,7 @@ templ databaseContent() {
                         c.formatter = function(cell) {
                             var rowData = cell.getRow().getData();
                             var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                            if (typeStr === "desenho" || typeStr === "planilha" || typeStr === "mapa" || typeStr === "mermaid" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo") {
+                            if (typeStr === "desenho" || typeStr === "planilha" || typeStr === "mapa" || typeStr === "mermaid" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub") {
                                 return "N/A";
                             }
                             return cell.getValue() ? "true" : "false";
@@ -268,6 +268,7 @@ templ databaseContent() {
                             var isPdf = fileStr.startsWith("pdfs/");
                             var isZip = fileStr.startsWith("attachments/");
                             var isArchive = fileStr.startsWith("archives/") || (typeStr === "arquivo");
+                            var isEpub = fileStr.startsWith("epubs/") || (typeStr === "epub") || fileStr.endsWith(".epub");
                             
                             var url = "";
                             var icon = "📄";
@@ -280,6 +281,9 @@ templ databaseContent() {
                             } else if (isArchive) {
                                 url = "/file/download?name=" + encodeURIComponent(file);
                                 icon = "💾";
+                            } else if (isEpub) {
+                                url = "/epub/reader?file=" + encodeURIComponent(file);
+                                icon = "📒";
                             } else if (isSpreadsheet) {
                                 url = "/spreadsheet?file=" + encodeURIComponent(file);
                                 icon = "📊";

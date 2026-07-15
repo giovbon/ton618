@@ -53,6 +53,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/notes/download-typst-pdf", notesCtx.HandleTypstPDF)
 
 	mux.Get("/file", notesCtx.HandleFile)
+	mux.Get("/epub/reader", notesCtx.HandleEpubReader)
 	mux.Get("/file/download", notesCtx.HandleFileDownload)
 	mux.Post("/file/save", notesCtx.HandleFileSave)
 	mux.Post("/api/note/save", notesCtx.HandleNoteSaveJSON)

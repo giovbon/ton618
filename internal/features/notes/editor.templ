@@ -984,6 +984,8 @@ templ editorContent(data domain.EditorData) {
                 href =
                     "/file/download?name=" +
                     encodeURIComponent("attachments/" + name);
+            } else if (ext === "epub") {
+                href = "/epub/reader?file=" + encodeURIComponent(fullPath || "epubs/" + name + ".epub");
             } else if (isSpreadsheet) {
                 href = "/spreadsheet?file=notes/" + encodeURIComponent(name) + ".md";
             } else {
@@ -1213,7 +1215,7 @@ templ editorContent(data domain.EditorData) {
                         // Ignora cliques com Ctrl/Meta (navegador ja abre em nova aba)
                         if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
                             // So navega se for link interno do editor
-                            if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/spreadsheet?file=") !== -1 || target.href.indexOf("/file/") !== -1) {
+                            if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/spreadsheet?file=") !== -1 || target.href.indexOf("/epub/reader") !== -1 || target.href.indexOf("/file/") !== -1) {
                                 event.preventDefault();
                                 window.location.href = target.href;
                                 return true;
@@ -1390,6 +1392,15 @@ templ editorContent(data domain.EditorData) {
                                     target +
                                     "</a>"
                                 );
+                            } else if (ext === "epub") {
+                                var path = target.startsWith("epubs/") ? target : "epubs/" + target;
+                                return (
+                                    '<a href="/epub/reader?file=' +
+                                    encodeURIComponent(path) +
+                                    '" class="wikish-link">' +
+                                    target +
+                                    "</a>"
+                                );
                             } else {
                                 // Arquivo não-markdown (PDF, ZIP, etc.) → link de download
                                 var dir =
@@ -1413,8 +1424,9 @@ templ editorContent(data domain.EditorData) {
                         try { md = editor.storage.markdown.getMarkdown(); } catch(e) { md = editor.getHTML(); }
                         var fm = document.getElementById("frontmatter-area").value.trim();
                         var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
-                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g, "[[$1]]");
-                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g, "[[$1]]");
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/editor\?file=notes\/(?:[^)]|\([^)]*\))*\.md\)/g, "[[$1]]");
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/epub\/reader\?file=(?:[^)]|\([^)]*\))*\.epub\)/g, "[[$1]]");
+                        finalContent = finalContent.replace(/\[([^\]]+)\]\(\/file\/download\?name=(?:[^)]|\([^)]*\))*\)/g, "[[$1]]");
                         lastSavedHash = await generateHash(finalContent);
                     }, 500);
                 }, 100);
@@ -2240,12 +2252,17 @@ templ editorContent(data domain.EditorData) {
             var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
             // Convert editor links to [[wikilink]] for storage
             finalContent = finalContent.replace(
-                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                /\[([^\]]+)\]\(\/editor\?file=notes\/(?:[^)]|\([^)]*\))*\.md\)/g,
+                "[[$1]]",
+            );
+            // Também converte links de epub reader de volta para [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/epub\/reader\?file=(?:[^)]|\([^)]*\))*\.epub\)/g,
                 "[[$1]]",
             );
             // Também converte links de download de volta pra [[wikilink]]
             finalContent = finalContent.replace(
-                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
+                /\[([^\]]+)\]\(\/file\/download\?name=(?:[^)]|\([^)]*\))*\)/g,
                 "[[$1]]",
             );
 
@@ -2313,12 +2330,17 @@ templ editorContent(data domain.EditorData) {
             var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
             // Convert editor links to [[wikilink]] for storage
             finalContent = finalContent.replace(
-                /\[([^\]]+)\]\(\/editor\?file=notes\/[^)]+\.md\)/g,
+                /\[([^\]]+)\]\(\/editor\?file=notes\/(?:[^)]|\([^)]*\))*\.md\)/g,
+                "[[$1]]",
+            );
+            // Também converte links de epub reader de volta para [[wikilink]]
+            finalContent = finalContent.replace(
+                /\[([^\]]+)\]\(\/epub\/reader\?file=(?:[^)]|\([^)]*\))*\.epub\)/g,
                 "[[$1]]",
             );
             // Também converte links de download de volta pra [[wikilink]]
             finalContent = finalContent.replace(
-                /\[([^\]]+)\]\(\/file\/download\?name=attachments\/[^)]+\)/g,
+                /\[([^\]]+)\]\(\/file\/download\?name=(?:[^)]|\([^)]*\))*\)/g,
                 "[[$1]]",
             );
 

@@ -65,6 +65,9 @@ func getFilename(path string) string {
 
 func getNoteLink(n domain.NoteItem) string {
     path := n.Arquivo
+    if strings.HasSuffix(strings.ToLower(path), ".epub") {
+        return "/epub/reader?file=" + SafeFileQueryEscape(path)
+    }
     if strings.HasPrefix(path, "pdfs/") {
         return "/file?name=" + SafeFileQueryEscape(path)
     }
@@ -77,6 +80,9 @@ func getNoteLink(n domain.NoteItem) string {
 }
 
 func getTarget(path string) string {
+    if strings.HasSuffix(strings.ToLower(path), ".epub") {
+        return ""
+    }
     if strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
         return "_blank"
     }
@@ -84,7 +90,9 @@ func getTarget(path string) string {
 }
 
 func getNoteIcon(path string, noteType string, tags []string) string {
-    if noteType == "pdf" || strings.HasPrefix(path, "pdfs/") {
+    if noteType == "epub" || strings.HasSuffix(strings.ToLower(path), ".epub") {
+        return "📒"
+    } else if noteType == "pdf" || strings.HasPrefix(path, "pdfs/") {
         return "📕"
     } else if noteType == "arquivo" || strings.HasPrefix(path, "archives/") {
         return "💾"
@@ -130,6 +138,9 @@ func getNoteIcon(path string, noteType string, tags []string) string {
 }
 
 func getDisplayType(n domain.NoteItem) string {
+    if strings.HasSuffix(strings.ToLower(n.Arquivo), ".epub") {
+        return "epub"
+    }
     if n.Type != "" {
         return n.Type
     }

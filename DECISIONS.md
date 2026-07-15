@@ -55,6 +55,8 @@ Serve como referência para manter consistência em contribuições futuras.
 | Transformers.js | Modelos ONNX no navegador (embeddings) | https://huggingface.co/docs/transformers.js |
 | marked | Parse markdown para HTML | https://marked.js.org/ |
 | lowlight | Syntax highlight de código | https://github.com/wooorm/lowlight |
+| epub.js | Leitor de arquivos EPUB no navegador | https://github.com/futurepress/epub.js |
+| jszip | Manipulação de arquivos zip (requerido pelo epub.js) | https://github.com/Stuk/jszip |
 | HTMX | Interatividade sem JS escrito | https://htmx.org/ |
 | Alpine.js | Interatividade declarativa | https://alpinejs.dev/ |
 | Tailwind CSS | Framework CSS utility-first | https://tailwindcss.com/ |

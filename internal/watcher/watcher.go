@@ -58,7 +58,7 @@ func isRecentlyProcessed(filename string) bool {
 }
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
-var MonitoredSubDirs = []string{"pdfs", "attachments", "archives"}
+var MonitoredSubDirs = []string{"pdfs", "attachments", "archives", "epubs"}
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{
@@ -71,6 +71,7 @@ var supportedExts = map[string]string{
 	".bmp":  "imagem",
 	".svg":  "imagem",
 	".zip":  "attachment",
+	".epub": "epub",
 }
 
 // ── FileEvent ──
@@ -259,6 +260,8 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		docs, links, fileTags = processor.ProcessPDF(ev.Path, filename, ev.ModTime)
 	case "imagem":
 		docs = processImageFile(filename, ev.ModTime, creationTime)
+	case "epub":
+		// Não cria documentos (evita indexação de busca e geração de embeddings)
 	}
 
 	for _, doc := range docs {

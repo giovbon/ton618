@@ -139,7 +139,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/"}
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -165,6 +165,9 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 
 	if ext == ".pdf" {
 		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
+	} else if ext == ".epub" {
+		w.Header().Set("Content-Type", "application/epub+zip")
 		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
 	} else {
 		ct := "application/octet-stream"
@@ -197,7 +200,7 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/"}
+	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -226,6 +229,9 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	// PDFs: inline; outros: attachment (download)
 	if ext == ".pdf" {
 		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
+	} else if ext == ".epub" {
+		w.Header().Set("Content-Type", "application/epub+zip")
 		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
 	} else {
 		// Detecta content-type pelo nome
@@ -343,6 +349,11 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "file not found", http.StatusNotFound)
 			return
 		}
+	} else if ext == ".epub" {
+		basename := filepath.Base(raw)
+		filename = "epubs/" + basename
+		fullPath := filepath.Join(ctx.Cfg.DocsDir, "epubs", basename)
+		os.Remove(fullPath)
 	} else if ext == ".zip" {
 		// ZIP attachments: stored in attachments/
 		basename := filepath.Base(raw)
@@ -403,6 +414,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	ext := strings.ToLower(filepath.Ext(rawOld))
 	isPdf := ext == ".pdf"
 	isZip := ext == ".zip"
+	isEpub := ext == ".epub"
 
 	var oldName, newName string
 
@@ -433,6 +445,20 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}
 		if !found {
 			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+	} else if isEpub {
+		basename := filepath.Base(rawOld)
+		newBasename := filepath.Base(rawNew)
+		if !strings.HasSuffix(strings.ToLower(newBasename), ".epub") {
+			newBasename += ".epub"
+		}
+		oldName = "epubs/" + basename
+		newName = "epubs/" + newBasename
+		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
+		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+		if err := os.Rename(oldPath, newPath); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	} else if isZip {
@@ -468,8 +494,8 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		newName = NoteFilename(rawNew)
 	}
 
-	// Update DB: delete old indexes for PDF/ZIP; notes já foram tratados pelo Notes.Rename
-	if isPdf || isZip {
+	// Update DB: delete old indexes for PDF/ZIP/EPUB; notes já foram tratados pelo Notes.Rename
+	if isPdf || isZip || isEpub {
 		if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
 			slog.Error("delete old file records on rename", "file", oldName, "error", err)
 		}
@@ -598,7 +624,7 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	r.ParseMultipartForm(10 << 20) // 10MB
+	r.ParseMultipartForm(126 << 20) // 126MB
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -609,10 +635,11 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	isPdf := ext == ".pdf"
+	isEpub := ext == ".epub"
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
 
-	if !isPdf && !isImage {
-		http.Error(w, "apenas arquivos PDF ou imagens (.png, .jpg) sao permitidos", http.StatusForbidden)
+	if !isPdf && !isEpub && !isImage {
+		http.Error(w, "apenas arquivos PDF, EPUB ou imagens (.png, .jpg, .jpeg) são permitidos", http.StatusForbidden)
 		return
 	}
 
@@ -622,6 +649,12 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 		// Garante extensao .pdf
 		if !strings.HasSuffix(filename, ".pdf") {
 			filename += ".pdf"
+		}
+	} else if isEpub {
+		filename = "epubs/" + filepath.Base(header.Filename)
+		// Garante extensao .epub
+		if !strings.HasSuffix(filename, ".epub") {
+			filename += ".epub"
 		}
 	} else {
 		// Imagem: salva em notes/ com prefixo img_ para evitar conflito
@@ -650,7 +683,6 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
 	})
-
 
 	// Redireciona para a pagina inicial (modo compacto)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -949,4 +981,15 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 		"ok":           true,
 		"new_filename": newFilename,
 	})
+}
+
+// HandleEpubReader renders the EPUB reader view.
+func (ctx *HandlerContext) HandleEpubReader(w http.ResponseWriter, r *http.Request) {
+	file := r.URL.Query().Get("file")
+	if file == "" {
+		http.Error(w, "file parameter required", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	EpubReader(file).Render(r.Context(), w)
 }

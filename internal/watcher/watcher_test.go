@@ -31,7 +31,7 @@ func newTestConfig(t *testing.T) *config.AppConfig {
 }
 
 func TestSupportedExts_CobreFormatos(t *testing.T) {
-	exts := []string{".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".zip"}
+	exts := []string{".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".zip", ".epub"}
 	for _, ext := range exts {
 		if _, ok := supportedExts[ext]; !ok {
 			t.Errorf("extensao %q nao esta em supportedExts", ext)
@@ -40,7 +40,7 @@ func TestSupportedExts_CobreFormatos(t *testing.T) {
 }
 
 func TestMonitoredSubDirs(t *testing.T) {
-	expected := []string{"pdfs", "attachments", "archives"}
+	expected := []string{"pdfs", "attachments", "archives", "epubs"}
 	for _, sub := range expected {
 		found := false
 		for _, m := range MonitoredSubDirs {
@@ -414,4 +414,40 @@ func TestWatcher_StartCancellation(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// If we got here, test passes
+}
+
+func TestProcessFile_Epub(t *testing.T) {
+	store := newTestStore(t)
+	cfg := newTestConfig(t)
+
+	filename := "epubs/livro.epub"
+	fullPath := filepath.Join(cfg.DocsDir, filename)
+	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	os.WriteFile(fullPath, []byte("fake epub content"), 0644)
+
+	ev := FileEvent{
+		Path:     fullPath,
+		Filename: filename,
+		ModTime:  time.Now(),
+		Type:     "modify",
+	}
+
+	if err := ProcessFile(store, ev); err != nil {
+		t.Fatalf("ProcessFile(epub): %v", err)
+	}
+
+	// 1. Deve registrar no file_mods (para aparecer no sidebar/tabulator)
+	mods, err := store.GetAllFileMods()
+	if err != nil {
+		t.Fatalf("GetAllFileMods: %v", err)
+	}
+	if _, ok := mods[filename]; !ok {
+		t.Error("epub deveria estar registrado em file_mods")
+	}
+
+	// 2. Não deve criar nenhum documento na tabela de documentos (para evitar indexação)
+	count := store.GetDocumentCount()
+	if count > 0 {
+		t.Errorf("ProcessFile epub não deveria criar documentos no DB, got %d", count)
+	}
 }

@@ -23,6 +23,7 @@ const (
 	NoteTypePDF         NoteType = "pdf"
 	NoteTypeAttachment  NoteType = "anexo"
 	NoteTypeArchive     NoteType = "arquivo"
+	NoteTypeEPUB        NoteType = "epub"
 )
 
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
@@ -94,6 +95,9 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 	}
 	if strings.HasPrefix(arquivo, "archives/") {
 		return NoteTypeArchive
+	}
+	if strings.HasPrefix(arquivo, "epubs/") || strings.HasSuffix(strings.ToLower(arquivo), ".epub") {
+		return NoteTypeEPUB
 	}
 
 	// 3. Conteúdo frontmatter (type: X)
@@ -173,6 +177,8 @@ func NoteIcon(arquivo string, tags []string) string {
 	switch DetectNoteType(tags, "", arquivo) {
 	case NoteTypePDF:
 		return "📕"
+	case NoteTypeEPUB:
+		return "📒"
 	case NoteTypeTypst:
 		return "📘"
 	case NoteTypeDrawing:

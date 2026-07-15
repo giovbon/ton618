@@ -93,6 +93,7 @@ func TestSupportedExts(t *testing.T) {
 		".bmp":  "imagem",
 		".svg":  "imagem",
 		".zip":  "attachment",
+		".epub": "epub",
 	}
 	for ext, expected := range exts {
 		got, ok := supportedExts[ext]

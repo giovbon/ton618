@@ -51,6 +51,9 @@ templ Navbar() {
             <input id="pdf-file-input" type="file" name="file" accept=".pdf" class="hidden" 
                 hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
                 hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
+            <input id="epub-file-input" type="file" name="file" accept=".epub" class="hidden" 
+                hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
+                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
             <input id="zip-file-input" type="file" name="files" multiple class="hidden" 
                 hx-post="/api/upload-attachment" hx-trigger="change" hx-encoding="multipart/form-data" 
                 hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
@@ -113,6 +116,10 @@ templ Navbar() {
                         <a href="#" id="pdf-upload-link" @click.prevent="open = false; document.getElementById('pdf-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
                             📕 <span>Upload PDF</span>
+                        </a>
+                        <a href="#" id="epub-upload-link" @click.prevent="open = false; document.getElementById('epub-file-input').click();"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
+                            📒 <span>Upload EPUB</span>
                         </a>
                         <a href="#" id="zip-upload-link" @click.prevent="open = false; document.getElementById('zip-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
@@ -197,19 +204,24 @@ templ Navbar() {
             <!-- Seção: Capturar -->
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Capturar</div>
-                <div class="grid grid-cols-2 gap-1.5">
+                <div class="grid grid-cols-3 gap-1.5">
                     <a href="#" id="mobile-pdf-link" @click.prevent="mobileMenuOpen = false; document.getElementById('pdf-file-input').click();"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
                         <span class="text-sm">📕</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ PDF</span>
                     </a>
+                    <a href="#" id="mobile-epub-link" @click.prevent="mobileMenuOpen = false; document.getElementById('epub-file-input').click();"
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        <span class="text-sm">📒</span>
+                        <span class="text-[11px] font-semibold text-zinc-300">+ EPUB</span>
+                    </a>
                     <a href="#" id="mobile-zip-link" @click.prevent="mobileMenuOpen = false; document.getElementById('zip-file-input').click();"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
                         <span class="text-sm">📦</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
                     </a>
                     <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture($el);"
-                        class="col-span-2 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
+                        class="col-span-3 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
                         <span class="text-sm">🌐</span>
                         <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>
                     </button>
