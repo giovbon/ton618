@@ -96,27 +96,27 @@ templ indexContent() {
     </div>
 
     <!-- Status do modelo semântico -->
-    <div id="semantic-panel" class="hidden mb-4 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40 backdrop-blur-md transition-all duration-300 hover:border-violet-500/20">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4">
+    <div id="semantic-panel" class="hidden mb-2.5 overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-950/20 backdrop-blur-sm transition-all duration-300">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5">
             <!-- Informações de Status -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2.5">
                 <!-- Indicador visual pulsante de status -->
-                <div class="relative flex h-2.5 w-2.5 flex-shrink-0">
+                <div class="relative flex h-2 w-2 flex-shrink-0">
                     <span id="model-indicator-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
-                    <span id="model-indicator" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-500"></span>
+                    <span id="model-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-zinc-500"></span>
                 </div>
                 <div class="min-w-0">
-                    <div id="model-status-text" class="text-xs font-bold text-zinc-100 tracking-wide">Inicializando IA...</div>
-                    <div id="index-status-text" class="text-[10px] text-zinc-450 font-semibold mt-0.5 truncate">Calculando status do índice...</div>
+                    <div id="model-status-text" class="text-[11px] font-semibold text-zinc-300 tracking-wide">Inicializando IA...</div>
+                    <div id="index-status-text" class="text-[10px] text-zinc-450 font-normal mt-0.5 truncate">Calculando status do índice...</div>
                 </div>
             </div>
 
             <!-- Ações & Progresso -->
-            <div class="flex items-center justify-end flex-wrap gap-2.5 min-w-0">
+            <div class="flex items-center justify-end flex-wrap gap-2 min-w-0">
                 <!-- Barra de progresso integrada -->
-                <div id="reindex-progress" class="hidden flex items-center gap-2.5 bg-zinc-900/60 border border-zinc-800/80 px-2.5 py-1.5 rounded-lg flex-shrink-0">
-                    <span id="reindex-progress-text" class="text-[10px] font-mono text-zinc-400 font-semibold whitespace-nowrap">0 / 0</span>
-                    <div class="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                <div id="reindex-progress" class="hidden flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/40 px-2 py-1 rounded-md flex-shrink-0">
+                    <span id="reindex-progress-text" class="text-[9px] font-mono text-zinc-400 font-medium whitespace-nowrap">0 / 0</span>
+                    <div class="w-12 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
                         <div id="reindex-progress-bar" class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300" style="width: 0%"></div>
                     </div>
                 </div>
@@ -291,13 +291,13 @@ templ indexContent() {
         statusText.textContent = text;
 
         if (state === "ready") {
-            indicator.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
+            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
             ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20";
         } else if (state === "error") {
-            indicator.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500";
+            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-red-500";
             ping.className = "absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-0";
         } else {
-            indicator.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500";
+            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-500";
             ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
         }
     }

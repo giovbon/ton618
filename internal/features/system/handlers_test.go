@@ -2,6 +2,8 @@ package system
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,5 +55,54 @@ func createMinimalPDF(t *testing.T, path, text string) {
 		"%%EOF", paddedText)
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("escrever PDF: %v", err)
+	}
+}
+
+func TestHandleStatus(t *testing.T) {
+	ctx := newTestContext(t)
+	req, _ := http.NewRequest("GET", "/status", nil)
+	rr := httptest.NewRecorder()
+
+	ctx.HandleStatus(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusOK)
+	}
+	if !strings.Contains(rr.Body.String(), `"status":"ok"`) {
+		t.Errorf("resposta nao contem ok: %s", rr.Body.String())
+	}
+}
+
+func TestHandleHealth(t *testing.T) {
+	ctx := newTestContext(t)
+	req, _ := http.NewRequest("GET", "/health", nil)
+	rr := httptest.NewRecorder()
+
+	ctx.HandleHealth(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusOK)
+	}
+	if !strings.Contains(rr.Body.String(), `"status":"up"`) {
+		t.Errorf("resposta nao contem up: %s", rr.Body.String())
+	}
+}
+
+func TestHandleGetTags(t *testing.T) {
+	ctx := newTestContext(t)
+	ctx.Store.SetFileTags("notes/a.md", []string{"tag1", "drawing"})
+
+	req, _ := http.NewRequest("GET", "/tags", nil)
+	rr := httptest.NewRecorder()
+	ctx.HandleGetTags(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusOK)
+	}
+	if !strings.Contains(rr.Body.String(), `"tag1"`) {
+		t.Errorf("resposta nao contem tag1: %s", rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), `"drawing"`) {
+		t.Errorf("resposta contem tipo interno que deveria ser filtrado: %s", rr.Body.String())
 	}
 }

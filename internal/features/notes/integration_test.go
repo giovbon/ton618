@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,4 +189,63 @@ func TestSaveReindexSearch_DeleteRemovesFromIndex(t *testing.T) {
 	}
 
 	t.Log("OK: nota removida do indice apos delecao")
+}
+
+func TestSaveReindexSearch_Rename(t *testing.T) {
+	store, svc, docsDir := newStoreAndSvc(t)
+	os.MkdirAll(filepath.Join(docsDir, "notes"), 0755)
+
+	// 1. Cria a nota antiga
+	oldContent := "---\ntitle: Nota Antiga\n---\n# Nota Antiga\nEsta é a nota que será renomeada."
+	saveNote(t, svc, "antiga.md", oldContent)
+	os.WriteFile(filepath.Join(docsDir, "notes", "antiga.md"), []byte(oldContent), 0644)
+
+	// 2. Cria notas que referenciam a nota antiga (usando wikilinks)
+	ref1 := "# Ref 1\nEu leio a [[antiga]] sempre."
+	saveNote(t, svc, "ref1.md", ref1)
+	os.WriteFile(filepath.Join(docsDir, "notes", "ref1.md"), []byte(ref1), 0644)
+
+	ref2 := "# Ref 2\nVeja tambem [[antiga|A nota velha]]."
+	saveNote(t, svc, "ref2.md", ref2)
+	os.WriteFile(filepath.Join(docsDir, "notes", "ref2.md"), []byte(ref2), 0644)
+
+	// Verifica se estão indexadas
+	r := searchNote(t, store, "velha")
+	if r.Total == 0 {
+		t.Fatal("esperava achar a ref2")
+	}
+
+	// 3. Renomeia a nota 'antiga.md' para 'nova.md'
+	if err := svc.Rename("antiga.md", "nova.md"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	// 4. Verifica arquivo fisico
+	if _, err := os.Stat(filepath.Join(docsDir, "notes/nova.md")); os.IsNotExist(err) {
+		t.Error("Arquivo físico notes/nova.md nao foi criado")
+	}
+	if _, err := os.Stat(filepath.Join(docsDir, "notes/antiga.md")); err == nil {
+		t.Error("Arquivo físico notes/antiga.md deveria ter sido removido")
+	}
+
+	// 5. Verifica indice (antiga nao existe, nova existe)
+	rAntiga, _ := store.GetNote("notes/antiga.md")
+	if rAntiga != "" {
+		t.Error("Nota antiga.md ainda existe no banco")
+	}
+
+	rNova, _ := store.GetNote("notes/nova.md")
+	if rNova == "" {
+		t.Error("Nota nova.md nao existe no banco")
+	}
+
+	// 6. Verifica backlinks regravados no banco (ref1 e ref2 devem ter sido atualizadas)
+	rRef1, _ := store.GetNote("notes/ref1.md")
+	if !strings.Contains(rRef1, "[[nova]]") {
+		t.Errorf("ref1 nao foi atualizada corretamente. Conteudo:\n%s", rRef1)
+	}
+	rRef2, _ := store.GetNote("notes/ref2.md")
+	if !strings.Contains(rRef2, "[[nova|A nota velha]]") {
+		t.Errorf("ref2 nao foi atualizada corretamente. Conteudo:\n%s", rRef2)
+	}
 }
