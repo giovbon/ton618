@@ -28,11 +28,11 @@ templ MarkersList(markers []db.TodoMarker) {
                             
                             <span class="marker-badge px-3 py-1 text-[11px] font-bold rounded" style={ "background:" + m.Color + "20; color:" + m.Color }>{ m.Marker }</span>
                             
+                            <span class="flex-1 text-xs text-zinc-500">{ m.Marker }:</span>
+                            
                             <form class="flex items-center gap-2 m-0">
                                 <input type="color" name="color" value={ m.Color } hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" class="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0" />
                             </form>
-                            
-                            <span class="flex-1 text-xs text-zinc-500">{ m.Marker }:</span>
                             
                             <button hx-delete={ string(templ.URL("/api/todo-markers/remove?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2 cursor-pointer">✕</button>
                         </div>

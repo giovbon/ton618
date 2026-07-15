@@ -148,8 +148,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                         feedback.textContent = "⚠️ Modelo semântico não disponível. Recarregue a página e tente novamente.";
                         feedback.className = "text-xs text-center mt-3 text-amber-400";
                         btn.disabled = false;
-                        btn.innerHTML =
-                            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                        btn.innerHTML = 'Resetar Índice e Reindexar Tudo';
                         return;
                     }
 
@@ -164,8 +163,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                                 feedback.textContent = "⚠️ Modelo não carregou. Indexe manualmente na página de busca.";
                                 feedback.className = "text-xs text-center mt-3 text-amber-400";
                                 btn.disabled = false;
-                                btn.innerHTML =
-                                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                                btn.innerHTML = 'Resetar Índice e Reindexar Tudo';
                             }
                         }, 10000);
                         idx.warmup();
@@ -177,8 +175,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                     feedback.textContent = "❌ " + err.message;
                     feedback.className = "text-xs text-center mt-3 text-red-400";
                     btn.disabled = false;
-                    btn.innerHTML =
-                        '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                    btn.innerHTML = 'Resetar Índice e Reindexar Tudo';
                 });
         }
 
@@ -193,14 +190,12 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 feedback.textContent = "✅ Reindexação completa! " + total + " notas processadas.";
                 feedback.className = "text-xs text-center mt-3 text-emerald-400";
                 btn.disabled = false;
-                btn.innerHTML =
-                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                btn.innerHTML = 'Resetar Índice e Reindexar Tudo';
             }).catch(function(err) {
                 feedback.textContent = "❌ Erro na reindexação: " + (err.message || "desconhecido");
                 feedback.className = "text-xs text-center mt-3 text-red-400";
                 btn.disabled = false;
-                btn.innerHTML =
-                    '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/></svg> 🔄 Resetar Índice e Reindexar Tudo';
+                btn.innerHTML = 'Resetar Índice e Reindexar Tudo';
             });
         }
     </script>

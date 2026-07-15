@@ -5,7 +5,7 @@ templ SettingsModal() {
     <div id="settings-modal" x-data x-show="$store.settings.open" x-cloak
         class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
         <div
-            class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl md:max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+            class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl md:max-w-3xl mx-4 max-h-[85vh] md:h-[620px] flex flex-col">
             <!-- Header -->
             <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
                 <h2 class="text-base font-bold text-zinc-200">
@@ -17,45 +17,47 @@ templ SettingsModal() {
                 </button>
             </div>
 
-            <!-- Tabs -->
-            <div class="settings-tabs-container flex gap-0 px-6 pt-4 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scroll-smooth whitespace-nowrap flex-nowrap"
-                style="-webkit-overflow-scrolling:touch;">
-                <button @click="$store.settings.openTab('arquivamento')"
-                    :class="$store.settings.activeTab === 'arquivamento' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    🗂️ Arquivamento
-                </button>
-                <button @click="$store.settings.openTab('restaurar')"
-                    :class="$store.settings.activeTab === 'restaurar' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    📦 Restaurar
-                </button>
-                <button @click="$store.settings.openTab('backup')"
-                    :class="$store.settings.activeTab === 'backup' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    💾 Backup
-                </button>
-                <button @click="$store.settings.openTab('marcadores')"
-                    :class="$store.settings.activeTab === 'marcadores' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    🔖 Marcadores
-                </button>
-                <button @click="$store.settings.openTab('agenda')"
-                    :class="$store.settings.activeTab === 'agenda' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    📅 Agenda
-                </button>
-                <button @click="$store.settings.openTab('ntfy')"
-                    :class="$store.settings.activeTab === 'ntfy' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    🔔 Ntfy
-                </button>
-                <button @click="$store.settings.openTab('semantica')"
-                    :class="$store.settings.activeTab === 'semantica' ? 'text-white border-sky-500' : 'text-zinc-400 border-transparent'"
-                    class="px-4 py-2 text-sm font-semibold border-b-2 transition-colors">
-                    🧠 Semântica
-                </button>
-            </div>
+            <!-- Wrapper for side-by-side tabs and content on desktop -->
+            <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+                <!-- Tabs -->
+                <div class="settings-tabs-container flex md:flex-col gap-1 px-6 md:px-3 pt-4 md:py-6 border-b md:border-b-0 md:border-r border-zinc-800 overflow-x-auto md:overflow-x-visible md:overflow-y-auto scroll-smooth whitespace-nowrap flex-nowrap md:w-44 flex-shrink-0"
+                    style="-webkit-overflow-scrolling:touch;">
+                    <button @click="$store.settings.openTab('arquivamento')"
+                        :class="$store.settings.activeTab === 'arquivamento' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        🗂️ Arquivamento
+                    </button>
+                    <button @click="$store.settings.openTab('restaurar')"
+                        :class="$store.settings.activeTab === 'restaurar' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        📦 Restaurar
+                    </button>
+                    <button @click="$store.settings.openTab('backup')"
+                        :class="$store.settings.activeTab === 'backup' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        💾 Backup
+                    </button>
+                    <button @click="$store.settings.openTab('marcadores')"
+                        :class="$store.settings.activeTab === 'marcadores' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        🔖 Marcadores
+                    </button>
+                    <button @click="$store.settings.openTab('agenda')"
+                        :class="$store.settings.activeTab === 'agenda' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        📅 Agenda
+                    </button>
+                    <button @click="$store.settings.openTab('ntfy')"
+                        :class="$store.settings.activeTab === 'ntfy' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        🔔 Ntfy
+                    </button>
+                    <button @click="$store.settings.openTab('semantica')"
+                        :class="$store.settings.activeTab === 'semantica' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-b-2 md:border-b-0 md:border-l-2 md:text-left md:w-full transition-all flex items-center gap-2 rounded-t-lg md:rounded-t-none md:rounded-l-none">
+                        🧠 Semântica
+                    </button>
+                </div>
 
             <!-- Tab Content -->
             <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
@@ -349,14 +351,12 @@ templ SettingsModal() {
                         </p>
                         <button id="btn-reset-semantica" onclick="resetAndReindexSemantic()"
                             class="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18v3"/>
-                            </svg>
-                            🔄 Resetar Índice e Reindexar Tudo
+                            Resetar Índice e Reindexar Tudo
                         </button>
                         <p id="reset-feedback" class="text-xs text-center mt-3 text-zinc-500 hidden"></p>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     </div>

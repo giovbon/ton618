@@ -103,5 +103,5 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/appointments/create", appointmentsCtx.HandleCreateAppointment)
 	mux.Post("/api/appointments/update", appointmentsCtx.HandleUpdateAppointment)
 	mux.Delete("/api/appointments/delete", appointmentsCtx.HandleDeleteAppointment)
-	mux.Post("/api/appointments/purge", appointmentsCtx.HandlePurgeOldAppointments)
+	mux.Delete("/api/appointments/purge-old", appointmentsCtx.HandlePurgeOldAppointments)
 }

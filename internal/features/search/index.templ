@@ -96,33 +96,36 @@ templ indexContent() {
     </div>
 
     <!-- Status do modelo semântico -->
-    <div id="semantic-panel" class="hidden mb-2.5 overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-950/20 backdrop-blur-sm transition-all duration-300">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5">
-            <!-- Informações de Status -->
-            <div class="flex items-center gap-2.5">
-                <!-- Indicador visual pulsante de status -->
-                <div class="relative flex h-2 w-2 flex-shrink-0">
-                    <span id="model-indicator-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
-                    <span id="model-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-zinc-500"></span>
-                </div>
-                <div class="min-w-0">
-                    <div id="model-status-text" class="text-[11px] font-semibold text-zinc-300 tracking-wide">Inicializando IA...</div>
-                    <div id="index-status-text" class="text-[10px] text-zinc-450 font-normal mt-0.5 truncate">Calculando status do índice...</div>
+    <div id="semantic-panel" class="hidden mb-2.5 transition-all duration-300">
+        <div class="flex items-center gap-2 py-1 text-[11px] text-zinc-400">
+            <!-- Indicador visual pulsante de status -->
+            <div class="relative flex h-2 w-2 flex-shrink-0">
+                <span id="model-indicator-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+                <span id="model-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-zinc-500"></span>
+            </div>
+            <div class="flex items-center gap-1.5 min-w-0">
+                <span id="model-status-text" class="font-semibold text-zinc-300">Inicializando IA...</span>
+                <span class="text-zinc-600">•</span>
+                <span id="index-status-text" class="text-zinc-500">Calculando status do índice...</span>
+            </div>
+            <!-- Barra de download do modelo IA -->
+            <div id="model-download-progress" class="hidden flex items-center gap-1.5 ml-2 flex-shrink-0">
+                <span id="model-download-text" class="text-[9px] font-mono text-zinc-500 whitespace-nowrap">0%</span>
+                <div class="w-16 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div id="model-download-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%"></div>
                 </div>
             </div>
-
-            <!-- Ações & Progresso -->
-            <div class="flex items-center justify-end flex-wrap gap-2 min-w-0">
-                <!-- Barra de progresso integrada -->
-                <div id="reindex-progress" class="hidden flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/40 px-2 py-1 rounded-md flex-shrink-0">
-                    <span id="reindex-progress-text" class="text-[9px] font-mono text-zinc-400 font-medium whitespace-nowrap">0 / 0</span>
-                    <div class="w-12 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div id="reindex-progress-bar" class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300" style="width: 0%"></div>
-                    </div>
+            <!-- Barra de progresso integrada -->
+            <div id="reindex-progress" class="hidden flex items-center gap-1.5 ml-2 flex-shrink-0">
+                <span id="reindex-progress-text" class="text-[9px] font-mono text-zinc-500 whitespace-nowrap">0 / 0</span>
+                <div class="w-10 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div id="reindex-progress-bar" class="h-full bg-violet-500 transition-all duration-300" style="width: 0%"></div>
                 </div>
-
-                <!-- Feedback do status (atualizado via refreshStatusOnly) -->
             </div>
+            <!-- Botão de Recuperação de Erro (Limpar Cache) -->
+            <button id="model-reset-cache-btn" onclick="clearTransformersCache()" class="hidden ml-2 px-2 py-0.5 text-[9px] font-bold tracking-wide uppercase rounded bg-red-950/40 text-red-400 border border-red-900/50 hover:bg-red-900/20 transition-all">
+                Limpar Cache e Recarregar
+            </button>
         </div>
     </div>
 
@@ -247,30 +250,47 @@ templ indexContent() {
         var idx = window.semanticIndex;
         if (!idx) return;
 
-        setModelStatus("loading", "Inicializando modelo de IA...");
+        updateStatus("loading", "Inicializando IA...", "Calculando status do índice...");
 
         // Timeout de 60s: se o modelo não carregar, mostra dica de troubleshooting
         var loadTimeout = setTimeout(function() {
             if (!idx.isReady) {
-                setModelStatus("error", "O modelo demorou muito. Recarregue a página ou veja o console (F12)");
+                updateStatus("error", "Erro ao carregar modelo", "O modelo demorou muito.");
+                var progressEl = document.getElementById("model-download-progress");
+                if (progressEl) progressEl.classList.add("hidden");
             }
         }, 60000);
 
         // Registra callbacks de progresso e prontidão
         idx.onProgress(function(msg) {
             var pct = msg.total > 0 ? Math.round((msg.loaded / msg.total) * 100) : 0;
-            setModelStatus("loading", "Baixando modelo: " + pct + "%");
+            updateStatus("loading", "Baixando modelo: " + pct + "%");
+            
+            var progressEl = document.getElementById("model-download-progress");
+            if (progressEl) {
+                progressEl.classList.remove("hidden");
+                var textEl = document.getElementById("model-download-text");
+                var barEl = document.getElementById("model-download-bar");
+                if (textEl) textEl.textContent = pct + "%";
+                if (barEl) barEl.style.width = pct + "%";
+            }
         });
 
         idx.onError(function(msg) {
             clearTimeout(loadTimeout);
-            setModelStatus("error", "Erro: " + msg);
+            updateStatus("error", "Erro: " + msg);
+            var progressEl = document.getElementById("model-download-progress");
+            if (progressEl) progressEl.classList.add("hidden");
         });
 
         idx.onReady(function() {
             clearTimeout(loadTimeout);
-            setModelStatus("ready", "Modelo pronto ✓");
+            updateStatus(null, "Modelo pronto");
+            
+            var progressEl = document.getElementById("model-download-progress");
+            if (progressEl) progressEl.classList.add("hidden");
 
+            loadIndexStatus();
 
             // Se já tinha texto digitado, dispara o input para executar a busca
             var pendingQuery = document.getElementById("search-semantic").value.trim();
@@ -284,38 +304,79 @@ templ indexContent() {
         idx.warmup();
     }
 
-    function setModelStatus(state, text) {
-        var indicator = document.getElementById("model-indicator");
-        var ping = document.getElementById("model-indicator-ping");
-        var statusText = document.getElementById("model-status-text");
-        statusText.textContent = text;
+    function updateStatus(state, modelText, indexText) {
+        if (state) {
+            var indicator = document.getElementById("model-indicator");
+            var ping = document.getElementById("model-indicator-ping");
+            var resetBtn = document.getElementById("model-reset-cache-btn");
+            if (indicator && ping) {
+                if (state === "ready") {
+                    indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+                    ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20";
+                    if (resetBtn) resetBtn.classList.add("hidden");
+                } else if (state === "error") {
+                    indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-red-500";
+                    ping.className = "absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-0";
+                    if (resetBtn) resetBtn.classList.remove("hidden");
+                } else { // "loading" or "indexing"
+                    indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-500";
+                    ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+                    if (resetBtn) resetBtn.classList.add("hidden");
+                }
+            }
+        }
+        if (modelText !== undefined && modelText !== null) {
+            var statusText = document.getElementById("model-status-text");
+            if (statusText) statusText.textContent = modelText;
+        }
+        if (indexText !== undefined && indexText !== null) {
+            var indexTextEl = document.getElementById("index-status-text");
+            if (indexTextEl) indexTextEl.textContent = indexText;
+        }
+    }
 
-        if (state === "ready") {
-            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
-            ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20";
-        } else if (state === "error") {
-            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-red-500";
-            ping.className = "absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-0";
+    function clearTransformersCache() {
+        var btn = document.getElementById("model-reset-cache-btn");
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Limpando...";
+        }
+        if ('caches' in window) {
+            caches.keys().then(function(names) {
+                var promises = names.filter(function(name) {
+                    return name.includes('transformers') || name.includes('onnx');
+                }).map(function(name) {
+                    return caches.delete(name);
+                });
+                return Promise.all(promises);
+            }).then(function() {
+                console.log("[SemanticSearch] Cache de IA limpo.");
+                window.location.reload();
+            }).catch(function(err) {
+                console.error("[SemanticSearch] Erro ao limpar cache:", err);
+                window.location.reload();
+            });
         } else {
-            indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-500";
-            ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+            window.location.reload();
         }
     }
 
     function loadIndexStatus() {
+        var idx = window.semanticIndex;
+        var idxReady = idx && idx.isReady;
+
+        updateStatus(idxReady ? null : "loading", null, "Calculando status do índice...");
         fetch("/api/embeddings/status")
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var statusEl = document.getElementById("index-status-text");
-                var idx = window.semanticIndex;
-
                 if (data.pending_notes > 0 || data.stale_notes > 0) {
                     var msg = data.indexed_notes + "/" + data.total_notes + " indexadas";
                     if (data.stale_notes > 0) msg += ", " + data.stale_notes + " desatualizadas";
                     msg += " — indexando pendentes...";
-                    statusEl.textContent = msg;
+                    updateStatus("indexing", null, msg);
+                    
                     var progressEl = document.getElementById("reindex-progress");
-                    progressEl.classList.remove("hidden");
+                    if (progressEl) progressEl.classList.remove("hidden");
                     updateReindexProgress(0, data.pending_notes);
 
                     if (idx) {
@@ -323,32 +384,35 @@ templ indexContent() {
                             updateReindexProgress(indexed, total);
                         }).catch(function(e) {
                             console.error("Erro na indexação automática:", e);
+                            updateStatus("error", null, "Erro na indexação");
                         }).finally(function() {
                             var progressEl = document.getElementById("reindex-progress");
                             if (progressEl) progressEl.classList.add("hidden");
-                            // Ao terminar o loop, atualiza status final
                             refreshStatusOnly();
                         });
                     } else {
-                        statusEl.textContent = "Erro: semanticIndex não carregado (F12)";
+                        updateStatus("error", null, "Erro: semanticIndex não carregado");
                         console.error("[SemanticSearch] window.semanticIndex is undefined");
                     }
                 } else if (data.total_notes > 0) {
-                    var msg = "Todas " + data.total_notes + " notas indexadas ✓";
+                    var msg = "Todas " + data.total_notes + " notas indexadas";
                     if (data.stale_notes > 0) {
                         msg = data.indexed_notes + "/" + data.total_notes + " indexadas, " + data.stale_notes + " desatualizadas";
+                        updateStatus("indexing", null, msg);
+                    } else {
+                        updateStatus(idxReady ? "ready" : "loading", null, msg);
                     }
-                    statusEl.textContent = msg;
-                    document.getElementById("reindex-progress").classList.add("hidden");
+                    var progressEl = document.getElementById("reindex-progress");
+                    if (progressEl) progressEl.classList.add("hidden");
                 } else {
-                    statusEl.textContent = "Nenhuma nota encontrada";
-                    document.getElementById("reindex-progress").classList.add("hidden");
+                    updateStatus(idxReady ? "ready" : "loading", null, "Nenhuma nota encontrada");
+                    var progressEl = document.getElementById("reindex-progress");
+                    if (progressEl) progressEl.classList.add("hidden");
                 }
             })
             .catch(function(err) {
                 console.error("[SemanticSearch] loadIndexStatus error:", err);
-                var statusEl = document.getElementById("index-status-text");
-                if (statusEl) statusEl.textContent = "Erro ao conectar: " + err.message;
+                updateStatus("error", null, "Erro ao conectar: " + err.message);
             });
     }
 
@@ -435,15 +499,17 @@ templ indexContent() {
         fetch("/api/embeddings/status")
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var el = document.getElementById("index-status-text");
-                if (!el) return;
+                var idx = window.semanticIndex;
+                var idxReady = idx && idx.isReady;
+                
                 if (data.pending_notes === 0 && data.stale_notes === 0) {
-                    el.textContent = "Todas " + data.total_notes + " notas indexadas ✓";
-                    document.getElementById("reindex-progress").classList.add("hidden");
+                    updateStatus(idxReady ? "ready" : "loading", null, "Todas " + data.total_notes + " notas indexadas");
+                    var progressEl = document.getElementById("reindex-progress");
+                    if (progressEl) progressEl.classList.add("hidden");
                 } else if (data.total_notes > 0) {
-                    el.textContent = data.indexed_notes + "/" + data.total_notes + " indexadas, " + (data.pending_notes + data.stale_notes) + " restantes";
+                    updateStatus("indexing", null, data.indexed_notes + "/" + data.total_notes + " indexadas, " + (data.pending_notes + data.stale_notes) + " restantes");
                 } else {
-                    el.textContent = "Nenhuma nota encontrada";
+                    updateStatus(idxReady ? "ready" : "loading", null, "Nenhuma nota encontrada");
                 }
             }).catch(function(err) {
                 console.error("[SemanticSearch] refreshStatus error:", err);
