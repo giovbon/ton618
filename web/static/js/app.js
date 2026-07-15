@@ -309,7 +309,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 // @ts-ignore
                 if (typeof Alpine !== "undefined" && evt.detail.target) {
                     // @ts-ignore
-                    Alpine.processTree(evt.detail.target);
+                    Alpine.initTree(evt.detail.target);
                 }
             }
         );
