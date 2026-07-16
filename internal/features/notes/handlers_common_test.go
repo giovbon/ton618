@@ -22,167 +22,93 @@ func similarItem(filename string, pct int) domain.SimilarNoteItem {
 // ── Tests: filterAndRankSimilarNotes ────────────────────────────
 
 func TestFilterAndRank_Empty(t *testing.T) {
-	result := filterAndRankSimilarNotes(nil, nil, 0, 0.75, 0.60)
+	result := filterAndRankSimilarNotes(nil, nil)
 	if len(result) != 0 {
 		t.Fatalf("esperado 0 resultados, got %d", len(result))
 	}
 
 	result = filterAndRankSimilarNotes(
 		map[string]float64{},
-		map[string]int{},
-		3, 0.75, 0.60,
+		map[string]float64{},
 	)
 	if len(result) != 0 {
 		t.Fatalf("esperado 0 resultados para mapas vazios, got %d", len(result))
 	}
 }
 
-func TestFilterAndRank_OrderByFrequencyThenDistance(t *testing.T) {
-	// 3 candidatos:
-	//   A: 3 matches, dist 0.50
-	//   B: 2 matches, dist 0.30 (menor distância que C)
-	//   C: 2 matches, dist 0.40
-	// Esperado: A (3 matches), B (2 matches, menor dist), C (2 matches, maior dist)
-	minDist := map[string]float64{
-		"a.md": 0.50,
-		"b.md": 0.30,
-		"c.md": 0.40,
+func TestFilterAndRank_OrderByAccumulatedScore(t *testing.T) {
+	// A: score 2.50, maxSim 0.85
+	// B: score 1.80, maxSim 0.90
+	// C: score 1.80, maxSim 0.95 (empate no score, C tem maior maxSim)
+	// D: score 0.90, maxSim 0.90
+	// Ordem esperada: A, C, B, D
+	scores := map[string]float64{
+		"a.md": 2.50,
+		"b.md": 1.80,
+		"c.md": 1.80,
+		"d.md": 0.90,
 	}
-	matchCnt := map[string]int{
-		"a.md": 3,
-		"b.md": 2,
-		"c.md": 2,
+	maxSims := map[string]float64{
+		"a.md": 0.85,
+		"b.md": 0.90,
+		"c.md": 0.95,
+		"d.md": 0.90,
 	}
 
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 5, 0.75, 0.60)
-	if len(result) != 3 {
-		t.Fatalf("esperado 3 resultados, got %d", len(result))
+	result := filterAndRankSimilarNotes(scores, maxSims)
+	if len(result) != 4 {
+		t.Fatalf("esperado 4 resultados, got %d", len(result))
 	}
 	if result[0].Filename != "a.md" {
 		t.Fatalf("posicao 0 esperada 'a.md', got '%s'", result[0].Filename)
 	}
-	if result[1].Filename != "b.md" {
-		t.Fatalf("posicao 1 esperada 'b.md', got '%s'", result[1].Filename)
+	if result[1].Filename != "c.md" {
+		t.Fatalf("posicao 1 esperada 'c.md', got '%s'", result[1].Filename)
 	}
-	if result[2].Filename != "c.md" {
-		t.Fatalf("posicao 2 esperada 'c.md', got '%s'", result[2].Filename)
+	if result[2].Filename != "b.md" {
+		t.Fatalf("posicao 2 esperada 'b.md', got '%s'", result[2].Filename)
+	}
+	if result[3].Filename != "d.md" {
+		t.Fatalf("posicao 3 esperada 'd.md', got '%s'", result[3].Filename)
 	}
 }
 
 func TestFilterAndRank_LimitTop5(t *testing.T) {
-	// 7 candidatos, todos com 1 match → deve limitar a 5
-	minDist := make(map[string]float64)
-	matchCnt := make(map[string]int)
+	scores := make(map[string]float64)
+	maxSims := make(map[string]float64)
 	for i := 0; i < 7; i++ {
 		name := string(rune('a'+i)) + ".md"
-		minDist[name] = 0.50
-		matchCnt[name] = 1
+		scores[name] = 1.0 + float64(i)*0.1
+		maxSims[name] = 0.80
 	}
 
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 2, 0.75, 0.60)
+	result := filterAndRankSimilarNotes(scores, maxSims)
 	if len(result) != 5 {
 		t.Fatalf("esperado 5 resultados (limite), got %d", len(result))
 	}
 }
 
-func TestFilterAndRank_MajorityVoting_BlocksLowMatch(t *testing.T) {
-	// Nota longa (5 chunks):
-	//   candidate_a: 1 match, dist 0.70 (≥ 0.60) → BLOQUEADO pelo voto majoritário
-	//   candidate_b: 2 matches, dist 0.70 → LIBERADO (≥ 2 matches)
-	//   candidate_c: 1 match, dist 0.50 (< 0.60) → LIBERADO (dist excepcional)
-	minDist := map[string]float64{
-		"candidate_a.md": 0.70,
-		"candidate_b.md": 0.70,
-		"candidate_c.md": 0.50,
-	}
-	matchCnt := map[string]int{
-		"candidate_a.md": 1,
-		"candidate_b.md": 2,
-		"candidate_c.md": 1,
-	}
-
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 5, 0.75, 0.60)
-	if len(result) != 2 {
-		t.Fatalf("esperado 2 resultados (b e c), got %d: %+v", len(result), result)
-	}
-	// candidate_b (2 matches) deve vir primeiro que candidate_c (1 match)
-	if result[0].Filename != "candidate_b.md" {
-		t.Fatalf("posicao 0 esperada 'candidate_b.md', got '%s'", result[0].Filename)
-	}
-	if result[1].Filename != "candidate_c.md" {
-		t.Fatalf("posicao 1 esperada 'candidate_c.md', got '%s'", result[1].Filename)
-	}
-}
-
-func TestFilterAndRank_ShortNote_NoMajorityVoting(t *testing.T) {
-	// Nota curta (2 chunks) — voto majoritário não se aplica
-	// candidate_a: 1 match, dist 0.70 (≥ 0.60) → DEVERIA PASSAR (nota curta)
-	minDist := map[string]float64{
-		"candidate_a.md": 0.70,
-	}
-	matchCnt := map[string]int{
-		"candidate_a.md": 1,
-	}
-
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 2, 0.75, 0.60)
-	if len(result) != 1 {
-		t.Fatalf("esperado 1 resultado (nota curta ignora voto), got %d", len(result))
-	}
-}
-
-func TestFilterAndRank_ThresholdAlreadyApplied(t *testing.T) {
-	// O threshold é aplicado em loadNoteData ANTES de chamar filterAndRankSimilarNotes.
-	// A função filterAndRankSimilarNotes recebe apenas quem já passou no threshold.
-	// Este teste verifica que mesmo com threshold baixo, todos os candidatos
-	// fornecidos no minDistMap são considerados (threshold é pré-filtro).
-	minDist := map[string]float64{
-		"candidate_a.md": 0.70,
-		"candidate_b.md": 0.80, // threshold 0.75 → seria bloqueado em loadNoteData
-		"candidate_c.md": 0.75,
-	}
-	matchCnt := map[string]int{
-		"candidate_a.md": 1,
-		"candidate_b.md": 1,
-		"candidate_c.md": 1,
-	}
-
-	// filterAndRankSimilarNotes NÃO filtra por threshold (já foi filtrado antes)
-	// então todos os 3 candidatos fornecidos aparecem no resultado
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 2, 0.75, 0.60)
-	if len(result) != 3 {
-		t.Fatalf("esperado 3 resultados (threshold é pré-filtro, não responsabilidade desta função), got %d", len(result))
-	}
-}
-
 func TestFilterAndRank_PercentageConversion(t *testing.T) {
-	// Testa a conversão de distância L2 para percentual de similaridade
-	// dist 0.00 → cosSim = 1.0 → 100%
-	// dist 0.50 → cosSim = 1.0 - 0.125 = 0.875 → 87%
-	// dist 0.75 → cosSim = 1.0 - 0.28125 = 0.71875 → 71%
-	// dist 1.00 → cosSim = 1.0 - 0.5 = 0.5 → 50%
-	minDist := map[string]float64{
-		"dist0.md":   0.00,
-		"dist050.md": 0.50,
-		"dist075.md": 0.75,
-		"dist100.md": 1.00,
+	scores := map[string]float64{
+		"sim100.md": 1.0,
+		"sim87.md":  1.0,
+		"sim50.md":  1.0,
 	}
-	matchCnt := map[string]int{
-		"dist0.md":   1,
-		"dist050.md": 1,
-		"dist075.md": 1,
-		"dist100.md": 1,
+	maxSims := map[string]float64{
+		"sim100.md": 1.00,
+		"sim87.md":  0.87,
+		"sim50.md":  0.50,
 	}
 
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 2, 1.5, 0.01)
+	result := filterAndRankSimilarNotes(scores, maxSims)
 
 	tests := []struct {
 		filename string
 		wantPct  int
 	}{
-		{"dist0.md", 100},
-		{"dist050.md", 87},
-		{"dist075.md", 71},
-		{"dist100.md", 50},
+		{"sim100.md", 100},
+		{"sim87.md", 87},
+		{"sim50.md", 50},
 	}
 	for _, tc := range tests {
 		var found bool
@@ -198,28 +124,6 @@ func TestFilterAndRank_PercentageConversion(t *testing.T) {
 		if !found {
 			t.Errorf("%s nao encontrado nos resultados", tc.filename)
 		}
-	}
-}
-
-func TestFilterAndRank_ExcellentDistanceBypassesMajority(t *testing.T) {
-	// Nota longa (4 chunks):
-	//   candidate_a: 1 match, dist 0.55 (< 0.60) → deve PASSAR (dist excepcional)
-	//   candidate_b: 1 match, dist 0.65 (≥ 0.60) → deve BLOQUEAR
-	minDist := map[string]float64{
-		"candidate_a.md": 0.55,
-		"candidate_b.md": 0.65,
-	}
-	matchCnt := map[string]int{
-		"candidate_a.md": 1,
-		"candidate_b.md": 1,
-	}
-
-	result := filterAndRankSimilarNotes(minDist, matchCnt, 4, 0.75, 0.60)
-	if len(result) != 1 {
-		t.Fatalf("esperado 1 resultado (candidate_a), got %d", len(result))
-	}
-	if result[0].Filename != "candidate_a.md" {
-		t.Fatalf("esperado 'candidate_a.md', got '%s'", result[0].Filename)
 	}
 }
 

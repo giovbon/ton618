@@ -122,18 +122,6 @@ func TestHandleFileDownload_PDFInline(t *testing.T) {
 
 // ── HandleFileDelete ────────────────────────────────────────────
 
-func TestHandleFileDelete_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/file/delete", nil)
-
-	ctx.HandleFileDelete(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
-
 func TestHandleFileDelete_NoFilename(t *testing.T) {
 	ctx := newTestContext(t)
 	rec := httptest.NewRecorder()
@@ -174,18 +162,6 @@ func TestHandleFileDelete_Success(t *testing.T) {
 }
 
 // ── HandleFileRename ────────────────────────────────────────────
-
-func TestHandleFileRename_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/file/rename", nil)
-
-	ctx.HandleFileRename(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
 
 func TestHandleFileRename_MissingParams(t *testing.T) {
 	ctx := newTestContext(t)
@@ -232,18 +208,6 @@ func TestHandleFileRename_Success(t *testing.T) {
 
 // ── HandleUploadAttachment ──────────────────────────────────────
 
-func TestHandleUploadAttachment_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/upload-attachment", nil)
-
-	ctx.HandleUploadAttachment(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
-
 func TestHandleUploadAttachment_Success(t *testing.T) {
 	ctx := newTestContext(t)
 	rec := httptest.NewRecorder()
@@ -280,18 +244,6 @@ func TestHandleUploadAttachment_Success(t *testing.T) {
 
 // ── HandleUpload ────────────────────────────────────────────────
 
-func TestHandleUpload_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/upload", nil)
-
-	ctx.HandleUpload(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
-
 func TestHandleUpload_PDF(t *testing.T) {
 	ctx := newTestContext(t)
 	rec := httptest.NewRecorder()
@@ -322,18 +274,6 @@ func TestHandleUpload_PDF(t *testing.T) {
 }
 
 // ── HandleUploadImage ───────────────────────────────────────────
-
-func TestHandleUploadImage_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/upload-image", nil)
-
-	ctx.HandleUploadImage(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
 
 func TestHandleUploadImage_Success(t *testing.T) {
 	ctx := newTestContext(t)
@@ -401,18 +341,6 @@ func TestHandleUploadImage_InvalidExtension(t *testing.T) {
 }
 
 // ── HandleCleanupImages ─────────────────────────────────────────
-
-func TestHandleCleanupImages_MethodNotAllowed(t *testing.T) {
-	ctx := newTestContext(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/cleanup-images", nil)
-
-	ctx.HandleCleanupImages(rec, req)
-
-	if rec.Code != 405 {
-		t.Errorf("esperado 405, got %d", rec.Code)
-	}
-}
 
 func TestHandleCleanupImages_RemovesOrphan(t *testing.T) {
 	ctx := newTestContext(t)

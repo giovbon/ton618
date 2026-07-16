@@ -1,12 +1,17 @@
 package db
 
 import (
+	"context"
 	"time"
+
 	"ton618/internal/processor"
 )
 
 // ReplaceFileIndexes replaces all indexing data for a file in a single transaction.
+// O parâmetro ctx permite cancelamento da operação (ex: cliente desconectou).
+// Se ctx for nil, usa o contexto padrão com timeout.
 func (s *Store) ReplaceFileIndexes(
+	ctx context.Context,
 	filename string,
 	docs []processor.Document,
 	links []string,
@@ -17,11 +22,22 @@ func (s *Store) ReplaceFileIndexes(
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
+	if ctx == nil {
+		ctx = s.queryCtx()
+	}
+
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	// Verifica cancelamento antes de cada etapa crítica
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	// 1. Documents & FTS
 	if _, err := tx.Exec("DELETE FROM documents WHERE arquivo = ?", filename); err != nil {
@@ -31,7 +47,7 @@ func (s *Store) ReplaceFileIndexes(
 		return err
 	}
 
-	docStmt, err := tx.Prepare(`
+	docStmt, err := tx.PrepareContext(ctx, `
 		INSERT OR REPLACE INTO documents 
 		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -40,9 +56,9 @@ func (s *Store) ReplaceFileIndexes(
 	}
 	defer docStmt.Close()
 
-	ftsStmt, err := tx.Prepare(`
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) 
-		VALUES (?, ?, ?, ?, ?, ?)`)
+	ftsStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, texto_stemmed) 
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -56,8 +72,9 @@ func (s *Store) ReplaceFileIndexes(
 		); err != nil {
 			return err
 		}
+		stemmedText := processor.StemText(doc.Texto)
 		if _, err := ftsStmt.Exec(
-			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
+			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr, stemmedText,
 		); err != nil {
 			return err
 		}
@@ -68,7 +85,7 @@ func (s *Store) ReplaceFileIndexes(
 		return err
 	}
 	if len(links) > 0 {
-		linkStmt, err := tx.Prepare("INSERT OR IGNORE INTO links (from_file, to_file) VALUES (?, ?)")
+		linkStmt, err := tx.PrepareContext(ctx, "INSERT OR IGNORE INTO links (from_file, to_file) VALUES (?, ?)")
 		if err != nil {
 			return err
 		}
@@ -85,7 +102,7 @@ func (s *Store) ReplaceFileIndexes(
 		return err
 	}
 	if len(tags) > 0 {
-		tagStmt, err := tx.Prepare("INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
+		tagStmt, err := tx.PrepareContext(ctx, "INSERT OR IGNORE INTO tags (arquivo, tag) VALUES (?, ?)")
 		if err != nil {
 			return err
 		}
@@ -112,7 +129,7 @@ func (s *Store) ReplaceFileIndexes(
 		return err
 	}
 	if len(todos) > 0 {
-		todoStmt, err := tx.Prepare("INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+		todoStmt, err := tx.PrepareContext(ctx, "INSERT INTO todos (id, file, section, type, status, text, line, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
 		if err != nil {
 			return err
 		}

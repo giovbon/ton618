@@ -100,7 +100,7 @@ type Watcher struct {
 	// Se outro evento para o mesmo arquivo chegar antes do timer disparar,
 	// o timer é reiniciado. Só após o período sem novos eventos o evento
 	// é enviado ao canal `events` para processamento.
-	debounceMu    sync.Mutex
+	debounceMu     sync.Mutex
 	debounceTimers map[string]*time.Timer
 
 	ntfyService *services.NtfyService
@@ -136,6 +136,14 @@ func (w *Watcher) Start(ctx context.Context) {
 	w.wg.Add(2)
 	go w.fsnotifyLoop(ctx)
 	go w.pollLoop(ctx)
+
+	// Goroutine que fecha o canal de eventos quando o contexto é cancelado,
+	// permitindo que o consumidor (main.go) saia do loop corretamente.
+	go func() {
+		<-ctx.Done()
+		close(w.events)
+	}()
+
 	slog.Info("Watcher fsnotify iniciado")
 }
 

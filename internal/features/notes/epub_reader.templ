@@ -17,6 +17,7 @@ templ EpubReader(file string) {
             font-family: system-ui, -apple-system, sans-serif;
             overflow: hidden;
             height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -117,6 +118,7 @@ templ EpubReader(file string) {
             left: 0;
             width: 320px;
             height: 100vh;
+            height: 100dvh;
             background-color: #18181b;
             border-right: 1px solid #27272a;
             z-index: 100;
@@ -195,6 +197,7 @@ templ EpubReader(file string) {
             left: 0;
             width: 100vw;
             height: 100vh;
+            height: 100dvh;
             background-color: rgba(0, 0, 0, 0.5);
             z-index: 99;
             opacity: 0;
@@ -391,14 +394,42 @@ templ EpubReader(file string) {
                     if (e.key === "ArrowRight") rendition.next();
                 });
 
+                let resizeTimeout;
+                window.addEventListener("resize", function() {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => {
+                        if (rendition) {
+                            const viewer = document.getElementById("viewer");
+                            if (viewer) {
+                                rendition.resize(viewer.clientWidth, viewer.clientHeight);
+                            }
+                        }
+                    }, 100);
+                });
+
+                window.addEventListener("scroll", function() {
+                    if (window.scrollY !== 0) {
+                        window.scrollTo(0, 0);
+                    }
+                });
+
                 rendition.hooks.content.register(function(contents) {
                     contents.addStylesheetRules({
+                        "html": {
+                            "overflow": "hidden !important",
+                            "height": "100% !important",
+                            "box-sizing": "border-box !important"
+                        },
                         "body": {
                             "background-color": "#09090b !important",
                             "color": "#a1a1aa !important",
                             "font-family": "system-ui, -apple-system, sans-serif !important",
                             "padding": "20px 40px !important",
-                            "margin": "0 !important"
+                            "margin": "0 !important",
+                            "overflow": "hidden !important",
+                            "height": "100% !important",
+                            "box-sizing": "border-box !important",
+                            "-webkit-tap-highlight-color": "transparent !important"
                         },
                         "p": {
                             "color": "#a1a1aa !important",
@@ -417,6 +448,19 @@ templ EpubReader(file string) {
                             "height": "auto !important"
                         }
                     });
+
+                    // Prevent text selection vertical scrolling inside the iframe document
+                    const doc = contents.document;
+                    if (doc) {
+                        doc.addEventListener("scroll", function() {
+                            if (doc.documentElement.scrollTop !== 0) {
+                                doc.documentElement.scrollTop = 0;
+                            }
+                            if (doc.body.scrollTop !== 0) {
+                                doc.body.scrollTop = 0;
+                            }
+                        }, { passive: true });
+                    }
                 });
             })
             .catch(err => {

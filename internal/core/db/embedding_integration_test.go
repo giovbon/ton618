@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -208,7 +209,7 @@ func TestEmbeddingIntegration_NotaViraNaoIndexavel_LimpaChunks(t *testing.T) {
 	// 2. Salva novamente como non-embeddable (drawing) via ReplaceFileIndexes
 	//    Isso simula o que o NoteService.processAndSave faz
 	s.SaveNote(filename, "{}", "2024-01-02T00:00:00Z")
-	s.ReplaceFileIndexes(filename, nil, nil, []string{"drawing"}, nil, time.Now())
+	s.ReplaceFileIndexes(context.Background(), filename, nil, nil, []string{"drawing"}, nil, time.Now())
 
 	// 3. Chunks devem ter sido limpos
 	if s.HasEmbedding(filename) {

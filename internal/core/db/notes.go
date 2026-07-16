@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -13,7 +12,7 @@ import (
 
 // GetNote returns the content of a note by filename.
 func (s *Store) GetNote(filename string) (string, error) {
-	content, err := s.Q.GetNote(context.Background(), filename)
+	content, err := s.Q.GetNote(s.queryCtx(), filename)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -24,7 +23,7 @@ func (s *Store) GetNote(filename string) (string, error) {
 func (s *Store) SaveNote(filename, content, mtime string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.SaveNote(context.Background(), dbgen.SaveNoteParams{
+	return s.Q.SaveNote(s.queryCtx(), dbgen.SaveNoteParams{
 		Filename: filename,
 		Content:  sql.NullString{String: content, Valid: true},
 		Mtime:    sql.NullString{String: mtime, Valid: true},
@@ -36,10 +35,10 @@ func (s *Store) DeleteNote(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 	
-	if err := s.Q.DeleteNote(context.Background(), filename); err != nil {
+	if err := s.Q.DeleteNote(s.queryCtx(), filename); err != nil {
 		return err
 	}
-	if err := s.Q.DeleteNoteChunks(context.Background(), filename); err != nil {
+	if err := s.Q.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
 		return err
 	}
 	_, err := s.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`)
@@ -50,7 +49,7 @@ func (s *Store) DeleteNote(filename string) error {
 func (s *Store) RenameNote(old, new string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.RenameNote(context.Background(), dbgen.RenameNoteParams{
+	return s.Q.RenameNote(s.queryCtx(), dbgen.RenameNoteParams{
 		Filename:   new,
 		Filename_2: old,
 	})
@@ -58,7 +57,7 @@ func (s *Store) RenameNote(old, new string) error {
 
 // GetAllNotes returns all note filenames and their mtimes, ordered by mtime desc.
 func (s *Store) GetAllNotes() (map[string]string, error) {
-	rows, err := s.Q.GetAllNotes(context.Background())
+	rows, err := s.Q.GetAllNotes(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +70,12 @@ func (s *Store) GetAllNotes() (map[string]string, error) {
 
 // GetAllNotesPaginated returns a paginated list of notes.
 func (s *Store) GetAllNotesPaginated(from, size int) (map[string]string, int, error) {
-	count, err := s.Q.CountNotes(context.Background())
+	count, err := s.Q.CountNotes(s.queryCtx())
 	if err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := s.Q.GetAllNotesPaginated(context.Background(), dbgen.GetAllNotesPaginatedParams{
+	rows, err := s.Q.GetAllNotesPaginated(s.queryCtx(), dbgen.GetAllNotesPaginatedParams{
 		Limit:  int64(size),
 		Offset: int64(from),
 	})
@@ -92,7 +91,7 @@ func (s *Store) GetAllNotesPaginated(from, size int) (map[string]string, int, er
 
 // GetNoteMtime returns just the mtime for a note.
 func (s *Store) GetNoteMtime(filename string) (string, error) {
-	mtime, err := s.Q.GetNoteMtime(context.Background(), filename)
+	mtime, err := s.Q.GetNoteMtime(s.queryCtx(), filename)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -101,7 +100,7 @@ func (s *Store) GetNoteMtime(filename string) (string, error) {
 
 // NoteExists checks if a note exists.
 func (s *Store) NoteExists(filename string) bool {
-	count, _ := s.Q.NoteExists(context.Background(), filename)
+	count, _ := s.Q.NoteExists(s.queryCtx(), filename)
 	return count > 0
 }
 
@@ -109,7 +108,7 @@ func (s *Store) NoteExists(filename string) bool {
 
 // GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
 func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
-	return s.Q.GetNotesNeedingMarkmapTag(context.Background())
+	return s.Q.GetNotesNeedingMarkmapTag(s.queryCtx())
 }
 
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
@@ -158,7 +157,7 @@ func (s *Store) MigrateNotesFromDisk(docsDir string) (int, error) {
 
 // GetAllNotesContent returns all note filenames and their content in a single query.
 func (s *Store) GetAllNotesContent() (map[string]string, error) {
-	rows, err := s.Q.GetAllNotesContent(context.Background())
+	rows, err := s.Q.GetAllNotesContent(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}

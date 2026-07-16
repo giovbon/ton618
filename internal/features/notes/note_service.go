@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"context"
 	"ton618/internal/core/domain"
 
 	"fmt"
@@ -16,9 +17,19 @@ import (
 	"ton618/internal/repository"
 )
 
+// fileOps define as operações de banco de mais alto nível que o NoteService
+// precisa do db.Store. Esta interface permite testar o NoteService sem banco real.
+type fileOps interface {
+	DeleteAllFileRecords(filename string) error
+	GetFilesModsAndTags() ([]db.FileModTag, error)
+	GetNotesNeedingMarkmapTag() ([]string, error)
+	GetActiveTodoMarkers() ([]db.TodoMarker, error)
+	ReplaceFileIndexes(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, todos []processor.TodoItem, modTime time.Time) error
+}
+
 // NoteService gerencia o ciclo de vida de notas markdown.
 type NoteService struct {
-	store   *db.Store // concreto: necessário para InsertDocument, IndexFTS, etc.
+	store   fileOps // operações de banco (desacoplado via interface)
 	notes   repository.NoteStore
 	tags    repository.TagStore
 	links   repository.LinkStore
@@ -29,7 +40,7 @@ type NoteService struct {
 
 // NewNoteService cria o serviço de notas.
 func NewNoteService(
-	store *db.Store,
+	store fileOps,
 	notes repository.NoteStore,
 	tags repository.TagStore,
 	links repository.LinkStore,
@@ -49,7 +60,15 @@ func NewNoteService(
 }
 
 // Save salva conteúdo markdown, reindexa e gerencia tags/links.
+// Usa context.Background() internamente. Prefira SaveWithContext se tiver
+// um contexto HTTP disponível para propagar cancelamento.
 func (s *NoteService) Save(filename, content string, rawTags []string) error {
+	return s.SaveWithContext(context.Background(), filename, content, rawTags)
+}
+
+// SaveWithContext é como Save, mas aceita um contexto para propagar
+// cancelamento (ex: cliente desconectou) até a camada de banco.
+func (s *NoteService) SaveWithContext(ctx context.Context, filename, content string, rawTags []string) error {
 	// Garante o formato do filename
 	if !strings.HasSuffix(filename, ".md") {
 		filename += ".md"
@@ -59,7 +78,7 @@ func (s *NoteService) Save(filename, content string, rawTags []string) error {
 	}
 
 	mtime := time.Now().UTC()
-	return s.processAndSave(filename, content, mtime)
+	return s.processAndSave(ctx, filename, content, mtime)
 }
 
 // Delete remove uma nota do banco e do disco.
@@ -143,7 +162,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 			}
 		}
 
-		if err := s.processAndSave(newName, content, time.Now().UTC()); err != nil {
+		if err := s.processAndSave(context.Background(), newName, content, time.Now().UTC()); err != nil {
 			slog.Error("processAndSave after rename", "file", newName, "error", err)
 		}
 	}
@@ -225,6 +244,11 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 
 // SyncDatabase garante que todas as notas da tabela 'notes' estejam devidamente indexadas no FTS e na tabela de tags.
 func (s *NoteService) SyncDatabase() error {
+	return s.SyncDatabaseWithContext(context.Background())
+}
+
+// SyncDatabaseWithContext é como SyncDatabase, mas aceita contexto para cancelamento.
+func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 	allNotes, err := s.notes.GetAllNotes()
 	if err != nil {
 		return err
@@ -253,15 +277,13 @@ func (s *NoteService) SyncDatabase() error {
 				mtime = time.Now()
 			}
 			slog.Info("Auto-reindexando nota no banco", "file", filename)
-			if err := s.processAndSave(filename, content, mtime); err != nil {
+			if err := s.processAndSave(ctx, filename, content, mtime); err != nil {
 				slog.Error("erro ao auto-reindexar nota", "file", filename, "error", err)
 			}
 		}
 	}
 	return nil
 }
-
-
 
 // GetBacklinks retorna os backlinks de 2 níveis para uma nota.
 // Nível 1: notas que linkam PARA esta nota.
@@ -301,7 +323,8 @@ func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, er
 // ── privado ──
 
 // processAndSave centraliza o processamento e indexação do markdown.
-func (s *NoteService) processAndSave(filename, content string, modTime time.Time) error {
+// O contexto é propagado para ReplaceFileIndexes, permitindo cancelamento.
+func (s *NoteService) processAndSave(ctx context.Context, filename, content string, modTime time.Time) error {
 	var docs []processor.Document
 	var links []string
 	var fileTags []string
@@ -320,7 +343,6 @@ func (s *NoteService) processAndSave(filename, content string, modTime time.Time
 		docs, links, fileTags = processor.ProcessMarkdownContent(contentBytes, filename, modTime, modTime)
 	}
 
-
 	// 2. Extrai TODOs estruturados
 	var todos []processor.TodoItem
 	activeMarkers, err := s.store.GetActiveTodoMarkers()
@@ -334,19 +356,17 @@ func (s *NoteService) processAndSave(filename, content string, modTime time.Time
 		slog.Error("get active todo markers", "error", err)
 	}
 
-	// 3. Prepara Tags limpas
+	// 3. Prepara tags limpas
 	cleanTags := fileTags
 
-	// 4. Salva a nota no banco 
+	// 4. Salva o conteúdo da nota no banco
 	mtimeStr := modTime.UTC().Format(time.RFC3339)
 	if err := s.notes.SaveNote(filename, content, mtimeStr); err != nil {
 		return fmt.Errorf("save note: %w", err)
 	}
 
-
-
-	// 6. Submete tudo para a transação única de FTS e índices
-	if err := s.store.ReplaceFileIndexes(filename, docs, links, cleanTags, todos, modTime); err != nil {
+	// 5. Submete documentos, links, tags e todos em transação única
+	if err := s.store.ReplaceFileIndexes(ctx, filename, docs, links, cleanTags, todos, modTime); err != nil {
 		return fmt.Errorf("replace file indexes: %w", err)
 	}
 

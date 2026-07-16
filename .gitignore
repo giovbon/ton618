@@ -8,7 +8,7 @@ server
 *.test-output
 /tmp/
 
-
+documents/
 data/
 docs/
 *.db

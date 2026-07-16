@@ -19,6 +19,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
     secao,
     texto,
     tags,
+    texto_stemmed,
     tokenize='unicode61'
 );
 

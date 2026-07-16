@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"strings"
 	"ton618/internal/core/db/generated"
@@ -56,7 +55,7 @@ func fromDBGen(d dbgen.Document) Document {
 func (s *Store) InsertDocument(doc Document) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.InsertDocument(context.Background(), dbgen.InsertDocumentParams{
+	return s.Q.InsertDocument(s.queryCtx(), dbgen.InsertDocumentParams{
 		ID:        doc.ID,
 		Tipo:      sql.NullString{String: doc.Tipo, Valid: true},
 		Arquivo:   sql.NullString{String: doc.Arquivo, Valid: true},
@@ -75,19 +74,19 @@ func (s *Store) InsertDocument(doc Document) error {
 func (s *Store) DeleteDocument(id string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.DeleteDocument(context.Background(), id)
+	return s.Q.DeleteDocument(s.queryCtx(), id)
 }
 
 // DeleteDocumentsByFile removes all documents associated with a given file path.
 func (s *Store) DeleteDocumentsByFile(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.DeleteDocumentsByFile(context.Background(), sql.NullString{String: arquivo, Valid: true})
+	return s.Q.DeleteDocumentsByFile(s.queryCtx(), sql.NullString{String: arquivo, Valid: true})
 }
 
 // GetDocument returns a single document by ID, or nil if not found.
 func (s *Store) GetDocument(id string) (*Document, error) {
-	row, err := s.Q.GetDocument(context.Background(), id)
+	row, err := s.Q.GetDocument(s.queryCtx(), id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -100,7 +99,7 @@ func (s *Store) GetDocument(id string) (*Document, error) {
 
 // GetDocumentsByFile returns all documents belonging to a file, ordered by position.
 func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
-	rows, err := s.Q.GetDocumentsByFile(context.Background(), sql.NullString{String: arquivo, Valid: true})
+	rows, err := s.Q.GetDocumentsByFile(s.queryCtx(), sql.NullString{String: arquivo, Valid: true})
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +112,7 @@ func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
 
 // GetAllDocumentsByFile returns all documents grouped by their file path.
 func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
-	rows, err := s.Q.GetAllDocumentsByFile(context.Background())
+	rows, err := s.Q.GetAllDocumentsByFile(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +126,7 @@ func (s *Store) GetAllDocumentsByFile() (map[string][]Document, error) {
 
 // GetAllDocuments returns every document in the database.
 func (s *Store) GetAllDocuments() ([]Document, error) {
-	rows, err := s.Q.GetAllDocuments(context.Background())
+	rows, err := s.Q.GetAllDocuments(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +139,11 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 
 // GetDocumentsPaginated returns a page of documents, along with the total count.
 func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
-	total, err := s.Q.CountDocumentsWithoutDrawing(context.Background())
+	total, err := s.Q.CountDocumentsWithoutDrawing(s.queryCtx())
 	if err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.Q.GetDocumentsPaginated(context.Background(), dbgen.GetDocumentsPaginatedParams{
+	rows, err := s.Q.GetDocumentsPaginated(s.queryCtx(), dbgen.GetDocumentsPaginatedParams{
 		Limit:  int64(size),
 		Offset: int64(from),
 	})
@@ -160,13 +159,13 @@ func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
 
 // GetDocumentCount returns the total number of documents in the database.
 func (s *Store) GetDocumentCount() int {
-	count, _ := s.Q.GetDocumentCount(context.Background())
+	count, _ := s.Q.GetDocumentCount(s.queryCtx())
 	return int(count)
 }
 
 // GetDistinctFiles returns all unique file paths that have documents.
 func (s *Store) GetDistinctFiles() ([]string, error) {
-	rows, err := s.Q.GetDistinctFiles(context.Background())
+	rows, err := s.Q.GetDistinctFiles(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +179,6 @@ func (s *Store) GetDistinctFiles() ([]string, error) {
 // SearchDocumentText returns the count of documents whose texto column contains the given substring.
 // Usado para verificar se uma imagem ainda é referenciada por alguma nota.
 func (s *Store) SearchDocumentText(substring string) (int, error) {
-	count, err := s.Q.SearchDocumentText(context.Background(), sql.NullString{String: "%" + substring + "%", Valid: true})
+	count, err := s.Q.SearchDocumentText(s.queryCtx(), sql.NullString{String: "%" + substring + "%", Valid: true})
 	return int(count), err
 }

@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"math"
 	"time"
@@ -15,7 +14,7 @@ import (
 
 // GetPopularity returns the access count for a file (Legacy).
 func (s *Store) GetPopularity(arquivo string) int {
-	count, _ := s.Q.GetPopularity(context.Background(), arquivo)
+	count, _ := s.Q.GetPopularity(s.queryCtx(), arquivo)
 	return int(count.Int64)
 }
 
@@ -27,7 +26,7 @@ func (s *Store) IncrementPopularity(arquivo string) error {
 
 // GetAllPopularity returns all popularity records as a map of file -> count.
 func (s *Store) GetAllPopularity() (map[string]int, error) {
-	rows, err := s.Q.GetAllPopularity(context.Background())
+	rows, err := s.Q.GetAllPopularity(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +42,7 @@ func (s *Store) GetAllPopularity() (map[string]int, error) {
 func (s *Store) ResetPopularity(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.ResetPopularity(context.Background(), arquivo)
+	return s.Q.ResetPopularity(s.queryCtx(), arquivo)
 }
 
 // ApplyInteractionReward aplica recompensas baseadas em interações implícitas e explícitas (RLHF)
@@ -65,7 +64,7 @@ func (s *Store) ApplyInteractionReward(arquivo string, interactionType string) e
 		return nil
 	}
 
-	return s.Q.ApplyInteractionReward(context.Background(), dbgen.ApplyInteractionRewardParams{
+	return s.Q.ApplyInteractionReward(s.queryCtx(), dbgen.ApplyInteractionRewardParams{
 		Arquivo:          arquivo,
 		Reward:           reward,
 		LastInteractedAt: sql.NullString{String: time.Now().Format(time.RFC3339), Valid: true},
@@ -74,7 +73,7 @@ func (s *Store) ApplyInteractionReward(arquivo string, interactionType string) e
 
 // GetSynapticWeight calcula o peso sináptico atual aplicando o Forgetting Curve (decaimento logarítmico)
 func (s *Store) GetSynapticWeight(arquivo string) float64 {
-	row, err := s.Q.GetSynapticWeight(context.Background(), arquivo)
+	row, err := s.Q.GetSynapticWeight(s.queryCtx(), arquivo)
 	if err != nil {
 		return 1.0 // Peso neutro padrão
 	}

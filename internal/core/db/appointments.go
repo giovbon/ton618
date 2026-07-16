@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"time"
 	"ton618/internal/core/domain"
@@ -17,7 +16,7 @@ func (s *Store) CreateAppointment(a domain.Appointment) error {
 		a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
-	return s.Q.CreateAppointment(context.Background(), dbgen.CreateAppointmentParams{
+	return s.Q.CreateAppointment(s.queryCtx(), dbgen.CreateAppointmentParams{
 		ID:          a.ID,
 		Description: sql.NullString{String: a.Description, Valid: true},
 		EventDate:   sql.NullString{String: a.EventDate, Valid: true},
@@ -33,7 +32,7 @@ func (s *Store) UpdateAppointment(a domain.Appointment) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	return s.Q.UpdateAppointment(context.Background(), dbgen.UpdateAppointmentParams{
+	return s.Q.UpdateAppointment(s.queryCtx(), dbgen.UpdateAppointmentParams{
 		Description: sql.NullString{String: a.Description, Valid: true},
 		EventDate:   sql.NullString{String: a.EventDate, Valid: true},
 		Year:        sql.NullInt64{Int64: int64(a.Year), Valid: true},
@@ -48,7 +47,7 @@ func (s *Store) DeleteAppointment(id string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	return s.Q.DeleteAppointment(context.Background(), id)
+	return s.Q.DeleteAppointment(s.queryCtx(), id)
 }
 
 // DeleteOldAppointments removes all appointments whose event_date is before the given time.
@@ -56,7 +55,7 @@ func (s *Store) DeleteOldAppointments(before time.Time) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	return s.Q.DeleteOldAppointments(context.Background(), sql.NullString{
+	return s.Q.DeleteOldAppointments(s.queryCtx(), sql.NullString{
 		String: before.UTC().Format(time.RFC3339),
 		Valid:  true,
 	})
@@ -64,7 +63,7 @@ func (s *Store) DeleteOldAppointments(before time.Time) error {
 
 // GetAppointments returns all appointments, optionally filtered or ordered.
 func (s *Store) GetAppointments() ([]domain.Appointment, error) {
-	rows, err := s.Q.GetAppointments(context.Background())
+	rows, err := s.Q.GetAppointments(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}

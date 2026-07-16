@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
@@ -103,7 +102,7 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	}
 
 	// 1. Remove chunks antigos do filename
-	if err := qtx.DeleteNoteChunks(context.Background(), filename); err != nil {
+	if err := qtx.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
 		return fmt.Errorf("delete old chunks: %w", err)
 	}
 
@@ -114,7 +113,7 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 
 	// 3. Insere novos chunks e embeddings
 	for _, ch := range chunks {
-		if err := qtx.InsertNoteChunk(context.Background(), dbgen.InsertNoteChunkParams{
+		if err := qtx.InsertNoteChunk(s.queryCtx(), dbgen.InsertNoteChunkParams{
 			ChunkID:      ch.ChunkID,
 			Filename:     ch.Filename,
 			ChunkIndex:   int64(ch.ChunkIndex),
@@ -161,7 +160,7 @@ func (s *Store) DeleteEmbedding(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	if err := s.Q.DeleteNoteChunks(context.Background(), filename); err != nil {
+	if err := s.Q.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
 		return err
 	}
 	_, err := s.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`)
@@ -170,7 +169,7 @@ func (s *Store) DeleteEmbedding(filename string) error {
 
 // HasEmbedding verifica se uma nota ja possui embedding indexado (qualquer chunk).
 func (s *Store) HasEmbedding(filename string) bool {
-	count, err := s.Q.HasNoteEmbedding(context.Background(), filename)
+	count, err := s.Q.HasNoteEmbedding(s.queryCtx(), filename)
 	if err != nil {
 		return false
 	}
@@ -263,14 +262,14 @@ func (s *Store) GetEmbeddingStatus() (EmbeddingStatus, error) {
 	status.EmbeddingDim = EmbeddingDim
 
 	// 1. Conta total de notas indexáveis
-	total, err := s.Q.CountEmbeddableNotes(context.Background())
+	total, err := s.Q.CountEmbeddableNotes(s.queryCtx())
 	if err != nil {
 		return status, err
 	}
 	status.TotalNotes = int(total)
 
 	// 2. Conta notas que possuem pelo menos um chunk indexado
-	indexed, err := s.Q.CountIndexedNotes(context.Background())
+	indexed, err := s.Q.CountIndexedNotes(s.queryCtx())
 	if err != nil {
 		return status, err
 	}
@@ -283,7 +282,7 @@ func (s *Store) GetEmbeddingStatus() (EmbeddingStatus, error) {
 	}
 
 	// 4. Conta notas com chunks desatualizados
-	stale, err := s.Q.CountStaleNotes(context.Background())
+	stale, err := s.Q.CountStaleNotes(s.queryCtx())
 	if err != nil {
 		status.StaleNotes = 0
 	} else {
@@ -309,7 +308,7 @@ func (s *Store) GetPendingEmbeddingNotes(limit int) ([]PendingNote, error) {
 		limit = 20
 	}
 
-	rows, err := s.Q.GetPendingEmbeddingNotes(context.Background(), int64(limit))
+	rows, err := s.Q.GetPendingEmbeddingNotes(s.queryCtx(), int64(limit))
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +329,7 @@ func (s *Store) GetPendingEmbeddingNotes(limit int) ([]PendingNote, error) {
 
 // GetEmbeddedFiles retorna o conjunto de nomes de arquivo que possuem chunks indexados.
 func (s *Store) GetEmbeddedFiles() (map[string]bool, error) {
-	filenames, err := s.Q.GetEmbeddedFiles(context.Background())
+	filenames, err := s.Q.GetEmbeddedFiles(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}

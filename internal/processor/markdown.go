@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/freeeve/go-stemmers"
 	"gopkg.in/yaml.v3"
 )
 
@@ -511,4 +512,22 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 	}
 
 	return todos
+}
+
+var wordRegex = regexp.MustCompile(`[a-zA-Z0-9À-ÿ_]+`)
+
+// StemText divide o texto em palavras, lematiza cada uma usando o stemmer de português
+// e as junta separadas por espaço.
+func StemText(text string) string {
+	stemmer := stemmers.New(stemmers.Portuguese)
+	words := wordRegex.FindAllString(strings.ToLower(text), -1)
+	if len(words) == 0 {
+		return ""
+	}
+	
+	stemmed := make([]string, len(words))
+	for i, word := range words {
+		stemmed[i] = stemmer.Stem(word)
+	}
+	return strings.Join(stemmed, " ")
 }

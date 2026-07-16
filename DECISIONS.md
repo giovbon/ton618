@@ -87,8 +87,6 @@ Serve como referência para manter consistência em contribuições futuras.
 ### 2.2 Frontend (JavaScript)
 
 - **JSDoc apenas em APIs públicas**: O que é exposto via `window.*` ou exportado como módulo. Funções internas não recebem JSDoc — evita ruído e documentação mentirosa.
-- **TypeScript incremental via `checkJs`**: TypeScript (`tsc --noEmit`) é usado apenas para checagem de tipos em cima de JSDoc, sem transpilação. `npm run typecheck` executa a validação. O build continua exclusivamente com esbuild.
-- **Migração gradual para `.ts`**: Arquivos em `web/src/` podem ser renomeados para `.ts`/`.tsx` conforme forem sendo migrados. O esbuild aceita TypeScript nativamente — basta atualizar o `entryPoints` em `build.js`. O JS inline em arquivos `.templ` não é verificável por TS e permanece como está até ser extraído.
 - **`web/src/global.d.ts`**: Declarações de tipos para globais `window.*` (IIFE exports), bibliotecas sem types (Leaflet, jSuites, markmap) e módulos CSS. Mantenha sincronizado com as funções expostas.
 - **Arquivo fonte em `web/src/`, compilado para `web/static/`**: esbuild compila e minifica. `npm run build` gera os estáticos. **Nunca editar `static/` diretamente.**
 - **IIFE para scripts no browser**: O build do esbuild usa `format: "iife"` para gerar código que não polui o escopo global além do que é explicitamente exposto.
@@ -167,38 +165,6 @@ Para dar controle sobre a precisão da IA, adicionou-se sliders de configuraçã
 - **Alterada em**: 14/07/2026 — implementação dos thresholds dinâmicos e UI de sliders.
 
 > ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
-
-### 3.8 Testes da Funcionalidade de Notas Semelhantes
-
-📍 `internal/features/notes/handlers_common_test.go`
-
-Para garantir a corretude da lógica de voto majoritário e thresholds dinâmicos, foram criados testes unitários e de integração:
-
-**Testes unitários** (`filterAndRankSimilarNotes` — função pura):
-| Teste | O que verifica |
-|-------|---------------|
-| `TestFilterAndRank_Empty` | Mapas vazios/nulos retornam lista vazia |
-| `TestFilterAndRank_OrderByFrequencyThenDistance` | Ordenação: frequência ↓, depois distância ↑ |
-| `TestFilterAndRank_LimitTop5` | Limite máximo de 5 resultados |
-| `TestFilterAndRank_MajorityVoting_BlocksLowMatch` | Nota longa (≥3 chunks) com 1 match e dist ≥0.60 é bloqueada |
-| `TestFilterAndRank_ShortNote_NoMajorityVoting` | Nota curta (≤2 chunks) não sofre voto majoritário |
-| `TestFilterAndRank_ExcellentDistanceBypassesMajority` | Dist excepcional (<0.60) passa mesmo com 1 match |
-| `TestFilterAndRank_PercentageConversion` | Conversão L2 → % de similaridade (~100% a 50%) |
-| `TestFilterAndRank_ThresholdAlreadyApplied` | Threshold é responsabilidade do caller, não da função |
-
-**Testes de integração** (threshold dinâmico + embeddings reais):
-| Teste | O que verifica |
-|-------|---------------|
-| `TestSimilarNotesThreshold_Default` | Sem config no banco → padrão 72% |
-| `TestSimilarNotesThreshold_Custom` | Config `similar_notes_threshold=90` → dist ~0.447 |
-| `TestSimilarNotesThreshold_InvalidValue` | Valor inválido → fallback silencioso |
-| `TestSimilarNotesThreshold_ZeroPercent` | 0% → dist ~1.414 (tudo passa) |
-| `TestSimilarNotesThreshold_HundredPercent` | 100% → dist 0.0 (apenas exatas) |
-| `TestSimilarNotes_EmptyEmbeddings` | Nota sem embeddings → 0 similares |
-| `TestSimilarNotes_WithPlot` | Threshold dinâmico com embeddings reais na vec0 |
-| `TestSimilarNotes_MajorityVotingWithRealEmbeddings` | Voto majoritário com dados reais |
-
-**Total**: 16 testes (8 unit + 8 integração), todos usando banco real (`newTestContext`).
 
 ## 4. Banco de Dados
 
@@ -284,12 +250,31 @@ Caso no futuro seja necessário suportar fallback remoto, é preciso:
 1. Adicionar `https://huggingface.co` (e possivelmente `https://cdn-lfs.huggingface.co`) ao `connect-src` do CSP.
 2. Testar manualmente, pois o bloqueio do CSP não gera erro no servidor — aparece apenas no console do navegador.
 
----
+## 7. Arquitetura de Busca
 
-## 7. Pendentes
+O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
 
-| ID | Item | Esforço | Motivo |
-|----|------|---------|--------|
-| P1 | ~~Migrar queries de embeddings para sqlc~~ | ✅ Feito | `HasEmbedding`, `GetEmbeddedFiles`, `GetEmbeddingStatus`, `GetPendingEmbeddingNotes`, `DeleteEmbedding`, `SaveNoteChunks` migradas para sqlc. `SearchSimilar`, `SaveEmbedding`, `GetNoteEmbeddings` mantidas como SQL cru por usarem a tabela virtual `note_embeddings` (vec0) que sqlc não reconhece. |
-| P2 | **Stemmer pt-BR para FTS5** | Baixo | `unicode61` não faz stemming. "navegador" não encontra "navegação". O fallback LIKE já cobre, mas um stemmer melhoraria precisão. |
-| P3 | ~~Corrigir erros do typecheck (30 erros)~~ | ✅ Feito | JSDoc corrigido em `semantic.js`, `mindmap.js`, `semantic-worker.js`, `map.js`, `drawing.jsx`. Ajustadas declarações em `global.d.ts`. `npm run typecheck` agora passa limpo. |
+### 7.1 Os Três Modos de Busca
+
+| Modo | Descrição | Tecnologia | Destaque Visual |
+| --- | --- | --- | --- |
+| **Busca de Notas** | Filtro instantâneo no menu focado exclusivamente no nome/título dos arquivos Markdown. | Busca local indexada por correspondência parcial (`LIKE %q%`). | Azul (Sky) |
+| **Busca Global** | Busca textual de termos no conteúdo interno de todas as notas do sistema. | SQLite FTS5 (tabela virtual) + Lematização (Stemming) em pt-BR. | Azul (Exato) e Roxo (Lematizado) |
+| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`MiniLM-L12-v2` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
+
+
+## Como Funciona a Busca Semântica
+Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
+Pesquisa KNN: Quando você digita uma busca semântica, o navegador gera o vetor da sua pergunta e o envia ao banco de dados SQLite. O banco usa a extensão vetorial sqlite-vec para rodar um cálculo KNN (Vizinhos Mais Próximos) e encontrar quais chunks de notas no banco têm a direção vetorial mais parecida (similaridade de cosseno).
+
+## Como Funcionam as Notas Relacionadas (Critérios)
+Para a nota que você está editando no momento, o sistema faz o seguinte:
+
+Busca por Chunk: Ele envia cada um dos chunks da nota aberta para buscar vizinhos no banco.
+Estratégia do Voto Majoritário:
+Ele anota a menor distância vetorial de cada nota candidata e em quantos chunks diferentes ela deu match.
+Regra para Notas Longas: Se a nota que você está editando for longa (≥ 3 chunks), uma nota relacionada só é considerada relevante se der match em pelo menos 2 chunks diferentes da nota atual. A única exceção é se a similaridade de um chunk for excepcional (acima de 82%).
+Ordenação: As top 5 notas relacionadas são ordenadas por frequência de matches (notas mais consistentes ao longo do texto vêm primeiro) e depois por proximidade vetorial (distância).
+Nota de Corte (Threshold): Descarta qualquer resultado abaixo do percentual configurado por você (padrão de 72%).
+
+[HELP do sistema](internal/features/system/help.md)

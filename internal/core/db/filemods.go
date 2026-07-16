@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"ton618/internal/core/db/generated"
 )
@@ -12,7 +11,7 @@ import (
 
 // GetFileMod returns the stored modification time for a file, or empty string if not found.
 func (s *Store) GetFileMod(arquivo string) (string, error) {
-	mtime, err := s.Q.GetFileMod(context.Background(), arquivo)
+	mtime, err := s.Q.GetFileMod(s.queryCtx(), arquivo)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil
@@ -26,7 +25,7 @@ func (s *Store) GetFileMod(arquivo string) (string, error) {
 func (s *Store) SetFileMod(arquivo, mtime string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.SetFileMod(context.Background(), dbgen.SetFileModParams{
+	return s.Q.SetFileMod(s.queryCtx(), dbgen.SetFileModParams{
 		Arquivo: arquivo,
 		Mtime:   sql.NullString{String: mtime, Valid: true},
 	})
@@ -36,12 +35,12 @@ func (s *Store) SetFileMod(arquivo, mtime string) error {
 func (s *Store) DeleteFileMod(arquivo string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.DeleteFileMod(context.Background(), arquivo)
+	return s.Q.DeleteFileMod(s.queryCtx(), arquivo)
 }
 
 // GetAllFileMods returns all stored file modification times as a map.
 func (s *Store) GetAllFileMods() (map[string]string, error) {
-	rows, err := s.Q.GetAllFileMods(context.Background())
+	rows, err := s.Q.GetAllFileMods(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +61,7 @@ type FileModTag struct {
 
 // GetFilesModsAndTags returns all files with their mtime and concatenated tags in a single query.
 func (s *Store) GetFilesModsAndTags() ([]FileModTag, error) {
-	rows, err := s.Q.GetFilesModsAndTags(context.Background())
+	rows, err := s.Q.GetFilesModsAndTags(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}

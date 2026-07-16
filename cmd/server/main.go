@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"mime"
-	"strings"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,8 +19,8 @@ import (
 	"ton618/internal/core/db"
 	"ton618/internal/core/services"
 	"ton618/internal/features/appointments"
-	"ton618/internal/features/notes"
 	"ton618/internal/features/embeddings"
+	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
 	"ton618/internal/features/system"
 	"ton618/internal/features/todos"
@@ -58,8 +58,6 @@ func main() {
 	}
 
 	slog.Info("Templates carregados")
-
-
 
 	// 4. Watcher
 	w := watcher.NewWatcher(cfg, store)
@@ -112,6 +110,7 @@ func main() {
 	r.Use(middleware.LoggingMiddleware)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.SecurityHeadersMiddleware)
+	r.Use(middleware.WithRequestContext) // propaga contexto HTTP para cancelamento de queries
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
 	// Arquivos estáticos (com suporte a arquivos pré-comprimidos Gzip/Brotli)
@@ -147,11 +146,7 @@ func main() {
 				ext := filepath.Ext(filePath)
 				contentType := mime.TypeByExtension(ext)
 				if contentType == "" {
-					if ext == ".onnx" {
-						contentType = "application/octet-stream"
-					} else {
-						contentType = "application/octet-stream"
-					}
+					contentType = "application/octet-stream"
 				}
 				w.Header().Set("Content-Type", contentType)
 				http.ServeFile(w, req, brPath)
@@ -167,11 +162,7 @@ func main() {
 				ext := filepath.Ext(filePath)
 				contentType := mime.TypeByExtension(ext)
 				if contentType == "" {
-					if ext == ".onnx" {
-						contentType = "application/octet-stream"
-					} else {
-						contentType = "application/octet-stream"
-					}
+					contentType = "application/octet-stream"
 				}
 				w.Header().Set("Content-Type", contentType)
 				http.ServeFile(w, req, gzPath)

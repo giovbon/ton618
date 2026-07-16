@@ -1,6 +1,8 @@
 package services
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,3 +103,88 @@ func TestBackup_EmptyDocs(t *testing.T) {
 	}
 	t.Logf("Backup vazio gerado: %d bytes", len(data))
 }
+
+func TestBackup_Conversions(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+
+	// Nota de desenho
+	drawingContent := "---\ntype: drawing\n---\n{\"elements\": []}"
+	store.SaveNote("notes/meu-desenho.md", drawingContent, time.Now().Format(time.RFC3339))
+
+	// Nota de planilha
+	sheetContent := "---\ntype: spreadsheet\n---\n{\"data\": [[\"Header1\", \"Header2\"], [\"Value1\", \"Value2\"]]}"
+	store.SaveNote("notes/minha-planilha.md", sheetContent, time.Now().Format(time.RFC3339))
+
+	// Nota de diagrama Mermaid
+	mermaidContent := "---\ntype: mermaid\n---\ngraph TD\nA[Inicio] --> B(Fim)"
+	store.SaveNote("notes/meu-diagrama.md", mermaidContent, time.Now().Format(time.RFC3339))
+
+	// Nota normal
+	markdownContent := "---\ntitle: Minha Nota\n---\n# Ola"
+	store.SaveNote("notes/nota-normal.md", markdownContent, time.Now().Format(time.RFC3339))
+
+	data, err := svc.Create(false)
+	if err != nil {
+		t.Fatalf("Backup Create failed: %v", err)
+	}
+
+	// Le o ZIP usando archive/zip
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("failed to open zip: %v", err)
+	}
+
+	foundDrawing := false
+	foundSpreadsheet := false
+	foundMermaid := false
+	foundNormal := false
+
+	for _, f := range r.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("failed to open file in zip: %v", err)
+		}
+		var contentBuf bytes.Buffer
+		contentBuf.ReadFrom(rc)
+		rc.Close()
+		fileContent := contentBuf.String()
+
+		switch f.Name {
+		case "notes/meu-desenho.excalidraw":
+			foundDrawing = true
+			if !strings.Contains(fileContent, `{"elements": []}`) {
+				t.Errorf("conteudo de meu-desenho.excalidraw incorreto: %q", fileContent)
+			}
+		case "notes/minha-planilha.csv":
+			foundSpreadsheet = true
+			if !strings.Contains(fileContent, "Header1,Header2") {
+				t.Errorf("conteudo de minha-planilha.csv incorreto: %q", fileContent)
+			}
+		case "notes/meu-diagrama.mmd":
+			foundMermaid = true
+			if !strings.Contains(fileContent, "graph TD") || strings.Contains(fileContent, "type: mermaid") {
+				t.Errorf("conteudo de meu-diagrama.mmd incorreto (deveria conter apenas o corpo de codigo): %q", fileContent)
+			}
+		case "notes/nota-normal.md":
+			foundNormal = true
+			if !strings.Contains(fileContent, "# Ola") {
+				t.Errorf("conteudo de nota-normal.md incorreto: %q", fileContent)
+			}
+		}
+	}
+
+	if !foundDrawing {
+		t.Error("meu-desenho.excalidraw nao encontrado no zip")
+	}
+	if !foundSpreadsheet {
+		t.Error("minha-planilha.csv nao encontrado no zip")
+	}
+	if !foundMermaid {
+		t.Error("meu-diagrama.mmd nao encontrado no zip")
+	}
+	if !foundNormal {
+		t.Error("nota-normal.md nao encontrado no zip")
+	}
+}
+
+

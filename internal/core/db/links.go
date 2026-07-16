@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"strings"
 	"ton618/internal/core/db/generated"
 )
@@ -10,7 +9,7 @@ import (
 func (s *Store) AddLink(fromFile, toFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.AddLink(context.Background(), dbgen.AddLinkParams{
+	return s.Q.AddLink(s.queryCtx(), dbgen.AddLinkParams{
 		FromFile: fromFile,
 		ToFile:   toFile,
 	})
@@ -20,7 +19,7 @@ func (s *Store) AddLink(fromFile, toFile string) error {
 func (s *Store) RemoveLink(fromFile, toFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.RemoveLink(context.Background(), dbgen.RemoveLinkParams{
+	return s.Q.RemoveLink(s.queryCtx(), dbgen.RemoveLinkParams{
 		FromFile: fromFile,
 		ToFile:   toFile,
 	})
@@ -28,29 +27,29 @@ func (s *Store) RemoveLink(fromFile, toFile string) error {
 
 // GetLinks returns all outbound links from a file.
 func (s *Store) GetLinks(fromFile string) ([]string, error) {
-	return s.Q.GetLinks(context.Background(), fromFile)
+	return s.Q.GetLinks(s.queryCtx(), fromFile)
 }
 
 // GetLinkCount returns the number of outbound links from a file.
 func (s *Store) GetLinkCount(fromFile string) int {
-	count, _ := s.Q.GetLinkCount(context.Background(), fromFile)
+	count, _ := s.Q.GetLinkCount(s.queryCtx(), fromFile)
 	return int(count)
 }
 
 // GetBacklinks returns all files that link to the given file.
 func (s *Store) GetBacklinks(toFile string) ([]string, error) {
-	return s.Q.GetBacklinks(context.Background(), strings.ToLower(toFile))
+	return s.Q.GetBacklinks(s.queryCtx(), strings.ToLower(toFile))
 }
 
 // GetBacklinkCount returns the number of files that link to the given file.
 func (s *Store) GetBacklinkCount(toFile string) int {
-	count, _ := s.Q.GetBacklinkCount(context.Background(), strings.ToLower(toFile))
+	count, _ := s.Q.GetBacklinkCount(s.queryCtx(), strings.ToLower(toFile))
 	return int(count)
 }
 
 // GetAllLinks returns all links as a map of from_file -> []to_file.
 func (s *Store) GetAllLinks() (map[string][]string, error) {
-	rows, err := s.Q.GetAllLinks(context.Background())
+	rows, err := s.Q.GetAllLinks(s.queryCtx())
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +65,7 @@ func (s *Store) GetAllLinks() (map[string][]string, error) {
 func (s *Store) ClearLinks(fromFile string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.ClearLinks(context.Background(), fromFile)
+	return s.Q.ClearLinks(s.queryCtx(), fromFile)
 }
 
 // GetLinksByFiles returns all unique files that the given files link TO.
@@ -76,7 +75,7 @@ func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]
 		return nil, nil
 	}
 	
-	rows, err := s.Q.GetLinksByFiles(context.Background(), fromFiles)
+	rows, err := s.Q.GetLinksByFiles(s.queryCtx(), fromFiles)
 	if err != nil {
 		return nil, err
 	}

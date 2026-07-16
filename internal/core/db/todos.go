@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"strings"
 	"time"
@@ -14,14 +13,14 @@ import (
 func (s *Store) DeleteTodosByFile(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.DeleteTodosByFile(context.Background(), filename)
+	return s.Q.DeleteTodosByFile(s.queryCtx(), filename)
 }
 
 // SaveFileTodos exclui os TODOs antigos de um arquivo e insere os novos em lote.
 func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error {
 	return s.RunInTx(func(tx *sql.Tx) error {
 		qtx := s.Q.WithTx(tx)
-		if err := qtx.DeleteTodosByFile(context.Background(), filename); err != nil {
+		if err := qtx.DeleteTodosByFile(s.queryCtx(), filename); err != nil {
 			return err
 		}
 
@@ -31,7 +30,7 @@ func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error
 
 		for _, t := range todos {
 			createdStr := t.Created.UTC().Format(time.RFC3339)
-			if err := qtx.CreateTodo(context.Background(), dbgen.CreateTodoParams{
+			if err := qtx.CreateTodo(s.queryCtx(), dbgen.CreateTodoParams{
 				ID:        t.ID,
 				File:      t.File,
 				Section:   sql.NullString{String: t.Section, Valid: true},

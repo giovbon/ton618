@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"ton618/internal/core/db"
+	"ton618/internal/processor"
 )
 
 type SearchHit struct {
@@ -249,11 +250,20 @@ func buildFTSQuery(raw string) string {
 				continue
 			}
 			wLower := strings.ToLower(w)
+			wStemmed := processor.StemText(wLower)
+			
 			if len(wLower) > 2 {
 				wLower += "*"
 			}
-			// Column weights: tags > arquivo > secao > texto
-			parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
+			if len(wStemmed) > 2 {
+				wStemmed += "*"
+			}
+			
+			if wStemmed != "" {
+				parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+` OR texto_stemmed:`+wStemmed+`)`)
+			} else {
+				parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
+			}
 		}
 	}
 
@@ -399,5 +409,29 @@ func removeAccents(s string) string {
 	)
 	return r.Replace(s)
 }
+
+// GetQueryStems extrai os radicais dos termos relevantes da busca.
+func GetQueryStems(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ""
+	}
+	terms := extractTerms(query)
+	var stems []string
+	seen := make(map[string]bool)
+	for _, t := range terms {
+		tLower := strings.ToLower(t)
+		if len(tLower) <= 2 {
+			continue
+		}
+		stem := processor.StemText(tLower)
+		if stem != "" && !seen[stem] {
+			seen[stem] = true
+			stems = append(stems, stem)
+		}
+	}
+	return strings.Join(stems, ",")
+}
+
 
 

@@ -12,7 +12,7 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
             <p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p>
         </div>
     } else {
-        <div class="space-y-1" id="sidebar-tree">
+        <div class="space-y-2" id="sidebar-tree">
             for _, n := range notes {
                 @SidebarNoteItem(n, query)
             }
@@ -21,15 +21,12 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
 }
 
 templ SidebarNoteItem(n domain.NoteItem, query string) {
-    <div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-900/40 transition-colors group">
+    <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-sky-500/30 hover:bg-sky-950/10 transition-all duration-300 group">
         <div class="flex-1 min-w-0">
             <a href={ templ.SafeURL(getNoteLink(n)) } target={ getTarget(n.Arquivo) } class="block">
                 <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">
                     <span class="mr-1.5">{ getNoteIcon(n.Arquivo, n.Type, n.Tags) }</span>@highlightText(getFilename(n.Arquivo), query)
                 </span>
-                <div class="flex flex-wrap gap-x-2 mt-0.5">
-                    <span class="text-[10px] text-zinc-700">{ getDisplayType(n) }</span>
-                </div>
             </a>
         </div>
         

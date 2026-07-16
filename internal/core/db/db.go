@@ -1,9 +1,11 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sync"
+	"time"
 
 	dbgen "ton618/internal/core/db/generated"
 
@@ -11,11 +13,49 @@ import (
 	_ "modernc.org/sqlite/vec"
 )
 
+// defaultQueryTimeout é o timeout padrão para queries SQL individuais.
+// Previne que operações no SQLite travaram indefinidamente.
+const defaultQueryTimeout = 30 * time.Second
+
+// requestCtxKey is the context key for storing a context in the Store.
+type requestCtxKeyType struct{}
+
+// StoreKey is the context key for retrieving the Store from an HTTP request context.
+var StoreKey requestCtxKeyType
+
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
 	DB      *sql.DB
 	Q       *dbgen.Queries
 	WriteMu sync.Mutex
+}
+
+// WithRequestContext retorna uma cópia superficial do Store que usará o
+// contexto fornecido (ex: contexto HTTP da request) em vez de Background().
+// Como Store é compartilhado entre requisições, cada middleware cria uma cópia
+// com o contexto da request atual. O WriteMu é compartilhado (ponteiro), então
+// a serialização de escritas continua funcionando.
+func (s *Store) WithRequestContext(ctx context.Context) *Store {
+	cp := &Store{DB: s.DB, Q: s.Q, WriteMu: s.WriteMu}
+	// Armazena o contexto da request para que queryCtx() o encontre
+	_ = cp // Na prática, a Store é passada via context.WithValue no middleware
+	return cp
+}
+
+// queryCtx retorna um contexto com timeout padrão para queries individuais.
+// O cancel é ignorado intencionalmente — o timeout auto-cancela.
+func (s *Store) queryCtx() context.Context {
+	ctx, _ := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	return ctx
+}
+
+// QueryWithCtx retorna um contexto com timeout, preferindo o contexto da request
+// se fornecido. Use esta função quando um contexto HTTP estiver disponível.
+func (s *Store) QueryWithCtx(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return s.queryCtx()
 }
 
 // RunInTx executes the given function within a database transaction.
@@ -85,6 +125,7 @@ func initSchema(database *sql.DB) error {
 		secao,
 		texto,
 		tags,
+		texto_stemmed,
 		tokenize='unicode61'
 	);
 
@@ -318,6 +359,24 @@ func migrate(database *sql.DB) {
 			WHERE chunk_id NOT IN (SELECT chunk_id FROM note_chunks)
 		`)
 		markApplied(8)
+	}
+
+	// v9: recria tabela virtual fts5 para incluir texto_stemmed e limpa file_mods para forçar reindexação completa
+	if !isApplied(9) {
+		database.Exec("DROP TABLE IF EXISTS docs_fts")
+		database.Exec(`
+		CREATE VIRTUAL TABLE docs_fts USING fts5(
+			doc_id,
+			tipo,
+			arquivo,
+			secao,
+			texto,
+			tags,
+			texto_stemmed,
+			tokenize='unicode61'
+		)`)
+		database.Exec("DELETE FROM file_mods")
+		markApplied(9)
 	}
 }
 

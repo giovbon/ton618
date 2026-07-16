@@ -11,7 +11,7 @@ import (
 )
 
 func TestHandleUpload_InvalidExtension(t *testing.T) {
-	cfg := &config.Config{
+	cfg := &config.AppConfig{
 		DocsDir: t.TempDir(),
 	}
 	
@@ -42,7 +42,7 @@ func TestHandleUpload_InvalidExtension(t *testing.T) {
 		t.Errorf("expected status 403 Forbidden, got %d", rr.Code)
 	}
 
-	expectedError := "apenas arquivos PDF ou imagens (.png, .jpg) sao permitidos\n"
+	expectedError := "apenas arquivos PDF, EPUB ou imagens (.png, .jpg, .jpeg) são permitidos\n"
 	if rr.Body.String() != expectedError {
 		t.Errorf("expected body %q, got %q", expectedError, rr.Body.String())
 	}

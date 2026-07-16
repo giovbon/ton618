@@ -1,7 +1,6 @@
 package notes
 
 import (
-	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,64 +11,63 @@ import (
 	"strings"
 	"time"
 
-	"ton618/internal/core/db"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
 
 var compressedExts = map[string]bool{
 	// Archives / Compression
-	".zip":   true,
-	".rar":   true,
-	".7z":    true,
-	".tar":   true,
-	".gz":    true,
-	".tgz":   true,
-	".bz2":   true,
-	".tbz2":  true,
-	".xz":    true,
-	".txz":   true,
-	".lzma":  true,
-	".tlz":   true,
-	".z":     true,
-	".zst":   true,
-	".lz":    true,
-	".apk":   true,
-	".jar":   true,
-	".war":   true,
-	".ear":   true,
+	".zip":  true,
+	".rar":  true,
+	".7z":   true,
+	".tar":  true,
+	".gz":   true,
+	".tgz":  true,
+	".bz2":  true,
+	".tbz2": true,
+	".xz":   true,
+	".txz":  true,
+	".lzma": true,
+	".tlz":  true,
+	".z":    true,
+	".zst":  true,
+	".lz":   true,
+	".apk":  true,
+	".jar":  true,
+	".war":  true,
+	".ear":  true,
 	// Images
-	".png":   true,
-	".jpg":   true,
-	".jpeg":  true,
-	".gif":   true,
-	".webp":  true,
-	".heic":  true,
-	".heif":  true,
-	".tiff":  true,
-	".tif":   true,
-	".ico":   true,
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+	".webp": true,
+	".heic": true,
+	".heif": true,
+	".tiff": true,
+	".tif":  true,
+	".ico":  true,
 	// Audio
-	".mp3":   true,
-	".m4a":   true,
-	".aac":   true,
-	".flac":  true,
-	".ogg":   true,
-	".opus":  true,
-	".wav":   true,
-	".wma":   true,
+	".mp3":  true,
+	".m4a":  true,
+	".aac":  true,
+	".flac": true,
+	".ogg":  true,
+	".opus": true,
+	".wav":  true,
+	".wma":  true,
 	// Video
-	".mp4":   true,
-	".mkv":   true,
-	".avi":   true,
-	".mov":   true,
-	".webm":  true,
-	".flv":   true,
-	".wmv":   true,
-	".mpeg":  true,
-	".mpg":   true,
-	".m4v":   true,
-	".3gp":   true,
+	".mp4":  true,
+	".mkv":  true,
+	".avi":  true,
+	".mov":  true,
+	".webm": true,
+	".flv":  true,
+	".wmv":  true,
+	".mpeg": true,
+	".mpg":  true,
+	".m4v":  true,
+	".3gp":  true,
 	// Disk Images / Binaries / Documents
 	".iso":   true,
 	".img":   true,
@@ -86,7 +84,6 @@ var compressedExts = map[string]bool{
 }
 
 // ── Helpers de normalizacao ──
-
 
 // copyFile copies a file from src to dst path, creating parent dirs as needed.
 func copyFile(src, dst string) error {
@@ -153,7 +150,11 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cleaned := filepath.Clean(raw)
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, cleaned)
+	fullPath, err := safeJoin(ctx.Cfg.DocsDir, cleaned)
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
 
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		http.Error(w, "file not found", http.StatusNotFound)
@@ -215,7 +216,11 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 
 	// Resolve path traversal
 	cleaned := filepath.Clean(raw)
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, cleaned)
+	fullPath, err := safeJoin(ctx.Cfg.DocsDir, cleaned)
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
 
 	// Verifica se o arquivo existe
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
@@ -268,11 +273,6 @@ func (ctx *HandlerContext) doSaveNote(filename, content, tags string) (unchanged
 
 // HandleFileSave saves a note to the database and processes its content.
 func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	raw := r.FormValue("filename")
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
@@ -290,11 +290,6 @@ func (ctx *HandlerContext) HandleFileSave(w http.ResponseWriter, r *http.Request
 
 // HandleNoteSaveJSON salva uma nota e retorna JSON (para chamadas via fetch/XHR).
 func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	raw := r.FormValue("filename")
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
@@ -317,69 +312,32 @@ func (ctx *HandlerContext) HandleNoteSaveJSON(w http.ResponseWriter, r *http.Req
 }
 
 func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	raw := r.FormValue("filename")
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(raw))
-	var filename string
+	ft, filename, fullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, raw)
+	if !found {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
 
-	if ext == ".pdf" {
-		// PDF files: search in pdfs/ or notes/
-		basename := filepath.Base(raw)
-		subdirs := []string{"pdfs", "notes"}
-		found := false
-		for _, sd := range subdirs {
-			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-			if _, err := os.Stat(testPath); err == nil {
-				filename = sd + "/" + basename
-				os.Remove(testPath)
-				found = true
-				break
-			}
-		}
-		if !found {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-	} else if ext == ".epub" {
-		basename := filepath.Base(raw)
-		filename = "epubs/" + basename
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, "epubs", basename)
-		os.Remove(fullPath)
-	} else if ext == ".zip" {
-		// ZIP attachments: stored in attachments/
-		basename := filepath.Base(raw)
-		filename = "attachments/" + basename
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
-		os.Remove(fullPath)
-	} else {
-		// Note: DeleteAllFileRecords (abaixo) apaga atomicamente todas as tabelas,
-		// incluindo notes — nenhum DeleteNote separado é necessário aqui.
-		filename = NoteFilename(raw)
-		// Remove o arquivo físico do disco (compatibilidade com migração)
-		fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-		os.Remove(fullPath)
+	// Remove o arquivo físico do disco
+	os.Remove(fullPath)
 
-		// Fallback para nomes com caracteres inválidos UTF-8 (\xc3, etc) que se tornam \uFFFD () no browser
-		if strings.Contains(filename, "\uFFFD") {
-			allNotes, err := ctx.Store.GetAllNotes()
-			if err == nil {
-				for dbFile := range allNotes {
-					if strings.ToValidUTF8(dbFile, "\uFFFD") == filename {
-						if e := ctx.Store.DeleteAllFileRecords(dbFile); e != nil {
-							slog.Error("delete all records (fallback utf8)", "file", dbFile, "error", e)
-						}
-						fPath := filepath.Join(ctx.Cfg.DocsDir, dbFile)
-						os.Remove(fPath)
+	// Fallback para nomes com caracteres inválidos UTF-8
+	if ft == fileTypeNote && strings.Contains(filename, "\uFFFD") {
+		allNotes, err := ctx.Store.GetAllNotes()
+		if err == nil {
+			for dbFile := range allNotes {
+				if strings.ToValidUTF8(dbFile, "\uFFFD") == filename {
+					if e := ctx.Store.DeleteAllFileRecords(dbFile); e != nil {
+						slog.Error("delete all records (fallback utf8)", "file", dbFile, "error", e)
 					}
+					fPath := filepath.Join(ctx.Cfg.DocsDir, dbFile)
+					os.Remove(fPath)
 				}
 			}
 		}
@@ -395,11 +353,6 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 }
 
 func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	rawOld := r.FormValue("old")
 	rawNew := r.FormValue("new")
 	if rawNew == "" {
@@ -411,426 +364,59 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(rawOld))
-	isPdf := ext == ".pdf"
-	isZip := ext == ".zip"
-	isEpub := ext == ".epub"
+	ft, oldName, oldFullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, rawOld)
+	if !found {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
 
-	var oldName, newName string
-
-	if isPdf {
-		// Para PDFs, busca o arquivo em pdfs/ ou notes/
-		basename := filepath.Base(rawOld)
-		newBasename := filepath.Base(rawNew)
-		if !strings.HasSuffix(strings.ToLower(newBasename), ".pdf") {
-			newBasename += ".pdf"
-		}
-
-		subdirs := []string{"pdfs", "notes"}
-		found := false
-		for _, sd := range subdirs {
-			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-			if _, err := os.Stat(testPath); err == nil {
-				oldName = sd + "/" + basename
-				newName = sd + "/" + newBasename
-				oldPath := testPath
-				newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-				if err := os.Rename(oldPath, newPath); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-	} else if isEpub {
-		basename := filepath.Base(rawOld)
-		newBasename := filepath.Base(rawNew)
-		if !strings.HasSuffix(strings.ToLower(newBasename), ".epub") {
-			newBasename += ".epub"
-		}
-		oldName = "epubs/" + basename
-		newName = "epubs/" + newBasename
-		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
-		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-		if err := os.Rename(oldPath, newPath); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else if isZip {
-		basename := filepath.Base(rawOld)
-		newBasename := filepath.Base(rawNew)
-		if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
-			newBasename += ".zip"
-		}
-		sd := "attachments"
-		if strings.HasPrefix(rawOld, "archives/") {
-			sd = "archives"
-		} else if strings.HasPrefix(rawOld, "attachments/") {
-			sd = "attachments"
-		} else {
-			if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "archives", basename)); err == nil {
-				sd = "archives"
-			}
-		}
-		oldName = sd + "/" + basename
-		newName = sd + "/" + newBasename
-		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
-		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-		if err := os.Rename(oldPath, newPath); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
+	if ft == fileTypeNote {
 		// Note: delega para o NoteService
 		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		newName = NoteFilename(rawNew)
+		w.Header().Set("HX-Trigger", "reload-sidebar")
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 
-	// Update DB: delete old indexes for PDF/ZIP/EPUB; notes já foram tratados pelo Notes.Rename
-	if isPdf || isZip || isEpub {
-		if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
-			slog.Error("delete old file records on rename", "file", oldName, "error", err)
+	// Para PDF/ZIP/EPUB: renomeia o arquivo físico
+	newBasename := filepath.Base(rawNew)
+	extMap := map[fileType]string{
+		fileTypePDF:  ".pdf",
+		fileTypeEPUB: ".epub",
+		fileTypeZip:  ".zip",
+	}
+	if suffix, ok := extMap[ft]; ok {
+		if !strings.HasSuffix(strings.ToLower(newBasename), suffix) {
+			newBasename += suffix
 		}
-		newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-		info, err := os.Stat(newPath)
-		if err == nil {
-			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-				Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-			})
-		}
+	}
+
+	sd := filepath.Dir(oldName)
+	newName := sd + "/" + newBasename
+	newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+
+	if err := os.Rename(oldFullPath, newPath); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update DB: delete old indexes
+	if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
+		slog.Error("delete old file records on rename", "file", oldName, "error", err)
+	}
+
+	info, err := os.Stat(newPath)
+	if err == nil {
+		watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+			Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
+		})
 	}
 
 	w.Header().Set("HX-Trigger", "reload-sidebar")
 	w.WriteHeader(http.StatusOK)
-}
-
-func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if err := r.ParseMultipartForm(126 << 20); err != nil { // 126MB
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		http.Error(w, "no files uploaded", http.StatusBadRequest)
-		return
-	}
-
-	// Gera nome legivel pro zip
-	zipName := processor.GenerateCUID2() + ".zip"
-
-	// Diretorio de anexos
-	attachDir := filepath.Join(ctx.Cfg.DocsDir, "attachments")
-	os.MkdirAll(attachDir, 0755)
-	zipPath := filepath.Join(attachDir, zipName)
-
-	// Cria o ZIP
-	zipFile, err := os.Create(zipPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	zw := zip.NewWriter(zipFile)
-	var fileList []map[string]string
-	var listText strings.Builder
-
-	for _, fh := range files {
-		src, err := fh.Open()
-		if err != nil {
-			continue
-		}
-		
-		// Determina o método de compressão: usa Store (sem compressão) para arquivos já compactados
-		ext := strings.ToLower(filepath.Ext(fh.Filename))
-		var method uint16 = zip.Deflate
-		if compressedExts[ext] {
-			method = zip.Store
-		}
-
-		header := &zip.FileHeader{
-			Name:   fh.Filename,
-			Method: method,
-		}
-		header.Modified = time.Now()
-
-		w, err := zw.CreateHeader(header)
-		if err != nil {
-			src.Close()
-			continue
-		}
-		io.Copy(w, src)
-		src.Close()
-		listText.WriteString(fh.Filename + " ")
-		fileList = append(fileList, map[string]string{
-			"name": fh.Filename,
-			"size": fmt.Sprintf("%d", fh.Size),
-		})
-	}
-	zw.Close()
-	zipFile.Close()
-
-	// Cria documento FTS com a lista de arquivos (pesquisavel)
-	filename := "attachments/" + zipName
-	docID := processor.HashFunc("att-" + zipName)
-	fileListStr := listText.String()
-
-	// Marca como recentemente processado ANTES de registrar no DB,
-	// para evitar que o watcher (fsnotify ou pollAll) interfira.
-	watcher.MarkRecentlyProcessed(filename)
-
-	// Limpa registros anteriores (segurança, caso haja colisão de nome)
-	ctx.Store.DeleteDocumentsByFile(filename)
-	ctx.Store.DeleteFTSByFile(filename)
-
-	doc := db.Document{
-		ID:        docID,
-		Tipo:      "attachment",
-		Arquivo:   filename,
-		Secao:     "\U0001f4e6 " + zipName,
-		Texto:     "Arquivos: " + fileListStr,
-		Tags:      "",
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		Hash:      processor.CalculateHash("att", fileListStr, nil),
-	}
-	ctx.Store.InsertDocument(doc)
-	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
-	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
-
-
-	slog.Info("Anexo ZIP criado", "file", filename, "arquivos", len(files), "tamanho", filepath.Base(zipPath))
-
-	// Redireciona pra lista compacta (mesmo comportamento do upload de PDF)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	r.ParseMultipartForm(126 << 20) // 126MB
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	isPdf := ext == ".pdf"
-	isEpub := ext == ".epub"
-	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
-
-	if !isPdf && !isEpub && !isImage {
-		http.Error(w, "apenas arquivos PDF, EPUB ou imagens (.png, .jpg, .jpeg) são permitidos", http.StatusForbidden)
-		return
-	}
-
-	var filename string
-	if isPdf {
-		filename = "pdfs/" + filepath.Base(header.Filename)
-		// Garante extensao .pdf
-		if !strings.HasSuffix(filename, ".pdf") {
-			filename += ".pdf"
-		}
-	} else if isEpub {
-		filename = "epubs/" + filepath.Base(header.Filename)
-		// Garante extensao .epub
-		if !strings.HasSuffix(filename, ".epub") {
-			filename += ".epub"
-		}
-	} else {
-		// Imagem: salva em notes/ com prefixo img_ para evitar conflito
-		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
-		cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
-		filename = fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
-	}
-
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-
-	dst, err := os.Create(fullPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer dst.Close()
-
-	io.Copy(dst, file)
-
-	// Marca como recentemente processado para evitar race com o watcher
-	watcher.MarkRecentlyProcessed(filename)
-
-	// Process the file (index)
-	info, _ := os.Stat(fullPath)
-	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	})
-
-	// Redireciona para a pagina inicial (modo compacto)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-// ── Upload Image (from editor, returns JSON) ──
-
-// HandleUploadImage recebe uma imagem, salva em notes/ e retorna JSON com a URL.
-// Diferente do HandleUpload, não redireciona — usado pelo editor via fetch.
-func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	r.ParseMultipartForm(10 << 20) // 10MB
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": false, "error": err.Error(),
-		})
-		return
-	}
-	defer file.Close()
-
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp"
-
-	if !isImage {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": false, "error": "apenas imagens (.png, .jpg, .jpeg, .gif, .webp)",
-		})
-		return
-	}
-
-	// Salva em notes/ com prefixo img_
-	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
-	cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
-	filename := fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
-
-	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
-
-	dst, err := os.Create(fullPath)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": false, "error": err.Error(),
-		})
-		return
-	}
-	defer dst.Close()
-
-	io.Copy(dst, file)
-
-	// Marca como recentemente processado para evitar race com o watcher
-	watcher.MarkRecentlyProcessed(filename)
-
-	// Processa como imagem (cria documento stub, sem FTS)
-	info, _ := os.Stat(fullPath)
-	watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-		Path: fullPath, Filename: filename, ModTime: info.ModTime(), Type: "create",
-	})
-
-
-	imageURL := "/file?name=" + SafeFileQueryEscape(filename)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":       true,
-		"filename": filename,
-		"url":      imageURL,
-	})
-}
-
-// ── Cleanup Orphan Images ──
-
-// HandleCleanupImages varre o diretorio notes/ em busca de arquivos img_*
-// que não são referenciados por nenhum documento (texto), e os remove
-// junto com seus registros no DB (documento stub, file_mod).
-func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
-	entries, err := os.ReadDir(notesDir)
-	if err != nil {
-		ArchiveAlert("Erro ao ler diretório de notas.", false).Render(r.Context(), w)
-		return
-	}
-
-	var removed []string
-	var errors []string
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		// Só processa arquivos com prefixo img_
-		if !strings.HasPrefix(name, "img_") {
-			continue
-		}
-		// Verifica se é extensão de imagem
-		ext := strings.ToLower(filepath.Ext(name))
-		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" {
-			continue
-		}
-
-		filename := "notes/" + name
-		// Verifica se a imagem é referenciada em algum documento
-		count, err := ctx.Store.SearchDocumentText(filename)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: erro ao buscar: %v", name, err))
-			continue
-		}
-		if count > 0 {
-			continue // ainda referenciada
-		}
-
-		// Remove o arquivo físico
-		fullPath := filepath.Join(notesDir, name)
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			errors = append(errors, fmt.Sprintf("%s: erro ao remover: %v", name, err))
-			continue
-		}
-
-		// Remove registros do DB
-		ctx.Store.DeleteDocumentsByFile(filename)
-		ctx.Store.DeleteFTSByFile(filename)
-		ctx.Store.DeleteFileMod(filename)
-		ctx.Store.ResetPopularity(filename)
-		ctx.Store.SetFileTags(filename, nil)
-		ctx.Store.ClearLinks(filename)
-
-
-		removed = append(removed, name)
-	}
-
-	slog.Info("Limpeza de imagens órfãs", "removidas", len(removed), "erros", len(errors))
-
-	if len(errors) > 0 {
-		ArchiveAlert(fmt.Sprintf("%d imagens removidas com %d erros.", len(removed), len(errors)), false).Render(r.Context(), w)
-	} else {
-		ArchiveAlert(fmt.Sprintf("%d imagens órfãs removidas com sucesso.", len(removed)), true).Render(r.Context(), w)
-	}
 }
 
 // ── Backup ──
@@ -858,63 +444,23 @@ func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) 
 
 // HandleDuplicateNote duplicates an existing note or file, prefixing the name with "copia-".
 func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	raw := r.FormValue("filename")
 	if raw == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(raw))
-	var oldFilename, newFilename string
-	var isZip, isPdf bool
+	ft, oldFilename, oldFullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, raw)
+	if !found {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
 
-	if ext == ".pdf" {
-		isPdf = true
-		basename := filepath.Base(raw)
-		subdirs := []string{"pdfs", "notes"}
-		found := false
-		for _, sd := range subdirs {
-			testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-			if _, err := os.Stat(testPath); err == nil {
-				oldFilename = sd + "/" + basename
-				newFilename = sd + "/copia-" + basename
-				
-				dstPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
-				if err := copyFile(testPath, dstPath); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
+	dir := filepath.Dir(oldFilename)
+	base := filepath.Base(oldFilename)
+	newFilename := filepath.ToSlash(filepath.Join(dir, "copia-"+base))
 
-				found = true
-				break
-			}
-		}
-		if !found {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-	} else if ext == ".zip" {
-		isZip = true
-		basename := filepath.Base(raw)
-		oldFilename = "attachments/" + basename
-		newFilename = "attachments/copia-" + basename
-		oldPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", basename)
-		newPath := filepath.Join(ctx.Cfg.DocsDir, "attachments", "copia-"+basename)
-		if err := copyFile(oldPath, newPath); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		oldFilename = NoteFilename(raw)
-		dir := filepath.Dir(oldFilename)
-		base := filepath.Base(oldFilename)
-		newFilename = filepath.ToSlash(filepath.Join(dir, "copia-"+base))
-
+	if ft == fileTypeNote {
 		content, err := ctx.Store.GetNote(oldFilename)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -956,24 +502,27 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 		if err == nil && len(tags) > 0 {
 			ctx.Store.SetFileTags(newFilename, tags)
 		}
-	}
 
-	// Index/Process new file
-	if isPdf || isZip {
-		newPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
-		info, err := os.Stat(newPath)
-		if err == nil {
-			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-				Path: newPath, Filename: newFilename, ModTime: info.ModTime(), Type: "create",
-			})
-		}
-	} else {
-		content, _ := ctx.Store.GetNote(newFilename)
+		// Reindex
 		if err := ctx.Notes.Save(newFilename, content, nil); err != nil {
 			slog.Error("reindex duplicated note", "file", newFilename, "error", err)
 		}
-	}
+	} else {
+		// PDF/ZIP/EPUB: copia o arquivo físico
+		dstPath := filepath.Join(ctx.Cfg.DocsDir, newFilename)
+		if err := copyFile(oldFullPath, dstPath); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
+		// Indexa o arquivo copiado
+		info, err := os.Stat(dstPath)
+		if err == nil {
+			watcher.ProcessFile(ctx.Store, watcher.FileEvent{
+				Path: dstPath, Filename: newFilename, ModTime: info.ModTime(), Type: "create",
+			})
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -984,59 +533,3 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 }
 
 // HandleEpubReader renders the EPUB reader view.
-func (ctx *HandlerContext) HandleEpubReader(w http.ResponseWriter, r *http.Request) {
-	file := r.URL.Query().Get("file")
-	if file == "" {
-		http.Error(w, "file parameter required", http.StatusBadRequest)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	EpubReader(file).Render(r.Context(), w)
-}
-
-// HandleGetEpubPosition returns the saved position of an EPUB file.
-// GET /api/epub/position?file=<file>
-func (ctx *HandlerContext) HandleGetEpubPosition(w http.ResponseWriter, r *http.Request) {
-	file := r.URL.Query().Get("file")
-	if file == "" {
-		http.Error(w, "file parameter required", http.StatusBadRequest)
-		return
-	}
-	key := "epub_position:" + file
-	position, err := ctx.Store.GetSetting(key)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"position": position,
-	})
-}
-
-// HandlePostEpubPosition saves the reading position of an EPUB file.
-// POST /api/epub/position
-func (ctx *HandlerContext) HandlePostEpubPosition(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		File     string `json:"file"`
-		Position string `json:"position"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-	if req.File == "" || req.Position == "" {
-		http.Error(w, "file and position are required", http.StatusBadRequest)
-		return
-	}
-	key := "epub_position:" + req.File
-	if err := ctx.Store.SetSetting(key, req.Position); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}

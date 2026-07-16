@@ -10,38 +10,45 @@ templ indexContent() {
 <div>
     <!-- Search toggle + bar -->
     <div class="flex items-center gap-3 mb-4">
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1 p-0.5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl select-none">
+            <!-- Busca de Notas -->
             <button
-                id="mode-toggle"
-                onclick="toggleMode()"
-                class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30"
-                title="Alternar modo de busca"
-            >
-                <span id="mode-icon">
-                    <svg
-                        class="w-3.5 h-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2.5"
-                            d="M4 6h16M4 12h16m-7 6h7"
-                        />
-                    </svg>
-                </span>
-                <span id="mode-label">Notas</span>
-            </button>
-            <button
-                id="mode-semantic"
-                onclick="toggleSemantic()"
-                class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50"
-                title="Busca semântica por similaridade (IA)"
+                id="btn-search-notes"
+                type="button"
+                onclick="setSearchMode('notes')"
+                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/10 text-sky-400 border-sky-500/20"
+                title="Busca de Notas (por nome do arquivo)"
             >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+                <span class="hidden lg:inline">Notas</span>
+            </button>
+
+            <!-- Busca Global -->
+            <button
+                id="btn-search-global"
+                type="button"
+                onclick="setSearchMode('global')"
+                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                title="Busca Global no Conteúdo (com lematização)"
+            >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span class="hidden lg:inline">Global</span>
+            </button>
+
+            <!-- Busca Semântica -->
+            <button
+                id="btn-search-semantic"
+                type="button"
+                onclick="setSearchMode('semantic')"
+                class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                title="Busca Semântica por Similaridade (IA)"
+            >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 <span>Semântica</span>
             </button>
@@ -51,29 +58,29 @@ templ indexContent() {
             <input
                 id="search-local"
                 type="text"
-                placeholder="Filtrar notas..."
+                placeholder="Filtrar nomes das notas..."
                 name="q"
                 autocomplete="off"
                 hx-get="/api/sidebar"
                 hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
                 hx-target="#contentArea"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-600 transition-all"
             />
             <input
                 id="search-global"
                 type="text"
-                placeholder="Buscar no conteúdo das notas..."
+                placeholder="Buscar no conteúdo das notas (com lematização)..."
                 name="q"
                 autocomplete="off"
                 hx-post="/search"
                 hx-trigger="input changed delay:300ms, search"
                 hx-target="#global-container"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-600 transition-all hidden"
             />
             <input
                 id="search-semantic"
                 type="text"
-                placeholder="Busca por similaridade (IA)..."
+                placeholder="Busca semântica por similaridade (IA)..."
                 name="q"
                 autocomplete="off"
                 class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-600 transition-all hidden"
@@ -147,101 +154,78 @@ templ indexContent() {
         var isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent) || 
                        (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
         if (isMobile) {
-            var btn = document.getElementById("mode-semantic");
+            var btn = document.getElementById("btn-search-semantic");
             if (btn) btn.style.display = "none";
         }
     })();
 
-    // NOTA: Indexação é iniciada apenas quando o usuário clica em "Semântica" (toggleSemantic)
+    // NOTA: Indexação é iniciada apenas quando o usuário entra no modo "Semântica"
     // para não baixar o modelo de ~200MB desnecessariamente.
 
-    var isCompact = true;
-    var isSemantic = false;
+    var currentSearchMode = "notes"; // "notes", "global", "semantic"
 
-    function toggleMode() {
-        if (isSemantic) toggleSemantic();
+    function setSearchMode(mode) {
+        if (currentSearchMode === mode) return;
 
-        isCompact = !isCompact;
-        var btn = document.getElementById("mode-toggle");
-        var label = document.getElementById("mode-label");
-        var icon = document.getElementById("mode-icon");
-        var localInput = document.getElementById("search-local");
-        var globalInput = document.getElementById("search-global");
-
-        if (isCompact) {
-            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
-            label.textContent = "Notas";
-            icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"/></svg>';
-
-            localInput.classList.remove("hidden");
-            globalInput.classList.add("hidden");
-            document.getElementById("compact-container").classList.remove("hidden");
-            document.getElementById("global-container").classList.add("hidden");
-            localInput.focus();
-        } else {
-            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
-            label.textContent = "Busca";
-            icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
-
-            localInput.classList.add("hidden");
-            globalInput.classList.remove("hidden");
-            document.getElementById("compact-container").classList.add("hidden");
-            document.getElementById("global-container").classList.remove("hidden");
-            globalInput.focus();
+        // Limpa estado anterior se necessário
+        if (currentSearchMode === "semantic") {
+            document.getElementById("semantic-panel").classList.add("hidden");
+            document.getElementById("semantic-container").classList.add("hidden");
+            if (window.semanticIndex && typeof window.semanticIndex.dispose === 'function') {
+                window.semanticIndex.dispose();
+            }
         }
-    }
 
-    // ── Semantic Mode (usa o singleton compartilhado semanticIndex) ──
+        currentSearchMode = mode;
 
-    var semanticSearchTimeout = null;
-    var currentSearchQuery = "";
+        // Elementos de Botão
+        var btnNotes = document.getElementById("btn-search-notes");
+        var btnGlobal = document.getElementById("btn-search-global");
+        var btnSemantic = document.getElementById("btn-search-semantic");
 
-    function toggleSemantic() {
-        var isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent) || 
-                       (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
-        if (isMobile) return;
-        isSemantic = !isSemantic;
-
-        var btn = document.getElementById("mode-semantic");
-        var panel = document.getElementById("semantic-panel");
-        var semanticInput = document.getElementById("search-semantic");
+        // Elementos de Input
         var localInput = document.getElementById("search-local");
         var globalInput = document.getElementById("search-global");
+        var semanticInput = document.getElementById("search-semantic");
 
-        if (isSemantic) {
-            isCompact = false;
-            localInput.classList.add("hidden");
-            globalInput.classList.add("hidden");
-            document.getElementById("compact-container").classList.add("hidden");
-            document.getElementById("global-container").classList.add("hidden");
+        // Containers de Resultados
+        var compactContainer = document.getElementById("compact-container");
+        var globalContainer = document.getElementById("global-container");
+        var semanticContainer = document.getElementById("semantic-container");
 
-            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-violet-500/20 text-violet-300 border-violet-500/40";
-            document.getElementById("mode-toggle").className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
-            document.getElementById("mode-label").textContent = "Notas";
+        // Reset classes dos botões
+        btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnSemantic.className = "hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
 
+        // Esconde todos os inputs e containers
+        localInput.classList.add("hidden");
+        globalInput.classList.add("hidden");
+        semanticInput.classList.add("hidden");
+        compactContainer.classList.add("hidden");
+        globalContainer.classList.add("hidden");
+        semanticContainer.classList.add("hidden");
+
+        // Ativa o modo selecionado
+        if (mode === "notes") {
+            btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/10 text-sky-400 border-sky-500/20";
+            localInput.classList.remove("hidden");
+            compactContainer.classList.remove("hidden");
+            localInput.focus();
+        } else if (mode === "global") {
+            btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+            globalInput.classList.remove("hidden");
+            globalContainer.classList.remove("hidden");
+            globalInput.focus();
+        } else if (mode === "semantic") {
+            btnSemantic.className = "hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/10 text-violet-400 border-violet-500/20";
             semanticInput.classList.remove("hidden");
-            panel.classList.remove("hidden");
-            document.getElementById("semantic-container").classList.remove("hidden");
+            semanticContainer.classList.remove("hidden");
+            document.getElementById("semantic-panel").classList.remove("hidden");
             semanticInput.focus();
 
             initSemanticUI();
             loadIndexStatus();
-        } else {
-            btn.className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-zinc-800/50 text-zinc-400 border-zinc-700/50";
-            semanticInput.classList.add("hidden");
-            panel.classList.add("hidden");
-            document.getElementById("semantic-container").classList.add("hidden");
-
-            isCompact = true;
-            localInput.classList.remove("hidden");
-            document.getElementById("compact-container").classList.remove("hidden");
-            document.getElementById("mode-toggle").className = "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all border bg-sky-500/10 text-sky-400 border-sky-500/30";
-            document.getElementById("mode-label").textContent = "Notas";
-
-            // Libera o worker/modelo ao fechar painel semântico — ninguém mais precisa
-            if (window.semanticIndex && typeof window.semanticIndex.dispose === 'function') {
-                window.semanticIndex.dispose();
-            }
         }
     }
 
@@ -467,7 +451,7 @@ templ indexContent() {
             return;
         }
 
-        var html = '<div class="space-y-1.5">';
+        var html = '<div class="space-y-2.5">';
         results.forEach(function(r) {
             var name = r.filename.replace(/^notes\//, "").replace(/\.md$/, "");
             var simVal = 1 - (r.distance * r.distance) / 2;
@@ -476,7 +460,7 @@ templ indexContent() {
             var similarityColor = similarity > 75 ? "text-green-400" : similarity > 50 ? "text-yellow-400" : "text-zinc-500";
 
             html += '<a href="/editor?file=' + encodeURIComponent(r.filename) + '"' +
-                ' class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/60 hover:border-violet-700/40 hover:bg-violet-950/20 transition-all group">' +
+                ' class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-violet-500/30 hover:bg-violet-950/10 transition-all duration-300 group">' +
                 '<div class="flex items-center gap-2 min-w-0">' +
                 '<svg class="w-3.5 h-3.5 text-zinc-600 group-hover:text-violet-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
                 '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>' +
@@ -537,11 +521,35 @@ templ indexContent() {
         terms = terms.concat(words);
 
         if (!terms.length) return;
+
+        var stemsEl = document.getElementById("search-metadata");
+        var stems = [];
+        if (stemsEl && stemsEl.dataset.stems) {
+            stems = stemsEl.dataset.stems.split(",").filter(function(s) { return s.length > 0; });
+        }
+
         document.querySelectorAll(".snippet-text, #global-container a[href^='/editor']").forEach(function (el) {
             var html = el.innerHTML;
             terms.forEach(function (w) {
                 var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>|[^<>]*<\/)", "gi");
                 html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
+            });
+            stems.forEach(function (stem) {
+                var re = new RegExp("\\b(" + stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-zA-Z0-9À-ÿ_]*)\\b(?![^<]*>|[^<>]*<\/)", "gi");
+                html = html.replace(re, function(match, group1, offset, fullText) {
+                    var prevText = fullText.slice(0, offset);
+                    var lastSpanIdx = prevText.lastIndexOf("<span");
+                    if (lastSpanIdx !== -1) {
+                        var lastCloseIdx = prevText.lastIndexOf("</span>");
+                        if (lastCloseIdx < lastSpanIdx) {
+                            var spanOpenTag = prevText.slice(lastSpanIdx);
+                            if (spanOpenTag.includes("search-highlight")) {
+                                return match;
+                            }
+                        }
+                    }
+                    return '<span class="stem-highlight text-violet-400 font-bold bg-violet-500/15 rounded px-0.5">' + match + '</span>';
+                });
             });
             el.innerHTML = html;
         });
