@@ -162,6 +162,8 @@ templ indexContent() {
     // para não baixar o modelo de ~200MB desnecessariamente.
 
     var currentSearchMode = "notes"; // "notes", "global", "semantic"
+    var currentSearchQuery = "";
+    var semanticSearchTimeout = null;
 
     function setSearchMode(mode) {
         if (currentSearchMode === mode) return;
