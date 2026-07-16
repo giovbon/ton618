@@ -114,10 +114,14 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
 				// Adicionado https://static.cloudflareinsights.com para liberar o script do Cloudflare Beacon
-				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "+
+				// Adicionado blob: para suportar Web Workers criados via blob URL (Transformers.js/ONNX)
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "+
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "+
 				"font-src 'self' https://fonts.gstatic.com; "+
 				"img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
+				// worker-src e wasm-src necessários para Web Workers e WASM (Transformers.js/ONNX) no HTTPS
+				"worker-src 'self' blob:; "+
+				"wasm-src 'self' blob:; "+
 				// Adicionado https://*.xethub.hf.co para permitir o download dos modelos ONNX/Tokenizers do Hugging Face
 				"connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co")
 		next.ServeHTTP(w, r)

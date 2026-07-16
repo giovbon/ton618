@@ -89,7 +89,7 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 			LIMIT ? OFFSET ?`, size, from)
 	} else {
 		rows, err = s.DB.Query(`
-			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, -1, '<b>', '</b>', '...', 64) as snippet_text
+			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, 4, '<b>', '</b>', '...', 64) as snippet_text
 			FROM docs_fts
 			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'
 			ORDER BY rank

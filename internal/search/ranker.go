@@ -33,9 +33,13 @@ func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, syn
 	cleanedQueryNorm := removeAccents(cleanedQuery)
 	textoBaixoNorm := removeAccents(textoBaixo)
 	if len(strings.Fields(cleanedQuery)) > 1 && strings.Contains(textoBaixoNorm, cleanedQueryNorm) {
-		val := baseScore * 0.5 // +50% do BM25 base
+		val := baseScore * 0.5 // +50% do BM25 base para frase multi-termo exata
 		score += val
 		details["frase_exata"] = val
+	} else if len(strings.Fields(cleanedQuery)) == 1 && strings.Contains(textoBaixoNorm, cleanedQueryNorm) {
+		val := baseScore * 0.3 // +30% do BM25 base para termo único literal
+		score += val
+		details["termo_exato"] = val
 	}
 
 	// ── CAMINHO: aditivo pequeno ──

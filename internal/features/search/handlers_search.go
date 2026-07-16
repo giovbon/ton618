@@ -263,6 +263,35 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 		// Extract multi-term context windows with ellipsis between distant terms
 		snippet = buildContextSnippet(query, snippet)
+
+		// Fallback: se o buildContextSnippet não encontrou o termo literalmente no texto
+		// (match ocorreu só via stem/lematização), usa o snippet do FTS5 como contexto.
+		// O snippet do FTS5 já aponta para a região correta do texto, mas usa <b> para marcar.
+		// Removemos as tags <b>/<\/b> e deixamos o JS de highlight cuidar da marcação visual.
+		if len(hit.Highlight) > 0 {
+			ftsSnippets := hit.Highlight["texto"]
+			if len(ftsSnippets) > 0 {
+				ftsSnip := ftsSnippets[0]
+				// Verifica se o snippet atual contém algum dos termos buscados
+				terms := extractSearchTerms(query)
+				snippetHasMatch := false
+				snippetLower := strings.ToLower(snippet)
+				snippetNorm := removeAccents(snippetLower)
+				for _, term := range terms {
+					if strings.Contains(snippetNorm, removeAccents(strings.ToLower(term))) {
+						snippetHasMatch = true
+						break
+					}
+				}
+				// Se o snippet atual não tem match literal, usa o snippet do FTS5 limpo
+				if !snippetHasMatch && ftsSnip != "" {
+					// Remove as marcações <b>/<\/b> que o SQLite snippet() inseriu
+					ftsSnip = strings.ReplaceAll(ftsSnip, "<b>", "")
+					ftsSnip = strings.ReplaceAll(ftsSnip, "</b>", "")
+					snippet = ftsSnip
+				}
+			}
+		}
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		// Filtra tags de tipo de nota para que não apareçam como tags comuns na interface do usuário
 		var userTags []string

@@ -161,6 +161,47 @@ func TestHandleFileDelete_Success(t *testing.T) {
 	}
 }
 
+func TestHandleFileDelete_DBOnly(t *testing.T) {
+	// Cenário: nota salva apenas no banco (sem arquivo em disco),
+	// como acontece quando o usuário salva pelo editor TipTap
+	// via HandleNoteSaveJSON -> doSaveNote -> NoteService.Save.
+	ctx := newTestContext(t)
+	filename := "notes/db-only.md"
+
+	// Salva apenas no banco, sem escrever arquivo em disco
+	ctx.Store.SaveNote(filename, "Conteudo apenas no banco", "2026-07-16T12:00:00Z")
+
+	// Confirma que a nota existe no banco mas o arquivo não existe em disco
+	if !ctx.Store.NoteExists(filename) {
+		t.Fatal("nota deveria existir no banco antes do delete")
+	}
+	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
+	if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
+		t.Fatal("arquivo não deveria existir em disco antes do delete")
+	}
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=db-only.md")
+	req := httptest.NewRequest("POST", "/file/delete", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200 para nota DB-only, got %d", rec.Code)
+	}
+
+	// Verifica que a nota foi removida do banco
+	if ctx.Store.NoteExists(filename) {
+		t.Error("nota DB-only deveria ter sido removida do banco")
+	}
+
+	// Verifica cabeçalho HTMX
+	if rec.Header().Get("HX-Trigger") != "reload-sidebar" {
+		t.Error("esperado header HX-Trigger=reload-sidebar")
+	}
+}
+
 // ── HandleFileRename ────────────────────────────────────────────
 
 func TestHandleFileRename_MissingParams(t *testing.T) {

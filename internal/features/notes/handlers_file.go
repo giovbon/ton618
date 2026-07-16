@@ -320,11 +320,19 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 
 	ft, filename, fullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, raw)
 	if !found {
-		http.Error(w, "file not found", http.StatusNotFound)
-		return
+		// Notas markdown podem existir apenas no banco (sem arquivo físico).
+		// Tenta resolver sem a verificação estrita de existência em disco.
+		ft2, fn2, fp2, found2 := resolveFileInfo(ctx.Cfg.DocsDir, raw)
+		if !found2 || ft2 != fileTypeNote {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+		ft = ft2
+		filename = fn2
+		fullPath = fp2
 	}
 
-	// Remove o arquivo físico do disco
+	// Remove o arquivo físico do disco (se existir)
 	os.Remove(fullPath)
 
 	// Fallback para nomes com caracteres inválidos UTF-8
