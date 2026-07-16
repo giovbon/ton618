@@ -44,13 +44,13 @@ templ indexContent() {
                 id="btn-search-semantic"
                 type="button"
                 onclick="setSearchMode('semantic')"
-                class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
                 title="Busca Semântica por Similaridade (IA)"
             >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span>Semântica</span>
+                <span class="hidden lg:inline">Semântica</span>
             </button>
         </div>
 
@@ -149,10 +149,9 @@ templ indexContent() {
 </div>
 
 <script>
-    // Esconde o botão Semântica em mobile
+    // Esconde o botão Semântica apenas em mobile (por User Agent)
     (function() {
-        var isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent) || 
-                       (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+        var isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent);
         if (isMobile) {
             var btn = document.getElementById("btn-search-semantic");
             if (btn) btn.style.display = "none";
@@ -196,7 +195,7 @@ templ indexContent() {
         // Reset classes dos botões
         btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
         btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
-        btnSemantic.className = "hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnSemantic.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
 
         // Esconde todos os inputs e containers
         localInput.classList.add("hidden");
@@ -218,7 +217,7 @@ templ indexContent() {
             globalContainer.classList.remove("hidden");
             globalInput.focus();
         } else if (mode === "semantic") {
-            btnSemantic.className = "hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/10 text-violet-400 border-violet-500/20";
+            btnSemantic.className = "flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/10 text-violet-400 border-violet-500/20";
             semanticInput.classList.remove("hidden");
             semanticContainer.classList.remove("hidden");
             document.getElementById("semantic-panel").classList.remove("hidden");
