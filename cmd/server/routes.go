@@ -54,6 +54,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 
 	mux.Get("/file", notesCtx.HandleFile)
 	mux.Get("/epub/reader", notesCtx.HandleEpubReader)
+	mux.Get("/api/epub/position", notesCtx.HandleGetEpubPosition)
+	mux.Post("/api/epub/position", notesCtx.HandlePostEpubPosition)
 	mux.Get("/file/download", notesCtx.HandleFileDownload)
 	mux.Post("/file/save", notesCtx.HandleFileSave)
 	mux.Post("/api/note/save", notesCtx.HandleNoteSaveJSON)
