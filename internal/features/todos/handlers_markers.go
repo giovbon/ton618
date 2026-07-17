@@ -3,10 +3,12 @@ package todos
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"ton618/internal/core/db"
-	)
+	"ton618/internal/processor"
+)
 
 // ── Todo Markers (HTMX) ──
 
@@ -67,6 +69,7 @@ func (ctx *HandlerContext) HandleUpdateTodoMarker(w http.ResponseWriter, r *http
 	
 	color := r.FormValue("color")
 	activeStr := r.URL.Query().Get("active")
+	sortOrderStr := r.FormValue("sort_order")
 
 	for i, m := range markers {
 		if m.Marker == markerName {
@@ -77,6 +80,11 @@ func (ctx *HandlerContext) HandleUpdateTodoMarker(w http.ResponseWriter, r *http
 				markers[i].Active = true
 			} else if activeStr == "false" {
 				markers[i].Active = false
+			}
+			if sortOrderStr != "" {
+				if v, err := strconv.Atoi(sortOrderStr); err == nil && v >= 0 {
+					markers[i].SortOrder = v
+				}
 			}
 			break
 		}
@@ -107,14 +115,13 @@ func (ctx *HandlerContext) HandleRemoveTodoMarker(w http.ResponseWriter, r *http
 }
 
 func (ctx *HandlerContext) HandleResetTodoMarkers(w http.ResponseWriter, r *http.Request) {
-	defaults := []db.TodoMarker{
-		{Marker: "TODO", Color: "#3b82f6", Active: true},
-		{Marker: "FIXME", Color: "#f59e0b", Active: true},
-		{Marker: "BUG", Color: "#ef4444", Active: true},
-		{Marker: "HACK", Color: "#8b5cf6", Active: false},
-		{Marker: "NOTE", Color: "#06b6d4", Active: false},
-		{Marker: "OPTIMIZE", Color: "#10b981", Active: false},
-		{Marker: "REVIEW", Color: "#f97316", Active: false},
+	var defaults []db.TodoMarker
+	for _, m := range processor.DefaultTodoMarkers {
+		defaults = append(defaults, db.TodoMarker{
+			Marker: m.Marker,
+			Color:  m.Color,
+			Active: m.Active,
+		})
 	}
 	ctx.Store.SaveTodoMarkers(defaults)
 	MarkersList(defaults).Render(r.Context(), w)

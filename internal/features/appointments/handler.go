@@ -11,6 +11,7 @@ import (
 	"ton618/internal/core/db"
 	"ton618/internal/core/domain"
 	"ton618/internal/core/timeutil"
+	"ton618/internal/httputil"
 	"ton618/internal/processor"
 )
 
@@ -36,8 +37,7 @@ func (ctx *HandlerContext) HandleGetAppointments(w http.ResponseWriter, r *http.
 	if apps == nil {
 		apps = []domain.Appointment{}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(apps)
+	httputil.WriteJSON(w, apps)
 }
 
 // HandleCreateAppointment creates a new appointment.
@@ -58,9 +58,7 @@ func (ctx *HandlerContext) HandleCreateAppointment(w http.ResponseWriter, r *htt
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(a)
+	httputil.WriteJSONStatus(w, http.StatusCreated, a)
 }
 
 // HandleUpdateAppointment updates an existing appointment.
@@ -76,9 +74,7 @@ func (ctx *HandlerContext) HandleUpdateAppointment(w http.ResponseWriter, r *htt
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(a)
+	httputil.WriteJSONStatus(w, http.StatusOK, a)
 }
 
 // HandleDeleteAppointment removes an appointment.

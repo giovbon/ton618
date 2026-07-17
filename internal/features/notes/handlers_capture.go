@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"ton618/internal/httputil"
 )
 
 // HandleCapture processa uma URL (artigo web ou video YouTube) e salva como nota.
@@ -43,8 +45,7 @@ func (ctx *HandlerContext) HandleCapture(w http.ResponseWriter, r *http.Request)
 	}
 
 	slog.Info("Captura salva", "file", result.Filename, "title", result.Title)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	httputil.WriteJSON(w, map[string]string{
 		"filename": result.Filename,
 		"title":    result.Title,
 		"url":      "/editor?file=" + result.Filename,

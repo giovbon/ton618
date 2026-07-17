@@ -34,7 +34,7 @@ func TestTodoMarkers_GetDefaultMarkers(t *testing.T) {
 	}
 
 	// Verifica que os markers essenciais existem
-	expected := map[string]bool{"TODO": false, "FIXME": false, "BUG": false, "HACK": false, "NOTE": false}
+	expected := map[string]bool{"TODO": false, "DOING": false, "DONE": false}
 	for _, m := range markers {
 		if _, ok := expected[m.Marker]; ok {
 			expected[m.Marker] = true
@@ -151,8 +151,8 @@ func TestTodoMarkers_Reset(t *testing.T) {
 	}
 
 	reset, _ := ctx.Store.GetTodoMarkers()
-	if len(reset) < 5 {
-		t.Errorf("apos reset esperado >=5 markers, got %d", len(reset))
+	if len(reset) != 3 {
+		t.Errorf("apos reset esperado 3 markers, got %d", len(reset))
 	}
 }
 
@@ -160,14 +160,13 @@ func (ctx *HandlerContext) resetAndSeed() error {
 	if _, err := ctx.Store.DB.Exec("DELETE FROM todo_markers"); err != nil {
 		return err
 	}
-	markers := []db.TodoMarker{
-		{Marker: "TODO", Color: "#3b82f6", Active: true},
-		{Marker: "FIXME", Color: "#f59e0b", Active: true},
-		{Marker: "BUG", Color: "#ef4444", Active: true},
-		{Marker: "HACK", Color: "#8b5cf6", Active: false},
-		{Marker: "NOTE", Color: "#06b6d4", Active: false},
-		{Marker: "OPTIMIZE", Color: "#10b981", Active: false},
-		{Marker: "REVIEW", Color: "#f97316", Active: false},
+	var markers []db.TodoMarker
+	for _, m := range processor.DefaultTodoMarkers {
+		markers = append(markers, db.TodoMarker{
+			Marker: m.Marker,
+			Color:  m.Color,
+			Active: m.Active,
+		})
 	}
 	return ctx.Store.SaveTodoMarkers(markers)
 }

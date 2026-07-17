@@ -26,13 +26,15 @@ import (
 	"ton618/internal/watcher"
 )
 
+var searchQuotedRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
+
 // extractSearchTerms extrai os termos de busca da query, ignorando filtros e operadores.
 func extractSearchTerms(query string) []string {
 	var terms []string
 	remaining := query
 
 	// 1. Extrai frases entre aspas duplas ou simples
-	quotedRe := regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
+	quotedRe := searchQuotedRe
 	for {
 		m := quotedRe.FindStringSubmatch(remaining)
 		if m == nil {

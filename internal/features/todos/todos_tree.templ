@@ -25,6 +25,9 @@ func getMarkerColor(todoType string, markers []db.TodoMarker) string {
 	for _, m := range markers {
 		if m.Marker == t { return m.Color }
 	}
+	if t == "TODO" { return "#3b82f6" }
+	if t == "DOING" { return "#f59e0b" }
+	if t == "DONE" { return "#10b981" }
 	if t == "FIXME" { return "#f59e0b" }
 	if t == "BUG" { return "#ef4444" }
 	return "#3b82f6"
@@ -38,6 +41,9 @@ func getTodoIcon(todo processor.TodoItem, markers []db.TodoMarker) string {
         }
         return "⬜"
     }
+    if t == "TODO" { return "🔵" }
+    if t == "DOING" { return "🟡" }
+    if t == "DONE" { return "🟢" }
     if t == "FIXME" { return "🟡" }
     if t == "BUG" { return "🔴" }
     return "🔵"

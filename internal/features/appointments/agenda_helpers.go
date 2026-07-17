@@ -46,6 +46,7 @@ func GetTagColor(tag string) (string, string) {
 
 var wikiLinkRegex = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]+))?\]\]`)
 var tagRegex = regexp.MustCompile(`(^|\s)(#[\w\-]+)`)
+var stripTagRegex = regexp.MustCompile(`\s*#[\w\-]+`)
 
 // FormatDescription formats description text, escaping HTML and converting wikilinks and tags
 func FormatDescription(desc string) string {
@@ -122,7 +123,6 @@ func FormatAgendaDate(dateStr string) string {
 
 // StripTags removes hashtag patterns from the description text
 func StripTags(desc string) string {
-	stripTagRegex := regexp.MustCompile(`\s*#[\w\-]+`)
 	res := stripTagRegex.ReplaceAllString(desc, "")
 	return strings.TrimSpace(res)
 }

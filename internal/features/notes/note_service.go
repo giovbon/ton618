@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -170,7 +169,6 @@ func (s *NoteService) Rename(oldName, newName string) error {
 	// Atualiza os wikilinks nos arquivos que referenciavam a nota antiga
 	if len(backlinks) > 0 {
 		newTitle := strings.TrimSuffix(filepath.Base(newName), ".md")
-		wikilinkRegex := regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
 
 		for _, refFile := range backlinks {
 			if refFile == oldName || refFile == newName {
@@ -181,8 +179,8 @@ func (s *NoteService) Rename(oldName, newName string) error {
 				continue
 			}
 
-			updatedContent := wikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
-				submatches := wikilinkRegex.FindStringSubmatch(match)
+			updatedContent := processor.WikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
+				submatches := processor.WikilinkRegex.FindStringSubmatch(match)
 				if len(submatches) > 1 {
 					target := strings.TrimSpace(submatches[1])
 					if target == "" {

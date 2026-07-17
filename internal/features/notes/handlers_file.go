@@ -1,7 +1,6 @@
 package notes
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"ton618/internal/httputil"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
@@ -83,6 +83,9 @@ var compressedExts = map[string]bool{
 	".epub":  true,
 }
 
+// allowedPrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
+var allowedPrefixes = []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
+
 // ── Helpers de normalizacao ──
 
 // copyFile copies a file from src to dst path, creating parent dirs as needed.
@@ -136,7 +139,6 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -201,7 +203,6 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	allowedPrefixes := []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
 	hasPrefix := false
 	for _, p := range allowedPrefixes {
 		if strings.HasPrefix(raw, p) {
@@ -320,16 +321,8 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 
 	ft, filename, fullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, raw)
 	if !found {
-		// Notas markdown podem existir apenas no banco (sem arquivo físico).
-		// Tenta resolver sem a verificação estrita de existência em disco.
-		ft2, fn2, fp2, found2 := resolveFileInfo(ctx.Cfg.DocsDir, raw)
-		if !found2 || ft2 != fileTypeNote {
-			http.Error(w, "file not found", http.StatusNotFound)
-			return
-		}
-		ft = ft2
-		filename = fn2
-		fullPath = fp2
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
 	}
 
 	// Remove o arquivo físico do disco (se existir)
@@ -532,9 +525,7 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSONStatus(w, http.StatusOK, map[string]interface{}{
 		"ok":           true,
 		"new_filename": newFilename,
 	})

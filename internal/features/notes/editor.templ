@@ -2038,60 +2038,81 @@ templ editorContent(data domain.EditorData) {
             el.style.height = el.scrollHeight + "px";
         }
 
-        function applyToc(headings) {
+        function applyToc(tocText) {
             if (!editor || editor.isDestroyed) return;
-            var lines = headings.split("\n").filter(function (l) { return l.trim(); });
-            var tr = editor.state.tr;
-            var headingsInDoc = [];
-            editor.state.doc.descendants(function (node, pos) {
-                if (node.type.name === "heading") headingsInDoc.push(pos);
-            });
-            // Atualiza niveis dos headings existentes
-            for (var idx = 0; idx < headingsInDoc.length && idx < lines.length; idx++) {
-                var line = lines[idx];
+            var lines = tocText.split("\n").filter(function (l) { return l.trim(); });
+
+            // Parseia cada linha: { tabs, text }
+            var parsed = lines.map(function (l) {
                 var tabs = 0;
-                for (var i = 0; i < line.length; i++) {
-                    if (line[i] === "\t") tabs++;
+                for (var i = 0; i < l.length; i++) {
+                    if (l[i] === "\t") tabs++;
                     else break;
                 }
-                var text = line.trim();
-                var node = editor.state.doc.nodeAt(headingsInDoc[idx]);
+                return { tabs: tabs, text: l.trim() };
+            });
+
+            // ── Passo 1: atualiza apenas os NÍVEIS (setNodeMarkup não altera tamanhos) ──
+            var trLevels = editor.state.tr;
+            var positions = [];
+            editor.state.doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") positions.push(pos);
+            });
+
+            for (var idx = 0; idx < positions.length && idx < parsed.length; idx++) {
+                var node = editor.state.doc.nodeAt(positions[idx]);
                 if (!node || node.type.name !== "heading") continue;
-                var newLevel = Math.min(Math.max(tabs + 1, 1), 6);
+                var newLevel = Math.min(Math.max(parsed[idx].tabs + 1, 1), 6);
                 if (newLevel !== node.attrs.level) {
-                    tr.setNodeMarkup(headingsInDoc[idx], null, { level: newLevel });
+                    trLevels.setNodeMarkup(positions[idx], null, { level: newLevel });
                 }
-                // Atualiza texto se mudou
-                var oldText = node.textContent;
-                if (text && text !== oldText) {
-                    var textNode = editor.state.schema.text(text);
-                    var from = headingsInDoc[idx] + 1;
-                    var to = headingsInDoc[idx] + node.nodeSize - 1;
+            }
+            if (trLevels.steps.length) editor.view.dispatch(trLevels);
+
+            // ── Passo 2: atualiza TEXTOS com posições frescas (após step 1) ──
+            var trTexts = editor.state.tr;
+            var freshPositions = [];
+            editor.state.doc.descendants(function (node, pos) {
+                if (node.type.name === "heading") freshPositions.push({ pos: pos, node: node });
+            });
+
+            // Acumula offset causado pelas substituições anteriores nesta transação
+            var offset = 0;
+            for (var idx = 0; idx < freshPositions.length && idx < parsed.length; idx++) {
+                var entry = freshPositions[idx];
+                var oldText = entry.node.textContent;
+                var newText = parsed[idx].text;
+                if (newText && newText !== oldText) {
+                    var textNode = editor.state.schema.text(newText);
+                    var from = entry.pos + 1 + offset;
+                    var to   = entry.pos + entry.node.nodeSize - 1 + offset;
                     if (to > from) {
-                        tr.replaceWith(from, to, textNode);
+                        trTexts.replaceWith(from, to, textNode);
                     } else {
-                        tr.insert(from, textNode);
+                        trTexts.insert(from, textNode);
                     }
+                    // delta: novo texto tem newText.length chars, antigo tinha oldText.length
+                    offset += newText.length - oldText.length;
                 }
             }
-            // Cria headings novos se o TOC tiver mais linhas
-            if (lines.length > headingsInDoc.length) {
-                var lastPos = editor.state.doc.content.size;
-                for (var idx = headingsInDoc.length; idx < lines.length; idx++) {
-                    var line = lines[idx];
-                    var tabs = 0;
-                    for (var i = 0; i < line.length; i++) {
-                        if (line[i] === "\t") tabs++;
-                        else break;
-                    }
-                    var text = line.trim();
-                    if (!text) continue;
-                    var newLevel = Math.min(Math.max(tabs + 1, 1), 6);
-                    var hNode = editor.state.schema.nodes.heading.create({ level: newLevel }, editor.state.schema.text(text));
-                    tr.insert(lastPos - 1, hNode);
+
+            // ── Passo 3: cria headings novos se o TOC tiver mais linhas ──
+            if (parsed.length > freshPositions.length) {
+                var lastPos = editor.state.doc.content.size + offset;
+                for (var idx = freshPositions.length; idx < parsed.length; idx++) {
+                    var p = parsed[idx];
+                    if (!p.text) continue;
+                    var newLevel = Math.min(Math.max(p.tabs + 1, 1), 6);
+                    var hNode = editor.state.schema.nodes.heading.create(
+                        { level: newLevel },
+                        editor.state.schema.text(p.text)
+                    );
+                    trTexts.insert(lastPos - 1, hNode);
+                    lastPos += hNode.nodeSize;
                 }
             }
-            if (tr.steps.length) editor.view.dispatch(tr);
+
+            if (trTexts.steps.length) editor.view.dispatch(trTexts);
         }
 
         document.addEventListener("input", function (e) {
@@ -2122,7 +2143,7 @@ templ editorContent(data domain.EditorData) {
                     ta.value = ta.value.substring(0, start) + "\t" + ta.value.substring(end);
                     ta.selectionStart = ta.selectionEnd = start + 1;
                 }
-                ta.dispatchEvent(new Event("input"));
+                ta.dispatchEvent(new Event("input", { bubbles: true }));
             }
         });
 

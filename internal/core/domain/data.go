@@ -172,6 +172,9 @@ func DisplayName(name string) string {
 	return name
 }
 
+// AllowedFilePrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
+var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/", "epubs/"}
+
 // NoteIcon retorna o emoji correspondente ao tipo de nota.
 func NoteIcon(arquivo string, tags []string) string {
 	switch DetectNoteType(tags, "", arquivo) {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"ton618/internal/core/db"
+	"ton618/internal/httputil"
 )
 
 // ── Request/Response types ──
@@ -151,8 +152,7 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(searchEmbeddingResponse{Results: results})
+	httputil.WriteJSON(w, searchEmbeddingResponse{Results: results})
 }
 
 // HandleEmbeddingStatus retorna status de indexacao semantica.
@@ -165,9 +165,8 @@ func (ctx *HandlerContext) HandleEmbeddingStatus(w http.ResponseWriter, r *http.
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache, max-age=10")
-	json.NewEncoder(w).Encode(status)
+	httputil.WriteJSON(w, status)
 }
 
 // HandleEmbeddingPending retorna notas que ainda nao possuem embedding indexado.
@@ -205,8 +204,7 @@ func (ctx *HandlerContext) HandleEmbeddingPending(w http.ResponseWriter, r *http
 		items = append(items, pendingItem{Filename: p.Filename, Content: c})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(items)
+	httputil.WriteJSON(w, items)
 }
 
 // HandleEmbeddingReset apaga todos os chunks e embeddings do banco.
@@ -224,6 +222,5 @@ func (ctx *HandlerContext) HandleEmbeddingReset(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, map[string]string{"status": "ok"})
 }

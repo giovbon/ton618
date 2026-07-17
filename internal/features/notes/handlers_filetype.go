@@ -89,14 +89,16 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 }
 
 // resolveFileInfoStrict como resolveFileInfo, mas retorna found=false se o arquivo
-// não existir em disco (usado para operações que exigem o arquivo físico).
+// não existir em disco. Para notas markdown (fileTypeNote), não verifica o disco pois
+// notas são armazenadas exclusivamente no banco de dados.
 func resolveFileInfoStrict(docsDir, raw string) (ft fileType, filename, fullPath string, found bool) {
 	ft, filename, fullPath, found = resolveFileInfo(docsDir, raw)
 	if !found {
 		return
 	}
-	// Para notas markdown, verifica existência em disco
-	if ft == fileTypeNote {
+	// Notas residem no banco — não exigem arquivo físico.
+	// PDFs, EPUBs e ZIPs precisam do arquivo em disco.
+	if ft != fileTypeNote {
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			return ft, filename, fullPath, false
 		}

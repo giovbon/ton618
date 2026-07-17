@@ -17,6 +17,7 @@ import (
 	"ton618/internal/features/notes"
 	"ton618/internal/features/search"
 	"ton618/internal/features/todos"
+	"ton618/internal/httputil"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
@@ -28,8 +29,7 @@ func (ctx *HandlerContext) HandleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ctx *HandlerContext) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, map[string]interface{}{
 		"status":    "ok",
 		"documents": ctx.Store.GetDocumentCount(),
 	})
@@ -58,7 +58,6 @@ func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Req
 }
 
 func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	tags, err := ctx.Store.GetAllTags()
 	if err != nil {
@@ -66,7 +65,7 @@ func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request)
 	}
 	// Usa InternalTypeTags para filtrar todas as tags de tipo de editor
 	filtered := domain.FilterUserTags(tags)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, map[string]interface{}{
 		"tags": filtered,
 	})
 }
@@ -126,8 +125,7 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 	}
 
 	if r.URL.Query().Get("format") == "json" || r.Header.Get("Accept") == "application/json" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"todos": filteredTodos,
 			"count": len(filteredTodos),
 		})
@@ -158,15 +156,98 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 		fg.Sections[foundIdx].Todos = append(fg.Sections[foundIdx].Todos, t)
 	}
 
+	// Constrói mapa de marker → sort_order para ordenação eficiente
+	markerOrder := make(map[string]int)
+	for _, m := range markers {
+		markerOrder[strings.ToUpper(m.Marker)] = m.SortOrder
+	}
+
+	// Para cada arquivo, calcula o menor sort_order dos markers presentes
+	// (0 = indefinido → tratado como máximo para ficar no fim)
+	const maxOrder = 999999
+	fileMinOrder := make(map[string]int)
+	for fname, fg := range fileMap {
+		min := maxOrder
+		for _, sec := range fg.Sections {
+			for _, t := range sec.Todos {
+				ord, ok := markerOrder[strings.ToUpper(t.Type)]
+				if !ok || ord == 0 {
+					ord = maxOrder
+				}
+				if ord < min {
+					min = ord
+				}
+			}
+		}
+		fileMinOrder[fname] = min
+	}
+
 	var sortedFiles []string
 	for f := range fileMap {
 		sortedFiles = append(sortedFiles, f)
 	}
-	sort.Strings(sortedFiles)
+	sort.Slice(sortedFiles, func(i, j int) bool {
+		oi := fileMinOrder[sortedFiles[i]]
+		oj := fileMinOrder[sortedFiles[j]]
+		if oi != oj {
+			return oi < oj
+		}
+		return sortedFiles[i] < sortedFiles[j]
+	})
 
 	var finalGroups []todos.FileGroup
 	for _, f := range sortedFiles {
-		finalGroups = append(finalGroups, *fileMap[f])
+		fg := fileMap[f]
+
+		// Sort sections within each FileGroup by the minimum sort_order of their todos
+		sort.Slice(fg.Sections, func(i, j int) bool {
+			minI := maxOrder
+			for _, t := range fg.Sections[i].Todos {
+				ord, ok := markerOrder[strings.ToUpper(t.Type)]
+				if !ok || ord == 0 {
+					ord = maxOrder
+				}
+				if ord < minI {
+					minI = ord
+				}
+			}
+			minJ := maxOrder
+			for _, t := range fg.Sections[j].Todos {
+				ord, ok := markerOrder[strings.ToUpper(t.Type)]
+				if !ok || ord == 0 {
+					ord = maxOrder
+				}
+				if ord < minJ {
+					minJ = ord
+				}
+			}
+			if minI != minJ {
+				return minI < minJ
+			}
+			return fg.Sections[i].Name < fg.Sections[j].Name
+		})
+
+		// Sort todos within each section by sort_order of their type, then by line number
+		for sIdx := range fg.Sections {
+			sort.Slice(fg.Sections[sIdx].Todos, func(i, j int) bool {
+				ti := fg.Sections[sIdx].Todos[i]
+				tj := fg.Sections[sIdx].Todos[j]
+				ordI, okI := markerOrder[strings.ToUpper(ti.Type)]
+				if !okI || ordI == 0 {
+					ordI = maxOrder
+				}
+				ordJ, okJ := markerOrder[strings.ToUpper(tj.Type)]
+				if !okJ || ordJ == 0 {
+					ordJ = maxOrder
+				}
+				if ordI != ordJ {
+					return ordI < ordJ
+				}
+				return ti.Line < tj.Line
+			})
+		}
+
+		finalGroups = append(finalGroups, *fg)
 	}
 
 	todos.TodoTree(finalGroups, markers, len(filteredTodos)).Render(r.Context(), w)
@@ -194,9 +275,8 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 	sort.Slice(noteList, func(i, j int) bool {
 		return noteList[i].Mtime > noteList[j].Mtime
 	})
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, map[string]interface{}{
 		"notes": noteList,
 		"total": len(noteList),
 	})
@@ -703,8 +783,7 @@ func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r 
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{
+	httputil.WriteJSON(w, map[string]int{
 		"search_threshold": searchThreshold,
 		"notes_threshold":  notesThreshold,
 	})

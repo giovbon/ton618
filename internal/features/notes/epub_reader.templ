@@ -90,6 +90,26 @@ templ EpubReader(file string) {
             min-height: 100%;
         }
 
+        /* ── Scrollbars dark (container e TOC sidebar) ── */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #27272a;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #3f3f46;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #27272a transparent;
+        }
+
         /* ── Chapter nav buttons ── */
         .nav-bar {
             display: flex;
@@ -531,8 +551,32 @@ templ EpubReader(file string) {
                             "color":       "#a1a1aa !important",
                             "border-radius": "4px !important",
                             "font-size":   "14px !important"
+                        },
+                        "::-webkit-scrollbar": {
+                            "width":  "6px !important",
+                            "height": "6px !important"
+                        },
+                        "::-webkit-scrollbar-track": {
+                            "background": "transparent !important"
+                        },
+                        "::-webkit-scrollbar-thumb": {
+                            "background-color": "#27272a !important",
+                            "border-radius":     "10px !important"
+                        },
+                        "::-webkit-scrollbar-thumb:hover": {
+                            "background-color": "#3f3f46 !important"
                         }
                     });
+
+                    // Firefox: injeta via <style> direto no documento do iframe
+                    try {
+                        const doc = contents.document;
+                        if (doc) {
+                            const ffStyle = doc.createElement("style");
+                            ffStyle.textContent = "* { scrollbar-width: thin; scrollbar-color: #27272a transparent; }";
+                            doc.head.appendChild(ffStyle);
+                        }
+                    } catch(e) {}
                 });
 
                 // ── Navegação por capítulo ────────────────────────

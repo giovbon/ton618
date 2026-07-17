@@ -87,13 +87,13 @@ func getTarget(path string) string {
 }
 
 func getNoteIcon(path string, noteType string, tags []string) string {
-    if noteType == "epub" || strings.HasSuffix(strings.ToLower(path), ".epub") {
+    if noteType == string(domain.NoteTypeEPUB) || strings.HasSuffix(strings.ToLower(path), ".epub") {
         return "📒"
-    } else if noteType == "pdf" || strings.HasPrefix(path, "pdfs/") {
+    } else if noteType == string(domain.NoteTypePDF) || strings.HasPrefix(path, "pdfs/") {
         return "📕"
-    } else if noteType == "arquivo" || strings.HasPrefix(path, "archives/") {
+    } else if noteType == string(domain.NoteTypeArchive) || strings.HasPrefix(path, "archives/") {
         return "💾"
-    } else if noteType == "anexo" || strings.HasPrefix(path, "attachments/") {
+    } else if noteType == string(domain.NoteTypeAttachment) || strings.HasPrefix(path, "attachments/") {
         return "📦"
     }
     

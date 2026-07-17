@@ -38,7 +38,7 @@ var (
 	headerRegex          = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
 	typstHeaderRegex     = regexp.MustCompile(`(?m)^(=+)\s+(.*)`)
 	hashtagRegex         = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
-	wikilinkRegex        = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	WikilinkRegex        = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
 	mediaLinkRegex       = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
 
 	checkboxTodoRegex    = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
@@ -50,9 +50,24 @@ var (
 	cachedTodoRegex  *regexp.Regexp
 )
 
+type DefaultMarkerInfo struct {
+	Marker string
+	Color  string
+	Active bool
+}
+
+var DefaultTodoMarkers = []DefaultMarkerInfo{
+	{Marker: "TODO", Color: "#3b82f6", Active: true},
+	{Marker: "DOING", Color: "#f59e0b", Active: true},
+	{Marker: "DONE", Color: "#10b981", Active: true},
+}
+
 func getTodoRegex(markers []string) *regexp.Regexp {
 	if len(markers) == 0 {
-		markers = []string{"TODO", "FIXME", "BUG"}
+		markers = make([]string, len(DefaultTodoMarkers))
+		for i, m := range DefaultTodoMarkers {
+			markers[i] = m.Marker
+		}
 	}
 	pattern := strings.Join(markers, "|")
 	
@@ -238,7 +253,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract wikilinks e normaliza: notas markdown ganham prefixo notes/
-	linkMatches := wikilinkRegex.FindAllStringSubmatch(text, -1)
+	linkMatches := WikilinkRegex.FindAllStringSubmatch(text, -1)
 	for _, m := range linkMatches {
 		if len(m) > 1 {
 			target := strings.TrimSpace(m[1])
@@ -413,21 +428,21 @@ func ExtractTitle(content, filename string) string {
 
 
 
-// TodoItem representa um TODO, FIXME, BUG ou checkbox encontrado em uma nota.
+// TodoItem representa um TODO, DOING, DONE ou checkbox encontrado em uma nota.
 type TodoItem struct {
 	ID      string
 	File    string
 	Section string
-	Type    string // "TODO", "FIXME", "BUG", "TASK"
+	Type    string // "TODO", "DOING", "DONE", "TASK"
 	Status  string // "pending", "completed"
 	Text    string
 	Line    int
 	Created time.Time
 }
 
-// ExtractTodos extrai marcadores (TODO, FIXME, BUG, etc) e checkboxes de conteúdo markdown.
-// markers é a lista de palavras-chave a detectar (ex: ["TODO", "FIXME", "BUG"]).
-// Se markers for nil/vazio, usa os defaults: TODO, FIXME, BUG.
+// ExtractTodos extrai marcadores (TODO, DOING, DONE, etc) e checkboxes de conteúdo markdown.
+// markers é a lista de palavras-chave a detectar (ex: ["TODO", "DOING", "DONE"]).
+// Se markers for nil/vazio, usa os defaults: TODO, DOING, DONE.
 func ExtractTodos(content string, filename string, modTime time.Time, markers []string) []TodoItem {
 	var todos []TodoItem
 
@@ -472,7 +487,7 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 			continue
 		}
 
-		// Check for TODO/FIXME/BUG
+		// Check for TODO/DOING/DONE
 		if todoMatch := todoRegex.FindStringSubmatch(line); todoMatch != nil {
 			todoType := strings.ToUpper(todoMatch[1])
 			todoText := strings.TrimSpace(todoMatch[2])

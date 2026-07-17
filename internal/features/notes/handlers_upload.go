@@ -2,7 +2,6 @@ package notes
 
 import (
 	"archive/zip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"ton618/internal/core/db"
+	"ton618/internal/httputil"
 	"ton618/internal/processor"
 	"ton618/internal/watcher"
 )
@@ -196,7 +196,7 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 // Diferente do HandleUpload, não redireciona — usado pelo editor via fetch.
 func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": err.Error(),
 		})
 		return
@@ -204,7 +204,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": err.Error(),
 		})
 		return
@@ -215,7 +215,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp"
 
 	if !isImage {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": "apenas imagens (.png, .jpg, .jpeg, .gif, .webp)",
 		})
 		return
@@ -231,7 +231,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 
 	dst, err := os.Create(fullPath)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": err.Error(),
 		})
 		return
@@ -241,7 +241,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	if _, err := io.Copy(dst, file); err != nil {
 		slog.Error("write uploaded image", "path", fullPath, "error", err)
 		os.Remove(fullPath)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": "write error",
 		})
 		return
@@ -258,8 +258,7 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 
 	imageURL := "/file?name=" + SafeFileQueryEscape(filename)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, map[string]interface{}{
 		"ok":       true,
 		"filename": filename,
 		"url":      imageURL,

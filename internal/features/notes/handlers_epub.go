@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"ton618/internal/httputil"
 )
 
 // HandleEpubReader renders the EPUB reader view.
@@ -31,8 +33,7 @@ func (ctx *HandlerContext) HandleGetEpubPosition(w http.ResponseWriter, r *http.
 		slog.Error("get epub position", "file", file, "error", err)
 		position = ""
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	httputil.WriteJSON(w, map[string]string{
 		"position": position,
 	})
 }

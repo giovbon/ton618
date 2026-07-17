@@ -18,6 +18,14 @@ import (
 	"ton618/internal/core/db"
 )
 
+var (
+	youtubeTitleRe      = regexp.MustCompile(`<title>([^<]+)</title>`)
+	slugifyRe           = regexp.MustCompile(`[^a-z0-9À-ÿ]+`)
+	dashRe              = regexp.MustCompile(`-{2,}`)
+	htmlTagRe           = regexp.MustCompile(`</?[a-zA-Z][^>]*>`)
+	multipleNewlineRe   = regexp.MustCompile(`\n{3,}`)
+)
+
 // CaptureService lida com a captura de URLs (artigos web e YouTube).
 type CaptureService struct {
 	store *db.Store
@@ -181,8 +189,7 @@ func getYouTubeTitle(videoURL string) string {
 	if err != nil {
 		return ""
 	}
-	re := regexp.MustCompile(`<title>([^<]+)</title>`)
-	matches := re.FindStringSubmatch(string(body))
+	matches := youtubeTitleRe.FindStringSubmatch(string(body))
 	if len(matches) < 2 {
 		return ""
 	}
@@ -194,10 +201,9 @@ func getYouTubeTitle(videoURL string) string {
 
 func slugifyFilename(title string) string {
 	lower := strings.ToLower(title)
-	re := regexp.MustCompile(`[^a-z0-9À-ÿ]+`)
-	slug := re.ReplaceAllString(lower, "-")
+	slug := slugifyRe.ReplaceAllString(lower, "-")
 	slug = strings.Trim(slug, "-")
-	slug = regexp.MustCompile(`-{2,}`).ReplaceAllString(slug, "-")
+	slug = dashRe.ReplaceAllString(slug, "-")
 	if len(slug) > 60 {
 		slug = slug[:60]
 	}
@@ -209,8 +215,7 @@ func slugifyFilename(title string) string {
 }
 
 func cleanupMarkdown(md string) string {
-	reHTML := regexp.MustCompile(`</?[a-zA-Z][^>]*>`)
-	md = reHTML.ReplaceAllString(md, "")
+	md = htmlTagRe.ReplaceAllString(md, "")
 	md = strings.ReplaceAll(md, "&gt;", ">")
 	md = strings.ReplaceAll(md, "&lt;", "<")
 	md = strings.ReplaceAll(md, "&amp;", "&")
@@ -236,8 +241,7 @@ func cleanupMarkdown(md string) string {
 		cleaned = append(cleaned, line)
 	}
 	md = strings.Join(cleaned, "\n")
-	re := regexp.MustCompile(`\n{3,}`)
-	md = re.ReplaceAllString(md, "\n\n")
+	md = multipleNewlineRe.ReplaceAllString(md, "\n\n")
 	return strings.TrimSpace(md)
 }
 

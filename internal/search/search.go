@@ -28,8 +28,8 @@ type SearchResults struct {
 }
 
 var (
-	quoteRegex       = regexp.MustCompile(`"([^"]*)"`)
-	singleQuoteRegex = regexp.MustCompile(`'([^']*)'`)
+	quoteRegex       = regexp.MustCompile(`"([^"]+)"`)
+	singleQuoteRegex = regexp.MustCompile(`'([^']+)'`)
 	tagFilterRegex   = regexp.MustCompile(`\+?tags:("[^"]+"|[^\s]+)`)
 	cleanQueryRe     = regexp.MustCompile(`[\+\*"]`)
 	spacesRe         = regexp.MustCompile(`\s+`)
@@ -329,7 +329,7 @@ func extractTerms(raw string) []string {
 	var terms []string
 	remaining := raw
 
-	quotedRe := regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
+	quotedRe := regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
 	for {
 		m := quotedRe.FindStringSubmatch(remaining)
 		if m == nil {
