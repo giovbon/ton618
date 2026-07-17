@@ -458,6 +458,11 @@ templ typstContent(data domain.EditorData) {
                 setStatus("saved");
                 lastSavedHash = currentHash;
                 filenameInput.dataset.filename = filename;
+
+                // Auto-indexação semântica com chunking (fire-and-forget)
+                if (window._semanticIndexNote) {
+                    window._semanticIndexNote(filename, content);
+                }
                 
                 var params = new URLSearchParams(window.location.search);
                 params.set("file", filename);
