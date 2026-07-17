@@ -563,11 +563,12 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Guard: ZIPs e PDFs não são notas — nunca devem ser processados como markdown.
+	// Guard: ZIPs, PDFs e EPUBs não são notas — nunca devem ser processados como markdown.
 	// Editar propriedades como "tags" neles via Notes.Save causaria a criação de um
-	// registro "notes/attachments/xxx.zip.md" no banco, corrompendo a listagem.
+	// registro "notes/attachments/xxx.zip.md" ou "notes/epubs/xxx.epub.md" no banco,
+	// corrompendo a listagem e criando notas vazias duplicadas.
 	ext := strings.ToLower(filepath.Ext(req.File))
-	if ext == ".zip" || ext == ".pdf" {
+	if ext == ".zip" || ext == ".pdf" || ext == ".epub" {
 		// Para não-notas, só permitimos atualização de tags via SetFileTags.
 		if req.Key == "tags" {
 			rawVal, _ := req.Value.(string)
@@ -584,7 +585,7 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 				return
 			}
 		}
-		// Outros campos (frontmatter) não se aplicam a ZIPs/PDFs — silenciosamente ignora.
+		// Outros campos (frontmatter) não se aplicam a ZIPs/PDFs/EPUBs — silenciosamente ignora.
 		// Invalidate cache
 		ctx.dbCacheMu.Lock()
 		delete(ctx.dbCache, req.File)
