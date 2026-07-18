@@ -9,6 +9,38 @@ window.markmap = markmap;
 const transformer = new Transformer();
 
 /**
+ * Escapes HTML entities in a string to prevent raw HTML rendering.
+ * Used as fallback when highlight.js is not yet loaded.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Fix: override highlight function to ensure HTML code inside fenced blocks
+// is always escaped, even when highlight.js hasn't loaded from CDN yet.
+// The markmap-lib browser hljs plugin returns raw `str` when window.hljs
+// is undefined, causing HTML tags to render as DOM inside foreignObject.
+const origHighlight = transformer.md.options.highlight;
+transformer.md.set({
+  highlight: (str, language) => {
+    const { hljs } = window;
+    if (hljs) {
+      // hljs available — use it (properly escapes HTML internally)
+      return hljs.highlightAuto(str, language ? [language] : void 0).value;
+    }
+    // hljs not loaded yet — at least escape HTML to prevent rendering
+    return escapeHtml(str);
+  }
+});
+
+/**
  * @typedef {Object} MindmapInstance
  * @property {Function} update - Updates the mindmap with new markdown content.
  * @property {Function} fit - Recalculates zoom and fits the mindmap in the SVG container.
@@ -26,6 +58,7 @@ window.initMindmap = function (svgEl, initialMarkdown) {
   /** @type {any} */
   let mmInstance = null;
   let hljsCssText = null;
+  let lastCompileBody = '';
 
   /**
    * Loads the local highlight.js CSS once and caches it.
@@ -152,6 +185,9 @@ window.initMindmap = function (svgEl, initialMarkdown) {
         compileBody = fmMatch[2];
       }
 
+      // Track for retransform (hljs loading)
+      lastCompileBody = compileBody;
+
       const { root, features } = transformer.transform(compileBody);
       
       // Load assets dynamically for features (like Prism for syntax highlighting or KaTeX for math)
@@ -190,6 +226,25 @@ window.initMindmap = function (svgEl, initialMarkdown) {
       console.error("[Markmap] Erro ao renderizar / atualizar mapa mental:", e);
     }
   }
+
+  // Subscribe to retransform hook (triggered after hljs loads from CDN)
+  // so we can re-render the mindmap with proper syntax highlighting.
+  transformer.hooks.retransform.tap(() => {
+    if (mmInstance && lastCompileBody) {
+      console.log("[Markmap] retransform hook fired — re-rendering with hljs");
+      try {
+        const { root, features } = transformer.transform(lastCompileBody);
+        applyFoldState(root);
+        mmInstance.setData(root);
+        mmInstance.fit();
+        if (features && features.hljs) {
+          ensureHljsStyleInSvg();
+        }
+      } catch (e) {
+        console.error("[Markmap] Erro no retransform:", e);
+      }
+    }
+  });
 
   // Initial render
   update(initialMarkdown);

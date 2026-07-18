@@ -404,7 +404,9 @@ export function CodeJar(editor, highlight, opt = {}) {
                 restore(newPos);
                 recordHistory();
                 if (prev !== toString()) {
+                    const pos2 = save();
                     doHighlight(editor);
+                    restore(pos2);
                     onUpdate(toString());
                 }
             } else {
@@ -412,7 +414,9 @@ export function CodeJar(editor, highlight, opt = {}) {
                 insert(options.tab);
                 recordHistory();
                 if (prev !== toString()) {
+                    const pos = save();
                     doHighlight(editor);
+                    restore(pos);
                     onUpdate(toString());
                 }
             }
