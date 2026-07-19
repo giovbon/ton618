@@ -7,7 +7,6 @@ import (
 	"ton618/internal/core/db"
 	"ton618/internal/core/services"
 	"ton618/internal/features/notes"
-	"ton618/internal/watcher"
 )
 
 type dbCacheEntry struct {
@@ -16,21 +15,19 @@ type dbCacheEntry struct {
 }
 
 type HandlerContext struct {
-	Cfg     *config.AppConfig
-	Store   *db.Store
-	Watcher *watcher.Watcher
-	Backup  *services.BackupService
-	Notes   *notes.NoteService
+	Cfg    *config.AppConfig
+	Store  *db.Store
+	Backup *services.BackupService
+	Notes  *notes.NoteService
 
 	dbCache   map[string]dbCacheEntry
 	dbCacheMu sync.RWMutex
 }
 
-func NewHandlerContext(cfg *config.AppConfig, store *db.Store, w *watcher.Watcher, backup *services.BackupService, notes *notes.NoteService) *HandlerContext {
+func NewHandlerContext(cfg *config.AppConfig, store *db.Store, backup *services.BackupService, notes *notes.NoteService) *HandlerContext {
 	return &HandlerContext{
 		Cfg:     cfg,
 		Store:   store,
-		Watcher: w,
 		Backup:  backup,
 		Notes:   notes,
 		dbCache: make(map[string]dbCacheEntry),

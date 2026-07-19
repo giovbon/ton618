@@ -59,24 +59,24 @@ func main() {
 
 	slog.Info("Templates carregados")
 
-	// 4. Watcher
-	w := watcher.NewWatcher(cfg, store)
-	ctxWatcher, cancelWatcher := context.WithCancel(context.Background())
-	defer cancelWatcher()
-	w.Start(ctxWatcher)
+	// 4. Indexação inicial
+	slog.Info("Indexação inicial...")
+	watcher.ScanAndIndexAll(store, cfg.DocsDir)
+	slog.Info("Indexação inicial concluída")
 
+	// 5. Agendador de notificações (calendário)
+	ntfySvc := services.NewNtfyService(store)
 	go func() {
-		for ev := range w.Events() {
-			slog.Info("Processando", "file", ev.Filename, "type", ev.Type)
-			if err := watcher.ProcessFile(store, ev); err != nil {
-				slog.Error("processar arquivo", "file", ev.Filename, "error", err)
-			}
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		// Executa uma vez na inicialização
+		ntfySvc.CheckAndSendDailyAppointments()
+		ntfySvc.CheckAndSendWeeklySummary()
+		for range ticker.C {
+			ntfySvc.CheckAndSendDailyAppointments()
+			ntfySvc.CheckAndSendWeeklySummary()
 		}
 	}()
-
-	slog.Info("Indexação inicial...")
-	w.PollAll()
-	slog.Info("Indexação inicial concluída")
 
 	// 5. Inicializa os repositórios por domínio
 	noteRepo := db.NewNoteRepo(store)
@@ -92,8 +92,8 @@ func main() {
 	captureService := notes.NewCaptureService(store)
 	typstService := notes.NewTypstService()
 
-	sysCtx := system.NewHandlerContext(cfg, store, w, backupService, notesService)
-	notesCtx := notes.NewHandlerContext(cfg, store, w, notesService, backupService, captureService, typstService)
+	sysCtx := system.NewHandlerContext(cfg, store, backupService, notesService)
+	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService, typstService)
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)

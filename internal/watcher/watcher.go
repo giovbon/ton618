@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,12 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"ton618/internal/core/config"
 	"ton618/internal/core/db"
-	"ton618/internal/core/services"
 	"ton618/internal/processor"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 // processMu serializa chamadas ao ProcessFile para evitar condicao de corrida
@@ -82,73 +77,6 @@ type FileEvent struct {
 	Filename string
 	ModTime  time.Time
 	Type     string // "create", "modify", "delete"
-}
-
-// ── Watcher ──
-
-const debounceInterval = 300 * time.Millisecond
-
-type Watcher struct {
-	cfg     *config.AppConfig
-	store   *db.Store
-	watcher *fsnotify.Watcher
-	events  chan FileEvent
-	wg      sync.WaitGroup
-
-	// Debounce agrupa eventos repetidos do fsnotify para o mesmo arquivo.
-	// Quando um evento chega, um timer de debounceInterval é iniciado.
-	// Se outro evento para o mesmo arquivo chegar antes do timer disparar,
-	// o timer é reiniciado. Só após o período sem novos eventos o evento
-	// é enviado ao canal `events` para processamento.
-	debounceMu     sync.Mutex
-	debounceTimers map[string]*time.Timer
-
-	ntfyService *services.NtfyService
-}
-
-// NewWatcher creates a new watcher instance.
-func NewWatcher(cfg *config.AppConfig, store *db.Store) *Watcher {
-	return &Watcher{
-		cfg:            cfg,
-		store:          store,
-		events:         make(chan FileEvent, 100),
-		debounceTimers: make(map[string]*time.Timer),
-		ntfyService:    services.NewNtfyService(store),
-	}
-}
-
-// Start launches the fsnotify watcher and polling loop.
-func (w *Watcher) Start(ctx context.Context) {
-	var err error
-	w.watcher, err = fsnotify.NewWatcher()
-	if err != nil {
-		slog.Error("criar watcher", "error", err)
-		return
-	}
-
-	// Watch monitored subdirectories
-	for _, sub := range MonitoredSubDirs {
-		dir := filepath.Join(w.cfg.DocsDir, sub)
-		os.MkdirAll(dir, 0755)
-		w.watcher.Add(dir)
-	}
-
-	w.wg.Add(2)
-	go w.fsnotifyLoop(ctx)
-	go w.pollLoop(ctx)
-
-	// Goroutine que fecha o canal de eventos quando o contexto é cancelado,
-	// permitindo que o consumidor (main.go) saia do loop corretamente.
-	go func() {
-		<-ctx.Done()
-		close(w.events)
-	}()
-
-	slog.Info("Watcher fsnotify iniciado")
-}
-
-func (w *Watcher) Events() <-chan FileEvent {
-	return w.events
 }
 
 // ── ProcessFile ──
@@ -319,185 +247,14 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 // ── Internal loops ──
 
-func (w *Watcher) fsnotifyLoop(ctx context.Context) {
-	defer w.wg.Done()
-
-	// Limpa todos os timers de debounce ao finalizar
-	defer func() {
-		w.debounceMu.Lock()
-		for _, t := range w.debounceTimers {
-			t.Stop()
-		}
-		w.debounceTimers = nil
-		w.debounceMu.Unlock()
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-w.watcher.Events:
-			if !ok {
-				return
-			}
-			switch {
-			case event.Op&(fsnotify.Create|fsnotify.Write) != 0:
-				w.handleCreateOrMod(event.Name)
-			case event.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
-				w.handleDelete(event.Name)
-			}
-		case err, ok := <-w.watcher.Errors:
-			if !ok {
-				return
-			}
-			slog.Error("watcher error", "error", err)
-		}
-	}
-}
-
-// relPathFromAbs converte um caminho absoluto para relativo a DocsDir
-// e normaliza para usar forward slashes.
-func (w *Watcher) relPathFromAbs(absPath string) (string, bool) {
-	rel, err := filepath.Rel(w.cfg.DocsDir, absPath)
-	if err != nil {
-		return "", false
-	}
-	rel = filepath.ToSlash(rel)
-	if rel == "" || strings.HasPrefix(rel, "..") {
-		return "", false
-	}
-	return rel, true
-}
-
-// debounceEvent agrupa eventos repetidos do fsnotify para o mesmo arquivo.
-// Cria ou reinicia um timer de debounceInterval. Quando o timer dispara,
-// o evento é enviado ao canal `events` para processamento.
-func (w *Watcher) debounceEvent(ev FileEvent) {
-	w.debounceMu.Lock()
-	defer w.debounceMu.Unlock()
-
-	// Se já existe um timer para este arquivo, reinicia
-	if t, ok := w.debounceTimers[ev.Filename]; ok {
-		t.Stop()
-		t.Reset(debounceInterval)
-		return
-	}
-
-	// Cria um novo timer
-	w.debounceTimers[ev.Filename] = time.AfterFunc(debounceInterval, func() {
-		// Remove o timer do mapa após disparar
-		w.debounceMu.Lock()
-		delete(w.debounceTimers, ev.Filename)
-		w.debounceMu.Unlock()
-
-		// Re-estatísticas do arquivo antes de enviar (mtime pode ter mudado)
-		if ev.Type == "modify" {
-			info, err := os.Stat(ev.Path)
-			if err == nil {
-				ev.ModTime = info.ModTime()
-			}
-		}
-
-		w.events <- ev
-	})
-}
-
-func (w *Watcher) handleCreateOrMod(absPath string) {
-	relPath, ok := w.relPathFromAbs(absPath)
-	if !ok {
-		return
-	}
-
-	// Skip if this file was just processed by HandleFileSave
-	if isRecentlyProcessed(relPath) {
-		slog.Debug("Skipping recently processed file", "file", relPath)
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(relPath))
-	if _, ok := supportedExts[ext]; !ok {
-		return
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return
-	}
-
-	w.debounceEvent(FileEvent{
-		Path:     absPath,
-		Filename: relPath,
-		ModTime:  info.ModTime(),
-		Type:     "modify",
-	})
-}
-
-func (w *Watcher) handleDelete(absPath string) {
-	relPath, ok := w.relPathFromAbs(absPath)
-	if !ok {
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(relPath))
-	if _, ok := supportedExts[ext]; !ok {
-		return
-	}
-
-	slog.Info("Arquivo deletado", "file", relPath)
-
-	// Delete events also go through debounce to prevent race
-	// with subsequent create events (e.g. editor temp files)
-	w.debounceEvent(FileEvent{
-		Path:     absPath,
-		Filename: relPath,
-		Type:     "delete",
-	})
-}
-
-func (w *Watcher) pollLoop(ctx context.Context) {
-	defer w.wg.Done()
-	ticker := time.NewTicker(w.cfg.PollIntervalSec)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			w.pollAll()
-		}
-	}
-}
-
-// PollAll forces an immediate scan of all monitored directories.
-func (w *Watcher) PollAll() {
-	w.pollAll()
-}
-
-// relPathFromWalk normaliza o caminho retornado por filepath.WalkDir
-// para relativo a DocsDir com forward slashes.
-func (w *Watcher) relPathFromWalk(path string) (string, bool) {
-	rel, err := filepath.Rel(w.cfg.DocsDir, path)
-	if err != nil {
-		return "", false
-	}
-	rel = filepath.ToSlash(rel)
-	if rel == "" || strings.HasPrefix(rel, "..") {
-		return "", false
-	}
-	return rel, true
-}
-
-func (w *Watcher) pollAll() {
-	// 0. Carrega mods do DB em memória para evitar N+1 queries
-	dbFiles, _ := w.store.GetAllFileMods()
-
-	// 1. Escaneia arquivos no disco
-	diskFiles := make(map[string]bool)
+// ScanAndIndexAll varre os diretórios monitorados e indexa tudo que encontrar.
+// Chamado uma vez na inicialização do servidor.
+func ScanAndIndexAll(store *db.Store, docsDir string) {
+	dbFiles, _ := store.GetAllFileMods()
 	var batchEvents []FileEvent
 
 	for _, sub := range MonitoredSubDirs {
-		dir := filepath.Join(w.cfg.DocsDir, sub)
+		dir := filepath.Join(docsDir, sub)
 		filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
@@ -510,23 +267,20 @@ func (w *Watcher) pollAll() {
 			if err != nil {
 				return nil
 			}
-			relPath, ok := w.relPathFromWalk(path)
-			if !ok {
+			relPath, err := filepath.Rel(docsDir, path)
+			if err != nil {
 				return nil
 			}
+			relPath = filepath.ToSlash(relPath)
 
-			// SO processa se o mtime mudou desde a ultima indexacao
+			// Só processa se o mtime mudou desde a última indexação
 			if existingMod, exists := dbFiles[relPath]; exists && existingMod != "" {
-				// Parse do mtime do banco e comparação ignorando sub-segundos
 				dbTime, err := time.Parse(time.RFC3339, existingMod)
 				if err == nil && dbTime.Unix() == info.ModTime().Unix() {
-					// Mtime igual (no mesmo segundo) — arquivo nao mudou, pula
-					diskFiles[relPath] = true
 					return nil
 				}
 			}
 
-			diskFiles[relPath] = true
 			batchEvents = append(batchEvents, FileEvent{
 				Path:     path,
 				Filename: relPath,
@@ -537,48 +291,8 @@ func (w *Watcher) pollAll() {
 		})
 	}
 
-	// 2. Processa lotes de eventos em transação única (mais rápido)
 	if len(batchEvents) > 0 {
-		if len(batchEvents) == 1 {
-			// Evento único: ProcessFile já faz lock + transação implícita
-			w.events <- batchEvents[0]
-		} else {
-			// Vários eventos: processa em lote com transação única
-			slog.Info("Processando lote de arquivos", "count", len(batchEvents))
-			if err := ProcessBatch(w.store, batchEvents); err != nil {
-				slog.Error("batch process error", "error", err)
-			}
-		}
+		slog.Info("Indexando arquivos", "count", len(batchEvents))
+		ProcessBatch(store, batchEvents)
 	}
-
-	// 2. Remove do banco arquivos que existem no DB mas não estão no disco
-	for filename := range dbFiles {
-		if !diskFiles[filename] {
-			// Pula arquivos que não têm extensão monitorada pelo watcher
-			ext := strings.ToLower(filepath.Ext(filename))
-			if _, ok := supportedExts[ext]; !ok {
-				continue
-			}
-			// Pula arquivos processados recentemente pelo HTTP handler
-			// (ex: upload de ZIP onde o pollAll escaneou antes do arquivo
-			// terminar de ser escrito, mas o registro no DB já foi feito).
-			if isRecentlyProcessed(filename) {
-				slog.Debug("PollAll: pulando delete de arquivo recentemente processado", "file", filename)
-				continue
-			}
-			fullPath := filepath.Join(w.cfg.DocsDir, filename)
-			slog.Info("Arquivo deletado (detectado no poll)", "file", filename)
-			w.events <- FileEvent{
-				Path:     fullPath,
-				Filename: filename,
-				Type:     "delete",
-			}
-		}
-	}
-
-	// 3. Verifica se precisa enviar notificações do calendário
-	go func() {
-		w.ntfyService.CheckAndSendDailyAppointments()
-		w.ntfyService.CheckAndSendWeeklySummary()
-	}()
 }

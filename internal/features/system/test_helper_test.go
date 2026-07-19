@@ -1,7 +1,6 @@
 package system
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"ton618/internal/core/db"
 	"ton618/internal/core/services"
 	"ton618/internal/features/notes"
-	"ton618/internal/watcher"
 )
 
 // newTestContext cria um HandlerContext isolado para testes.
@@ -29,19 +27,13 @@ func newTestContext(t *testing.T) *HandlerContext {
 	t.Cleanup(func() { store.Close() })
 
 	cfg := &config.AppConfig{
-		DocsDir:         docsDir,
-		PollIntervalSec: 30 * time.Second,
+		DocsDir: docsDir,
 	}
-
-	w := watcher.NewWatcher(cfg, store)
-	ctxWatcher, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	w.Start(ctxWatcher)
 
 	backupSvc := services.NewBackupService(store, store, docsDir)
 	notesSvc := notes.NewNoteService(store, store, store, store, store, store, docsDir)
 
-	return NewHandlerContext(cfg, store, w, backupSvc, notesSvc)
+	return NewHandlerContext(cfg, store, backupSvc, notesSvc)
 }
 
 // saveTestNote cria uma nota de teste no banco e no disco.

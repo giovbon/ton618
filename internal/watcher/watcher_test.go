@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,22 +84,6 @@ func TestProcessFile_SkippedExtension(t *testing.T) {
 	err := ProcessFile(store, ev)
 	if err != nil {
 		t.Fatalf("ProcessFile retornou erro inesperado: %v", err)
-	}
-}
-
-func TestNewWatcher(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
-
-	if w.cfg != cfg {
-		t.Error("cfg nao foi atribuida")
-	}
-	if w.store != store {
-		t.Error("store nao foi atribuida")
-	}
-	if w.events == nil {
-		t.Error("events channel nao foi criado")
 	}
 }
 
@@ -281,81 +264,27 @@ func TestRecentlyProcessed_Expires(t *testing.T) {
 
 // ── Events() ─────────────────────────────────────────────────────
 
-func TestEvents_ChannelNaoNulo(t *testing.T) {
-	store := newTestStore(t)
-	cfg := newTestConfig(t)
-	w := NewWatcher(cfg, store)
-	if w.Events() == nil {
-		t.Error("Events() should not return nil channel")
-	}
-}
-
 // ── ProcessBatch ─────────────────────────────────────────────────
 
-// ── relPathFromAbs / relPathFromWalk ─────────────────────────────
-
-func TestRelPathFromAbs_Relativo(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
-
-	absPath := filepath.Join(cfg.DocsDir, "notes", "test.md")
-	rel, ok := w.relPathFromAbs(absPath)
-	if !ok {
-		t.Fatal("relPathFromAbs should succeed")
-	}
-	if rel != "notes/test.md" {
-		t.Errorf("expected 'notes/test.md', got %q", rel)
-	}
-}
-
-func TestRelPathFromAbs_ForaDoDocDir(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
-
-	_, ok := w.relPathFromAbs("/tmp/outside.md")
-	if ok {
-		t.Error("should return false for path outside DocsDir")
-	}
-}
-
-func TestRelPathFromWalk_Relativo(t *testing.T) {
-	cfg := newTestConfig(t)
-	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
-
-	absPath := filepath.Join(cfg.DocsDir, "notes", "test.md")
-	rel, ok := w.relPathFromWalk(absPath)
-	if !ok {
-		t.Fatal("relPathFromWalk should succeed")
-	}
-	if rel != "notes/test.md" {
-		t.Errorf("expected 'notes/test.md', got %q", rel)
-	}
-}
+// ── relPathFromWalk ─────────────────────────────────────────────
 
 // ── PollAll ──────────────────────────────────────────────────────
 
-func TestPollAll_IndexaArquivosNovos(t *testing.T) {
+func TestScanAndIndexAll(t *testing.T) {
 	cfg := newTestConfig(t)
 	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
 
-	// PollAll scans monitored directories (notes/ no longer monitored)
-	// Use attachments/ with images since they get indexed as documents
-	fp1 := filepath.Join(cfg.DocsDir, "attachments", "poll-test1.png")
-	fp2 := filepath.Join(cfg.DocsDir, "attachments", "poll-test2.png")
+	fp1 := filepath.Join(cfg.DocsDir, "attachments", "scan-test1.png")
+	fp2 := filepath.Join(cfg.DocsDir, "attachments", "scan-test2.png")
 	os.MkdirAll(filepath.Dir(fp1), 0755)
 	os.MkdirAll(filepath.Dir(fp2), 0755)
 	os.WriteFile(fp1, []byte("fake png"), 0644)
 	os.WriteFile(fp2, []byte("fake png"), 0644)
 
-	w.PollAll()
+	ScanAndIndexAll(store, cfg.DocsDir)
 
-	// Imagens são indexadas como documentos stub
 	if c := store.GetDocumentCount(); c != 2 {
-		t.Errorf("PollAll should index 2 files, got %d", c)
+		t.Errorf("ScanAndIndexAll should index 2 files, got %d", c)
 	}
 }
 
@@ -397,24 +326,6 @@ func TestProcessFile_AttachmentRecovery(t *testing.T) {
 }
 
 // ── Start — context cancellation ────────────────────────────────
-
-func TestWatcher_StartCancellation(t *testing.T) {
-	cfg := newTestConfig(t)
-	cfg.PollIntervalSec = time.Hour // avoid panic from NewTicker(0)
-	store := newTestStore(t)
-	w := NewWatcher(cfg, store)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	w.Start(ctx)
-
-	// Should not panic when we cancel
-	cancel()
-
-	// Allow goroutines to finish
-	time.Sleep(50 * time.Millisecond)
-
-	// If we got here, test passes
-}
 
 func TestProcessFile_Epub(t *testing.T) {
 	store := newTestStore(t)
