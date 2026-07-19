@@ -8,6 +8,7 @@ import (
 
 // HandleMindmap renderiza a página do editor split-pane do Markmap.
 func (ctx *HandlerContext) HandleMindmap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	filename, redirected := ensureNoteFilename(w, r, "/mindmap")
 	if redirected {
 		return

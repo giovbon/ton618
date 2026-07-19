@@ -8,6 +8,7 @@ import (
 
 // HandleMermaid renderiza a página do editor split-pane do Mermaid.
 func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	filename, redirected := ensureNoteFilename(w, r, "/mermaid")
 	if redirected {
 		return

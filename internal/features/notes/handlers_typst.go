@@ -10,6 +10,7 @@ import (
 
 // HandleTypst renderiza a página do editor Typst.
 func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	fileParam := r.URL.Query().Get("file")
 	if fileParam == "" {
 		http.Error(w, "file parameter required", http.StatusBadRequest)
