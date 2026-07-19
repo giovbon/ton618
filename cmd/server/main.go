@@ -32,6 +32,10 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	slog.Info("TON-618 iniciando...")
 
+	// Registra tipos MIME para módulos ES (.mjs) e WebAssembly (.wasm)
+	mime.AddExtensionType(".mjs", "text/javascript")
+	mime.AddExtensionType(".wasm", "application/wasm")
+
 	// 1. Config
 	cfg := config.Load()
 	if err := cfg.EnsureDirs(); err != nil {

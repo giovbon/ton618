@@ -63,11 +63,15 @@ func (ctx *HandlerContext) loadNoteData(filename string) (noteLoadResult, error)
 	//
 	// Ordenação: Ordenado pela pontuação acumulada (decrescente). Em caso de empate, pela maior similaridade (decrescente).
 
-	// Carrega limite do banco ou assume padrão (72%)
-	similarThresholdPct := 72
+	// Carrega limite do banco ou assume padrão (40%)
+	similarThresholdPct := 40
 	if val, err := ctx.Store.GetSetting("similar_notes_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
-			similarThresholdPct = v
+			if v == 72 {
+				similarThresholdPct = 40
+			} else {
+				similarThresholdPct = v
+			}
 		}
 	}
 

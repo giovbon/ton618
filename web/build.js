@@ -58,6 +58,14 @@ await esbuild.build({
 
 console.log("Semantic worker compilado com sucesso!");
 
+console.log("Copiando assets do ONNX Runtime WebAssembly (ORT)...");
+try {
+  execSync("node static/models/download-ort.js", { stdio: "inherit" });
+} catch (error) {
+  console.error("Erro ao copiar assets do ORT:", error.message);
+  process.exit(1);
+}
+
 console.log("Comprimindo assets estáticos (Gzip & Brotli)...");
 
 function compressFile(filePath) {

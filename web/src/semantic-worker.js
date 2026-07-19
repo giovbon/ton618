@@ -46,7 +46,9 @@ import { pipeline, env } from "@huggingface/transformers";
 env.allowLocalModels = true;
 env.localModelPath = "/static/models/";
 env.allowRemoteModels = true; // fallback: CDN do HuggingFace se local falhar
-env.useBrowserCache = true; // cacheia no IndexedDB após primeira carga
+// O CacheStorage API (self.caches) só é disponível em contextos seguros (HTTPS ou localhost).
+// Em contextos HTTP não seguros (ex: acessando via IP http://192.168.15.6:6180), self.caches é undefined.
+env.useBrowserCache = typeof self !== "undefined" && typeof self.caches !== "undefined";
 env.backends.onnx.wasm.wasmPaths = "/static/models/ort/";
 
 /** @type {string} Nome do modelo HuggingFace para embeddings multilingues */

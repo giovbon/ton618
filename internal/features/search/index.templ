@@ -64,7 +64,7 @@ templ indexContent() {
                 hx-get="/api/sidebar"
                 hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
                 hx-target="#contentArea"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-600 transition-all"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
             />
             <input
                 id="search-global"
@@ -75,7 +75,7 @@ templ indexContent() {
                 hx-post="/search"
                 hx-trigger="input changed delay:300ms, search"
                 hx-target="#global-container"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-600 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-emerald-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition-all hidden"
             />
             <input
                 id="search-semantic"
@@ -83,7 +83,7 @@ templ indexContent() {
                 placeholder="Busca semântica por similaridade (IA)..."
                 name="q"
                 autocomplete="off"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-600 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-violet-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all hidden"
             />
             <div
                 id="spinner"
@@ -209,17 +209,17 @@ templ indexContent() {
 
         // Ativa o modo selecionado
         if (mode === "notes") {
-            btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/10 text-sky-400 border-sky-500/20";
+            btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40";
             localInput.classList.remove("hidden");
             compactContainer.classList.remove("hidden");
             localInput.focus();
         } else if (mode === "global") {
-            btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+            btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
             globalInput.classList.remove("hidden");
             globalContainer.classList.remove("hidden");
             globalInput.focus();
         } else if (mode === "semantic") {
-            btnSemantic.className = "flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/10 text-violet-400 border-violet-500/20";
+            btnSemantic.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/20 text-violet-400 border-violet-500/40";
             semanticInput.classList.remove("hidden");
             semanticContainer.classList.remove("hidden");
             document.getElementById("semantic-panel").classList.remove("hidden");
@@ -501,25 +501,65 @@ templ indexContent() {
             });
     }
 
+    // Helper to generate regex pattern for accent-insensitive search
+    function makeAccentInsensitivePattern(str) {
+        var charMap = {
+            'a': '[aáàâãäAÁÀÂÃÄ]', 'á': '[aáàâãäAÁÀÂÃÄ]', 'à': '[aáàâãäAÁÀÂÃÄ]', 'â': '[aáàâãäAÁÀÂÃÄ]', 'ã': '[aáàâãäAÁÀÂÃÄ]', 'ä': '[aáàâãäAÁÀÂÃÄ]',
+            'e': '[eéèêëEÉÈÊË]', 'é': '[eéèêëEÉÈÊË]', 'è': '[eéèêëEÉÈÊË]', 'ê': '[eéèêëEÉÈÊË]', 'ë': '[eéèêëEÉÈÊË]',
+            'i': '[iíìîïIÍÌÎÏ]', 'í': '[iíìîïIÍÌÎÏ]', 'ì': '[iíìîïIÍÌÎÏ]', 'î': '[iíìîïIÍÌÎÏ]', 'ï': '[iíìîïIÍÌÎÏ]',
+            'o': '[oóòôõöOÓÒÔÕÖ]', 'ó': '[oóòôõöOÓÒÔÕÖ]', 'ò': '[oóòôõöOÓÒÔÕÖ]', 'ô': '[oóòôõöOÓÒÔÕÖ]', 'õ': '[oóòôõöOÓÒÔÕÖ]', 'ö': '[oóòôõöOÓÒÔÕÖ]',
+            'u': '[uúùûüUÚÙÛÜ]', 'ú': '[uúùûüUÚÙÛÜ]', 'ù': '[uúùûüUÚÙÛÜ]', 'û': '[uúùûüUÚÙÛÜ]', 'ü': '[uúùûüUÚÙÛÜ]',
+            'c': '[cçCÇ]', 'ç': '[cçCÇ]'
+        };
+        var pattern = "";
+        for (var i = 0; i < str.length; i++) {
+            var ch = str[i].toLowerCase();
+            if (charMap[ch]) {
+                pattern += charMap[ch];
+            } else {
+                pattern += str[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+        }
+        return pattern;
+    }
+
+    function cleanJSOperators(w) {
+        if (!w) return "";
+        w = w.replace(/^[+\-~#]+/, "");
+        w = w.replace(/[*~]+$/, "");
+        w = w.replace(/^["']+|["']+$/g, "");
+        return w.trim();
+    }
+
     // ── Original FTS5 search highlight ──
     function highlightSearchTerms(query) {
         if (!query) return;
 
-        var terms = [];
+        var rawTerms = [];
         var remaining = query;
         var quoteRe = /"([^"]*)"|\'([^']*)'/g;
         var m;
         while ((m = quoteRe.exec(query)) !== null) {
             var phrase = m[1] || m[2];
             if (phrase && phrase.length > 1) {
-                terms.push(phrase);
+                rawTerms.push(phrase);
             }
             remaining = remaining.replace(m[0], " ");
         }
         var words = remaining.split(/\s+/).filter(function (w) {
             return w.length > 1 && w !== '"' && !w.startsWith('-') && !w.startsWith('+tags:') && !w.startsWith('#');
         });
-        terms = terms.concat(words);
+        rawTerms = rawTerms.concat(words);
+
+        var terms = [];
+        var seen = {};
+        rawTerms.forEach(function(w) {
+            var cleaned = cleanJSOperators(w);
+            if (cleaned.length > 1 && !seen[cleaned.toLowerCase()]) {
+                seen[cleaned.toLowerCase()] = true;
+                terms.push(cleaned);
+            }
+        });
 
         if (!terms.length) return;
 
@@ -532,11 +572,15 @@ templ indexContent() {
         document.querySelectorAll(".snippet-text, #global-container a[href^='/editor']").forEach(function (el) {
             var html = el.innerHTML;
             terms.forEach(function (w) {
-                var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>|[^<>]*<\/)", "gi");
+                var pat = makeAccentInsensitivePattern(w);
+                var re = new RegExp("(" + pat + ")(?![^<]*>|[^<>]*<\/)", "gi");
                 html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
             });
             stems.forEach(function (stem) {
-                var re = new RegExp("\\b(" + stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-zA-Z0-9À-ÿ_]*)\\b(?![^<]*>|[^<>]*<\/)", "gi");
+                var cleanedStem = cleanJSOperators(stem);
+                if (cleanedStem.length <= 1) return;
+                var pat = makeAccentInsensitivePattern(cleanedStem);
+                var re = new RegExp("\\b(" + pat + "[a-zA-Z0-9À-ÿ_]*)\\b(?![^<]*>|[^<>]*<\/)", "gi");
                 html = html.replace(re, function(match, group1, offset, fullText) {
                     var prevText = fullText.slice(0, offset);
                     var lastSpanIdx = prevText.lastIndexOf("<span");
