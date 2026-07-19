@@ -54,9 +54,7 @@ templ Navbar() {
             <input id="epub-file-input" type="file" name="file" accept=".epub" class="hidden" 
                 hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
                 hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
-            <input id="zip-file-input" type="file" name="files" multiple class="hidden" 
-                hx-post="/api/upload-attachment" hx-trigger="change" hx-encoding="multipart/form-data" 
-                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
+            <input id="zip-file-input" type="file" name="files" multiple class="hidden" />
 
             <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
 

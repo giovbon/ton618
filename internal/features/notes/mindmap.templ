@@ -316,9 +316,6 @@ templ mindmapContent(data domain.EditorData) {
                 });
             } while (html !== lastHtml);
 
-            if (code.endsWith("\n")) {
-                html += " ";
-            }
             return html;
         }
 
