@@ -385,8 +385,21 @@ Sistema de licenciamento para o produto comercial, baseado em **assinatura RSA-4
 | Plano | Features |
 |-------|----------|
 | **Personal** | Desktop, Cloud Sync |
-| **Team** | Personal + Multi-usuário, Colaboração, API Pública |
+| **Team** | Personal + Multi-usuário*, Colaboração, API Pública |
 | **Enterprise** | Team + Mobile, Audit Log, White Label, Suporte Prioritário |
+
+### ⚠️ Limitação do SQLite para Multi-usuário
+
+SQLite com WAL (modo usado pelo TON-618) suporta:
+
+| Operação | Concorrência |
+|----------|:------------:|
+| **Leitura** | ✅ Ilimitada (WAL permite leitores simultâneos) |
+| **Escrita** | ⚠️ Serializada (`WriteMu sync.Mutex`) |
+
+Na prática, para um **time de até ~10 pessoas** usando simultaneamente, o SQLite aguenta bem — a maioria das operações é leitura (visualizar notas, buscar). Escritas são rápidas (microssegundos) e raramente colidem.
+
+**Para escala maior** (10+ usuários concorrentes), o middleware multi-tenant pode ser adaptado para usar um banco server-side (PostgreSQL via `pgx`), mantendo a mesma interface `db.Store`. Isso é uma evolução futura — o SQLite cobre o MVP comercial sem custo de infra. |
 
 ### Fluxo
 
