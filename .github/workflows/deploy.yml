@@ -19,7 +19,7 @@ on:
         default: "2"
 
 env:
-  IMAGE_NAME: giovbon/ton618v2
+  IMAGE_NAME: giovbon/ton618_core
 
 jobs:
   deploy:
@@ -67,7 +67,8 @@ jobs:
       - name: 🔨 Build e Push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./core
+          file: ./core/Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
