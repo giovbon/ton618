@@ -19,7 +19,7 @@ RUN node static/models/download-ort.js
 RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache ca-certificates upx curl
 
