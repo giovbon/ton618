@@ -35,13 +35,12 @@ jobs:
         run: |
           cd desktop && wails build -platform linux/amd64
 
-      - name: 📦 Criar AppImage
+      - name: 📦 Criar pacote Linux
         run: |
-          mkdir -p dist/ton618-desktop-linux-amd64
-          cp desktop/build/bin/TON-618 dist/ton618-desktop-linux-amd64/
-          cp desktop/core-server dist/ton618-desktop-linux-amd64/
-          cp desktop/build/bin/TON-618.png dist/ton618-desktop-linux-amd64/ 2>/dev/null || true
-          cd dist && tar czf ton618-desktop-linux-amd64.tar.gz ton618-desktop-linux-amd64/
+          mkdir -p dist/ton618-linux-amd64
+          cp desktop/build/bin/TON-618 dist/ton618-linux-amd64/
+          cp desktop/core-server dist/ton618-linux-amd64/
+          cd dist && tar czf ton618-desktop-linux-amd64.tar.gz ton618-linux-amd64/
 
       - uses: actions/upload-artifact@v4
         with:
