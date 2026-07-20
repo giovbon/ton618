@@ -50,8 +50,10 @@ func main() {
 	}
 
 	// Inicia o core-server em segundo plano
+	// Nota: durante o build do Wails, isso pode falhar (core-server não existe ainda)
+	// Nesse caso, apenas loga um aviso — o build continua.
 	if err := app.startCore(); err != nil {
-		log.Fatalf("Erro ao iniciar core: %v", err)
+		log.Printf("Aviso: core-server não iniciou (%v). O desktop vai tentar novamente ao abrir.", err)
 	}
 	defer app.stopCore()
 
@@ -107,42 +109,62 @@ func resolveDataDir() string {
 }
 
 // coreBinaryPath retorna o caminho para o binário core-server.
+// Durante o build do Wails, o executable está em um diretório temp,
+// então também verifica o diretório atual como fallback.
 func coreBinaryPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "./core-server"
+	// 1. Tenta ao lado do executável
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		binary := filepath.Join(dir, "core-server")
+		if runtime.GOOS == "windows" {
+			binary += ".exe"
+		}
+		if _, err := os.Stat(binary); err == nil {
+			return binary
+		}
 	}
-	dir := filepath.Dir(exe)
+	// 2. Fallback: diretório atual
 	binary := "core-server"
 	if runtime.GOOS == "windows" {
-		binary = "core-server.exe"
+		binary += ".exe"
 	}
-	return filepath.Join(dir, binary)
+	if _, err := os.Stat(binary); err == nil {
+		return binary
+	}
+	// 3. Fallback: diretório pai (quando roda de desktop/)
+	parent := filepath.Join("..", "core", "core-server")
+	if runtime.GOOS == "windows" {
+		parent += ".exe"
+	}
+	if _, err := os.Stat(parent); err == nil {
+		return parent
+	}
+	return binary
 }
 
 func (a *App) startCore() error {
 	binary := coreBinaryPath()
 
-	// Configura o core via variáveis de ambiente
-	a.core = exec.Command(binary)
-	a.core.Env = append(os.Environ(),
-		fmt.Sprintf("PORT=%d", a.port),
-		fmt.Sprintf("DB_PATH=%s/ton618.db", a.dataDir),
-		fmt.Sprintf("STATE_DIR=%s", a.dataDir),
-		fmt.Sprintf("DOCS_DIR=%s", a.dataDir),
-	)
-
-	// Se o core-server não existir ao lado do desktop,
-	// tenta go run (ambiente de desenvolvimento)
+	// Se o core-server não existir, tenta go run (ambiente de desenvolvimento)
 	if _, err := os.Stat(binary); os.IsNotExist(err) {
-		log.Printf("core-server não encontrado em %s, tentando build dev...", binary)
-		binary = "go"
+		log.Printf("core-server não encontrado, tentando go run no core...")
+		coreDir := filepath.Join("..", "core")
 		a.core = exec.Command("go", "run", ".")
-		a.core.Dir = "../core"
+		a.core.Dir = coreDir
+		a.core.Env = append(os.Environ(),
+			fmt.Sprintf("PORT=%d", a.port),
+			fmt.Sprintf("DB_PATH=%s/ton618.db", a.dataDir),
+			fmt.Sprintf("STATE_DIR=%s", a.dataDir),
+			fmt.Sprintf("DOCS_DIR=%s", a.dataDir),
+		)
+	} else {
+		a.core.Env = append(os.Environ(),
+			fmt.Sprintf("PORT=%d", a.port),
+			fmt.Sprintf("DB_PATH=%s/ton618.db", a.dataDir),
+			fmt.Sprintf("STATE_DIR=%s", a.dataDir),
+			fmt.Sprintf("DOCS_DIR=%s", a.dataDir),
+		)
 	}
-
-	a.core.Stdout = os.Stdout
-	a.core.Stderr = os.Stderr
 
 	if err := a.core.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar core-server: %w", err)
