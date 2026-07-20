@@ -486,6 +486,107 @@ func TestNoteService_Rename_UpdatesBacklinks(t *testing.T) {
 	}
 }
 
+func TestNoteService_UpdateBacklinksOnRename_ZipFile(t *testing.T) {
+	var savedNoteContent string
+	var savedNoteFile string
+
+	notes := &mockNoteStore{
+		getAllNotesFn: func() (map[string]string, error) {
+			return map[string]string{"notes/referenciadora.md": "2026-01-01T00:00:00Z"}, nil
+		},
+		getNoteFn: func(filename string) (string, error) {
+			if filename == "notes/referenciadora.md" {
+				return "Link 1: [[meuarquivo.zip]]\nLink 2: [[attachments/meuarquivo.zip|Rótulo]]\nLink 3: [Baixar](/file/download?name=attachments/meuarquivo.zip)", nil
+			}
+			return "", nil
+		},
+		saveNoteFn: func(filename, content, mtime string) error {
+			savedNoteFile = filename
+			savedNoteContent = content
+			return nil
+		},
+	}
+	links := &mockLinkStore{
+		getBacklinksFn: func(to string) ([]string, error) {
+			return []string{"notes/referenciadora.md"}, nil
+		},
+	}
+	fileOps := &mockFileOps{
+		replaceFileIndexesFn: func(_ context.Context, _ string, _ []processor.Document, _ []string, _ []string, _ []processor.TodoItem, _ time.Time) error {
+			return nil
+		},
+	}
+
+	svc, _ := newMockService(t, fileOps, notes, links)
+
+	oldZip := "attachments/meuarquivo.zip"
+	newZip := "attachments/novo_arquivo.zip"
+
+	if err := svc.UpdateBacklinksOnRename(oldZip, newZip); err != nil {
+		t.Fatalf("UpdateBacklinksOnRename: %v", err)
+	}
+
+	if savedNoteFile != "notes/referenciadora.md" {
+		t.Errorf("esperado salvar notes/referenciadora.md, got %q", savedNoteFile)
+	}
+
+	expectedContent := "Link 1: [[novo_arquivo.zip]]\nLink 2: [[attachments/novo_arquivo.zip|Rótulo]]\nLink 3: [Baixar](/file/download?name=attachments/novo_arquivo.zip)"
+	if savedNoteContent != expectedContent {
+		t.Errorf("conteúdo inesperado após renomear zip:\nesperado:\n%s\nobtido:\n%s", expectedContent, savedNoteContent)
+	}
+}
+
+func TestNoteService_UpdateBacklinksOnRename_AllNoteTypes(t *testing.T) {
+	var savedNoteContent string
+
+	notes := &mockNoteStore{
+		getAllNotesFn: func() (map[string]string, error) {
+			return map[string]string{"notes/main.md": "2026-01-01T00:00:00Z"}, nil
+		},
+		getNoteFn: func(filename string) (string, error) {
+			if filename == "notes/main.md" {
+				return "Desenho: [[meu-desenho]] | PDF: [[manual.pdf]] | EPUB: [Livro](/epub/reader?file=epubs/oldbook.epub)", nil
+			}
+			return "", nil
+		},
+		saveNoteFn: func(filename, content, mtime string) error {
+			savedNoteContent = content
+			return nil
+		},
+	}
+	fileOps := &mockFileOps{
+		replaceFileIndexesFn: func(_ context.Context, _ string, _ []processor.Document, _ []string, _ []string, _ []processor.TodoItem, _ time.Time) error {
+			return nil
+		},
+	}
+
+	svc, _ := newMockService(t, fileOps, notes)
+
+	// 1. Renomeia nota de desenho
+	if err := svc.UpdateBacklinksOnRename("notes/meu-desenho.md", "notes/desenho-v2.md"); err != nil {
+		t.Fatalf("rename drawing: %v", err)
+	}
+	if !strings.Contains(savedNoteContent, "[[desenho-v2]]") {
+		t.Errorf("esperado link [[desenho-v2]], obtido: %s", savedNoteContent)
+	}
+
+	// 2. Renomeia PDF
+	if err := svc.UpdateBacklinksOnRename("pdfs/manual.pdf", "pdfs/manual-novo.pdf"); err != nil {
+		t.Fatalf("rename pdf: %v", err)
+	}
+	if !strings.Contains(savedNoteContent, "[[manual-novo.pdf]]") {
+		t.Errorf("esperado link [[manual-novo.pdf]], obtido: %s", savedNoteContent)
+	}
+
+	// 3. Renomeia EPUB
+	if err := svc.UpdateBacklinksOnRename("epubs/oldbook.epub", "epubs/newbook.epub"); err != nil {
+		t.Fatalf("rename epub: %v", err)
+	}
+	if !strings.Contains(savedNoteContent, "file=epubs/newbook.epub") {
+		t.Errorf("esperado URL file=epubs/newbook.epub, obtido: %s", savedNoteContent)
+	}
+}
+
 // ── Tests: GetMany ──
 
 func TestNoteService_GetMany_ReturnsItems(t *testing.T) {

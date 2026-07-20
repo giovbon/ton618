@@ -629,6 +629,11 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 					Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
 				})
 			}
+			if ctx.Notes != nil {
+				if err := ctx.Notes.UpdateBacklinksOnRename(oldName, newName); err != nil {
+					slog.Error("update backlinks on non-note property rename", "old", oldName, "new", newName, "error", err)
+				}
+			}
 		}
 
 		// Invalidate cache

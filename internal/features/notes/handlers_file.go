@@ -416,6 +416,12 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
+	if ctx.Notes != nil {
+		if err := ctx.Notes.UpdateBacklinksOnRename(oldName, newName); err != nil {
+			slog.Error("update backlinks on non-note file rename", "old", oldName, "new", newName, "error", err)
+		}
+	}
+
 	w.Header().Set("HX-Trigger", "reload-sidebar")
 	w.WriteHeader(http.StatusOK)
 }

@@ -2,6 +2,7 @@ package notes
 
 import (
 	"context"
+	"net/url"
 	"ton618/internal/core/domain"
 
 	"fmt"
@@ -117,12 +118,6 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return nil
 	}
 
-	// Obtém os backlinks antes de qualquer alteração no banco
-	backlinks, err := s.links.GetBacklinks(oldName)
-	if err != nil {
-		slog.Error("get backlinks for rename", "oldName", oldName, "error", err)
-	}
-
 	if err := s.notes.RenameNote(oldName, newName); err != nil {
 		return fmt.Errorf("rename note: %w", err)
 	}
@@ -166,46 +161,137 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		}
 	}
 
-	// Atualiza os wikilinks nos arquivos que referenciavam a nota antiga
-	if len(backlinks) > 0 {
-		newTitle := strings.TrimSuffix(filepath.Base(newName), ".md")
+	// Atualiza os wikilinks e URLs nos arquivos que referenciavam a nota antiga
+	if err := s.UpdateBacklinksOnRename(oldName, newName); err != nil {
+		slog.Error("update backlinks on rename", "oldName", oldName, "newName", newName, "error", err)
+	}
 
-		for _, refFile := range backlinks {
-			if refFile == oldName || refFile == newName {
-				continue
-			}
-			refContent, err := s.notes.GetNote(refFile)
-			if err != nil || refContent == "" {
-				continue
-			}
+	return nil
+}
 
-			updatedContent := processor.WikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
-				submatches := processor.WikilinkRegex.FindStringSubmatch(match)
-				if len(submatches) > 1 {
-					target := strings.TrimSpace(submatches[1])
-					if target == "" {
-						return match
-					}
-					normTarget := strings.ToLower(target)
-					if !strings.Contains(normTarget, ".") {
-						normTarget += ".md"
-					}
-					if strings.HasSuffix(normTarget, ".md") && !strings.Contains(normTarget, "/") {
-						normTarget = "notes/" + normTarget
-					}
+// UpdateBacklinksOnRename atualiza wikilinks, links markdown e URLs em todas as notas
+// quando qualquer arquivo (.md, .zip, .pdf, .epub, etc.) é renomeado.
+func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
+	if oldName == "" || newName == "" || oldName == newName {
+		return nil
+	}
 
-					if normTarget == strings.ToLower(oldName) {
+	oldBase := filepath.Base(oldName)
+	newBase := filepath.Base(newName)
+
+	oldTitle := strings.TrimSuffix(oldBase, filepath.Ext(oldBase))
+	newTitle := strings.TrimSuffix(newBase, filepath.Ext(newBase))
+
+	candidateMap := make(map[string]bool)
+
+	// Busca backlinks registrados no banco
+	if bl1, err := s.links.GetBacklinks(oldName); err == nil {
+		for _, f := range bl1 {
+			candidateMap[f] = true
+		}
+	}
+	if bl2, err := s.links.GetBacklinks(oldBase); err == nil {
+		for _, f := range bl2 {
+			candidateMap[f] = true
+		}
+	}
+	if bl3, err := s.links.GetBacklinks(strings.ToLower(oldName)); err == nil {
+		for _, f := range bl3 {
+			candidateMap[f] = true
+		}
+	}
+	if bl4, err := s.links.GetBacklinks(strings.ToLower(oldBase)); err == nil {
+		for _, f := range bl4 {
+			candidateMap[f] = true
+		}
+	}
+
+	// Garante que todas as notas do sistema sejam testadas caso a indexação estivesse pendente
+	if allNotes, err := s.notes.GetAllNotes(); err == nil {
+		for f := range allNotes {
+			candidateMap[f] = true
+		}
+	}
+
+	oldEsc := SafeFileQueryEscape(oldName)
+	newEsc := SafeFileQueryEscape(newName)
+	oldUrlEsc := url.QueryEscape(oldName)
+	newUrlEsc := url.QueryEscape(newName)
+
+	oldBaseEsc := SafeFileQueryEscape(oldBase)
+	newBaseEsc := SafeFileQueryEscape(newBase)
+	oldBaseUrlEsc := url.QueryEscape(oldBase)
+	newBaseUrlEsc := url.QueryEscape(newBase)
+
+	for refFile := range candidateMap {
+		if refFile == oldName || refFile == newName {
+			continue
+		}
+		refContent, err := s.notes.GetNote(refFile)
+		if err != nil || refContent == "" {
+			continue
+		}
+
+		// 1. Wikilinks [[target]]
+		updatedContent := processor.WikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
+			submatches := processor.WikilinkRegex.FindStringSubmatch(match)
+			if len(submatches) > 1 {
+				target := strings.TrimSpace(submatches[1])
+				if target == "" {
+					return match
+				}
+				normTarget := strings.ToLower(target)
+
+				// Match com nome completo (ex: attachments/meuarquivo.zip ou notes/nota.md)
+				if normTarget == strings.ToLower(oldName) {
+					return strings.Replace(match, target, newName, 1)
+				}
+
+				// Match com nome base (ex: meuarquivo.zip)
+				if normTarget == strings.ToLower(oldBase) {
+					return strings.Replace(match, target, newBase, 1)
+				}
+
+				// Match com o nome sem extensão (ex: "meudesenho", "manual", "anexo")
+				if normTarget == strings.ToLower(oldTitle) {
+					return strings.Replace(match, target, newTitle, 1)
+				}
+
+				if !strings.Contains(normTarget, ".") {
+					oldExt := filepath.Ext(oldBase)
+					if oldExt != "" && normTarget+strings.ToLower(oldExt) == strings.ToLower(oldBase) {
+						return strings.Replace(match, target, newTitle, 1)
+					}
+					if normTarget+".md" == strings.ToLower(oldBase) || "notes/"+normTarget+".md" == strings.ToLower(oldName) {
 						return strings.Replace(match, target, newTitle, 1)
 					}
 				}
-				return match
-			})
+			}
+			return match
+		})
 
-			if updatedContent != refContent {
-				// s.Save processa tags, links e salva tanto no DB quanto no disco
-				if err := s.Save(refFile, updatedContent, nil); err != nil {
-					slog.Error("update referring note during rename", "refFile", refFile, "error", err)
-				}
+		// 2. URLs de download/mídia e caminhos relativos em markdown links
+		if strings.Contains(updatedContent, oldName) || strings.Contains(updatedContent, oldEsc) || strings.Contains(updatedContent, oldUrlEsc) ||
+			strings.Contains(updatedContent, oldBase) || strings.Contains(updatedContent, oldBaseEsc) || strings.Contains(updatedContent, oldBaseUrlEsc) {
+
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldEsc, "name="+newEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldUrlEsc, "name="+newUrlEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldName, "name="+newName)
+
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldEsc, "file="+newEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldUrlEsc, "file="+newUrlEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldName, "file="+newName)
+
+			for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/", "notes/"} {
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBase, prefix+newBase)
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseEsc, prefix+newBaseEsc)
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseUrlEsc, prefix+newBaseUrlEsc)
+			}
+		}
+
+		if updatedContent != refContent {
+			if err := s.Save(refFile, updatedContent, nil); err != nil {
+				slog.Error("update referring note during rename", "refFile", refFile, "error", err)
 			}
 		}
 	}

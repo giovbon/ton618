@@ -3,6 +3,7 @@ package processor
 import (
 	"crypto/sha256"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -35,11 +36,12 @@ const (
 )
 
 var (
-	headerRegex          = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-	typstHeaderRegex     = regexp.MustCompile(`(?m)^(=+)\s+(.*)`)
-	hashtagRegex         = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
-	WikilinkRegex        = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
-	mediaLinkRegex       = regexp.MustCompile(`\(/api/file\?name=([^)&]+)`)
+	headerRegex           = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
+	typstHeaderRegex      = regexp.MustCompile(`(?m)^(=+)\s+(.*)`)
+	hashtagRegex          = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
+	WikilinkRegex         = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	mediaLinkRegex        = regexp.MustCompile(`(?i)(?:/file(?:/download)?|/api/file)\?name=([^)\s"&]+)`)
+	markdownFileLinkRegex = regexp.MustCompile(`(?i)\]\(((?:attachments|archives|pdfs|epubs|notes)/[^)\s]+)\)`)
 
 	checkboxTodoRegex    = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
 	todoHeaderRegex      = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
@@ -267,17 +269,37 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 					target = "notes/" + target
 				}
 				links = append(links, target)
+				// Se for um anexo sem diretório (ex: meuarquivo.zip), indexa também com os prefixos possíveis
+				if strings.Contains(target, ".") && !strings.Contains(target, "/") && !strings.HasSuffix(target, ".md") {
+					for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/"} {
+						links = append(links, prefix+target)
+					}
+				}
 			}
 		}
 	}
 
-	// Extract media links
+	// Extract media e download links (?name=...)
 	mediaMatches := mediaLinkRegex.FindAllStringSubmatch(text, -1)
 	for _, m := range mediaMatches {
 		if len(m) > 1 {
 			target := strings.TrimSpace(m[1])
 			if target != "" {
-				links = append(links, target)
+				if unescaped, err := url.QueryUnescape(target); err == nil {
+					target = unescaped
+				}
+				links = append(links, strings.ToLower(target))
+			}
+		}
+	}
+
+	// Extract markdown relative links ](attachments/... etc)
+	markdownFileMatches := markdownFileLinkRegex.FindAllStringSubmatch(text, -1)
+	for _, m := range markdownFileMatches {
+		if len(m) > 1 {
+			target := strings.TrimSpace(m[1])
+			if target != "" {
+				links = append(links, strings.ToLower(target))
 			}
 		}
 	}
