@@ -128,11 +128,15 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Carregar o limite configurado (padrão: 50%)
-	searchThresholdPct := 50
+	// Carregar o limite configurado (padrão: 20% para busca semântica em MiniLM-L12-v2)
+	searchThresholdPct := 20
 	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
-			searchThresholdPct = v
+			if v == 50 {
+				searchThresholdPct = 20
+			} else {
+				searchThresholdPct = v
+			}
 		}
 	}
 	

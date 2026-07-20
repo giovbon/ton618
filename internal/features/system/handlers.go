@@ -774,17 +774,25 @@ func (ctx *HandlerContext) HandlePostSemanticDevice(w http.ResponseWriter, r *ht
 // HandleGetSemanticThresholds retorna os thresholds configurados para buscas semânticas
 // GET /api/settings/semantic-thresholds
 func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r *http.Request) {
-	searchThreshold := 50 // default: 50%
-	notesThreshold := 72  // default: 72%
+	searchThreshold := 20 // default: 20%
+	notesThreshold := 40  // default: 40%
 
 	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
-			searchThreshold = v
+			if v == 50 {
+				searchThreshold = 20
+			} else {
+				searchThreshold = v
+			}
 		}
 	}
 	if val, err := ctx.Store.GetSetting("similar_notes_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
-			notesThreshold = v
+			if v == 72 {
+				notesThreshold = 40
+			} else {
+				notesThreshold = v
+			}
 		}
 	}
 

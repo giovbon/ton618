@@ -25,8 +25,8 @@ func TestBuildContextSnippet_EmptyText(t *testing.T) {
 func TestBuildContextSnippet_NoMatch(t *testing.T) {
 	text := "This is a long text about something else entirely."
 	result := buildContextSnippet("nonexistent", text)
-	if !strings.HasPrefix(result, "This is") {
-		t.Errorf("esperado prefixo do texto original, got %q", result)
+	if result != "" {
+		t.Errorf("esperado '' para sem correspondência, got %q", result)
 	}
 }
 
@@ -57,8 +57,53 @@ func TestBuildContextSnippet_ExactPhrase(t *testing.T) {
 func TestBuildContextSnippet_LongTextTruncation(t *testing.T) {
 	text := strings.Repeat("word ", 200)
 	result := buildContextSnippet("nothing", text)
-	if len(result) > 260 {
-		t.Errorf("texto longo sem match deve ser truncado para ~250 chars, got %d: %q", len(result), result)
+	if result != "" {
+		t.Errorf("esperado '' para busca sem match, got %q", result)
+	}
+}
+
+func TestBuildContextSnippet_AccentsAndUTF8Shift(t *testing.T) {
+	// Texto com múltiplos caracteres acentuados de 2 bytes antes do termo buscado
+	text := "A introdução e a apresentação das configurações da automação são essenciais. No final temos a palavra ALVO que buscamos."
+	result := buildContextSnippet("ALVO", text)
+	if !strings.Contains(result, "ALVO") {
+		t.Errorf("snippet deve conter a palavra ALVO sem deslocamento de bytes UTF-8, got %q", result)
+	}
+}
+
+func TestBuildContextSnippet_StemMatching(t *testing.T) {
+	// A busca é por "juiza", mas o texto contém a forma flexionada "juiz"
+	text := "O processo seguiu para análise. O juiz Marcelo definiu a sentença do caso."
+	result := buildContextSnippet("juiza", text)
+	if !strings.Contains(result, "juiz") {
+		t.Errorf("snippet deve encontrar o radical 'juiz' ao buscar 'juiza', got %q", result)
+	}
+}
+
+func TestHasVisibleMatch(t *testing.T) {
+	// 1. Termo visível no snippet (via radical)
+	if !hasVisibleMatch("juiza", "... O juiz definiu ...", "nota.md", "Geral", nil) {
+		t.Errorf("esperado true quando o radical do termo está presente no snippet")
+	}
+
+	// 2. Termo visível na seção
+	if !hasVisibleMatch("juiza", "Texto genérico sem a palavra", "nota.md", "Decisão da Juíza", nil) {
+		t.Errorf("esperado true quando o termo está presente na seção")
+	}
+
+	// 3. Falso positivo (termo estava apenas em URL limpa e não em nenhum campo visível)
+	if hasVisibleMatch("juiza", "Texto da nota sobre Andrew Tate em Miami sem a palavra", "captura-tate.md", "Notícias", []string{"redpill"}) {
+		t.Errorf("esperado false para resultado falso positivo sem termo visível")
+	}
+
+	// 4. Teste de limite de palavra: o radical "cas" da palavra "casa" NÃO deve casar com "poucas"
+	if hasVisibleMatch("casa", "Poucas horas após fazer os supostos gestos racistas...", "captura-tate.md", "Geral", nil) {
+		t.Errorf("esperado false pois 'cas' está dentro de 'poucas' e não no início da palavra")
+	}
+
+	// 5. O radical "cas" deve casar com "caso" ou "casos"
+	if !hasVisibleMatch("casa", "Relembre o caso...", "captura-tate.md", "Geral", nil) {
+		t.Errorf("esperado true pois 'caso' começa com o radical 'cas'")
 	}
 }
 

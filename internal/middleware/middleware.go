@@ -119,11 +119,10 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "+
 				"font-src 'self' https://fonts.gstatic.com; "+
 				"img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
-				// worker-src e wasm-src necessários para Web Workers e WASM (Transformers.js/ONNX) no HTTPS
+				// worker-src necessário para Web Workers (Transformers.js/ONNX) no HTTPS
 				"worker-src 'self' blob:; "+
-				"wasm-src 'self' blob:; "+
-				// Adicionado https://*.xethub.hf.co para permitir o download dos modelos ONNX/Tokenizers do Hugging Face
-				"connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co")
+				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa
+				"connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co https://*.hf.co https://*.cdn.hf.co https://cdn-lfs.huggingface.co")
 		next.ServeHTTP(w, r)
 	})
 }

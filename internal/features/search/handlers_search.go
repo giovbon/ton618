@@ -17,6 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"unicode"
+	"unicode/utf8"
+
 	"ton618/internal/core/db"
 	"ton618/internal/core/domain"
 	"ton618/internal/processor"
@@ -27,6 +30,17 @@ import (
 )
 
 var searchQuotedRe = regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
+
+func cleanTermForMatching(t string) string {
+	t = strings.TrimSpace(t)
+	// Remove leading operators like +, -, ~, #
+	t = strings.TrimLeft(t, "+-~#")
+	// Remove trailing operators like *, ~
+	t = strings.TrimRight(t, "*~")
+	// Trim quotes
+	t = strings.Trim(t, `"'`)
+	return strings.TrimSpace(t)
+}
 
 // extractSearchTerms extrai os termos de busca da query, ignorando filtros e operadores.
 func extractSearchTerms(query string) []string {
@@ -63,19 +77,45 @@ func extractSearchTerms(query string) []string {
 			continue
 		}
 		
-		// Remove aspas adicionais se sobrarem nas bordas
-		t = strings.Trim(t, `"'`)
-		if len(t) <= 1 {
+		cleaned := cleanTermForMatching(t)
+		if len(cleaned) <= 1 {
 			continue
 		}
 		
-		terms = append(terms, t)
+		terms = append(terms, cleaned)
 	}
 	return terms
 }
 
+// normalizeAccentsWithMap converte uma string UTF-8 para minúsculas e sem acentos,
+// retornando também um slice normToOrig que mapeia cada índice de byte da string normalizada
+// para o índice de byte correspondente na string original.
+func normalizeAccentsWithMap(s string) (string, []int) {
+	var sb strings.Builder
+	normToOrig := make([]int, 0, len(s)+1)
+
+	for origIdx, r := range s {
+		normRuneStr := removeAccents(strings.ToLower(string(r)))
+		sb.WriteString(normRuneStr)
+		for i := 0; i < len(normRuneStr); i++ {
+			normToOrig = append(normToOrig, origIdx)
+		}
+	}
+	normToOrig = append(normToOrig, len(s))
+	return sb.String(), normToOrig
+}
+
+// isWordStartBoundary verifica se a posição byteIdx dentro de text está no início de uma palavra.
+func isWordStartBoundary(text string, byteIdx int) bool {
+	if byteIdx <= 0 {
+		return true
+	}
+	r, _ := utf8.DecodeLastRuneInString(text[:byteIdx])
+	return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_'
+}
+
 // buildContextSnippet gera um trecho do texto com contexto ao redor de termos encontrados.
-// Suporta "frases exatas" entre aspas como termo único.
+// Mapeia os índices de byte com precisão UTF-8 e suporta frases e termos com acentos.
 func buildContextSnippet(query, text string) string {
 	const before = 80
 	const after = 120
@@ -85,49 +125,81 @@ func buildContextSnippet(query, text string) string {
 	}
 
 	terms := extractSearchTerms(query)
+	var cleanTerms []string
+	seen := make(map[string]bool)
+	for _, term := range terms {
+		cleaned := cleanTermForMatching(term)
+		if len(cleaned) > 1 && !seen[cleaned] {
+			seen[cleaned] = true
+			cleanTerms = append(cleanTerms, cleaned)
+		}
+	}
 
-	if len(terms) == 0 {
+	// Também inclui radicais/stems dos termos de busca (ex: "juiza" -> stem "juiz")
+	queryStemsStr := search.GetQueryStems(query)
+	if queryStemsStr != "" {
+		stems := strings.Split(queryStemsStr, ",")
+		for _, st := range stems {
+			st = cleanTermForMatching(st)
+			if len(st) > 1 && !seen[st] {
+				seen[st] = true
+				cleanTerms = append(cleanTerms, st)
+			}
+		}
+	}
+
+	if len(cleanTerms) == 0 {
 		if len(text) > 250 {
 			return text[:250] + "..."
 		}
 		return text
 	}
 
-	textLower := strings.ToLower(text)
-	textLowerNormalized := removeAccents(textLower)
+	normText, normToOrig := normalizeAccentsWithMap(text)
 
-	// Find first occurrence of each term
 	type match struct {
-		pos  int
-		term string
+		start int // índice de byte na string original text
+		end   int // índice de byte na string original text
 	}
 	var matches []match
-	seen := make(map[string]bool)
-	for _, term := range terms {
-		termLower := strings.ToLower(term)
-		if seen[termLower] {
+
+	for _, term := range cleanTerms {
+		termNorm := removeAccents(strings.ToLower(term))
+		if termNorm == "" {
 			continue
 		}
-		seen[termLower] = true
-		termLowerNormalized := removeAccents(termLower)
-		if pos := strings.Index(textLowerNormalized, termLowerNormalized); pos >= 0 {
-			matches = append(matches, match{pos: pos, term: termLower})
+
+		searchStart := 0
+		for {
+			idx := strings.Index(normText[searchStart:], termNorm)
+			if idx < 0 {
+				break
+			}
+			normPos := searchStart + idx
+			if isWordStartBoundary(normText, normPos) {
+				origStart := normToOrig[normPos]
+				origEnd := normToOrig[normPos+len(termNorm)]
+
+				matches = append(matches, match{start: origStart, end: origEnd})
+			}
+
+			searchStart = normPos + len(termNorm)
+			if searchStart >= len(normText) {
+				break
+			}
 		}
 	}
 
 	if len(matches) == 0 {
-		if len(text) > 250 {
-			return text[:250] + "..."
-		}
-		return text
+		return ""
 	}
 
-	// Sort by position
+	// Ordena os matches pelo início
 	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].pos < matches[j].pos
+		return matches[i].start < matches[j].start
 	})
 
-	// Build context windows, merging close ones
+	// Constrói janelas de contexto fundindo as sobrepostas ou próximas
 	const gapThreshold = 150
 	type window struct {
 		start, end int
@@ -135,18 +207,17 @@ func buildContextSnippet(query, text string) string {
 	var windows []window
 
 	for _, m := range matches {
-		start := m.pos - before
+		start := m.start - before
 		if start < 0 {
 			start = 0
 		}
-		end := m.pos + len(m.term) + after
+		end := m.end + after
 		if end > len(text) {
 			end = len(text)
 		}
 
 		if len(windows) > 0 {
 			last := &windows[len(windows)-1]
-			// If this window overlaps or is close enough, merge
 			if start <= last.end+gapThreshold {
 				if end > last.end {
 					last.end = end
@@ -157,11 +228,10 @@ func buildContextSnippet(query, text string) string {
 		windows = append(windows, window{start: start, end: end})
 	}
 
-	// Build final snippet with ellipsis
+	// Monta o snippet final com reticências
 	var parts []string
 	for i, w := range windows {
 		part := text[w.start:w.end]
-		// Trim to sentence boundaries at edges when possible
 		if w.start > 0 {
 			part = "... " + part
 		}
@@ -169,7 +239,6 @@ func buildContextSnippet(query, text string) string {
 			part = part + " ..."
 		}
 
-		// If this is not the first window and previous window is far, add separator
 		if i > 0 {
 			parts = append(parts, "...")
 		}
@@ -231,6 +300,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Build template data
+	seenFiles := make(map[string]bool)
 	var items []domain.SearchResultItem
 	for _, hit := range results.Hits {
 		// Clean snippet: strip HTML, show context around query
@@ -386,6 +456,19 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
 			continue
 		}
+
+		// Deduplica por arquivo de nota para não exibir o mesmo arquivo várias vezes na busca
+		if seenFiles[hit.Doc.Arquivo] {
+			continue
+		}
+
+		// Descarta falsos positivos que não possuem correspondência nos campos visíveis
+		if !hasVisibleMatch(query, snippet, hit.Doc.Arquivo, hit.Doc.Secao, userTags) {
+			continue
+		}
+
+		seenFiles[hit.Doc.Arquivo] = true
+
 		// Compute line number: find first line in the note that matches the query
 		line := findQueryLine(ctx, hit.Doc.Arquivo, query)
 
@@ -406,15 +489,75 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
+	total := results.Total
+	if len(items) < total {
+		total = len(items)
+	}
+
 	data := domain.SearchResultsData{
 		Query:   query,
 		Results: items,
-		Total:   results.Total,
+		Total:   total,
 	}
 
 	// HTMX: return only the results partial
 	w.Header().Set("Content-Type", "text/html")
 	SearchResults(data).Render(r.Context(), w)
+}
+
+// hasVisibleMatch verifica se ao menos um dos termos (ou seus radicais) está presente em algum campo visível do resultado.
+func hasVisibleMatch(query, snippet, arquivo, secao string, tags []string) bool {
+	terms := extractSearchTerms(query)
+	var cleanTerms []string
+	seen := make(map[string]bool)
+	for _, term := range terms {
+		cleaned := cleanTermForMatching(term)
+		if len(cleaned) > 1 && !seen[cleaned] {
+			seen[cleaned] = true
+			cleanTerms = append(cleanTerms, cleaned)
+		}
+	}
+	queryStemsStr := search.GetQueryStems(query)
+	if queryStemsStr != "" {
+		for _, st := range strings.Split(queryStemsStr, ",") {
+			st = cleanTermForMatching(st)
+			if len(st) > 1 && !seen[st] {
+				seen[st] = true
+				cleanTerms = append(cleanTerms, st)
+			}
+		}
+	}
+
+	if len(cleanTerms) == 0 {
+		return true // Se busca é só por tags ou vazia, não descarte nada
+	}
+
+	searchTarget := strings.ToLower(snippet + " " + arquivo + " " + secao + " " + strings.Join(tags, " "))
+	normTarget := removeAccents(searchTarget)
+
+	for _, t := range cleanTerms {
+		normTerm := removeAccents(strings.ToLower(t))
+		if normTerm == "" {
+			continue
+		}
+
+		searchStart := 0
+		for {
+			idx := strings.Index(normTarget[searchStart:], normTerm)
+			if idx < 0 {
+				break
+			}
+			pos := searchStart + idx
+			if isWordStartBoundary(normTarget, pos) {
+				return true
+			}
+			searchStart = pos + len(normTerm)
+			if searchStart >= len(normTarget) {
+				break
+			}
+		}
+	}
+	return false
 }
 
 // findQueryLine encontra a primeira linha no conteúdo da nota que contém os termos buscados.
