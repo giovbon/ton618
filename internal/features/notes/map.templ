@@ -10,7 +10,7 @@ templ MapNote(data domain.EditorData) {
 templ mapContent(data domain.EditorData) {
 <div class="editor-root flex flex-col" id="map-root"
      style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 0; border-radius: 0;">
-    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative z-20">
+    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative z-[2000]">
         <input id="file-name" type="text" value={ data.DisplayName }
             data-filename={ data.Filename }
             class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
@@ -20,7 +20,7 @@ templ mapContent(data domain.EditorData) {
         
         <!-- Dropdown de Opções Unificado -->
         <div class="relative" id="map-actions-wrapper">
-            <button id="map-actions-btn" onclick="toggleMapActions()"
+            <button id="map-actions-btn" onclick="toggleMapActions(event)"
                 class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-750 bg-zinc-900/60 hover:bg-zinc-900 transition-all flex items-center gap-1.5 select-none cursor-pointer">
                 ⚙️ Opções <span class="text-[10px] text-zinc-500">▼</span>
             </button>
@@ -299,11 +299,14 @@ templ mapContent(data domain.EditorData) {
 
     window.saveMap = doSave;
     
-    window.toggleMapActions = function() {
+    window.toggleMapActions = function(e) {
+        if (e && e.stopPropagation) e.stopPropagation();
         var dropdown = document.getElementById("map-actions-dropdown");
+        if (!dropdown) return;
         if (dropdown.classList.contains("hidden")) {
             dropdown.classList.remove("hidden");
-            document.getElementById("search-container").classList.add("hidden");
+            var searchContainer = document.getElementById("search-container");
+            if (searchContainer) searchContainer.classList.add("hidden");
         } else {
             dropdown.classList.add("hidden");
         }

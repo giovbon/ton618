@@ -135,6 +135,23 @@
             }
         },
 
+        // ── wikilinksToMarkdown: converte links do editor de volta pra [[wikilinks]] ──
+        wikilinksToMarkdown: function (content) {
+            return content
+                .replace(
+                    /\[([^\]]+)\]\(\/editor\?file=notes\/(?:[^)]|\([^)]*\))*\.md\)/g,
+                    "[[$1]]",
+                )
+                .replace(
+                    /\[([^\]]+)\]\(\/epub\/reader\?file=(?:[^)]|\([^)]*\))*\.epub\)/g,
+                    "[[$1]]",
+                )
+                .replace(
+                    /\[([^\]]+)\]\(\/file\/download\?name=(?:[^)]|\([^)]*\))*\)/g,
+                    "[[$1]]",
+                );
+        },
+
         // ── setupCodeJarActiveLine: highlights active line in CodeJar editor ──
         setupCodeJarActiveLine: function (editorEl) {
             if (!editorEl) return;
@@ -228,6 +245,135 @@
             });
 
             window.addEventListener("resize", updateHighlight);
+        },
+
+        // ── normalizeFilename: garante formato notes/<nome>.md ──
+        normalizeFilename: function (name) {
+            if (!name.endsWith(".md")) name += ".md";
+            if (!name.startsWith("notes/")) name = "notes/" + name;
+            return name;
+        },
+
+        // ── getCurrentFilename: obtém filename do input com fallback ──
+        getCurrentFilename: function (filenameInput) {
+            var name = filenameInput.dataset.filename || filenameInput.value.trim();
+            return this.normalizeFilename(name);
+        },
+
+        // ── getDisplayName: extrai nome de exibição de um filename ──
+        getDisplayName: function (filename) {
+            return filename.split("/").pop().replace(/\.md$/i, "");
+        },
+
+        // ── deleteCurrentNote: genérico para todos os tipos de nota ──
+        deleteCurrentNote: function (filenameInput, confirmMsg) {
+            var filename = this.getCurrentFilename(filenameInput);
+            if (!filename) return;
+            if (!confirm(confirmMsg || 'Excluir definitivamente "' + filename + '"?')) return;
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fetch("/file/delete", { method: "POST", body: fd })
+                .then(function () { window.location.href = "/"; })
+                .catch(function () { window.location.href = "/"; });
+        },
+
+        // ── duplicateCurrentNote: genérico para todos os tipos de nota ──
+        duplicateCurrentNote: function (filenameInput, redirectBase, confirmMsg) {
+            var filename = this.getCurrentFilename(filenameInput);
+            if (!filename) return;
+            if (!confirm(confirmMsg || 'Duplicar "' + filename + '"?')) return;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+
+            fetch("/api/note/duplicate", { method: "POST", body: fd })
+                .then(function (r) {
+                    if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.new_filename) {
+                        window.location.href = (redirectBase || "/editor") + "?file=" + encodeURIComponent(data.new_filename);
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro ao duplicar: " + err.message);
+                });
+        },
+
+        // ── doRenameContent: renomeia + salva conteúdo, comum a todos os tipos ──
+        doRenameContent: async function (filenameInput, getContentFn, redirectBase, opts) {
+            opts = opts || {};
+            var newName = filenameInput.value.trim();
+            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
+
+            var currentFilename = this.getCurrentFilename(filenameInput);
+            var currentDisplayName = this.getDisplayName(currentFilename);
+
+            if (!newName || newName === currentDisplayName) return;
+
+            var fullNewName = "notes/" + newName + ".md";
+
+            try {
+                if (opts.setStatus) opts.setStatus("saving");
+
+                var content = typeof getContentFn === "function" ? getContentFn() : "";
+
+                // 1. Rename
+                if (currentFilename !== fullNewName) {
+                    var renameFd = new FormData();
+                    renameFd.append("old", currentFilename);
+                    renameFd.append("new", fullNewName);
+                    var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd });
+                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+                }
+
+                // 2. Save
+                var saveFd = new FormData();
+                saveFd.append("filename", fullNewName);
+                saveFd.append("content", content);
+                saveFd.append("tags", opts.tags || "");
+
+                var saveResp = await fetch("/api/note/save", { method: "POST", body: saveFd });
+                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
+
+                if (opts.onSaved) opts.onSaved(content, fullNewName);
+
+                // 3. Update + redirect
+                filenameInput.dataset.filename = fullNewName;
+                window.location.href = (redirectBase || "/editor") + "?file=" + encodeURIComponent(fullNewName);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao renomear: " + (e.message || "desconhecido"));
+                filenameInput.value = currentDisplayName;
+                if (opts.setStatus) opts.setStatus("dirty");
+            }
+        },
+
+        // ── setupRenameListeners: liga eventos de rename num filenameInput ──
+        setupRenameListeners: function (filenameInput, opts) {
+            opts = opts || {};
+            var self = this;
+            filenameInput.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    self.doRenameContent(filenameInput, opts.getContent, opts.redirectBase, opts);
+                    filenameInput.blur();
+                }
+            });
+            filenameInput.addEventListener("blur", function () {
+                self.doRenameContent(filenameInput, opts.getContent, opts.redirectBase, opts);
+            });
+        },
+
+        // ── setupCtrlS: liga Ctrl+S para salvar ──
+        setupCtrlS: function (saveFn) {
+            document.addEventListener("keydown", function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                    e.preventDefault();
+                    if (typeof saveFn === "function") saveFn();
+                }
+            });
         }
     };
 

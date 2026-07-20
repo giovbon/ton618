@@ -404,132 +404,29 @@ templ mermaidContent(data domain.EditorData) {
         }
 
         async function doRename() {
-            var newName = filenameInput.value.trim();
-            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
-            
-            var currentFilename = filenameInput.dataset.filename;
-            if (!currentFilename) {
-                currentFilename = filenameInput.value.trim();
-                if (!currentFilename.endsWith(".md")) currentFilename += ".md";
-                if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
-                filenameInput.dataset.filename = currentFilename;
-            }
-            
-            var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
-            
-            if (!newName || newName === currentDisplayName) return;
-            
-            if (saveTimer) clearTimeout(saveTimer);
-            
-            var fullNewName = "notes/" + newName + ".md";
-            
-            try {
-                setStatus("saving");
-                var content = jar.toString();
-
-                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
-                if (currentFilename !== fullNewName) {
-                    var renameFd = new FormData();
-                    renameFd.append("old", currentFilename);
-                    renameFd.append("new", fullNewName);
-                    var renameResp = await fetch("/file/rename", {
-                        method: "POST",
-                        body: renameFd
-                    });
-                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/mermaid", {
+                setStatus: setStatus,
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
                 }
-
-                // 2. Salva a nota no novo nome
-                var saveFd = new FormData();
-                saveFd.append("filename", fullNewName);
-                saveFd.append("content", content);
-                saveFd.append("tags", "");
-
-                var saveResp = await fetch("/api/note/save", {
-                    method: "POST",
-                    body: saveFd
-                });
-                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
-                
-                lastSavedHash = await generateHash(content);
-
-                // 3. Atualiza local de exibição e recarrega
-                filenameInput.dataset.filename = fullNewName;
-                window.location.href = "/mermaid?file=" + encodeURIComponent(fullNewName);
-            } catch (e) {
-                console.error(e);
-                alert("Erro ao renomear nota Mermaid.");
-                filenameInput.value = currentDisplayName;
-                setStatus("dirty");
-            }
+            });
         }
 
         function deleteCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Excluir definitivamente esta nota "' + filename + '"?')) return;
-            
-            var fd = new FormData();
-            fd.append("filename", filename);
-            
-            fetch("/file/delete", { method: "POST", body: fd })
-                .then(function () {
-                    window.location.href = "/";
-                })
-                .catch(function () {
-                    window.location.href = "/";
-                });
+            EditorCommon.deleteCurrentNote(filenameInput);
         }
 
         function duplicateCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Duplicar esta nota "' + filename + '"?')) return;
-            
-            var fd = new FormData();
-            fd.append("filename", filename);
-            
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
-                .then(function (r) {
-                    if (!r.ok) {
-                        return r.text().then(function (t) { throw new Error(t); });
-                    }
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data && data.new_filename) {
-                        window.location.href = "/mermaid?file=" + encodeURIComponent(data.new_filename);
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro ao duplicar nota Mermaid: " + err.message);
-                });
+            EditorCommon.duplicateCurrentNote(filenameInput, "/mermaid", 'Duplicar esta nota "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
         }
 
-        filenameInput.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                doRename();
-                filenameInput.blur();
-            }
-        });
-        filenameInput.addEventListener("blur", function () {
-            doRename();
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () { return jar.toString(); },
+            redirectBase: "/mermaid",
+            setStatus: setStatus
         });
 
-        // Event listener Ctrl+S para salvar manualmente
-        document.addEventListener("keydown", function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                e.preventDefault();
-                doSave();
-            }
-        });
+        EditorCommon.setupCtrlS(doSave);
 
         // Inicialização
         (async function () {

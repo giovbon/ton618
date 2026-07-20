@@ -29,7 +29,7 @@ try {
 
 
 await esbuild.build({
-  entryPoints: ["src/editor.js", "src/spreadsheet.js", "src/drawing.jsx", "src/mindmap.js", "src/map.js", "src/semantic.js"],
+  entryPoints: ["src/editor.js", "src/editor-init.js", "src/spreadsheet.js", "src/drawing.jsx", "src/database.js", "src/mindmap.js", "src/map.js", "src/semantic.js"],
   bundle: true,
   minify: true,
   outdir: "static",

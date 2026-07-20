@@ -114,8 +114,24 @@ interface Window {
 
 // ── EditorCommon (exposto por editor-common.js) ──
 declare namespace EditorCommon {
-  function httpSave(filename: string, content: string, tags: string): Promise<Response>;
-  function httpDelete(filename: string): Promise<Response>;
+  function generateHash(text: string): Promise<string>;
+  function setStatus(el: HTMLElement, s: 'saved' | 'saving' | 'dirty'): void;
+  function getAuthHeaders(): Record<string, string>;
+  function httpSaveNote(filename: string, content: string, tags?: string, silent?: boolean): Promise<Response>;
+  function httpSaveFile(filename: string, content: string, tags?: string): Promise<Response>;
   function httpRename(oldName: string, newName: string): Promise<Response>;
+  function httpDelete(filename: string): Promise<Response>;
   function httpDuplicate(filename: string): Promise<Response>;
+  function httpUploadImage(file: File): Promise<{ ok: boolean; url?: string; error?: string }>;
+  function toggleBacklinksPopover(event?: MouseEvent): void;
+  function setupCodeJarActiveLine(editorEl: HTMLElement | null): void;
+  function wikilinksToMarkdown(content: string): string;
+  function normalizeFilename(name: string): string;
+  function getCurrentFilename(filenameInput: HTMLInputElement): string;
+  function getDisplayName(filename: string): string;
+  function deleteCurrentNote(filenameInput: HTMLInputElement, confirmMsg?: string): void;
+  function duplicateCurrentNote(filenameInput: HTMLInputElement, redirectBase?: string, confirmMsg?: string): void;
+  function doRenameContent(filenameInput: HTMLInputElement, getContentFn: (() => string) | null, redirectBase?: string, opts?: { setStatus?: (s: string) => void; tags?: string; onSaved?: (content: string, filename: string) => void }): Promise<void>;
+  function setupRenameListeners(filenameInput: HTMLInputElement, opts?: { getContent?: () => string; redirectBase?: string; setStatus?: (s: string) => void; tags?: string }): void;
+  function setupCtrlS(saveFn: () => void): void;
 }

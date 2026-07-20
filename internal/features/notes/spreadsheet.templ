@@ -267,164 +267,66 @@ templ spreadsheetContent(data domain.EditorData) {
         }
 
         function deleteCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
-            var fd = new FormData();
-            fd.append("filename", filename);
-            fetch("/file/delete", { method: "POST", body: fd })
-                .then(function () {
-                    window.location.href = "/";
-                })
-                .catch(function () {
-                    window.location.href = "/";
-                });
+            EditorCommon.deleteCurrentNote(filenameInput);
         }
 
         function duplicateCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Duplicar esta planilha "' + filename + '"?')) return;
-            
-            var fd = new FormData();
-            fd.append("filename", filename);
-            
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
-                .then(function (r) {
-                    if (!r.ok) {
-                        return r.text().then(function (t) { throw new Error(t); });
-                    }
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data && data.new_filename) {
-                        window.location.href = "/spreadsheet?file=" + encodeURIComponent(data.new_filename);
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro ao duplicar planilha: " + err.message);
-                });
-        }
+            EditorCommon.duplicateCurrentNote(filenameInput, "/spreadsheet", 'Duplicar esta planilha "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
 
         async function doRename() {
-            var newName = filenameInput.value.trim();
-            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
-            
-            var currentFilename = filenameInput.dataset.filename;
-            if (!currentFilename) {
-                currentFilename = filenameInput.value.trim();
-                if (!currentFilename.endsWith(".md")) currentFilename += ".md";
-                if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
-                filenameInput.dataset.filename = currentFilename;
-            }
-            
-            var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
-            
-            if (!newName || newName === currentDisplayName) return;
-            
-            if (saveTimer) clearTimeout(saveTimer);
-            
-            var fullNewName = "notes/" + newName + ".md";
-            
-            try {
-                setStatus("saving");
-                
-                // Obter conteúdo atual da planilha
-                if (!spreadsheetInstance) return;
+            function getSheetContent() {
+                if (!spreadsheetInstance) return "";
                 var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
-                if (!ws || !ws.getData) return;
+                if (!ws || !ws.getData) return "";
 
                 var rows = ws.getData();
                 var widths = [];
                 if (typeof ws.getWidth === "function") {
                     try {
                         var allWidths = ws.getWidth();
-                        if (Array.isArray(allWidths) && allWidths.length > 0) {
-                            widths = allWidths;
-                        }
-                    } catch (e) {
-                        console.error("Erro ao obter widths do ws:", e);
-                    }
-                    
+                        if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
+                    } catch (e) {}
                     if (widths.length === 0) {
-                        var colCount = (rows && rows[0]) ? rows[0].length : (ws.options && ws.options.columns ? ws.options.columns.length : 26);
+                        var colCount = (rows && rows[0]) ? rows[0].length : 26;
                         for (var i = 0; i < colCount; i++) {
-                            try {
-                                widths.push(ws.getWidth(i));
-                            } catch (e) {
-                                widths.push(100);
-                            }
+                            try { widths.push(ws.getWidth(i)); } catch (e) { widths.push(100); }
                         }
                     }
                 }
-
-                var payload = {
-                    data: rows,
-                    widths: widths
-                };
-                var fullContent = initialFrontmatter + JSON.stringify(payload);
-
-                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
-                if (currentFilename !== fullNewName) {
-                    var renameFd = new FormData();
-                    renameFd.append("old", currentFilename);
-                    renameFd.append("new", fullNewName);
-                    var renameResp = await fetch("/file/rename", {
-                        method: "POST",
-                        body: renameFd
-                    });
-                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
-                }
-
-                // 2. Salvar no novo nome
-                var saveFd = new FormData();
-                saveFd.append("filename", fullNewName);
-                saveFd.append("content", fullContent);
-                saveFd.append("tags", "spreadsheet");
-
-                var saveResp = await fetch("/api/note/save", {
-                    method: "POST",
-                    body: saveFd
-                });
-                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
-                
-                lastSavedHash = await generateHash(fullContent);
-
-                // 3. Atualizar e redirecionar
-                filenameInput.dataset.filename = fullNewName;
-                window.location.href = "/spreadsheet?file=" + encodeURIComponent(fullNewName);
-            } catch (e) {
-                console.error(e);
-                alert("Erro ao renomear planilha.");
-                filenameInput.value = currentDisplayName;
-                setStatus("dirty");
+                var payload = { data: rows, widths: widths };
+                return initialFrontmatter + JSON.stringify(payload);
             }
+
+            await EditorCommon.doRenameContent(filenameInput, getSheetContent, "/spreadsheet", {
+                setStatus: setStatus,
+                tags: "spreadsheet",
+                onSaved: async function (content, filename) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
         }
 
-        filenameInput.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                doRename();
-                filenameInput.blur();
-            }
-        });
-        filenameInput.addEventListener("blur", function () {
-            doRename();
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () {
+                if (!spreadsheetInstance) return "";
+                var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+                if (!ws || !ws.getData) return "";
+                var rows = ws.getData();
+                var widths = [];
+                if (typeof ws.getWidth === "function") {
+                    try {
+                        var allWidths = ws.getWidth();
+                        if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
+                    } catch (e) {}
+                }
+                return initialFrontmatter + JSON.stringify({ data: rows, widths: widths });
+            },
+            redirectBase: "/spreadsheet",
+            setStatus: setStatus,
+            tags: "spreadsheet"
         });
 
-        // Ctrl+S
-        document.addEventListener("keydown", function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                e.preventDefault();
-                doSave();
-            }
-        });
+        EditorCommon.setupCtrlS(doSave);
 
         try {
             var ctor = window.JspreadsheetCE;
@@ -464,7 +366,8 @@ templ spreadsheetContent(data domain.EditorData) {
             el.innerHTML = "<div style='padding:16px;color:#f87171;font-family:monospace;font-size:12px;white-space:pre-wrap'>Erro: " + err.message + "\n\n" + err.stack + "</div>";
         }
 
-        setTimeout(async function() {
+        // Hash inicial calculado após inicialização
+        (async function initHash() {
             if (spreadsheetInstance) {
                 var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
                 if (ws && ws.getData) {
@@ -475,19 +378,13 @@ templ spreadsheetContent(data domain.EditorData) {
                             var allWidths = ws.getWidth();
                             if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
                         } catch (e) {}
-                        if (widths.length === 0) {
-                            var colCount = (rows && rows[0]) ? rows[0].length : 26;
-                            for (var i = 0; i < colCount; i++) {
-                                try { widths.push(ws.getWidth(i)); } catch (e) { widths.push(100); }
-                            }
-                        }
                     }
                     var payload = { data: rows, widths: widths };
                     var fullContent = initialFrontmatter + JSON.stringify(payload);
                     lastSavedHash = await generateHash(fullContent);
                 }
             }
-        }, 800);
+        })();
 
         window.saveSpreadsheet = doSave;
         window.deleteCurrentNote = deleteCurrentNote;

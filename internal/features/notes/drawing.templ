@@ -189,131 +189,34 @@ templ drawingContent(data domain.EditorData) {
         }
 
         function deleteCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Excluir definitivamente o desenho "' + filename + '"?')) return;
-            var fd = new FormData();
-            fd.append("filename", filename);
-            fetch("/file/delete", { method: "POST", body: fd })
-                .then(function () {
-                    window.location.href = "/";
-                })
-                .catch(function () {
-                    window.location.href = "/";
-                });
+            EditorCommon.deleteCurrentNote(filenameInput);
         }
 
         function duplicateCurrentNote() {
-            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
-            if (!filename) return;
-            if (!filename.endsWith(".md")) filename += ".md";
-            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
-
-            if (!confirm('Duplicar este desenho "' + filename + '"?')) return;
-            
-            var fd = new FormData();
-            fd.append("filename", filename);
-            
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
-                .then(function (r) {
-                    if (!r.ok) {
-                        return r.text().then(function (t) { throw new Error(t); });
-                    }
-                    return r.json();
-                })
-                .then(function (data) {
-                    if (data && data.new_filename) {
-                        window.location.href = "/drawing?file=" + encodeURIComponent(data.new_filename);
-                    }
-                })
-                .catch(function (err) {
-                    alert("Erro ao duplicar desenho: " + err.message);
-                });
+            EditorCommon.duplicateCurrentNote(filenameInput, "/drawing", 'Duplicar este desenho "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
         }
 
         async function doRename() {
-            var newName = filenameInput.value.trim();
-            if (newName.endsWith(".md")) newName = newName.slice(0, -3);
-
-            var currentFilename = filenameInput.dataset.filename;
-            if (!currentFilename) {
-                currentFilename = filenameInput.value.trim();
-                if (!currentFilename.endsWith(".md")) currentFilename += ".md";
-                if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
-                filenameInput.dataset.filename = currentFilename;
+            function getDrawingContent() {
+                return initialFrontmatter + JSON.stringify(currentSnapshot || {});
             }
-
-            var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
-
-            if (!newName || newName === currentDisplayName) return;
-
-            if (saveTimer) clearTimeout(saveTimer);
-
-            var fullNewName = "notes/" + newName + ".md";
-
-            try {
-                setStatus("saving");
-
-                var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot || {});
-
-                // 1. Chama a rota de rename para atualizar DB, disco, e backlinks
-                if (currentFilename !== fullNewName) {
-                    var renameFd = new FormData();
-                    renameFd.append("old", currentFilename);
-                    renameFd.append("new", fullNewName);
-                    var renameResp = await fetch("/file/rename", {
-                        method: "POST",
-                        body: renameFd
-                    });
-                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+            await EditorCommon.doRenameContent(filenameInput, getDrawingContent, "/drawing", {
+                setStatus: setStatus,
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
                 }
-
-                // 2. Salvar no novo nome
-                var saveFd = new FormData();
-                saveFd.append("filename", fullNewName);
-                saveFd.append("content", fullContent);
-                saveFd.append("tags", "");
-
-                var saveResp = await fetch("/api/note/save", {
-                    method: "POST",
-                    body: saveFd
-                });
-                if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
-                
-                lastSavedHash = await generateHash(fullContent);
-
-                // 3. Atualizar e redirecionar
-                filenameInput.dataset.filename = fullNewName;
-                window.location.href = "/drawing?file=" + encodeURIComponent(fullNewName);
-            } catch (e) {
-                console.error(e);
-                alert("Erro ao renomear o desenho.");
-                filenameInput.value = currentDisplayName;
-                setStatus("dirty");
-            }
+            });
         }
 
-        filenameInput.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                doRename();
-                filenameInput.blur();
-            }
-        });
-        filenameInput.addEventListener("blur", function () {
-            doRename();
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () {
+                return initialFrontmatter + JSON.stringify(currentSnapshot || {});
+            },
+            redirectBase: "/drawing",
+            setStatus: setStatus
         });
 
-        // Ctrl+S para salvar imediatamente
-        document.addEventListener("keydown", function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                e.preventDefault();
-                doSave();
-            }
-        });
+        EditorCommon.setupCtrlS(doSave);
 
         // Inicializa o Excalidraw se a biblioteca global estiver disponível
         if (window.initDrawing) {
@@ -329,10 +232,11 @@ templ drawingContent(data domain.EditorData) {
             el.innerHTML = "<div style='padding:20px;color:#f87171;'>Erro: Módulo de desenho não carregado.</div>";
         }
 
-        setTimeout(async function() {
+        // Hash inicial calculado após carregar
+        (async function () {
             var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot || {});
             lastSavedHash = await generateHash(fullContent);
-        }, 800);
+        })();
 
         window.saveDrawing = doSave;
         window.deleteCurrentNote = deleteCurrentNote;

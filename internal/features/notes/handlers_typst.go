@@ -11,25 +11,24 @@ import (
 // HandleTypst renderiza a página do editor Typst.
 func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	fileParam := r.URL.Query().Get("file")
-	if fileParam == "" {
-		http.Error(w, "file parameter required", http.StatusBadRequest)
+	filename, redirected := ensureNoteFilename(w, r, "/typst")
+	if redirected {
 		return
 	}
 
-	nd, _ := ctx.loadNoteData(fileParam)
+	nd, _ := ctx.loadNoteData(filename)
 
 	if !nd.Exists {
 		nd.Content = "---\ntype: typst\n---\n\n= Titulo\n\nEscreva seu conteudo Typst aqui."
 	} else {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, fileParam)
-		if redirectIfWrongEditor(w, r, noteType, "/typst", fileParam) {
+		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		if redirectIfWrongEditor(w, r, noteType, "/typst", filename) {
 			return
 		}
 	}
 
-	displayName := domain.DisplayName(fileParam)
-	data := buildEditorData(displayName+" — TON-618", fileParam, nd)
+	displayName := domain.DisplayName(filename)
+	data := buildEditorData(displayName+" — TON-618", filename, nd)
 	Typst(data).Render(r.Context(), w)
 }
 
