@@ -1,0 +1,394 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+
+templ Spreadsheet(data domain.EditorData) {
+    @layout.Layout(data.Title, true, spreadsheetContent(data))
+}
+
+templ spreadsheetContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="sheet-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+    <div class="flex items-center gap-3 mb-3 shrink-0 relative z-20" id="sheet-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+        <button
+            id="save-btn"
+            onclick="saveSpreadsheet()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar"
+        >
+            💾
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta planilha"
+        >
+            ⧉
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta planilha"
+        >
+            🗑️
+        </button>
+    </div>
+    <!-- placeholders para compatibilidade com layout.templ -->
+    <div id="frontmatter-area" class="hidden"></div>
+    <div id="tag-suggestions" class="hidden mt-2">
+        <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- O container expande usando flex-1. Invert filter cria o modo escuro perfeito -->
+    <div id="spreadsheet-container" class="flex-1 overflow-auto rounded-lg" style="filter: invert(0.85) hue-rotate(180deg) contrast(1.1); background-color: #fdfdfd;"></div>
+
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+    <input id="editor-image-input" type="file" accept="image/*" class="hidden" />
+</div>
+
+<!-- Jspreadsheet CSS e JS -->
+<link rel="stylesheet" href="/static/spreadsheet.css?v=2" />
+<script src="/static/spreadsheet.js?v=2"></script>
+<style>
+    /* Estilos globais para dropdowns e menus flutuantes que são renderizados no body (não afetados pelo filter invert) */
+    .jss_contextmenu, .jcalendar, .jdropdown {
+        filter: invert(0.85) hue-rotate(180deg) contrast(1.1);
+    }
+
+    #spreadsheet-container {
+        width: 100%;
+        border-radius: 0 !important;
+    }
+
+    /* Menu de contexto em tema escuro premium */
+    .jcontextmenu {
+        background-color: #18181b !important; /* zinc-900 */
+        color: #f4f4f5 !important;           /* zinc-100 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        border-radius: 8px !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5) !important;
+        font-family: 'Inter', system-ui, sans-serif !important;
+        padding: 4px 0 !important;
+        z-index: 9999 !important;
+    }
+
+    .jcontextmenu > div {
+        color: #e4e4e7 !important; /* zinc-200 */
+        padding: 8px 16px !important;
+        font-size: 13px !important;
+        transition: background-color 0.15s, color 0.15s !important;
+    }
+
+    .jcontextmenu > div:hover {
+        background-color: #27272a !important; /* zinc-800 */
+        color: #ffffff !important;
+    }
+
+    .jcontextmenu hr {
+        border: none !important;
+        border-top: 1px solid #27272a !important; /* zinc-800 */
+        margin: 4px 0 !important;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        if (window.jSuites && typeof window.jSuites.setDictionary === "function") {
+            window.jSuites.setDictionary({
+                'Insert a new row before': 'Inserir linha antes',
+                'Insert a new row after': 'Inserir linha depois',
+                'Delete selected rows': 'Excluir linhas selecionadas',
+                'Add comments': 'Adicionar comentário',
+                'Copy...': 'Copiar...',
+                'Paste...': 'Colar...',
+                'Save as...': 'Salvar como...',
+                'About': 'Sobre',
+                'Insert a new column before': 'Inserir coluna antes',
+                'Insert a new column after': 'Inserir coluna depois',
+                'Delete selected columns': 'Excluir colunas selecionadas',
+                'Rename this column': 'Renomear esta coluna'
+            });
+        }
+
+        var el = document.getElementById("spreadsheet-container");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+        var rawContent = document.getElementById("content-output").value;
+        var sheetData = null;
+        var dataToLoad = null;
+        var savedWidths = null;
+        var currentStatus = "saved";
+        var spreadsheetInstance = null;
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var initialFrontmatter = "---\ntype: spreadsheet\n---\n";
+        var lastSavedHash = null;
+
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
+
+
+        // Extrai dados JSON do frontmatter
+        var fmMatch = rawContent.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            initialFrontmatter = "---\n" + fmMatch[1] + "\n---\n";
+            try {
+                sheetData = JSON.parse(fmMatch[2].trim());
+                if (sheetData) {
+                    if (Array.isArray(sheetData)) {
+                        dataToLoad = sheetData;
+                    } else if (sheetData.data) {
+                        dataToLoad = sheetData.data;
+                        savedWidths = sheetData.widths;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Salvar com Debounce e Fila para evitar Race Condition
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function() {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 800);
+        }
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        async function doSave() {
+            if (!spreadsheetInstance || saveInProgress) return;
+            var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+            if (!ws || !ws.getData) return;
+
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+            var btn = document.getElementById("save-btn");
+
+            var rows = ws.getData();
+            var widths = [];
+            if (typeof ws.getWidth === "function") {
+                try {
+                    var allWidths = ws.getWidth();
+                    if (Array.isArray(allWidths) && allWidths.length > 0) {
+                        widths = allWidths;
+                    }
+                } catch (e) {
+                    console.error("Erro ao obter widths do ws:", e);
+                }
+                
+                if (widths.length === 0) {
+                    var colCount = (rows && rows[0]) ? rows[0].length : (ws.options && ws.options.columns ? ws.options.columns.length : 26);
+                    for (var i = 0; i < colCount; i++) {
+                        try {
+                            widths.push(ws.getWidth(i));
+                        } catch (e) {
+                            widths.push(100);
+                        }
+                    }
+                }
+            }
+
+            var payload = {
+                data: rows,
+                widths: widths
+            };
+            var fullContent = initialFrontmatter + JSON.stringify(payload);
+            var currentHash = await generateHash(fullContent);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", fullContent);
+            fd.append("tags", "spreadsheet");
+            fd.append("silent", "true");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        function handleChange() {
+            setStatus("dirty");
+            scheduleSave();
+        }
+
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput);
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/spreadsheet", 'Duplicar esta planilha "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
+
+        async function doRename() {
+            function getSheetContent() {
+                if (!spreadsheetInstance) return "";
+                var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+                if (!ws || !ws.getData) return "";
+
+                var rows = ws.getData();
+                var widths = [];
+                if (typeof ws.getWidth === "function") {
+                    try {
+                        var allWidths = ws.getWidth();
+                        if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
+                    } catch (e) {}
+                    if (widths.length === 0) {
+                        var colCount = (rows && rows[0]) ? rows[0].length : 26;
+                        for (var i = 0; i < colCount; i++) {
+                            try { widths.push(ws.getWidth(i)); } catch (e) { widths.push(100); }
+                        }
+                    }
+                }
+                var payload = { data: rows, widths: widths };
+                return initialFrontmatter + JSON.stringify(payload);
+            }
+
+            await EditorCommon.doRenameContent(filenameInput, getSheetContent, "/spreadsheet", {
+                setStatus: setStatus,
+                tags: "spreadsheet",
+                onSaved: async function (content, filename) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () {
+                if (!spreadsheetInstance) return "";
+                var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+                if (!ws || !ws.getData) return "";
+                var rows = ws.getData();
+                var widths = [];
+                if (typeof ws.getWidth === "function") {
+                    try {
+                        var allWidths = ws.getWidth();
+                        if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
+                    } catch (e) {}
+                }
+                return initialFrontmatter + JSON.stringify({ data: rows, widths: widths });
+            },
+            redirectBase: "/spreadsheet",
+            setStatus: setStatus,
+            tags: "spreadsheet"
+        });
+
+        EditorCommon.setupCtrlS(doSave);
+
+        try {
+            var ctor = window.JspreadsheetCE;
+            if (ctor && typeof ctor !== "function" && typeof ctor.default === "function") {
+                ctor = ctor.default;
+            }
+            if (typeof ctor !== "function") {
+                throw new Error("JspreadsheetCE não carregou (" + (typeof ctor) + ")");
+            }
+
+            var worksheetCfg = {
+                minDimensions: [26, 50],
+                tableOverflow: true,
+            };
+
+            if (dataToLoad) {
+                worksheetCfg.data = dataToLoad;
+            }
+            if (savedWidths && Array.isArray(savedWidths)) {
+                worksheetCfg.columns = savedWidths.map(function(w) {
+                    return { width: w };
+                });
+            }
+
+            // Inicialização simples e robusta (v5 API)
+            spreadsheetInstance = ctor(el, {
+                worksheets: [worksheetCfg],
+                onchange: handleChange,
+                onresizecolumn: handleChange,
+                onevent: function(event) {
+                    if (event === "onchange" || event === "onresizecolumn") handleChange();
+                }
+            });
+
+        } catch (err) {
+            console.error("Erro planilha:", err);
+            el.innerHTML = "<div style='padding:16px;color:#f87171;font-family:monospace;font-size:12px;white-space:pre-wrap'>Erro: " + err.message + "\n\n" + err.stack + "</div>";
+        }
+
+        // Hash inicial calculado após inicialização
+        (async function initHash() {
+            if (spreadsheetInstance) {
+                var ws = spreadsheetInstance[0] || (spreadsheetInstance.worksheets && spreadsheetInstance.worksheets[0]) || (window.JspreadsheetCE && window.JspreadsheetCE.current);
+                if (ws && ws.getData) {
+                    var rows = ws.getData();
+                    var widths = [];
+                    if (typeof ws.getWidth === "function") {
+                        try {
+                            var allWidths = ws.getWidth();
+                            if (Array.isArray(allWidths) && allWidths.length > 0) widths = allWidths;
+                        } catch (e) {}
+                    }
+                    var payload = { data: rows, widths: widths };
+                    var fullContent = initialFrontmatter + JSON.stringify(payload);
+                    lastSavedHash = await generateHash(fullContent);
+                }
+            }
+        })();
+
+        window.saveSpreadsheet = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+    })();
+</script>
+}

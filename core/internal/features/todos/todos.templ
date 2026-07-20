@@ -1,0 +1,149 @@
+package todos
+
+import (
+	"ton618/core/web/layout"
+
+    "ton618/core/internal/core/db"
+)
+
+templ Todos(title string, markers []db.TodoMarker) {
+    @layout.Layout(title, false, todosContent(markers))
+}
+
+templ todosContent(markers []db.TodoMarker) {
+<div>
+    <!-- Header with filters -->
+    <div class="flex flex-col gap-4 mb-6">
+        <form id="todo-filters" hx-get="/api/todos" hx-target="#todo-tree-container" hx-trigger="change, keyup from:#todo-search delay:250ms">
+            <!-- Filter buttons -->
+            <div class="flex flex-wrap gap-2" id="marker-filters">
+                <label class="cursor-pointer">
+                    <input type="checkbox" name="type" value="all" class="peer hidden" checked onchange="if(this.checked) { document.querySelectorAll('#todo-filters input[name=type]').forEach(cb => { if(cb !== this) cb.checked = false; }) }" />
+                    <div class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border peer-checked:bg-zinc-800 peer-checked:text-zinc-200 peer-checked:border-zinc-500">
+                        Todos
+                    </div>
+                </label>
+                
+                for _, m := range markers {
+                    if m.Active {
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="type" value={ m.Marker } class="peer hidden" onchange="if(this.checked) document.querySelector('#todo-filters input[value=all]').checked = false;" />
+                            <div class="filter-btn-dynamic px-3 py-1.5 text-[11px] font-bold rounded-lg border"
+                                style={ "color: " + m.Color + "; border-color: " + m.Color + "40; --marker-bg-color: " + m.Color + "20; --marker-border-color: " + m.Color + "60; --marker-border-hover-color: " + m.Color + "80;" }>
+                                { m.Marker }
+                            </div>
+                        </label>
+                    }
+                }
+                
+                <label class="cursor-pointer">
+                    <input type="checkbox" name="type" value="TASK" class="peer hidden" onchange="if(this.checked) document.querySelector('#todo-filters input[value=all]').checked = false;" />
+                    <div class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 peer-checked:bg-green-500/10 peer-checked:border-green-500/60 hover:bg-green-500/10 hover:border-green-500/50">
+                        TASK
+                    </div>
+                </label>
+                
+                <div class="flex-1"></div>
+                
+                <label class="cursor-pointer">
+                    <input type="radio" name="status" value="pending" class="peer hidden" checked />
+                    <div class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border peer-checked:bg-zinc-800 peer-checked:text-zinc-300 peer-checked:border-zinc-700">
+                        Pendentes
+                    </div>
+                </label>
+                <label class="cursor-pointer">
+                    <input type="radio" name="status" value="completed" class="peer hidden" />
+                    <div class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border peer-checked:bg-zinc-800 peer-checked:text-zinc-300 peer-checked:border-zinc-700">
+                        Completos
+                    </div>
+                </label>
+                
+                <button type="button" onclick="toggleAllFolders()"
+                    class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-zinc-400 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600">
+                    Alternar Expansão
+                </button>
+            </div>
+
+            <!-- Search input -->
+            <div class="relative mt-4">
+                <input id="todo-search" name="q" type="text" placeholder="Buscar Tasks..." autocomplete="off"
+                    class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-all" />
+            </div>
+        </form>
+    </div>
+
+    <!-- Todo tree container -->
+    <div id="todo-tree-container" hx-get="/api/todos" hx-trigger="load">
+        <div class="text-center py-16">
+            <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+            <p class="text-xs text-zinc-600">Carregando Tasks...</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .filter-btn {
+        background: transparent;
+        border-color: #3f3f46;
+        color: #a1a1aa;
+        transition: all 0.15s;
+    }
+    .filter-btn:hover {
+        color: #e4e4e7;
+        border-color: #52525b;
+    }
+    .filter-btn-dynamic {
+        background: transparent;
+        transition: all 0.15s;
+    }
+    .filter-btn-dynamic:hover {
+        border-color: var(--marker-border-hover-color) !important;
+    }
+    .peer:checked + .filter-btn-dynamic {
+        background-color: var(--marker-bg-color) !important;
+        border-color: var(--marker-border-color) !important;
+    }
+    .todo-tree-item { padding: 0; margin: 0; }
+    .todo-tree-folder { display: flex; align-items: center; gap: 6px; padding: 6px 4px; cursor: pointer; user-select: none; transition: all 0.1s; border-radius: 4px; }
+    .todo-tree-folder:hover { background: rgba(255, 255, 255, 0.04); }
+    .todo-tree-folder .toggle { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; transition: transform 0.15s; font-size: 10px; color: #52525b; }
+    .todo-tree-folder.expanded .toggle { }
+    .todo-tree-folder .folder-icon { font-size: 14px; }
+    .todo-tree-folder .folder-name { font-size: 12px; font-weight: 600; color: #d4d4d8; flex: 1; }
+    .todo-tree-folder .folder-count { font-size: 10px; color: #71717a; padding: 0 6px; }
+    .todo-tree-children { margin-left: 12px; border-left: 1px solid #27272a; padding-left: 12px; display: none; }
+    .todo-tree-children.expanded { display: block; }
+    .todo-tree-todo { display: flex; align-items: flex-start; gap: 8px; padding: 8px 4px; margin: 2px 0; border-radius: 4px; cursor: pointer; transition: all 0.1s; font-size: 12px; line-height: 1.4; }
+    .todo-tree-todo:hover { background: rgba(255, 255, 255, 0.06); }
+    .todo-tree-todo .todo-icon { flex-shrink: 0; font-size: 12px; width: 16px; text-align: center; margin-top: 2px; }
+    .todo-tree-todo.completed .todo-icon { color: #6b7280; }
+    .todo-tree-todo .todo-content { flex: 1; min-width: 0; }
+    .todo-tree-todo .todo-text { color: #d4d4d8; word-break: break-word; overflow-wrap: anywhere; }
+    .todo-tree-todo.completed .todo-text { color: #6b7280; text-decoration: line-through; }
+    .todo-tree-todo .todo-type { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.05em; margin-right: 6px; }
+</style>
+
+<script>
+    function toggleAllFolders() {
+        const folders = document.querySelectorAll(".todo-tree-folder");
+        const children = document.querySelectorAll(".todo-tree-children");
+        const anyExpanded = document.querySelector(".todo-tree-folder.expanded") !== null;
+
+        if (anyExpanded) {
+            folders.forEach(f => f.classList.remove("expanded"));
+            children.forEach(c => {
+                c.classList.remove("expanded");
+                c.style.display = "none";
+            });
+            document.querySelectorAll(".toggle").forEach(t => t.textContent = "▶");
+        } else {
+            folders.forEach(f => f.classList.add("expanded"));
+            children.forEach(c => {
+                c.classList.add("expanded");
+                c.style.display = "block";
+            });
+            document.querySelectorAll(".toggle").forEach(t => t.textContent = "▼");
+        }
+    }
+</script>
+}

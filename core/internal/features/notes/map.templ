@@ -1,0 +1,428 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+
+templ MapNote(data domain.EditorData) {
+    @layout.Layout(data.Title, false, mapContent(data))
+}
+
+templ mapContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="map-root"
+     style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 0; border-radius: 0;">
+    <div class="flex items-center gap-3 px-6 py-2 shrink-0 bg-zinc-950 border-b border-zinc-800 relative z-[2000]">
+        <input id="file-name" type="text" value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false" />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+        
+        <!-- Dropdown de Opções Unificado -->
+        <div class="relative" id="map-actions-wrapper">
+            <button id="map-actions-btn" onclick="toggleMapActions(event)"
+                class="text-zinc-400 hover:text-sky-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-750 bg-zinc-900/60 hover:bg-zinc-900 transition-all flex items-center gap-1.5 select-none cursor-pointer">
+                ⚙️ Opções <span class="text-[10px] text-zinc-500">▼</span>
+            </button>
+            <div id="map-actions-dropdown" class="hidden absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[10000] overflow-hidden py-1">
+                <button id="add-marker-btn" onclick="addMarkerModeDropdown()" class="text-zinc-400">＋ Adicionar Ponto</button>
+                <button id="measure-btn" onclick="toggleMeasureModeDropdown()" class="text-zinc-400">📏 Rota</button>
+                <button id="satellite-btn" onclick="toggleSatelliteDropdown()" class="text-zinc-400"><span id="satellite-btn-icon">🛰</span> <span id="satellite-btn-text">Satélite</span></button>
+                <button id="search-btn-trigger" onclick="toggleSearchDropdown()" class="text-zinc-400">🔍 Buscar</button>
+            </div>
+        </div>
+
+        <button id="save-btn" onclick="saveMap()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60" title="Salvar">💾</button>
+        <button onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60" title="Duplicar">⧉</button>
+        <button onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60" title="Excluir">🗑️</button>
+
+        <!-- Container de Busca Flutuante -->
+        <div id="search-container" class="hidden absolute right-6 top-full mt-2 w-72 max-w-none bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[10000] overflow-hidden" style="min-width: 288px;">
+            <div class="flex items-center bg-zinc-850 border-b border-zinc-800 pr-3">
+                <input id="search-input" type="text" placeholder="Buscar endereço ou local..." autocomplete="off"
+                    class="flex-1 px-4 py-2.5 text-sm bg-transparent text-zinc-200 placeholder-zinc-500 focus:outline-none" />
+                <button onclick="toggleSearch()" class="text-zinc-500 hover:text-zinc-300 text-xs font-bold cursor-pointer">✕</button>
+            </div>
+            <div id="search-results" class="max-h-48 overflow-y-auto"></div>
+        </div>
+    </div>
+    <div id="map-container" class="flex-1 w-full" style="min-height: 300px;"></div>
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+</div>
+
+<link rel="stylesheet" href="/static/leaflet.css" />
+<style>
+    .map-marker-label {
+        background: rgba(0, 0, 0, 0.75) !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        font-family: 'Inter', system-ui, sans-serif !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important;
+        white-space: nowrap !important;
+    }
+    .map-marker-label::before {
+        border-top-color: rgba(0, 0, 0, 0.75) !important;
+    }
+    
+    /* Estilização Premium Dark para os Popups do Leaflet */
+    .leaflet-popup-content-wrapper {
+        background: #18181b !important; /* zinc-900 */
+        color: #f4f4f5 !important; /* zinc-100 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        border-radius: 12px !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5) !important;
+        padding: 2px !important;
+    }
+    .leaflet-popup-tip {
+        background: #18181b !important;
+        border: 1px solid #27272a !important;
+        box-shadow: none !important;
+    }
+    .leaflet-popup-content {
+        margin: 12px !important;
+        line-height: 1.5 !important;
+    }
+    .leaflet-popup-close-button {
+        color: #a1a1aa !important; /* zinc-400 */
+        padding: 8px 10px 0 0 !important;
+    }
+    .leaflet-popup-close-button:hover {
+        color: #f4f4f5 !important;
+        background: transparent !important;
+    }
+    
+    /* Filtro CSS para transformar OSM em tema escuro localmente */
+    .map-tiles-dark {
+        filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%) !important;
+    }
+    .leaflet-container {
+        background: #09090b !important;
+    }
+    
+    /* Estilos do Dropdown de Ações */
+    #map-actions-dropdown button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        padding: 10px 16px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        color: #d4d4d8 !important; /* zinc-300 */
+        transition: all 0.2s ease;
+        cursor: pointer;
+        white-space: nowrap !important;
+    }
+    #map-actions-dropdown button:hover {
+        background: rgba(39, 39, 42, 0.6) !important; /* zinc-800/60 */
+        color: #38bdf8 !important; /* sky-400 */
+    }
+    #map-actions-dropdown button.text-sky-400 {
+        color: #38bdf8 !important;
+        background: rgba(56, 189, 248, 0.1) !important; /* sky-500/10 */
+    }
+</style>
+<script src="/static/leaflet.js"></script>
+<script src="/static/map.js?v=4"></script>
+
+<script>
+(function(){
+    var container = document.getElementById("map-container");
+    var statusEl = document.getElementById("editor-status");
+    var filenameInput = document.getElementById("file-name");
+    var rawContent = document.getElementById("content-output").value;
+    var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+    var initialFrontmatter = "---\ntype: map\n---\n";
+    var currentData = [];
+    var currentStatus = "saved";
+    var saveTimer = null;
+    var saveInProgress = false;
+    var savePending = false;
+    var lastSavedHash = null;
+    var mapInstance = null;
+
+    var fmMatch = rawContent.match(FRONTMATTER_REGEX);
+    if (fmMatch) {
+        initialFrontmatter = "---\n" + fmMatch[1] + "\n---\n";
+        try { currentData = JSON.parse(fmMatch[2]); } catch(e) { currentData = []; }
+    }
+
+    function setStatus(s) {
+        currentStatus = s;
+        EditorCommon.setStatus(statusEl, s);
+    }
+
+    function onChange(data) {
+        currentData = data;
+        setStatus("dirty");
+        scheduleSave();
+    }
+
+    function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function() {
+            if (saveInProgress) { savePending = true; }
+            else { doSave(); }
+        }, 800);
+    }
+
+    async function doSave() {
+        if (saveInProgress) return;
+        saveInProgress = true;
+        savePending = false;
+        setStatus("saving");
+
+        var fullContent = initialFrontmatter + JSON.stringify(currentData);
+        var currentHash = await EditorCommon.generateHash(fullContent);
+        if (currentHash === lastSavedHash) {
+            saveInProgress = false;
+            setStatus("saved");
+            if (savePending) doSave();
+            return;
+        }
+
+        var filename = filenameInput.value.trim();
+        if (!filename.endsWith(".md")) filename += ".md";
+        if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+        var fd = new FormData();
+        fd.append("filename", filename);
+        fd.append("content", fullContent);
+        fd.append("tags", "map");
+
+        try {
+            var r = await fetch("/api/note/save", { method: "POST", body: fd });
+            if (!r.ok && r.status !== 303) throw new Error("HTTP " + r.status);
+            saveInProgress = false;
+            setStatus("saved");
+            lastSavedHash = currentHash;
+            filenameInput.dataset.filename = filename;
+            if (savePending) doSave();
+        } catch(e) {
+            saveInProgress = false;
+            setStatus("dirty");
+            if (savePending) scheduleSave();
+        }
+    }
+
+    function initLeaflet() {
+        if (window.initMap) {
+            mapInstance = window.initMap(container, currentData, onChange);
+        } else {
+            container.innerHTML = "<div class='p-8 text-red-400 font-mono'>Erro: Modulo de mapa nao carregado.</div>";
+        }
+    }
+
+    // Aguarda o Leaflet carregar
+    if (typeof L !== "undefined") {
+        initLeaflet();
+    } else {
+        var checkTimer = setInterval(function() {
+            if (typeof L !== "undefined") {
+                clearInterval(checkTimer);
+                initLeaflet();
+            }
+        }, 100);
+        setTimeout(function() { clearInterval(checkTimer); }, 5000);
+    }
+
+    async function doRename() {
+        var newName = filenameInput.value.trim();
+        if (newName.endsWith(".md")) newName = newName.slice(0, -3);
+        var currentFilename = filenameInput.dataset.filename;
+        if (!currentFilename) {
+            currentFilename = filenameInput.value.trim();
+            if (!currentFilename.endsWith(".md")) currentFilename += ".md";
+            if (!currentFilename.startsWith("notes/")) currentFilename = "notes/" + currentFilename;
+            filenameInput.dataset.filename = currentFilename;
+        }
+        var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
+        if (!newName || newName === currentDisplayName) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        var fullNewName = "notes/" + newName + ".md";
+        try {
+            setStatus("saving");
+            var fullContent = initialFrontmatter + JSON.stringify(currentData);
+            if (currentFilename !== fullNewName) {
+                var renameFd = new FormData();
+                renameFd.append("old", currentFilename);
+                renameFd.append("new", fullNewName);
+                var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd, headers: getAuthHeaders() });
+                if (!renameResp.ok) throw new Error("Erro ao renomear");
+            }
+            var saveFd = new FormData();
+            saveFd.append("filename", fullNewName);
+            saveFd.append("content", fullContent);
+            saveFd.append("tags", "map");
+            var saveResp = await fetch("/api/note/save", { method: "POST", body: saveFd, headers: getAuthHeaders() });
+            if (!saveResp.ok) throw new Error("Erro ao salvar");
+            lastSavedHash = await EditorCommon.generateHash(fullContent);
+            filenameInput.dataset.filename = fullNewName;
+            window.location.href = "/map?file=" + encodeURIComponent(fullNewName);
+        } catch(e) {
+            console.error(e);
+            filenameInput.value = currentDisplayName;
+            setStatus("dirty");
+        }
+    }
+
+    filenameInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); doRename(); filenameInput.blur(); }
+    });
+    filenameInput.addEventListener("blur", function () { doRename(); });
+
+    document.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); doSave(); }
+    });
+
+    function deleteCurrentNote() {
+        var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+        if (!filename) return;
+        if (!filename.endsWith(".md")) filename += ".md";
+        if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+        if (!confirm('Excluir "' + filename + '"?')) return;
+        EditorCommon.httpDelete(filename)
+            .then(function () { window.location.href = "/"; })
+            .catch(function () { window.location.href = "/"; });
+    }
+
+    window.saveMap = doSave;
+    
+    window.toggleMapActions = function(e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        var dropdown = document.getElementById("map-actions-dropdown");
+        if (!dropdown) return;
+        if (dropdown.classList.contains("hidden")) {
+            dropdown.classList.remove("hidden");
+            var searchContainer = document.getElementById("search-container");
+            if (searchContainer) searchContainer.classList.add("hidden");
+        } else {
+            dropdown.classList.add("hidden");
+        }
+    };
+
+    window.addMarkerModeDropdown = function() {
+        if (window._mapAddMode) window._mapAddMode();
+        toggleMapActions();
+    };
+
+    window.toggleMeasureModeDropdown = function() {
+        if (window._mapToggleMeasureMode) window._mapToggleMeasureMode();
+        toggleMapActions();
+    };
+
+    window.toggleSatelliteDropdown = function() {
+        var mode = window._mapToggleSatellite();
+        var label = document.getElementById("satellite-btn-text");
+        var icon = document.getElementById("satellite-btn-icon");
+        if (label && icon) {
+            label.textContent = mode === "satellite" ? "Mapa" : "Satélite";
+            icon.textContent = mode === "satellite" ? "🗺️" : "🛰";
+        }
+        toggleMapActions();
+    };
+
+    window.toggleSearchDropdown = function() {
+        toggleSearch();
+        toggleMapActions();
+    };
+
+    // Fechar dropdown/busca ao clicar fora
+    document.addEventListener("click", function(e) {
+        var wrapper = document.getElementById("map-actions-wrapper");
+        if (wrapper && !wrapper.contains(e.target)) {
+            var dropdown = document.getElementById("map-actions-dropdown");
+            if (dropdown) dropdown.classList.add("hidden");
+        }
+        var searchContainer = document.getElementById("search-container");
+        var actionsBtn = document.getElementById("map-actions-btn");
+        if (searchContainer && !searchContainer.classList.contains("hidden")) {
+            var isClickInside = searchContainer.contains(e.target) || 
+                                (wrapper && wrapper.contains(e.target)) ||
+                                (actionsBtn && actionsBtn.contains(e.target));
+            if (!isClickInside) {
+                searchContainer.classList.add("hidden");
+            }
+        }
+    });
+
+    // ── Busca ──
+    var searchTimer = null;
+    window.toggleSearch = function() {
+        var container = document.getElementById("search-container");
+        if (container.classList.contains("hidden")) {
+            container.classList.remove("hidden");
+            var inp = document.getElementById("search-input");
+            inp.value = "";
+            inp.focus();
+            document.getElementById("search-results").innerHTML = "";
+        } else {
+            container.classList.add("hidden");
+        }
+    };
+
+    document.getElementById("search-input").addEventListener("keydown", function(e) {
+        e.stopPropagation();
+    });
+    document.getElementById("search-input").addEventListener("input", function() {
+        var self = this;
+        clearTimeout(searchTimer);
+        var q = self.value.trim();
+        if (q.length < 3) {
+            document.getElementById("search-results").innerHTML = "";
+            return;
+        }
+        document.getElementById("search-results").innerHTML = '<div class="px-4 py-3 text-xs text-zinc-500">Buscando...</div>';
+        searchTimer = setTimeout(function() {
+            window._mapSearch(q).then(function(results) {
+                if (self.value.trim() !== q) return; // resposta defasada
+                if (!results || results.length === 0) {
+                    document.getElementById("search-results").innerHTML = '<div class="px-4 py-3 text-xs text-zinc-500">Nenhum resultado encontrado</div>';
+                    return;
+                }
+                var html = "";
+                results.forEach(function(r) {
+                    var safeLabel = r.label.replace(/'/g, "").replace(/"/g, "");
+                    html += '<div onclick="window._mapGoToLocation(' + r.lat + ',' + r.lng + ',\'' + safeLabel + '\');document.getElementById(\'search-container\').classList.add(\'hidden\')" ' +
+                        'class="px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0">' +
+                        r.label + '</div>';
+                });
+                document.getElementById("search-results").innerHTML = html;
+            }).catch(function() {
+                document.getElementById("search-results").innerHTML = '<div class="px-4 py-3 text-xs text-red-400">Erro ao buscar. Verifique o console.</div>';
+            });
+        }, 400);
+    });
+    window.deleteCurrentNote = deleteCurrentNote;
+    window.duplicateCurrentNote = function() {
+        var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+        if (!filename) return;
+        if (!filename.endsWith(".md")) filename += ".md";
+        if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+        if (!confirm('Duplicar "' + filename + '"?')) return;
+        var fd = new FormData();
+        fd.append("filename", filename);
+        fetch("/api/note/duplicate", { method: "POST", body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && data.new_filename) window.location.href = "/map?file=" + encodeURIComponent(data.new_filename);
+            })
+            .catch(function (err) { alert("Erro ao duplicar: " + err.message); });
+    };
+    window.getAuthHeaders = function() { return EditorCommon.getAuthHeaders(); };
+
+    setStatus("saved");
+})();
+</script>
+}

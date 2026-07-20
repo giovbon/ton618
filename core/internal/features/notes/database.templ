@@ -1,0 +1,179 @@
+package notes
+
+import "ton618/core/web/layout"
+
+templ Database(title string) {
+    @layout.Layout(title, true, databaseContent())
+}
+
+templ databaseContent() {
+<div>
+    <!-- Header -->
+    <div class="flex flex-col gap-4 mb-6">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-black tracking-tight text-white">🗃️ Tabulator</h1>
+            <div class="flex items-center gap-4">
+                <div class="text-sm text-zinc-400" id="db-stats">Carregando...</div>
+                
+                <!-- Column Visibility Selector -->
+                <div class="relative" id="column-selector-container">
+                    <button id="column-selector-btn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 10.5h.008v.008H9V10.5zm0 2.25h.008v.008H9v-.008zm3-2.25h.008v.008H12V10.5zm0 2.25h.008v.008H12v-.008zm3-2.25h.008v.008H15V10.5zm0 2.25h.008v.008H15v-.008zm-6-5.25h.008v.008H9V5.25zm0 2.25h.008v.008H9v-.008zm3-2.25h.008v.008H12V5.25zm0 2.25h.008v.008H12v-.008zm3-2.25h.008v.008H15V5.25zm0 2.25h.008v.008H15v-.008zm-6 10.5h.008v.008H9v-.008zm0 2.25h.008v.008H9v-.008zm3-10.5h.008v.008H12v-.008zm0 2.25h.008v.008H12v-.008zm3-10.5h.008v.008H15v-.008zm0 2.25h.008v.008H15v-.008z" />
+                        </svg>
+                        Colunas
+                    </button>
+                    <!-- Dropdown Menu -->
+                    <div id="column-selector-menu" class="absolute right-0 mt-2 w-56 origin-top-right bg-zinc-950/95 border border-zinc-800 rounded-xl shadow-2xl hidden z-50 p-3 max-h-80 overflow-y-auto">
+                        <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">Exibir/Ocultar Colunas</div>
+                        <div class="space-y-1" id="column-checkboxes">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search input and filters -->
+        <div class="relative mt-2 flex items-center">
+            <input id="db-search" type="text" placeholder="Buscar em qualquer campo..." autocomplete="off"
+                class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-all" />
+            <button id="db-search-clear" type="button" class="absolute right-3 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabulator container -->
+    <div id="notes-table" class="w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
+</div>
+
+<!-- Tabulator Assets loaded dynamically below -->
+
+<style>
+    /* Tabulator Overrides to match the premium dark mode of TON-618 */
+    #notes-table {
+        width: 100vw;
+        position: relative;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
+        border-radius: 0 !important;
+    }
+    .tabulator {
+        background-color: transparent !important;
+        border: none !important;
+        font-family: 'Inter', system-ui, sans-serif !important;
+        font-size: 13px;
+    }
+    .tabulator-header {
+        background-color: #18181b !important; /* zinc-900 */
+        border-bottom: 1px solid #27272a !important; /* zinc-800 */
+        color: #a1a1aa !important; /* zinc-400 */
+        font-weight: 700 !important;
+    }
+    .tabulator-col {
+        background-color: #18181b !important;
+        border-right: 1px solid #27272a !important;
+    }
+    .tabulator-row {
+        background-color: #09090b !important; /* zinc-950 */
+        border-bottom: 1px solid #27272a !important; /* zinc-800 */
+        color: #d4d4d8 !important; /* zinc-300 */
+        transition: background-color 0.15s;
+    }
+    .tabulator-row:hover {
+        background-color: #18181b !important; /* zinc-900 */
+    }
+    .tabulator-row.tabulator-row-even {
+        background-color: #09090b !important; /* zinc-950 */
+    }
+    .tabulator-cell {
+        border-right: 1px solid #27272a !important;
+        padding: 8px 12px !important;
+    }
+    .tabulator-cell input {
+        background-color: #27272a !important;
+        color: #fff !important;
+        border: 1px solid #3f3f46 !important;
+        border-radius: 4px;
+        padding: 4px;
+    }
+    /* Editable cells indication */
+    .tabulator-cell.tabulator-editable:hover {
+        background-color: rgba(14, 165, 233, 0.1) !important; /* sky-500/10 */
+        cursor: pointer;
+    }
+    /* Cell Formatters styling */
+    .tag-pill {
+        display: inline-block;
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #e4e4e7;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-right: 4px;
+        margin-bottom: 2px;
+    }
+    
+    /* Premium Dark Mode Footer & Pagination styling */
+    .tabulator-footer {
+        background-color: #09090b !important; /* zinc-950 */
+        border-top: 1px solid #27272a !important; /* zinc-800 */
+        color: #a1a1aa !important; /* zinc-400 */
+        padding: 10px 16px !important;
+    }
+    .tabulator-footer .tabulator-paginator {
+        color: #a1a1aa !important;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .tabulator-footer select {
+        background-color: #18181b !important; /* zinc-900 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        color: #d4d4d8 !important; /* zinc-300 */
+        border-radius: 6px;
+        padding: 4px 8px !important;
+        font-weight: 500;
+        outline: none;
+        cursor: pointer;
+    }
+    .tabulator-footer select:focus {
+        border-color: #0ea5e9 !important; /* sky-500 */
+    }
+    .tabulator-footer .tabulator-page {
+        background-color: #18181b !important; /* zinc-900 */
+        border: 1px solid #27272a !important; /* zinc-800 */
+        color: #a1a1aa !important; /* zinc-400 */
+        border-radius: 6px;
+        padding: 4px 10px !important;
+        font-weight: 600;
+        font-family: inherit;
+        transition: all 0.15s ease;
+    }
+    .tabulator-footer .tabulator-page:hover:not(.disabled) {
+        background-color: #27272a !important; /* zinc-800 */
+        color: #ffffff !important;
+        border-color: #3f3f46 !important;
+    }
+    .tabulator-footer .tabulator-page.active {
+        background-color: rgba(14, 165, 233, 0.15) !important; /* sky-500/15 */
+        border-color: rgba(14, 165, 233, 0.4) !important; /* sky-500/40 */
+        color: #38bdf8 !important; /* sky-400 */
+        font-weight: 700;
+    }
+    .tabulator-footer .tabulator-page.disabled {
+        opacity: 0.3;
+        background-color: transparent !important;
+        border-color: transparent !important;
+        cursor: not-allowed;
+    }
+</style>
+
+<script src="/static/database.js?v=1"></script>
+}

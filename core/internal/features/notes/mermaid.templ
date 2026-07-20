@@ -1,0 +1,573 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+
+templ Mermaid(data domain.EditorData) {
+    @layout.Layout(data.Title, false, mermaidContent(data))
+}
+
+templ mermaidContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="mermaid-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+    <!-- Topbar -->
+    <div class="flex items-center gap-3 mb-3 shrink-0 relative z-20" id="mermaid-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+        <button
+            id="save-btn"
+            onclick="saveMermaid()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar (Ctrl+S)"
+        >
+            💾
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta nota"
+        >
+            ⧉
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            🗑️
+        </button>
+    </div>
+
+    <!-- Layout Dividido Verticalmente -->
+    <div class="flex flex-col flex-1 gap-4 overflow-hidden min-h-0 relative">
+        <!-- Painel Superior: Visualizador (Diagrama) -->
+        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-auto relative p-6 min-w-0" id="preview-panel">
+            <!-- Botão de copiar PNG -->
+            <button
+                id="copy-png-btn"
+                onclick="copyToClipboardPNG()"
+                class="absolute top-4 left-4 bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-all text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer z-20"
+                title="Copiar diagrama como imagem PNG"
+            >
+                📷 Copiar PNG
+            </button>
+
+            <!-- Spinner de Processamento -->
+            <div id="mermaid-compile-indicator" class="absolute top-4 right-4 hidden bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800">
+                ⚡ Renderizando
+            </div>
+            
+            <!-- Banner de Erro -->
+            <div id="mermaid-error-banner" class="hidden w-full bg-red-950/85 border border-red-800/60 text-red-300 px-4 py-3 rounded-lg font-mono text-xs whitespace-pre-wrap mb-4 shrink-0 overflow-x-auto"></div>
+
+            <!-- SVG Renderizado -->
+            <div id="mermaid-preview-container" class="flex flex-col items-center justify-center gap-6 w-full h-full min-h-[220px]">
+                <div class="text-zinc-600 text-xs py-20 font-mono">
+                    Nenhum diagrama renderizado.
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel Inferior: Editor de Código -->
+        <div class="h-[280px] shrink-0 flex flex-col min-w-0 relative">
+            <div class="flex-1 w-full relative min-h-0">
+                <div
+                    id="mermaid-editor"
+                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
+                    spellcheck="false"
+                >{ data.Content }</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Editor CodeJar */
+    .editor-codejar {
+        margin: 0 !important;
+        padding: 16px !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-size: 14px !important;
+        line-height: 1.625 !important;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
+        box-sizing: border-box !important;
+        border-radius: 0.75rem; /* rounded-xl */
+        border: 1px solid #27272a !important; /* border-zinc-800 */
+        background-color: #09090b !important;
+        color: #d4d4d8 !important;
+        tab-size: 4;
+        scrollbar-gutter: stable !important;
+        overflow-y: auto !important;
+        caret-color: #38bdf8 !important;
+        z-index: 10;
+    }
+    
+    .editor-codejar:focus {
+        border-color: #3f3f46 !important;
+    }
+
+    .editor-codejar:empty::before {
+        content: "%% Escreva seu código Mermaid aqui...";
+        color: #52525b; /* zinc-600 */
+        pointer-events: none;
+    }
+    
+    /* Estilização customizada de scrollbar */
+    .editor-codejar::-webkit-scrollbar {
+        width: 10px !important;
+        height: 10px !important;
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-thumb {
+        background-color: #27272a !important; /* zinc-800 */
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
+    /* Firefox scrollbars */
+    .editor-codejar {
+        scrollbar-width: thin !important;
+        scrollbar-color: #27272a transparent !important;
+    }
+
+    /* Container adjustments for centered svg */
+    #mermaid-preview-container svg {
+        max-width: 100%;
+        max-height: 100%;
+        height: auto;
+    }
+</style>
+
+<!-- Load Mermaid locally (Lazy Loading via JS) -->
+<script type="module">
+    import { CodeJar } from '/static/codejar.js?v=8';
+
+    (function () {
+        "use strict";
+
+        // Variável de controle para o Lazy Load do Mermaid
+        var mermaidLoaded = false;
+        var mermaidLoadingPromise = null;
+
+        async function ensureMermaid() {
+            if (mermaidLoaded) return;
+            if (mermaidLoadingPromise) return mermaidLoadingPromise;
+            
+            mermaidLoadingPromise = new Promise(function(resolve, reject) {
+                var s = document.createElement("script");
+                s.src = "/static/mermaid.min.js?v=2";
+                s.onload = function() {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'dark',
+                        securityLevel: 'loose',
+                        flowchart: { useMaxWidth: true, htmlLabels: false }
+                    });
+                    mermaidLoaded = true;
+                    resolve();
+                };
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+            
+            return mermaidLoadingPromise;
+        }
+
+        var editorEl = document.getElementById("mermaid-editor");
+        var previewContainer = document.getElementById("mermaid-preview-container");
+        var errorBanner = document.getElementById("mermaid-error-banner");
+        var compileIndicator = document.getElementById("mermaid-compile-indicator");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+
+        var currentStatus = "saved";
+        var compileTimer = null;
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+        var lastSavedHash = null;
+        var renderIdCounter = 0;
+
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
+
+        function highlightMermaid(code) {
+            var html = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            var tokens = [];
+            var id = 0;
+            var tokenPrefix = "TK" + Math.random().toString(36).substring(2) + "X";
+            function addToken(text, className) {
+                var tokenPlace = tokenPrefix + (id++) + "Y";
+                tokens.push({ id: tokenPlace, html: '<span class="' + className + '">' + text + '</span>' });
+                return tokenPlace;
+            }
+
+            // 1. Comments starting with %%
+            html = html.replace(/%%.*/g, function(match) {
+                return addToken(match, "text-zinc-500 italic");
+            });
+
+            // 2. Strings in quotes "..."
+            html = html.replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, function(match) {
+                return addToken(match, "text-emerald-400");
+            });
+
+            // 3. Diagram types
+            var diagramTypes = /\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram-v2|stateDiagram|erDiagram|gantt|pie|gitGraph|journey|info|c4Diagram|mindmap|timeline|zenuml|gannt)\b/g;
+            html = html.replace(diagramTypes, function(match) {
+                return addToken(match, "text-sky-400 font-bold");
+            });
+
+            // 4. Direction keywords
+            var directions = /\b(TB|TD|BT|RL|LR)\b/g;
+            html = html.replace(directions, function(match) {
+                return addToken(match, "text-amber-400 font-semibold");
+            });
+
+            // 5. Connections/Arrows
+            var arrows = /(-{2,}&gt;|--&gt;|-{3,}|-\.-&gt;|==&gt;|-\.)/g;
+            html = html.replace(arrows, function(match) {
+                return addToken(match, "text-purple-400 font-bold");
+            });
+
+            // 6. Keywords/Subgraphs
+            var keywords = /\b(subgraph|end|click|style|classDef|class|linkStyle|as)\b/g;
+            html = html.replace(keywords, function(match) {
+                return addToken(match, "text-pink-400 font-bold");
+            });
+
+            // Restore tokens recursively to handle nested highlights
+            var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
+            var lastHtml;
+            do {
+                lastHtml = html;
+                html = html.replace(tokenRegExp, function(match, tokenId) {
+                    var idx = parseInt(tokenId, 10);
+                    return tokens[idx] ? tokens[idx].html : match;
+                });
+            } while (html !== lastHtml);
+
+            return html;
+        }
+
+        const highlight = (editor) => {
+            editor.innerHTML = highlightMermaid(editor.textContent);
+        };
+
+        const jar = CodeJar(editorEl, highlight, { tab: "  " });
+        EditorCommon.setupCodeJarActiveLine(editorEl);
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        function handleChange() {
+            setStatus("dirty");
+            scheduleCompile();
+            scheduleSave();
+        }
+
+        jar.onUpdate(handleChange);
+
+        function scheduleCompile() {
+            clearTimeout(compileTimer);
+            compileTimer = setTimeout(doCompile, 300);
+        }
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1200);
+        }
+
+        async function doCompile() {
+            var rawContent = jar.toString();
+            
+            // Extract code body after frontmatter if present
+            var codeToRender = rawContent;
+            var fmEndIndex = rawContent.indexOf("\n---");
+            if (rawContent.startsWith("---") && fmEndIndex !== -1) {
+                codeToRender = rawContent.substring(fmEndIndex + 4).trim();
+            } else if (rawContent.startsWith("---") && rawContent.indexOf("\r\n---") !== -1) {
+                codeToRender = rawContent.substring(rawContent.indexOf("\r\n---") + 5).trim();
+            }
+
+            if (!codeToRender) {
+                previewContainer.innerHTML = '<div class="text-zinc-600 text-xs py-20 font-mono">Sem conteúdo para renderizar.</div>';
+                return;
+            }
+
+            compileIndicator.classList.remove("hidden");
+
+            try {
+                // Força o carregamento da biblioteca sob demanda antes de tentar invocar
+                await ensureMermaid();
+
+                var uniqueId = "mermaid-svg-" + (renderIdCounter++);
+                
+                // Render dynamically using mermaid client-side API
+                var { svg } = await mermaid.render(uniqueId, codeToRender);
+                
+                errorBanner.classList.add("hidden");
+                errorBanner.textContent = "";
+                previewContainer.innerHTML = svg;
+            } catch (err) {
+                // If it's a parse error, show detailed error
+                console.error("Mermaid Render Error:", err);
+                errorBanner.textContent = err.message || "Erro de sintaxe no diagrama Mermaid.";
+                errorBanner.classList.remove("hidden");
+                
+                // Clean up mermaid's error display div if it leaves one behind
+                var badSvg = document.getElementById(uniqueId);
+                if (badSvg) badSvg.remove();
+            } finally {
+                compileIndicator.classList.add("hidden");
+            }
+        }
+
+        async function doSave() {
+            if (saveInProgress) return;
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var content = jar.toString();
+            var currentHash = await generateHash(content);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", content);
+            fd.append("tags", "");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        async function doRename() {
+            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/mermaid", {
+                setStatus: setStatus,
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
+        }
+
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput);
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/mermaid", 'Duplicar esta nota "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () { return jar.toString(); },
+            redirectBase: "/mermaid",
+            setStatus: setStatus
+        });
+
+        EditorCommon.setupCtrlS(doSave);
+
+        // Inicialização
+        (async function () {
+            setStatus("saved");
+            lastSavedHash = await generateHash(jar.toString());
+            doCompile();
+        })();
+
+        async function copyToClipboardPNG() {
+            const svgEl = previewContainer.querySelector('svg');
+            if (!svgEl) {
+                alert("Nenhum diagrama disponível para copiar.");
+                return;
+            }
+
+            if (!navigator.clipboard) {
+                alert("Área de transferência (Clipboard API) não disponível. Certifique-se de que está usando HTTPS ou localhost.");
+                return;
+            }
+
+            if (typeof ClipboardItem === "undefined") {
+                alert("ClipboardItem não é suportado por este navegador.");
+                return;
+            }
+
+            const copyBtn = document.getElementById("copy-png-btn");
+            const originalText = copyBtn.innerHTML;
+            copyBtn.disabled = true;
+            copyBtn.innerHTML = "⏳ Copiando...";
+
+            try {
+                const rect = svgEl.getBoundingClientRect();
+                const viewBox = svgEl.viewBox ? svgEl.viewBox.baseVal : null;
+                const width = (viewBox && viewBox.width) ? viewBox.width : (rect.width || 800);
+                const height = (viewBox && viewBox.height) ? viewBox.height : (rect.height || 600);
+
+                // Clone to modify dimensions securely without affecting layout
+                const svgClone = svgEl.cloneNode(true);
+                svgClone.setAttribute('width', width);
+                svgClone.setAttribute('height', height);
+                if (!svgClone.getAttribute('xmlns')) {
+                    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                }
+
+                // Strip remote imports/fonts/urls from style tags to prevent tainted canvas
+                svgClone.querySelectorAll('style').forEach(function (styleTag) {
+                    let css = styleTag.innerHTML;
+                    // Remove @import statements
+                    css = css.replace(/@import\s+url\([^)]+\);?/gi, '');
+                    // Remove @font-face rules
+                    css = css.replace(/@font-face\s*\{[^}]+\}/gi, '');
+                    // Remove remote url references
+                    css = css.replace(/url\(['"]?http[^'")]+['"]?\)/gi, 'none');
+                    styleTag.innerHTML = css;
+                });
+                
+                // Remove embedded images or foreign objects to prevent cross-origin taint
+                svgClone.querySelectorAll('image, foreignObject').forEach(function(el) {
+                    el.remove();
+                });
+
+                // Get SVG XML source
+                const serializer = new XMLSerializer();
+                let svgText = serializer.serializeToString(svgClone);
+
+                // Create blob URL
+                const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(svgBlob);
+
+                const img = new Image();
+                img.onload = function () {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        const scale = 2.0; // 2x for medium-high quality
+                        canvas.width = width * scale;
+                        canvas.height = height * scale;
+
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Render image
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                        canvas.toBlob(function (blob) {
+                            try {
+                                URL.revokeObjectURL(url);
+                                if (!blob) {
+                                    alert("Falha ao gerar PNG.");
+                                    copyBtn.disabled = false;
+                                    copyBtn.innerHTML = originalText;
+                                    return;
+                                }
+
+                                // Copy blob to clipboard
+                                navigator.clipboard.write([
+                                    new ClipboardItem({ 'image/png': blob })
+                                ]).then(function () {
+                                    copyBtn.innerHTML = "✅ Copiado!";
+                                    setTimeout(function () {
+                                        copyBtn.disabled = false;
+                                        copyBtn.innerHTML = originalText;
+                                    }, 2000);
+                                }).catch(function (err) {
+                                    console.error(err);
+                                    alert("Erro ao copiar imagem para a área de transferência: " + err.message);
+                                    copyBtn.disabled = false;
+                                    copyBtn.innerHTML = originalText;
+                                });
+                            } catch (e) {
+                                console.error(e);
+                                alert("Erro ao processar blob: " + e.message);
+                                copyBtn.disabled = false;
+                                copyBtn.innerHTML = originalText;
+                            }
+                        }, 'image/png');
+                    } catch (e) {
+                        console.error(e);
+                        alert("Erro ao desenhar no canvas: " + e.message);
+                        copyBtn.disabled = false;
+                        copyBtn.innerHTML = originalText;
+                    }
+                };
+                img.onerror = function(e) {
+                    console.error("Image loading failed:", e);
+                    alert("Erro ao carregar imagem temporária do diagrama.");
+                    copyBtn.disabled = false;
+                    copyBtn.innerHTML = originalText;
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao converter diagrama: " + err.message);
+                copyBtn.disabled = false;
+                copyBtn.innerHTML = originalText;
+            }
+        }
+
+        window.saveMermaid = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+        window.copyToClipboardPNG = copyToClipboardPNG;
+    })();
+</script>
+}

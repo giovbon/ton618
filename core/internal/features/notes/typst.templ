@@ -1,0 +1,533 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+
+templ Typst(data domain.EditorData) {
+    @layout.Layout(data.Title, false, typstContent(data))
+}
+
+templ typstContent(data domain.EditorData) {
+<script>
+    window.autoCompile = localStorage.getItem("typst-auto-compile") !== "false";
+    window.toggleAutoCompile = function(checked) {
+        window.autoCompile = checked;
+        localStorage.setItem("typst-auto-compile", checked);
+    };
+    window.shouldAutoCompile = function() {
+        var panel = document.getElementById("preview-panel");
+        var isVisible = panel && !panel.classList.contains("hidden");
+        return window.autoCompile === true && isVisible;
+    };
+    window.triggerCompile = function() {
+        document.body.dispatchEvent(new Event("typst-compile"));
+    };
+    window.togglePreview = function() {
+        var panel = document.getElementById("preview-panel");
+        var btn = document.getElementById("toggle-preview-btn");
+        if (panel.classList.contains("hidden")) {
+            panel.classList.remove("hidden");
+            btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
+            btn.classList.remove("text-zinc-500");
+            window.triggerCompile();
+        } else {
+            panel.classList.add("hidden");
+            btn.classList.remove("bg-zinc-800", "text-sky-400", "border-sky-500/30");
+            btn.classList.add("text-zinc-500");
+        }
+    };
+    document.addEventListener("DOMContentLoaded", function() {
+        var toggle = document.getElementById("auto-compile-toggle");
+        if (toggle) {
+            toggle.checked = window.autoCompile;
+        }
+    });
+    document.addEventListener("htmx:afterOnLoad", function(evt) {
+        if (evt.detail.target && evt.detail.target.id === "typst-preview-container") {
+            var errorDiv = evt.detail.target.querySelector(".bg-red-950\\/85");
+            var errorBanner = document.getElementById("typst-error-banner");
+            var errorContent = document.getElementById("typst-error-content");
+            if (errorBanner) {
+                if (errorDiv) {
+                    if (errorContent) {
+                        errorContent.innerHTML = errorDiv.innerHTML;
+                    }
+                    errorBanner.classList.remove("hidden");
+                    evt.detail.target.innerHTML = errorDiv.outerHTML;
+                } else {
+                    if (errorContent) {
+                        errorContent.innerHTML = "";
+                    }
+                    errorBanner.classList.add("hidden");
+                }
+            }
+        }
+    });
+</script>
+<div class="editor-root flex flex-col" id="typst-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+    <!-- Topbar -->
+    <div class="flex items-center gap-3 mb-3 shrink-0 relative z-20" id="typst-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+        
+        <!-- Toggle Auto-Compilar -->
+        <div class="flex items-center gap-1.5 bg-zinc-900/40 px-2 py-1 rounded-lg border border-zinc-800 shrink-0 select-none">
+            <input
+                id="auto-compile-toggle"
+                type="checkbox"
+                class="w-3.5 h-3.5 rounded border-zinc-750 text-sky-500 bg-zinc-950 focus:ring-sky-500 focus:ring-offset-zinc-900 cursor-pointer"
+                onchange="toggleAutoCompile(this.checked)"
+            />
+            <label for="auto-compile-toggle" class="text-[11px] font-bold tracking-tight text-zinc-400 cursor-pointer">
+                Auto
+            </label>
+        </div>
+
+        <!-- Botão de Compilar Manual -->
+        <button
+            id="compile-btn"
+            onclick="triggerCompile()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Compilar Visualização (Alt+Enter)"
+        >
+            ⚡
+        </button>
+
+        <!-- Botão Toggle Preview -->
+        <button
+            id="toggle-preview-btn"
+            onclick="togglePreview()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 flex items-center gap-1"
+            title="Alternar Visualização (Preview)"
+        >
+            <span>👁️</span> Preview
+        </button>
+
+        <button
+            id="save-btn"
+            onclick="saveTypst()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar (Ctrl+S)"
+        >
+            💾
+        </button>
+        <button
+            id="pdf-download-btn"
+            onclick="downloadPDF()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800"
+            title="Baixar PDF"
+        >
+            📥 PDF
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta nota"
+        >
+            ⧉
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            🗑️
+        </button>
+    </div>
+
+    <!-- Layout Dividido (Split-Pane) -->
+    <div class="flex flex-col md:flex-row flex-1 gap-4 overflow-hidden min-h-0 relative">
+        <!-- Painel Esquerdo: Editor de Código -->
+        <div class="flex-1 flex flex-col min-w-0 relative">
+            <div class="flex-1 w-full relative min-h-0">
+                <div
+                    id="typst-editor"
+                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
+                    spellcheck="false"
+                    hx-post="/api/notes/render-typst"
+                    hx-trigger="load, keyup[shouldAutoCompile()] delay:1500ms, typst-compile from:body"
+                    hx-target="#typst-preview-container"
+                    hx-vals="js:{content: window.getTypstContent ? window.getTypstContent() : ''}"
+                    hx-indicator="#typst-compile-indicator"
+                >{ data.Content }</div>
+            </div>
+            <!-- Banner de Erros de Sintaxe -->
+            <div id="typst-error-banner" class="hidden mt-2 shrink-0 border border-red-900/50 rounded-lg bg-zinc-950/90 backdrop-blur-md overflow-hidden flex flex-col shadow-lg shadow-red-950/20">
+                <div class="flex items-center justify-between px-3 py-1.5 bg-red-950/40 border-b border-red-900/30 text-[11px] font-bold uppercase tracking-wider text-red-400 select-none">
+                    <span class="flex items-center gap-1.5">
+                        <span class="text-xs">⚠️</span> Erros de Compilação
+                    </span>
+                    <button onclick="document.getElementById('typst-error-banner').classList.add('hidden')" class="hover:text-red-200 transition-colors text-xs font-mono w-5 h-5 flex items-center justify-center rounded hover:bg-red-900/20">✕</button>
+                </div>
+                <div id="typst-error-content" class="max-h-48 overflow-y-auto p-3.5 font-mono text-xs text-red-300/90 whitespace-pre-wrap leading-relaxed select-text"></div>
+            </div>
+        </div>
+
+        <!-- Painel Direito: Visualizador de Preview -->
+        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0 hidden" id="preview-panel">
+            <!-- Spinner de Processamento -->
+            <div id="typst-compile-indicator" class="absolute top-4 right-4 bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800 htmx-indicator">
+                ⚡ Compilando
+            </div>
+            
+            <!-- Páginas Renderizadas -->
+            <div id="typst-preview-container" class="flex flex-col items-center gap-6 w-full">
+                <div class="text-zinc-600 text-xs py-20 font-mono">
+                    Nenhum conteúdo renderizado.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<style>
+    /* Scrollbar customizada para o painel de erros */
+    #typst-error-content::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+        background: transparent !important;
+    }
+
+    #typst-error-content::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #typst-error-content::-webkit-scrollbar-thumb {
+        background-color: #451a1a !important;
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
+    /* Estilo de "folha de papel" para cada página SVG renderizada do Typst */
+    .typst-page {
+        background-color: #ffffff;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        max-width: 100%;
+        transition: transform 0.2s ease;
+    }
+    
+    .typst-page:hover {
+        transform: scale(1.005);
+    }
+
+    .typst-page svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    /* Editor CodeJar */
+    .editor-codejar {
+        margin: 0 !important;
+        padding: 16px !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-size: 14px !important;
+        line-height: 1.625 !important;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
+        box-sizing: border-box !important;
+        border-radius: 0.75rem; /* rounded-xl */
+        border: 1px solid #27272a !important; /* border-zinc-800 */
+        background-color: #09090b !important;
+        color: #d4d4d8 !important;
+        tab-size: 4;
+        scrollbar-gutter: stable !important;
+        overflow-y: auto !important;
+        caret-color: #38bdf8 !important;
+        z-index: 10;
+    }
+    
+    .editor-codejar:focus {
+        border-color: #3f3f46 !important;
+    }
+
+    .editor-codejar:empty::before {
+        content: "// Escreva seu código Typst aqui...";
+        color: #52525b; /* zinc-600 */
+        pointer-events: none;
+    }
+    
+    /* Estilização customizada de scrollbar */
+    .editor-codejar::-webkit-scrollbar {
+        width: 10px !important;
+        height: 10px !important;
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-thumb {
+        background-color: #27272a !important; /* zinc-800 */
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
+    /* Firefox scrollbars */
+    .editor-codejar {
+        scrollbar-width: thin !important;
+        scrollbar-color: #27272a transparent !important;
+    }
+</style>
+
+<script type="module">
+    import { CodeJar } from '/static/codejar.js?v=8';
+
+    (function () {
+        "use strict";
+
+        var editorEl = document.getElementById("typst-editor");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+
+        var currentStatus = "saved";
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+        var lastSavedHash = null;
+
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
+
+        function highlightTypst(code) {
+            var html = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            var tokens = [];
+            var id = 0;
+            var tokenPrefix = "TK" + Math.random().toString(36).substring(2) + "X";
+            function addToken(text, className) {
+                var tokenPlace = tokenPrefix + (id++) + "Y";
+                tokens.push({ id: tokenPlace, html: '<span class="' + className + '">' + text + '</span>' });
+                return tokenPlace;
+            }
+
+            // 1. Comments block /* ... */
+            html = html.replace(/\/\*[\s\S]*?\*\//g, function(match) {
+                return addToken(match, "text-zinc-500 italic");
+            });
+
+            // 2. Comments line // ...
+            html = html.replace(/\/\/.*/g, function(match) {
+                return addToken(match, "text-zinc-500 italic");
+            });
+
+            // 3. Triple backtick code blocks ``` ... ```
+            html = html.replace(/```[\s\S]*?```/g, function(match) {
+                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+            });
+
+            // 4. Single backtick code ` ... `
+            html = html.replace(/`[^`\n]+`/g, function(match) {
+                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+            });
+
+            // 5. String literals
+            html = html.replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, function(match) {
+                return addToken(match, "text-emerald-400");
+            });
+
+            // 6. Keywords/Commands starting with #
+            html = html.replace(/#[a-zA-Z_][a-zA-Z0-9_.-]*/g, function(match) {
+                return addToken(match, "text-sky-400 font-bold");
+            });
+
+            // 7. Headings (=, ==, === etc) at start of line
+            html = html.replace(/^={1,6}\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-white font-black");
+            });
+
+            // 8. Math formulas $...$
+            html = html.replace(/\$[^\$\n]+\$/g, function(match) {
+                return addToken(match, "text-purple-400 font-semibold");
+            });
+
+            // 9. Bold *text*
+            html = html.replace(/\*[^*\n]+\*/g, function(match) {
+                return addToken(match, "font-bold text-zinc-100");
+            });
+
+            // 10. Italic _text_
+            html = html.replace(/_[^_\n]+_/g, function(match) {
+                return addToken(match, "italic text-zinc-100");
+            });
+
+            // Restore tokens recursively to handle nested highlights (e.g. bold/italic containing strings)
+            var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
+            var lastHtml;
+            do {
+                lastHtml = html;
+                html = html.replace(tokenRegExp, function(match, tokenId) {
+                    var idx = parseInt(tokenId, 10);
+                    return tokens[idx] ? tokens[idx].html : match;
+                });
+            } while (html !== lastHtml);
+
+            return html;
+        }
+
+        const highlight = (editor) => {
+            editor.innerHTML = highlightTypst(editor.textContent);
+        };
+
+        const jar = CodeJar(editorEl, highlight, { tab: "  " });
+        EditorCommon.setupCodeJarActiveLine(editorEl);
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        function handleChange() {
+            setStatus("dirty");
+            scheduleSave();
+        }
+
+        jar.onUpdate(handleChange);
+
+        window.getTypstContent = function() {
+            return jar.toString();
+        };
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1200);
+        }
+
+        async function doSave() {
+            if (saveInProgress) return;
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var content = jar.toString();
+            var currentHash = await generateHash(content);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", content);
+            fd.append("tags", "");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+
+                // Auto-indexação semântica com chunking (fire-and-forget)
+                if (window._semanticIndexNote) {
+                    window._semanticIndexNote(filename, content);
+                }
+                
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        async function doRename() {
+            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/typst", {
+                setStatus: setStatus,
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
+        }
+
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput);
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/typst", 'Duplicar esta nota "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () { return jar.toString(); },
+            redirectBase: "/typst",
+            setStatus: setStatus
+        });
+
+        // Ctrl+S para salvar + Alt+Enter para compilar
+        EditorCommon.setupCtrlS(doSave);
+        document.addEventListener("keydown", function (e) {
+            if (e.altKey && e.key === "Enter") {
+                e.preventDefault();
+                window.triggerCompile();
+            }
+        });
+
+        // Inicialização
+        (async function () {
+            setStatus("saved");
+            lastSavedHash = await generateHash(jar.toString());
+        })();
+
+        async function downloadPDF() {
+            await doSave();
+            var filename = filenameInput.dataset.filename || filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+            window.open("/api/notes/download-typst-pdf?file=" + encodeURIComponent(filename), "_blank");
+        }
+
+        window.saveTypst = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+        window.downloadPDF = downloadPDF;
+    })();
+</script>
+}

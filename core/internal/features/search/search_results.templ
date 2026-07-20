@@ -1,0 +1,108 @@
+package search
+
+import (
+	"strconv"
+	"ton618/core/internal/core/domain"
+	searchpkg "ton618/core/internal/search"
+)
+
+func getLineHash(line int) string {
+	if line > 0 {
+		return "#line-" + strconv.Itoa(line)
+	}
+	return ""
+}
+
+templ SearchResults(data domain.SearchResultsData) {
+	<div id="search-metadata" data-stems={ searchpkg.GetQueryStems(data.Query) } class="hidden"></div>
+	if data.Query != "" {
+		<p class="text-[11px] font-medium text-zinc-500 mb-4 tracking-wide uppercase">
+			{ strconv.Itoa(data.Total) } resultado
+			if data.Total != 1 {
+				{ "s" }
+			}
+			para &ldquo;{ data.Query }&rdquo;
+		</p>
+	}
+	if len(data.Results) > 0 {
+		<ul class="space-y-2.5">
+			for _, res := range data.Results {
+				<li class="relative bg-zinc-900/30 border border-zinc-800/50 hover:border-emerald-500/30 hover:bg-emerald-950/10 rounded-xl transition-all duration-300 group p-4">
+					<div class="relative z-10">
+						<div class="flex items-center gap-2 min-w-0 mb-2">
+							<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0">
+								{ domain.NoteIcon(res.Arquivo, res.RawTags) } { res.Tipo }
+							</span>
+							if res.Tipo == "pdf" {
+								<a href={ templ.SafeURL("/file?name=" + res.Arquivo) } target="_blank" class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-orange-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "planilha" || res.Tipo == "spreadsheet" {
+								<a href={ templ.SafeURL("/spreadsheet?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "desenho" || res.Tipo == "drawing" {
+								<a href={ templ.SafeURL("/drawing?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "typst" {
+								<a href={ templ.SafeURL("/typst?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "markmap" || res.Tipo == "mindmap" {
+								<a href={ templ.SafeURL("/mindmap?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else if res.Tipo == "mapa" || res.Tipo == "map" {
+								<a href={ templ.SafeURL("/map?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							} else {
+								<a href={ templ.SafeURL("/editor?file=" + res.Arquivo + getLineHash(res.Line)) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+									{ domain.DisplayName(res.Arquivo) }
+								</a>
+							}
+						</div>
+						if res.Secao != "" {
+							<div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase">
+								{ res.Secao }
+							</div>
+						}
+						<div class="text-[14px] leading-relaxed text-zinc-400 font-sans line-clamp-4 snippet-text">
+							@templ.Raw(res.Snippet)
+						</div>
+						if len(res.Tags) > 0 {
+							<div class="mt-3 flex items-center justify-between gap-3">
+								<div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
+									for _, tag := range res.Tags {
+										<span class="px-2 py-0.5 rounded bg-zinc-800/60 text-[10px] font-semibold text-zinc-400">#{ tag }</span>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</li>
+			}
+		</ul>
+	} else {
+		if data.Query != "" {
+			<div class="text-center py-20">
+				<p class="text-zinc-500 text-sm">
+					Nenhum resultado para &ldquo;{ data.Query }&rdquo;.
+				</p>
+				<p class="text-zinc-600 text-xs mt-1">
+					Tente termos diferentes ou verifique a ortografia.
+				</p>
+			</div>
+		} else {
+			<div class="text-center py-20">
+				<p class="text-zinc-600 text-sm">
+					Comece a digitar para buscar suas notas.
+				</p>
+				<p class="text-zinc-700 text-xs mt-1">
+					O índice será atualizado automaticamente.
+				</p>
+			</div>
+		}
+	}
+}

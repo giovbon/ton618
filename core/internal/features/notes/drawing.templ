@@ -1,0 +1,246 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+
+templ Drawing(data domain.EditorData) {
+    @layout.Layout(data.Title, true, drawingContent(data))
+}
+
+templ drawingContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="drawing-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 0 0 0; border-radius: 0;">
+    <div class="flex items-center gap-3 mb-3 shrink-0 px-6 relative z-20" id="drawing-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+        <button
+            id="save-btn"
+            onclick="saveDrawing()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Salvar"
+        >
+            💾
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar este desenho"
+        >
+            ⧉
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir este desenho"
+        >
+            🗑️
+        </button>
+    </div>
+    <!-- placeholders para compatibilidade com layout.templ -->
+    <div id="frontmatter-area" class="hidden"></div>
+    <div id="tag-suggestions" class="hidden mt-2">
+        <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- Container do Excalidraw que ocupa todo o espaço restante -->
+    <div id="drawing-container" class="flex-1 overflow-hidden bg-zinc-950 relative"></div>
+
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+    <input id="editor-image-input" type="file" accept="image/*" class="hidden" />
+</div>
+
+<!-- Bundles compilados do Excalidraw -->
+<script>
+    window.EXCALIDRAW_ASSET_PATH = "/static/";
+</script>
+<link rel="stylesheet" href="/static/drawing.css?v=2" />
+<script src="/static/drawing.js?v=2"></script>
+
+<style>
+    #drawing-container {
+        width: 100%;
+        height: 100%;
+        border-radius: 0 !important;
+    }
+    .excalidraw {
+        border: none !important;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        var el = document.getElementById("drawing-container");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+        var rawContent = document.getElementById("content-output").value;
+        var drawingData = null;
+        var currentStatus = "saved";
+        var editorInstance = null;
+        var currentSnapshot = null;
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var initialFrontmatter = "---\ntype: drawing\n---\n";
+        var lastSavedHash = null;
+
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
+
+        // Extrai dados JSON do frontmatter
+        var fmMatch = rawContent.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            initialFrontmatter = "---\n" + fmMatch[1] + "\n---\n";
+            try {
+                var jsonStr = fmMatch[2].trim();
+                if (jsonStr) {
+                    drawingData = JSON.parse(jsonStr);
+                    currentSnapshot = drawingData;
+                }
+            } catch (e) {
+                console.error("Erro ao ler JSON do desenho:", e);
+            }
+        }
+
+        // Salvar com Debounce e Fila para evitar Race Condition
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function() {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1500); // 1.5 segundos de inatividade para auto-save
+        }
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        async function doSave() {
+            if (!currentSnapshot || saveInProgress) return;
+
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot);
+            var currentHash = await generateHash(fullContent);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", fullContent);
+            fd.append("tags", "");
+            fd.append("silent", "true");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+                
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar desenho:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        function handleDrawingChange(snapshot) {
+            currentSnapshot = snapshot;
+            setStatus("dirty");
+            scheduleSave();
+        }
+
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput);
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/drawing", 'Duplicar este desenho "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
+        }
+
+        async function doRename() {
+            function getDrawingContent() {
+                return initialFrontmatter + JSON.stringify(currentSnapshot || {});
+            }
+            await EditorCommon.doRenameContent(filenameInput, getDrawingContent, "/drawing", {
+                setStatus: setStatus,
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () {
+                return initialFrontmatter + JSON.stringify(currentSnapshot || {});
+            },
+            redirectBase: "/drawing",
+            setStatus: setStatus
+        });
+
+        EditorCommon.setupCtrlS(doSave);
+
+        // Inicializa o Excalidraw se a biblioteca global estiver disponível
+        if (window.initDrawing) {
+            window.initDrawing(el, {
+                initialState: drawingData,
+                onReady: function (editor) {
+                    editorInstance = editor;
+                },
+                onChange: handleDrawingChange
+            });
+        } else {
+            console.error("Função initDrawing não encontrada no window. Verifique se drawing.js foi carregado.");
+            el.innerHTML = "<div style='padding:20px;color:#f87171;'>Erro: Módulo de desenho não carregado.</div>";
+        }
+
+        // Hash inicial calculado após carregar
+        (async function () {
+            var fullContent = initialFrontmatter + JSON.stringify(currentSnapshot || {});
+            lastSavedHash = await generateHash(fullContent);
+        })();
+
+        window.saveDrawing = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+    })();
+</script>
+}

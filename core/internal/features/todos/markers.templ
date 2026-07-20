@@ -1,0 +1,80 @@
+package todos
+
+import (
+	"strconv"
+	"ton618/core/internal/core/db"
+)
+
+templ MarkersList(markers []db.TodoMarker) {
+    <div id="markers-container" class="space-y-6">
+        <!-- Lista atual -->
+        <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-sm font-semibold text-zinc-200">Marcadores ativos</span>
+                <button hx-post="/api/todo-markers/reset" hx-target="#markers-container" hx-swap="outerHTML" hx-confirm="Restaurar marcadores para o padrão original?" class="text-[10px] text-zinc-500 hover:text-amber-400">Restaurar padrão</button>
+            </div>
+            <div id="modal-markers-list" class="space-y-2">
+                if len(markers) == 0 {
+                    <div class="text-center py-8"><p class="text-xs text-zinc-500">Nenhum marcador configurado.</p></div>
+                } else {
+                    for _, m := range markers {
+                        <div class="marker-row flex items-center gap-3 px-4 py-3 bg-zinc-800/40 border border-zinc-700/50 rounded-lg">
+                            <!-- Checkbox ativo -->
+                            <label class="flex items-center gap-2 cursor-pointer flex-shrink-0">
+                                if m.Active {
+                                    <input type="checkbox" checked hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&active=false")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
+                                } else {
+                                    <input type="checkbox" hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&active=true")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
+                                }
+                            </label>
+
+                            <span class="marker-badge px-3 py-1 text-[11px] font-bold rounded flex-shrink-0" style={ "background:" + m.Color + "20; color:" + m.Color }>{ m.Marker }</span>
+
+                            <span class="flex-1 text-xs text-zinc-500 min-w-0 truncate">{ m.Marker }:</span>
+
+                            <!-- Seletor de ordem -->
+                            <form class="flex items-center gap-1.5 m-0 flex-shrink-0" id={ "order-form-" + m.Marker }>
+                                <label class="text-[10px] text-zinc-600 whitespace-nowrap">Ordem</label>
+                                <select
+                                    name="sort_order"
+                                    hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) }
+                                    hx-target="#markers-container"
+                                    hx-swap="outerHTML"
+                                    hx-trigger="change"
+                                    class="bg-zinc-900 border border-zinc-700 rounded text-[11px] text-zinc-300 px-1.5 py-1 cursor-pointer focus:outline-none focus:border-zinc-500 w-[72px]"
+                                >
+                                    <option value="0" selected?={ m.SortOrder == 0 }>Padrão</option>
+                                    for i := 1; i <= 9; i++ {
+                                        <option value={ strconv.Itoa(i) } selected?={ m.SortOrder == i }>{ strconv.Itoa(i) }º</option>
+                                    }
+                                </select>
+                            </form>
+
+                            <!-- Cor -->
+                            <form class="flex items-center gap-2 m-0 flex-shrink-0">
+                                <input type="color" name="color" value={ m.Color } hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" class="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0" />
+                            </form>
+
+                            <button hx-delete={ string(templ.URL("/api/todo-markers/remove?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2 cursor-pointer flex-shrink-0">✕</button>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- Novo marcador -->
+        <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
+            <label class="block text-sm font-semibold text-zinc-200 mb-2">Novo marcador</label>
+            <form hx-post="/api/todo-markers/add" hx-target="#markers-container" hx-swap="outerHTML" class="flex gap-2 m-0">
+                <input type="text" name="marker" placeholder="Ex: URGENTE"
+                    class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 uppercase placeholder:normal-case focus:outline-none focus:border-sky-500" required />
+                <input type="color" name="color" value="#3b82f6"
+                    class="w-10 h-[38px] rounded cursor-pointer border border-zinc-700 p-0" />
+                <button type="submit"
+                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors">
+                    + Adicionar
+                </button>
+            </form>
+        </div>
+    </div>
+}
