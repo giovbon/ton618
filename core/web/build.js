@@ -71,11 +71,11 @@ console.log("Comprimindo assets estáticos (Gzip & Brotli)...");
 function compressFile(filePath) {
   if (filePath.endsWith(".gz") || filePath.endsWith(".br")) return;
   const data = readFileSync(filePath);
-  
+
   // Gzip
   const gzipData = gzipSync(data, { level: 9 });
   writeFileSync(filePath + ".gz", gzipData);
-  
+
   // Brotli
   const brotliData = brotliCompressSync(data, {
     params: {
@@ -83,7 +83,7 @@ function compressFile(filePath) {
     },
   });
   writeFileSync(filePath + ".br", brotliData);
-  
+
   console.log(
     `  ${filePath}: ${(data.length / 1024).toFixed(1)}KB → Gzip: ${(gzipData.length / 1024).toFixed(1)}KB, Brotli: ${(brotliData.length / 1024).toFixed(1)}KB`
   );

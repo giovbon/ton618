@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"ton618/core/internal/middleware"
 	"ton618/core/internal/features/commercial"
+	"ton618/core/internal/middleware"
 )
 
 func init() {
