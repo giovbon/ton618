@@ -7,32 +7,88 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            ext: ""
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-            ext: ""
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-            ext: ".exe"
-
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    name: Linux (AppImage)
+    runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
 
-      - name: 🔧 Setup Go
-        uses: actions/setup-go@v5
+      - name: 📦 Dependencias de sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            build-essential pkg-config libappindicator3-dev
+
+      - name: 🔧 Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: 🔨 Build core-server
+        run: |
+          cd core && go build -o core-server ./cmd/server
+          cp core-server ../desktop/
+
+      - name: 🔨 Build desktop
+        run: |
+          cd desktop && wails build -platform linux/amd64
+
+      - name: 📦 Criar AppImage
+        run: |
+          mkdir -p dist/ton618-desktop-linux-amd64
+          cp desktop/build/bin/TON-618 dist/ton618-desktop-linux-amd64/
+          cp desktop/core-server dist/ton618-desktop-linux-amd64/
+          cp desktop/build/bin/TON-618.png dist/ton618-desktop-linux-amd64/ 2>/dev/null || true
+          cd dist && tar czf ton618-desktop-linux-amd64.tar.gz ton618-desktop-linux-amd64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ton618-desktop-linux-amd64
+          path: dist/ton618-desktop-linux-amd64.tar.gz
+
+  build-mac:
+    name: macOS (DMG)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: 🔧 Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: 🔨 Build core-server
+        run: |
+          cd core && go build -o core-server ./cmd/server
+          cp core-server ../desktop/
+
+      - name: 🔨 Build desktop
+        run: |
+          cd desktop && wails build -platform darwin/amd64
+
+      - name: 📦 Criar ZIP
+        run: |
+          mkdir -p dist
+          cp -r desktop/build/bin/TON-618.app dist/
+          cp desktop/core-server dist/TON-618.app/Contents/MacOS/
+          cd dist && zip -r ton618-desktop-macos-amd64.zip TON-618.app/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ton618-desktop-macos-amd64
+          path: dist/ton618-desktop-macos-amd64.zip
+
+  build-windows:
+    name: Windows (ZIP)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
 
@@ -42,32 +98,22 @@ jobs:
       - name: 🔨 Build core-server
         run: |
           cd core
-          go build -o core-server${{ matrix.ext }} ./cmd/server
-          cp core-server${{ matrix.ext }} ../desktop/
+          go build -o core-server.exe ./cmd/server
+          copy core-server.exe ..\desktop\
 
-      - name: 🔨 Build desktop (Wails)
+      - name: 🔨 Build desktop
         run: |
           cd desktop
-          wails build -platform "${{ matrix.goos }}/${{ matrix.goarch }}"
+          wails build -platform windows/amd64
 
-      - name: 📦 Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ton618-desktop-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: desktop/build/bin/*
-
-      - name: 📦 Upload core-server
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-server-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: core/core-server${{ matrix.ext }}
-
-      - name: ✅ Summary
+      - name: 📦 Criar ZIP
         run: |
-          echo "## 🖥️ Desktop build concluído" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Valor |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Plataforma** | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Core-server** | core/core-server${{ matrix.ext }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Desktop** | desktop/build/bin/TON-618${{ matrix.ext }} |" >> $GITHUB_STEP_SUMMARY
+          mkdir dist -Force
+          Copy-Item desktop\build\bin\TON-618.exe dist\
+          Copy-Item desktop\core-server.exe dist\
+          Compress-Archive -Path dist\* -DestinationPath dist\ton618-desktop-windows-amd64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ton618-desktop-windows-amd64
+          path: dist/ton618-desktop-windows-amd64.zip
