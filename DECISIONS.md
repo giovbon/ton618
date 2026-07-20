@@ -7,6 +7,31 @@
 Este documento registra decisões arquiteturais e padrões adotados no projeto.
 Serve como referência para manter consistência em contribuições futuras.
 
+```
+ton618/                          ← GitHub (branch main)
+├── core/                        ← ★ Código do app (auto-hospedado)
+│   ├── cmd/server/              ← Servidor Go (chi + SQLite)
+│   ├── internal/                ← Lógica completa
+│   ├── web/                     ← Frontend (TipTap, HTMX, etc.)
+│   ├── go.mod (module ton618/core)
+│   └── Dockerfile               ← Builda só o core
+│
+├── desktop/                     ← 🆕 Wails (esqueleto)
+├── pkg/commercial/              ← 🆕 Licenciamento (esqueleto)
+├── docker-compose.yml           ← Aponta para core/
+├── Makefile                     ← Comandos unificados
+└── .dockerignore                ← Bloqueia desktop/ e pkg/
+```
+
+**Como usar:**
+
+| Ação | Comando |
+|------|---------|
+| Build local | `cd core && go build -o ton618 ./cmd/server` |
+| Docker Hub | `docker build -f core/Dockerfile -t seuuser/ton618 core/` |
+| Produto comercial | `cd core && go build -tags commercial -o ton618-pro ./cmd/server` |
+| Corrigir bug | Edita em core, commit na `main` → beneficia ambos |
+
 ---
 
 ## 1. Stack Principal

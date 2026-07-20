@@ -31,6 +31,7 @@ RUN go mod download
 RUN go install github.com/a-h/templ/cmd/templ@latest
 
 ARG TARGETARCH
+ARG BUILD_TAGS="sqlite_fts5"
 COPY . .
 
 # Copia o bundle compilado (contendo os modelos originais + .gz + .br)
@@ -40,7 +41,7 @@ COPY --from=web-builder /web/static ./web/static
 RUN templ generate
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -tags sqlite_fts5 \
+    -tags "${BUILD_TAGS}" \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
 
