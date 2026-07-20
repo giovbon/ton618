@@ -1,4 +1,3 @@
-package desktop
 // desktop — Launcher do TON-618 para Desktop
 //
 // Estratégia: o desktop é um shell (Wails) que inicia o core-server
