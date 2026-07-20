@@ -280,32 +280,82 @@ templ mindmapContent(data domain.EditorData) {
                 return tokenPlace;
             }
 
-            // 1. Frontmatter
-            html = html.replace(/^---[\s\S]*?---/g, function(match) {
+            // 0. Frontmatter (--- ... ---)
+            html = html.replace(/^---[\s\S]*?---/gm, function(match) {
                 return addToken(match, "text-zinc-500 font-mono");
             });
 
-            // 2. Headers (#, ##)
+            // 1. Fenced code blocks (``` ... ```) — antes de outros padrões para evitar conflitos
+            html = html.replace(/```[\s\S]*?```/g, function(match) {
+                return addToken(match, "text-emerald-400 font-mono");
+            });
+
+            // 2. Inline code `code`
+            html = html.replace(/`[^`\n]+`/g, function(match) {
+                return addToken(match, "text-pink-400 font-mono bg-zinc-900/60 px-1 rounded");
+            });
+
+            // 3. Images ![alt](url)
+            html = html.replace(/!\[[^\]]*\]\([^)]*\)/g, function(match) {
+                return addToken(match, "text-purple-400");
+            });
+
+            // 4. Links [text](url)
+            html = html.replace(/\[([^\]]+)\]\([^)]+\)/g, function(match) {
+                return addToken(match, "text-sky-400 underline");
+            });
+
+            // 5. Headers (#, ##, ###, etc)
             html = html.replace(/^#{1,6}\s+[^\n]+/gm, function(match) {
                 return addToken(match, "text-sky-400 font-black");
             });
 
-            // 3. Lists (- , * )
-            html = html.replace(/^\s*[-*+]\s+/gm, function(match) {
-                return addToken(match, "text-amber-400 font-bold");
+            // 6. Horizontal rules (---, ***, ___)
+            html = html.replace(/^(\s*[-*_]\s*){3,}$/gm, function(match) {
+                return addToken(match, "text-zinc-600");
             });
 
-            // 4. Bold (**text**)
-            html = html.replace(/\*\*[^*]+\*\*/g, function(match) {
+            // 7. Blockquotes (> text)
+            html = html.replace(/^>\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-zinc-400 italic border-l-2 border-zinc-600 pl-2");
+            });
+
+            // 8. Unordered list markers (-, *, +)
+            html = html.replace(/^(\s*)[-*+]\s+/gm, function(match, space) {
+                return space + addToken(match.trimStart(), "text-amber-400 font-bold");
+            });
+
+            // 9. Ordered list markers (1., 2., etc)
+            html = html.replace(/^(\s*)\d+\.\s+/gm, function(match, space) {
+                return space + addToken(match.trimStart(), "text-amber-400 font-bold");
+            });
+
+            // 10. Task list markers (- [ ] or - [x])
+            html = html.replace(/^(\s*)[-*+]\s+\[[ x]\]\s+/gim, function(match, space) {
+                return space + addToken(match.trimStart(), "text-emerald-500");
+            });
+
+            // 11. Bold (**text** or __text__)
+            html = html.replace(/(\*\*|__)(?:(?!\1)[\s\S]*?)\1/g, function(match) {
                 return addToken(match, "font-bold text-zinc-100");
             });
 
-            // 5. Italic (_text_)
-            html = html.replace(/_[^_]+_/g, function(match) {
+            // 12. Italic (*text* or _text_) — cuidadoso para nao pegar underscores em palavras
+            html = html.replace(/(?<!\w)(\*|_)(?:(?!\1)[^\s*_][^*_\n]*?)\1(?!\w)/g, function(match) {
                 return addToken(match, "italic text-zinc-300");
             });
 
-            // Restore tokens recursively to handle nested highlights
+            // 13. Strikethrough (~~text~~)
+            html = html.replace(/~~[^~]+~~/g, function(match) {
+                return addToken(match, "line-through text-zinc-500");
+            });
+
+            // 14. Tables (| col1 | col2 |)
+            html = html.replace(/^\|.+\|$/gm, function(match) {
+                return addToken(match, "text-zinc-300");
+            });
+
+            // Restore tokens recursively
             var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
             var lastHtml;
             do {
