@@ -47,40 +47,6 @@ jobs:
           name: ton618-desktop-linux-amd64
           path: dist/ton618-desktop-linux-amd64.tar.gz
 
-  build-mac:
-    name: macOS (DMG)
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: 🔧 Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: 🔨 Build core-server
-        run: |
-          cd core && go build -o core-server ./cmd/server
-          cp core-server ../desktop/
-
-      - name: 🔨 Build desktop
-        run: |
-          cd desktop && wails build -platform darwin/amd64
-
-      - name: 📦 Criar ZIP
-        run: |
-          mkdir -p dist
-          cp -r desktop/build/bin/TON-618.app dist/
-          cp desktop/core-server dist/TON-618.app/Contents/MacOS/
-          cd dist && zip -r ton618-desktop-macos-amd64.zip TON-618.app/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ton618-desktop-macos-amd64
-          path: dist/ton618-desktop-macos-amd64.zip
-
   build-windows:
     name: Windows (ZIP)
     runs-on: windows-latest
