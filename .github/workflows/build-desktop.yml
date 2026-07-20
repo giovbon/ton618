@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-windows:
-    name: Windows (ZIP)
+    name: Windows (Instalador)
     runs-on: windows-latest
 
     steps:
@@ -20,9 +20,13 @@ jobs:
       - name: 🔧 Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: � Install templ
+      - name: 🔧 Install templ
         shell: bash
         run: go install github.com/a-h/templ/cmd/templ@latest
+
+      - name: 🔧 Install NSIS
+        shell: powershell
+        run: choco install nsis -y
 
       - name: 🔨 Build core-server
         shell: bash
@@ -32,19 +36,14 @@ jobs:
           go build -o core-server.exe ./cmd/server
           cp core-server.exe ../desktop/
 
-      - name: 🔨 Build desktop
+      - name: 🔨 Build desktop + instalador
+        shell: bash
         run: |
           cd desktop
-          wails build -platform windows/amd64
+          wails build -platform windows/amd64 -nsis
 
-      - name: 📦 Criar ZIP
-        run: |
-          mkdir dist -Force
-          Copy-Item desktop\build\bin\TON-618.exe dist\
-          Copy-Item desktop\core-server.exe dist\
-          Compress-Archive -Path dist\* -DestinationPath dist\ton618-desktop-windows-amd64.zip
-
-      - uses: actions/upload-artifact@v4
+      - name: 📦 Upload instalador
+        uses: actions/upload-artifact@v4
         with:
-          name: ton618-desktop-windows-amd64
-          path: dist/ton618-desktop-windows-amd64.zip
+          name: TON-618-Setup.exe
+          path: desktop/build/bin/*.exe
