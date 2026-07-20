@@ -1,0 +1,73 @@
+name: 🖥️ Build Desktop (Wails)
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            ext: ""
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: 🔧 Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: 🔨 Build core-server
+        run: |
+          cd core
+          go build -o core-server${{ matrix.ext }} ./cmd/server
+          cp core-server${{ matrix.ext }} ../desktop/
+
+      - name: 🔨 Build desktop (Wails)
+        run: |
+          cd desktop
+          wails build -platform "${{ matrix.goos }}/${{ matrix.goarch }}"
+
+      - name: 📦 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton618-desktop-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: desktop/build/bin/*
+
+      - name: 📦 Upload core-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: core/core-server${{ matrix.ext }}
+
+      - name: ✅ Summary
+        run: |
+          echo "## 🖥️ Desktop build concluído" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Plataforma** | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Core-server** | core/core-server${{ matrix.ext }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Desktop** | desktop/build/bin/TON-618${{ matrix.ext }} |" >> $GITHUB_STEP_SUMMARY
