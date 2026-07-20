@@ -1,5 +1,10 @@
 > Este documento deve ser atualizado sempre que uma decisão arquitetural significativa for tomada.
 > ⚠️ Qualquer IA que for modificar este projeto **deve** ler este documento primeiro.
+>
+> **Documentos complementares:**
+> - [`GLOSSARY.md`](GLOSSARY.md) — Nomes e responsabilidades de cada componente
+> - [`ADRS/`](ADRS/) — Registro cronológico de decisões (ADRs)
+>
 > Utilize o arquivo `repomix-output.xml` como referência rápida de código, a menos que consultas diretas aos arquivos do workspace por outras ferramentas (como busca textual ou leitura direta) sejam mais adequadas para a tarefa.
 
 # Decisões de Arquitetura — TON-618

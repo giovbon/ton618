@@ -1,6 +1,6 @@
 module ton618/core
 
-go 1.25.0
+go 1.26.3
 
 require (
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
@@ -30,4 +30,7 @@ require (
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+	ton618/commercial v0.0.0-00010101000000-000000000000 // indirect
 )
+
+replace ton618/commercial => ../pkg/commercial

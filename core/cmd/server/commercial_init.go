@@ -42,11 +42,6 @@ func init() {
 func setupMultiTenant(router *http.ServeMux, tenantsDir string) *middleware.TenantManager {
 	manager := middleware.NewTenantManager(tenantsDir)
 
-	// Aplica o middleware de tenant globalmente
-	handler := manager.Middleware(router)
-
-	// Substitui o handler padrão pelo handler com tenant
-	// (Na prática, isso é feito no router principal)
 	slog.Info("commercial: multi-tenant ativo", "tenantsDir", tenantsDir)
 
 	return manager

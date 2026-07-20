@@ -26,10 +26,10 @@ import (
 )
 
 var (
-	mu         sync.RWMutex
-	verifyKey  *rsa.PublicKey
-	license    *LicenseInfo
-	licensed   bool
+	mu        sync.RWMutex
+	verifyKey *rsa.PublicKey
+	license   *LicenseInfo
+	licensed  bool
 )
 
 // Planos disponíveis
@@ -41,16 +41,16 @@ const (
 
 // Features disponíveis
 const (
-	FeatureMultiUser    = "multi_user"
-	FeatureCloudSync    = "cloud_sync"
-	FeatureShareNotes   = "share_notes"
-	FeaturePublicAPI    = "public_api"
-	FeatureDesktop      = "desktop_app"
-	FeatureMobile       = "mobile_app"
-	FeatureTeam         = "team_collab"
-	FeatureAuditLog     = "audit_log"
-	FeatureWhiteLabel   = "white_label"
-	FeaturePriority     = "priority_support"
+	FeatureMultiUser  = "multi_user"
+	FeatureCloudSync  = "cloud_sync"
+	FeatureShareNotes = "share_notes"
+	FeaturePublicAPI  = "public_api"
+	FeatureDesktop    = "desktop_app"
+	FeatureMobile     = "mobile_app"
+	FeatureTeam       = "team_collab"
+	FeatureAuditLog   = "audit_log"
+	FeatureWhiteLabel = "white_label"
+	FeaturePriority   = "priority_support"
 )
 
 // FeatureTiers mapeia cada plano às suas features.
