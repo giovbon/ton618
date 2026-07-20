@@ -4,8 +4,9 @@
 // como processo filho e abre a WebView apontando para localhost:6180.
 //
 // Isso permite atualizar o core independentemente do desktop:
-//   git pull && cd core && go build -o core-server
-//   → substitui o binário, desktop continua funcionando
+//
+//	git pull && cd core && go build -o core-server
+//	→ substitui o binário, desktop continua funcionando
 package main
 
 import (
@@ -32,9 +33,9 @@ import (
 
 // App é o struct de binding exposto para o frontend Wails.
 type App struct {
-	ctx    context.Context
-	core   *exec.Cmd
-	port   int
+	ctx     context.Context
+	core    *exec.Cmd
+	port    int
 	dataDir string
 }
 
@@ -158,6 +159,7 @@ func (a *App) startCore() error {
 			fmt.Sprintf("DOCS_DIR=%s", a.dataDir),
 		)
 	} else {
+		a.core = exec.Command(binary)
 		a.core.Env = append(os.Environ(),
 			fmt.Sprintf("PORT=%d", a.port),
 			fmt.Sprintf("DB_PATH=%s/ton618.db", a.dataDir),
@@ -165,6 +167,9 @@ func (a *App) startCore() error {
 			fmt.Sprintf("DOCS_DIR=%s", a.dataDir),
 		)
 	}
+
+	a.core.Stdout = os.Stdout
+	a.core.Stderr = os.Stderr
 
 	if err := a.core.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar core-server: %w", err)
@@ -307,10 +312,10 @@ func (a *App) CheckUpdate() (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"hasUpdate":    hasUpdate,
-		"latestVersion": release.TagName,
+		"hasUpdate":      hasUpdate,
+		"latestVersion":  release.TagName,
 		"currentVersion": current,
-		"downloadURL":  downloadURL,
+		"downloadURL":    downloadURL,
 	}, nil
 }
 
