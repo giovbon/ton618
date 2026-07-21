@@ -5,7 +5,7 @@ on:
     tags:
       - "v*"
     branches:
-      - disable
+      - main
 
   workflow_dispatch:
     inputs:
