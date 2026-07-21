@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"ton618/core/internal/core/config"
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/core/services"
+	"ton618/core/internal/core/staticver"
 	"ton618/core/internal/features/appointments"
 	"ton618/core/internal/features/embeddings"
 	"ton618/core/internal/features/notes"
@@ -117,66 +117,14 @@ func main() {
 	r.Use(middleware.WithRequestContext) // propaga contexto HTTP para cancelamento de queries
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
-	// Arquivos estáticos (com suporte a arquivos pré-comprimidos Gzip/Brotli)
+	// Arquivos estáticos com ETag automático (cache-buster via hash do conteúdo)
 	staticDir := filepath.Join(cfg.WebDir, "static")
-	staticFS := http.FileServer(http.Dir(staticDir))
-	r.Handle("/static/*", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Cache control
-		if req.URL.Query().Get("v") != "" {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
-			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-		}
-
-		filePath := filepath.Clean(req.URL.Path)
-		if strings.HasPrefix(filePath, "/") {
-			filePath = filePath[1:]
-		}
-		fullPath := filepath.Join(staticDir, filePath)
-
-		// Evita processar diretórios para compressão
-		if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
-			staticFS.ServeHTTP(w, req)
-			return
-		}
-
-		acceptEncoding := req.Header.Get("Accept-Encoding")
-
-		// 1. Tenta servir Brotli (.br)
-		if strings.Contains(acceptEncoding, "br") {
-			brPath := fullPath + ".br"
-			if _, err := os.Stat(brPath); err == nil {
-				w.Header().Set("Content-Encoding", "br")
-				ext := filepath.Ext(filePath)
-				contentType := mime.TypeByExtension(ext)
-				if contentType == "" {
-					contentType = "application/octet-stream"
-				}
-				w.Header().Set("Content-Type", contentType)
-				http.ServeFile(w, req, brPath)
-				return
-			}
-		}
-
-		// 2. Tenta servir Gzip (.gz)
-		if strings.Contains(acceptEncoding, "gzip") {
-			gzPath := fullPath + ".gz"
-			if _, err := os.Stat(gzPath); err == nil {
-				w.Header().Set("Content-Encoding", "gzip")
-				ext := filepath.Ext(filePath)
-				contentType := mime.TypeByExtension(ext)
-				if contentType == "" {
-					contentType = "application/octet-stream"
-				}
-				w.Header().Set("Content-Type", contentType)
-				http.ServeFile(w, req, gzPath)
-				return
-			}
-		}
-
-		// 3. Fallback: serve arquivo não comprimido
-		staticFS.ServeHTTP(w, req)
-	})))
+	staticCache, err := staticver.NewCache(staticDir)
+	if err != nil {
+		slog.Warn("staticver: erro ao inicializar cache (usando fallback)", "error", err)
+	}
+	// Monta o handler com ETags automáticos
+	r.Handle("/static/*", http.StripPrefix("/static/", staticCache.Handler(staticDir)))
 
 	// Protege as rotas dinâmicas com BasicAuth
 	r.Group(func(r chi.Router) {
