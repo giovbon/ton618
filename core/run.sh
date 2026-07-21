@@ -26,7 +26,7 @@ fi
 # Padrões seguros para variáveis obrigatórias
 PORT="${PORT:-6180}"
 DATA_DIR="${DATA_DIR:-$BASE_DIR/data}"
-DOCS_DIR="${DOCS_DIR:-$BASE_DIR/documents}" # Fallback caso não esteja no .env
+DOCS_DIR="${DOCS_DIR:-$BASE_DIR/docs}" # Fallback caso não esteja no .env
 DB_PATH="${DB_PATH:-$DATA_DIR/ton618.db}"
 EMBEDDING_ALL="${EMBEDDING_ALL:-false}"
 

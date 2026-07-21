@@ -1,13 +1,13 @@
+# --- Go Build ---
 ton618
 server
-!cmd/server/
-!cmd/server/main.go
 *.exe
 *.test
 *.out
 *.test-output
 /tmp/
 
+# --- Local Data ---
 documents/
 data/
 docs/
@@ -15,13 +15,18 @@ docs/
 state/
 *.bleve/
 
+# --- Dependencies ---
 node_modules/
+
+# --- Environment ---
 .env
 .env.local
 .env.prod
 
+# --- AI Models ---
 ollama_data/
 
+# --- IDEs / OS ---
 .vscode/
 .idea/
 *.swp
@@ -29,7 +34,6 @@ ollama_data/
 *~
 *.bak
 .vim/
-
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -40,10 +44,10 @@ Nul
 .Spotlight-V100
 .Trashes
 
+# --- Workspace ---
 go.work
 go.work.sum
 /vendor/
-.env
 repomix-output.xml
 *.log
 coverage.out

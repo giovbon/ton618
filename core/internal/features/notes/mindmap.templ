@@ -376,6 +376,9 @@ templ mindmapContent(data domain.EditorData) {
         const jar = CodeJar(editorEl, highlight, { tab: "  " });
         EditorCommon.setupCodeJarActiveLine(editorEl);
 
+        // Aplica highlight no conteúdo inicial (CodeJar não faz isso automático)
+        highlight(editorEl);
+
         function setStatus(s) {
             currentStatus = s;
             EditorCommon.setStatus(statusEl, s);

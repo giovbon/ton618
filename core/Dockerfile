@@ -66,16 +66,13 @@ RUN adduser -D -h /app appuser
 WORKDIR /app
 
 COPY --from=builder /ton618 .
-COPY entrypoint.sh .
-
 # Otimização: Copia estritamente a pasta static compilada e os metadados.
 # Isso impede que o node_modules de desenvolvimento infle os 271 MB da imagem.
 RUN mkdir -p /app/web/static
 COPY --from=builder /app/web/static /app/web/static
 COPY --from=builder /app/web/package.json /app/web/package.json
-COPY --from=builder /app/entrypoint.sh .
 
-RUN mkdir -p /app/docs /app/data && chmod 777 /app/docs /app/data && chmod +x /app/entrypoint.sh
+RUN mkdir -p /app/docs /app/data && chmod 777 /app/docs /app/data
 
 VOLUME ["/app/docs", "/app/data"]
 
@@ -90,4 +87,4 @@ ENV DOCS_DIR=/app/docs \
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:6180/api/health || exit 1
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD chmod -R 777 /app/data /app/docs 2>/dev/null || true && exec ./ton618

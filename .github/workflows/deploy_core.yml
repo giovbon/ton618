@@ -1,4 +1,4 @@
-name: Deploy do Core no Docker Hub (SelfHosted)
+name: Deploy do Core no Docker Hub
 
 on:
   push:
