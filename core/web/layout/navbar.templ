@@ -1,5 +1,7 @@
 package layout
 
+import "ton618/core/internal/ui/icons"
+
 templ Navbar() {
     <nav x-data="{ mobileMenuOpen: false }" class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
@@ -63,7 +65,7 @@ templ Navbar() {
                     <button id="criar-btn"
                         @click="open = !open"
                         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                        @icons.Icon("plus", "w-3.5 h-3.5")
                         Criar
                     </button>
                     <div id="criar-menu"
@@ -71,31 +73,31 @@ templ Navbar() {
                         class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
                         <a href="/editor" @click="open = false"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📄 <span>+ Nota</span>
+                            @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota")) <span>+ Nota</span>
                         </a>
                         <a href="/spreadsheet"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📊 <span>+ Planilha</span>
+                            @icons.Icon(icons.GetIcon("planilha"), "w-4 h-4 " + icons.GetColor("planilha")) <span>+ Planilha</span>
                         </a>
                         <a href="/drawing"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            🎨 <span>+ Desenho</span>
+                            @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho")) <span>+ Desenho</span>
                         </a>
                         <a href="/typst"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            📘 <span>+ Typst</span>
+                            @icons.Icon(icons.GetIcon("typst"), "w-4 h-4 " + icons.GetColor("typst")) <span>+ Typst</span>
                         </a>
                         <a href="/mermaid"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            🧜‍♀️ <span>+ Mermaid</span>
+                            @icons.Icon(icons.GetIcon("mermaid"), "w-4 h-4 " + icons.GetColor("mermaid")) <span>+ Mermaid</span>
                         </a>
                         <a href="/mindmap"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            🔱 <span>+ Markmap</span>
+                            @icons.Icon(icons.GetIcon("mindmap"), "w-4 h-4 " + icons.GetColor("mindmap")) <span>+ Markmap</span>
                         </a>
                         <a href="/map"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            🗺️ <span>+ Mapa</span>
+                            @icons.Icon(icons.GetIcon("mapa"), "w-4 h-4 " + icons.GetColor("mapa")) <span>+ Mapa</span>
                         </a>
                     </div>
                 </div>
@@ -105,7 +107,7 @@ templ Navbar() {
                     <button id="captura-btn"
                         @click="open = !open"
                         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        @icons.Icon(icons.GetIcon("captura"), "w-3.5 h-3.5 " + icons.GetColor("captura"))
                         Captura
                     </button>
                     <div id="captura-menu"
@@ -113,37 +115,49 @@ templ Navbar() {
                         class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
                         <a href="#" id="pdf-upload-link" @click.prevent="open = false; document.getElementById('pdf-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
-                            📕 <span>Upload PDF</span>
+                            @icons.Icon(icons.GetIcon("pdf"), "w-4 h-4 " + icons.GetColor("pdf")) <span>Upload PDF</span>
                         </a>
                         <a href="#" id="epub-upload-link" @click.prevent="open = false; document.getElementById('epub-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
-                            📒 <span>Upload EPUB</span>
+                            @icons.Icon(icons.GetIcon("epub"), "w-4 h-4 " + icons.GetColor("epub")) <span>Upload EPUB</span>
                         </a>
                         <a href="#" id="zip-upload-link" @click.prevent="open = false; document.getElementById('zip-file-input').click();"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
-                            📦 <span>Upload Anexo</span>
+                            @icons.Icon(icons.GetIcon("anexo"), "w-4 h-4 " + icons.GetColor("anexo")) <span>Upload Anexo</span>
                         </a>
                         <a href="#" id="capture-link" @click.prevent="open = false; promptCapture($el);"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
-                            🌐 <span>Web Capture</span>
+                            @icons.Icon(icons.GetIcon("captura"), "w-4 h-4 " + icons.GetColor("captura")) <span>Web Capture</span>
                         </a>
                     </div>
                 </div>
 
                 <!-- Nav links — icon + label only for key destinations -->
                 <a id="nav-agenda" href="/agenda"
-                    class="text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">📅 Agenda</a>
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">
+                    @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4") Agenda
+                </a>
                 <a id="nav-todos" href="/todos"
-                    class="text-zinc-400 hover:text-amber-400 transition-colors" title="Task">🚧 Task</a>
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
+                    @icons.Icon(icons.GetIcon("task"), "w-4 h-4") Task
+                </a>
                 <a id="nav-database" href="/database"
-                    class="text-zinc-400 hover:text-white transition-colors" title="Tabulator">🗃️ Tabulator</a>
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors" title="Tabulator">
+                    @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4") Tabulator
+                </a>
 
-                <!-- Utility icons (icon only + tooltip) -->
-                <a href="/help" class="text-zinc-500 hover:text-sky-400 transition-colors text-base" title="Ajuda">❓</a>
+                <!-- Utility icons (cinza conforme especificado) -->
+                <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Ajuda">
+                    @icons.Icon(icons.GetIcon("ajuda"), "w-4 h-4 " + icons.GetColor("ajuda"))
+                </a>
                 <button @click="$store.settings.openTab('arquivamento')"
-                    class="text-zinc-500 hover:text-white transition-colors cursor-pointer text-base" title="Configurações">⚙️</button>
+                    class="text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Configurações">
+                    @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
+                </button>
                 <button onclick="logout()"
-                    class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer text-base" title="Sair">➜]</button>
+                    class="text-zinc-400 hover:text-red-400 transition-colors cursor-pointer" title="Sair">
+                    @icons.Icon(icons.GetIcon("sair"), "w-4 h-4 " + icons.GetColor("sair"))
+                </button>
             </div>
             <button id="mobile-menu-toggle" @click="mobileMenuOpen = !mobileMenuOpen"
                 class="md:hidden text-zinc-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
@@ -163,38 +177,38 @@ templ Navbar() {
                 <div class="grid grid-cols-2 gap-1.5">
                     <a href="/editor" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📄</span>
+                        @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ Nota</span>
                     </a>
                     <a href="/spreadsheet"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📊</span>
-                        <span class="text-[11px] font-semibold text-emerald-400/90">+ Planilha</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("planilha"), "w-4 h-4 " + icons.GetColor("planilha"))
+                        <span class="text-[11px] font-semibold text-sky-400/90">+ Planilha</span>
                     </a>
                     <a href="/drawing"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">🎨</span>
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Desenho</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-pink-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho"))
+                        <span class="text-[11px] font-semibold text-pink-400/90">+ Desenho</span>
                     </a>
                     <a href="/typst"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📘</span>
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Typst</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-cyan-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("typst"), "w-4 h-4 " + icons.GetColor("typst"))
+                        <span class="text-[11px] font-semibold text-cyan-400/90">+ Typst</span>
                     </a>
                     <a href="/mermaid"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">🧜‍♀️</span>
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Mermaid</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-purple-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("mermaid"), "w-4 h-4 " + icons.GetColor("mermaid"))
+                        <span class="text-[11px] font-semibold text-purple-400/90">+ Mermaid</span>
                     </a>
                     <a href="/mindmap"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">🔱</span>
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Markmap</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("mindmap"), "w-4 h-4 " + icons.GetColor("mindmap"))
+                        <span class="text-[11px] font-semibold text-emerald-400/90">+ Markmap</span>
                     </a>
                     <a href="/map"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        <span class="text-sm">🗺️</span>
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Mapa</span>
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-orange-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("mapa"), "w-4 h-4 " + icons.GetColor("mapa"))
+                        <span class="text-[11px] font-semibold text-orange-400/90">+ Mapa</span>
                     </a>
                 </div>
             </div>
@@ -205,22 +219,22 @@ templ Navbar() {
                 <div class="grid grid-cols-3 gap-1.5">
                     <a href="#" id="mobile-pdf-link" @click.prevent="mobileMenuOpen = false; document.getElementById('pdf-file-input').click();"
                         class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📕</span>
+                        @icons.Icon(icons.GetIcon("pdf"), "w-4 h-4 " + icons.GetColor("pdf"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ PDF</span>
                     </a>
                     <a href="#" id="mobile-epub-link" @click.prevent="mobileMenuOpen = false; document.getElementById('epub-file-input').click();"
                         class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📒</span>
+                        @icons.Icon(icons.GetIcon("epub"), "w-4 h-4 " + icons.GetColor("epub"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ EPUB</span>
                     </a>
                     <a href="#" id="mobile-zip-link" @click.prevent="mobileMenuOpen = false; document.getElementById('zip-file-input').click();"
                         class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
-                        <span class="text-sm">📦</span>
+                        @icons.Icon(icons.GetIcon("anexo"), "w-4 h-4 " + icons.GetColor("anexo"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
                     </a>
                     <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture($el);"
                         class="col-span-3 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
-                        <span class="text-sm">🌐</span>
+                        @icons.Icon(icons.GetIcon("captura"), "w-4 h-4 " + icons.GetColor("captura"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>
                     </button>
                 </div>
@@ -232,39 +246,39 @@ templ Navbar() {
                 <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
                     <a id="mobile-nav-agenda" href="/agenda" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
-                        <span class="text-sm">📅</span>
+                        @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4")
                         <span class="text-[11px] font-bold tracking-wider">AGENDA</span>
                     </a>
                     
                     <a id="mobile-nav-todos" href="/todos" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
-                        <span class="text-sm">🚧</span>
+                        @icons.Icon(icons.GetIcon("task"), "w-4 h-4")
                         <span class="text-[11px] font-bold tracking-wider">TASK</span>
                     </a>
                     
                     <a id="mobile-nav-database" href="/database" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors">
-                        <span class="text-sm">🗃️</span>
+                        @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4")
                         <span class="text-[11px] font-bold tracking-wider">TABULATOR</span>
                     </a>
 
                     <a href="/help" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
-                        <span class="text-sm">📖</span>
+                        @icons.Icon(icons.GetIcon("ajuda"), "w-4 h-4 " + icons.GetColor("ajuda"))
                         <span class="text-[11px] font-bold tracking-wider">TUTORIAL</span>
                     </a>
 
                     <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
                         class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">
-                        <span class="text-sm">⚙️</span>
+                        @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
                         <span class="text-[11px] font-bold tracking-wider">CONFIGURAÇÕES</span>
                     </button>
                     
                     <div class="border-t border-zinc-800/80 my-1"></div>
                     
                     <button @click="mobileMenuOpen = false; logout()"
-                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900/50 transition-colors text-left font-bold">
-                        <span class="text-sm">➜]</span>
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        @icons.Icon(icons.GetIcon("sair"), "w-4 h-4 " + icons.GetColor("sair"))
                         <span class="text-[11px] font-bold tracking-wider">SAIR</span>
                     </button>
                 </div>

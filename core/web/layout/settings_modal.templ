@@ -1,5 +1,7 @@
 package layout
 
+import "ton618/core/internal/ui/icons"
+
 templ SettingsModal() {
     <!-- Settings Modal -->
     <div id="settings-modal" x-data x-show="$store.settings.open" x-cloak
@@ -8,8 +10,8 @@ templ SettingsModal() {
             class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl md:max-w-3xl mx-4 max-h-[85vh] md:h-[620px] flex flex-col">
             <!-- Header -->
             <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-                <h2 class="text-base font-bold text-zinc-200">
-                    ⚙️ Configurações
+                <h2 class="text-base font-bold text-zinc-200 flex items-center gap-2">
+                    @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config")) Configurações
                 </h2>
                 <button @click="$store.settings.close()"
                     class="text-zinc-500 hover:text-white transition-colors text-xl leading-none">
@@ -25,37 +27,37 @@ templ SettingsModal() {
                     <button @click="$store.settings.openTab('arquivamento')"
                         :class="$store.settings.activeTab === 'arquivamento' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        🗂️ Arquivamento
+                        @icons.Icon("archive", "w-4 h-4 text-amber-400") Arquivamento
                     </button>
                     <button @click="$store.settings.openTab('restaurar')"
                         :class="$store.settings.activeTab === 'restaurar' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        📦 Restaurar
+                        @icons.Icon("package", "w-4 h-4 text-sky-400") Restaurar
                     </button>
                     <button @click="$store.settings.openTab('backup')"
                         :class="$store.settings.activeTab === 'backup' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        💾 Backup
+                        @icons.Icon("database", "w-4 h-4 text-emerald-400") Backup
                     </button>
                     <button @click="$store.settings.openTab('marcadores')"
                         :class="$store.settings.activeTab === 'marcadores' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        🔖 Marcadores
+                        @icons.Icon("pin", "w-4 h-4 text-purple-400") Marcadores
                     </button>
                     <button @click="$store.settings.openTab('agenda')"
                         :class="$store.settings.activeTab === 'agenda' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        📅 Agenda
+                        @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 text-cyan-400") Agenda
                     </button>
                     <button @click="$store.settings.openTab('ntfy')"
                         :class="$store.settings.activeTab === 'ntfy' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        🔔 Ntfy
+                        @icons.Icon("bell", "w-4 h-4 text-rose-400") Ntfy
                     </button>
                     <button @click="$store.settings.openTab('semantica')"
                         :class="$store.settings.activeTab === 'semantica' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
-                        🧠 Semântica
+                        @icons.Icon("sparkles", "w-4 h-4 text-violet-400") Semântica
                     </button>
                 </div>
 

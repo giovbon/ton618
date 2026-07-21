@@ -1,9 +1,9 @@
 package notes
 
-import "ton618/core/internal/core/domain"
-
 import (
     "strings"
+    "ton618/core/internal/core/domain"
+    "ton618/core/internal/ui/icons"
 )
 
 templ SidebarTree(notes []domain.NoteItem, query string) {
@@ -21,11 +21,16 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
 }
 
 templ SidebarNoteItem(n domain.NoteItem, query string) {
+    {{
+        iconName := getNoteIcon(n.Arquivo, n.Type, n.Tags)
+        iconColor := domain.NoteIconColor(iconName)
+    }}
     <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-sky-500/30 hover:bg-sky-950/10 transition-all duration-300 group">
         <div class="flex-1 min-w-0">
             <a href={ templ.SafeURL(getNoteLink(n)) } target={ getTarget(n.Arquivo) } class="block">
-                <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate block">
-                    <span class="mr-1.5">{ getNoteIcon(n.Arquivo, n.Type, n.Tags) }</span>@highlightText(getFilename(n.Arquivo), query)
+                <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate flex items-center gap-1.5">
+                    @icons.Icon(iconName, "w-4 h-4 shrink-0 " + iconColor)
+                    @highlightText(getFilename(n.Arquivo), query)
                 </span>
             </a>
         </div>
@@ -40,12 +45,12 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
         
         <button type="button" 
             onclick={ promptRename(n.Arquivo, getFilename(n.Arquivo)) }
-            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 px-1 py-0.5 rounded-md hover:bg-zinc-900/60 text-xs max-sm:text-lg max-sm:px-2 max-sm:py-1" title="Editar título">
-            ✎
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1 rounded-md hover:bg-zinc-900/60" title="Editar título">
+            @icons.Icon("edit-3", "w-3.5 h-3.5")
         </button>
         <button type="button" hx-post="/api/notes/delete" hx-vals={ `{"filename": "` + n.Arquivo + `"}` } hx-target="#sidebar-tree" hx-swap="none" hx-confirm={ "Excluir " + n.Arquivo + "?" } 
-            class="text-zinc-600 hover:text-red-400 text-sm font-semibold transition-colors shrink-0 px-2 py-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">
-            ✕
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">
+            @icons.Icon("trash-2", "w-3.5 h-3.5")
         </button>
     </div>
 }
@@ -87,81 +92,14 @@ func getTarget(path string) string {
 }
 
 func getNoteIcon(path string, noteType string, tags []string) string {
-    if noteType == string(domain.NoteTypeEPUB) || strings.HasSuffix(strings.ToLower(path), ".epub") {
-        return "📒"
-    } else if noteType == string(domain.NoteTypePDF) || strings.HasPrefix(path, "pdfs/") {
-        return "📕"
-    } else if noteType == string(domain.NoteTypeArchive) || strings.HasPrefix(path, "archives/") {
-        return "💾"
-    } else if noteType == string(domain.NoteTypeAttachment) || strings.HasPrefix(path, "attachments/") {
-        return "📦"
-    }
-    
-    switch noteType {
-    case "planilha", "spreadsheet":
-        return "📊"
-    case "desenho", "drawing":
-        return "🎨"
-    case "typst":
-        return "📘"
-    case "mermaid":
-        return "🧜"
-    case "mindmap", "markmap":
-        return "🔱"
-    case "map", "mapa":
-        return "🗺️"
-    case "youtube":
-        return "🎬"
-    case "artigo", "article":
-        return "📰"
-    case "captura", "capture":
-        return "🌐"
-    }
-    
-    for _, t := range tags {
-        switch strings.ToLower(t) {
-        case "spreadsheet": return "📊"
-        case "drawing": return "🎨"
-        case "typst": return "📘"
-        case "mermaid": return "🧜"
-        case "mindmap", "markmap": return "🔱"
-        case "map", "mapa": return "🗺️"
-        case "youtube": return "🎬"
-        case "artigo", "article": return "📰"
-        case "captura", "capture": return "🌐"
-        }
-    }
-    return "📄"
+    return icons.GetIcon(noteType)
 }
 
 func getDisplayType(n domain.NoteItem) string {
-    if strings.HasSuffix(strings.ToLower(n.Arquivo), ".epub") {
-        return "epub"
-    }
-    if n.Type != "" {
+    if n.Type != "" && n.Type != "nota" {
         return n.Type
     }
-    // Basic heuristics since n.Type isn't in NoteItem, relying on tags/path
-    if strings.HasPrefix(n.Arquivo, "pdfs/") {
-        return "pdf"
-    }
-    for _, t := range n.Tags {
-        lowerT := strings.ToLower(t)
-        if lowerT == "spreadsheet" || lowerT == "planilha" {
-            return "planilha"
-        } else if lowerT == "drawing" || lowerT == "desenho" {
-            return "desenho"
-        } else if lowerT == "typst" {
-            return "typst"
-        } else if lowerT == "mermaid" {
-            return "mermaid"
-        } else if lowerT == "mindmap" || lowerT == "markmap" {
-            return "markmap"
-        } else if lowerT == "map" || lowerT == "mapa" {
-            return "mapa"
-        }
-    }
-    return "nota"
+    return string(domain.DetectNoteType(n.Tags, "", n.Arquivo))
 }
 
 func getVisibleTags(tags []string) []string {

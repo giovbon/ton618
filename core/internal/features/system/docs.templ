@@ -1,6 +1,7 @@
 package system
 
 import "ton618/core/web/layout"
+import "ton618/core/internal/ui/icons"
 
 templ Docs(title string) {
     @layout.Layout(title, false, helpContent())
@@ -9,7 +10,7 @@ templ Docs(title string) {
 templ helpContent() {
 <div class="max-w-3xl mx-auto">
     <div class="flex items-center gap-3 mb-6">
-        <span class="text-2xl">📖</span>
+        @icons.Icon("book-open", "w-6 h-6 text-sky-400")
         <h1 class="text-xl font-black tracking-tight text-zinc-200">
             Documentação — TON-618
         </h1>
@@ -20,7 +21,9 @@ templ helpContent() {
         id="help-toc"
         class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 mb-8"
     >
-        <h2 class="text-sm font-bold text-zinc-300 mb-3">📑 Índice</h2>
+        <h2 class="text-sm font-bold text-zinc-300 mb-3 flex items-center gap-2">
+            @icons.Icon("file-text", "w-4 h-4 text-zinc-400") Índice
+        </h2>
         <div id="toc-list" class="space-y-1"></div>
     </div>
 

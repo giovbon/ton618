@@ -2,6 +2,7 @@ package notes
 
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/ui/icons"
 
 templ Typst(data domain.EditorData) {
     @layout.Layout(data.Title, false, typstContent(data))
@@ -95,10 +96,10 @@ templ typstContent(data domain.EditorData) {
         <button
             id="compile-btn"
             onclick="triggerCompile()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Compilar Visualização (Alt+Enter)"
         >
-            ⚡
+            @icons.Icon("sparkles", "w-4 h-4")
         </button>
 
         <!-- Botão Toggle Preview -->
@@ -108,40 +109,40 @@ templ typstContent(data domain.EditorData) {
             class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 flex items-center gap-1"
             title="Alternar Visualização (Preview)"
         >
-            <span>👁️</span> Preview
+            @icons.Icon("file-text", "w-3.5 h-3.5") Preview
         </button>
 
         <button
             id="save-btn"
             onclick="saveTypst()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Salvar (Ctrl+S)"
         >
-            💾
+            @icons.Icon("archive", "w-4 h-4")
         </button>
         <button
             id="pdf-download-btn"
             onclick="downloadPDF()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 flex items-center gap-1"
             title="Baixar PDF"
         >
-            📥 PDF
+            @icons.Icon("book-open", "w-3.5 h-3.5") PDF
         </button>
         <button
             id="duplicate-editor-btn"
             onclick="duplicateCurrentNote()"
-            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Duplicar esta nota"
         >
-            ⧉
+            @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
         </button>
         <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
-            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Excluir esta nota"
         >
-            🗑️
+            @icons.Icon(icons.GetIcon("excluir"), "w-4 h-4 " + icons.GetColor("excluir"))
         </button>
     </div>
 

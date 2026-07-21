@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	"ton618/core/internal/core/domain"
+	"ton618/core/internal/ui/icons"
 )
 
 type WeekGroup struct {
@@ -108,8 +109,12 @@ templ AgendaItem(app domain.Appointment) {
 
 		<!-- Ações -->
 		<div class="flex items-center gap-1 shrink-0 order-4 ml-auto md:ml-0">
-			<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors text-sm md:text-xs" title="Editar" data-id={ app.ID } data-desc={ app.Description }>✎</button>
-			<button class="del-btn text-zinc-500 hover:text-red-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors text-sm md:text-xs" title="Excluir" data-id={ app.ID }>✕</button>
+			<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors" title="Editar" data-id={ app.ID } data-desc={ app.Description }>
+				@icons.Icon("edit-3", "w-3.5 h-3.5")
+			</button>
+			<button class="del-btn text-zinc-500 hover:text-red-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors" title="Excluir" data-id={ app.ID }>
+				@icons.Icon("x", "w-3.5 h-3.5")
+			</button>
 		</div>
 	</div>
 }

@@ -28,9 +28,17 @@ SELECT COUNT(*) FROM notes WHERE filename = ?;
 -- name: GetNotesNeedingMarkmapTag :many
 SELECT n.filename
 FROM notes n
-WHERE (n.content LIKE '%type: markmap%' OR n.content LIKE '%type: mindmap%')
+WHERE (
+    n.content LIKE '%markmap%' OR n.content LIKE '%mindmap%'
+    OR n.content LIKE '%drawing%' OR n.content LIKE '%desenho%'
+    OR n.content LIKE '%spreadsheet%' OR n.content LIKE '%planilha%'
+    OR n.content LIKE '%typst%'
+    OR n.content LIKE '%mermaid%'
+    OR n.content LIKE '%mapa%' OR n.content LIKE '%/map%'
+    OR n.filename LIKE '%mindmap%' OR n.filename LIKE '%markmap%'
+)
   AND n.filename NOT IN (
-      SELECT arquivo FROM tags WHERE tag IN ('markmap', 'mindmap')
+      SELECT arquivo FROM tags WHERE tag IN ('markmap', 'mindmap', 'drawing', 'spreadsheet', 'typst', 'mermaid', 'map', 'mapa')
   );
 
 -- name: GetAllNotesContent :many

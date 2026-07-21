@@ -2,6 +2,7 @@ package notes
 
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/ui/icons"
 
 templ Mindmap(data domain.EditorData) {
     @layout.Layout(data.Title, false, mindmapContent(data))
@@ -24,26 +25,26 @@ templ mindmapContent(data domain.EditorData) {
         <button
             id="save-btn"
             onclick="saveMindmap()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-lg px-1 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Salvar (Ctrl+S)"
         >
-            💾
+            @icons.Icon(icons.GetIcon("arquivar"), "w-4 h-4 " + icons.GetColor("arquivar"))
         </button>
         <button
             id="duplicate-editor-btn"
             onclick="duplicateCurrentNote()"
-            class="text-zinc-700 hover:text-sky-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Duplicar esta nota"
         >
-            ⧉
+            @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
         </button>
         <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
-            class="text-zinc-700 hover:text-red-400 transition-colors shrink-0 text-lg px-1.5 py-0.5 rounded-md hover:bg-zinc-900/60"
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Excluir esta nota"
         >
-            🗑️
+            @icons.Icon(icons.GetIcon("excluir"), "w-4 h-4 " + icons.GetColor("excluir"))
         </button>
     </div>
 
@@ -69,7 +70,7 @@ templ mindmapContent(data domain.EditorData) {
                     class="bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-all p-2 rounded-lg cursor-pointer flex items-center justify-center w-8 h-8 text-xs font-bold"
                     title="Ajustar Mapa à Tela"
                 >
-                    🔍
+                    @icons.Icon("search", "w-3.5 h-3.5")
                 </button>
             </div>
             <svg id="mindmap-svg" class="w-full h-full text-zinc-100" style="background-color: #09090b; cursor: grab;"></svg>

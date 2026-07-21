@@ -275,4 +275,7 @@ Regra para Notas Longas: Se a nota que você está editando for longa (≥ 3 chu
 Ordenação: As top 5 notas relacionadas são ordenadas por frequência de matches (notas mais consistentes ao longo do texto vêm primeiro) e depois por proximidade vetorial (distância).
 Nota de Corte (Threshold): Descarta qualquer resultado abaixo do percentual configurado por você (padrão de 72%).
 
-[HELP do sistema](internal/features/system/help.md)
+[HELP do sistema](core/internal/features/system/help.md)
+[Definição dos iccones da aplicação](/core/internal/ui/icons/config.go)
+
+https://lucide.dev/icons/

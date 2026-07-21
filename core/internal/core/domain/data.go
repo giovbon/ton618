@@ -2,6 +2,7 @@ package domain
 
 import (
 	"strings"
+	"ton618/core/internal/ui/icons"
 )
 
 // ── NoteType ──
@@ -64,10 +65,10 @@ func (t NoteType) EditorRoute() string {
 func DetectNoteType(tags []string, content, arquivo string) NoteType {
 	// 1. Tags têm prioridade máxima (são explicitamente definidas pelo usuário/editor)
 	for _, t := range tags {
-		switch strings.ToLower(t) {
-		case "drawing":
+		switch strings.ToLower(strings.TrimSpace(t)) {
+		case "drawing", "desenho":
 			return NoteTypeDrawing
-		case "spreadsheet":
+		case "spreadsheet", "planilha":
 			return NoteTypeSpreadsheet
 		case "typst":
 			return NoteTypeTypst
@@ -100,32 +101,49 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 		return NoteTypeEPUB
 	}
 
-	// 3. Conteúdo frontmatter (type: X)
-	if strings.Contains(content, "type: drawing") {
-		return NoteTypeDrawing
-	}
-	if strings.Contains(content, "type: spreadsheet") {
-		return NoteTypeSpreadsheet
-	}
-	if strings.Contains(content, "type: typst") {
-		return NoteTypeTypst
-	}
-	if strings.Contains(content, "type: mermaid") {
-		return NoteTypeMermaid
-	}
-	if strings.Contains(content, "type: mindmap") || strings.Contains(content, "type: markmap") {
-		return NoteTypeMindmap
-	}
-	if strings.Contains(content, "type: map") || strings.Contains(content, "type: mapa") {
-		return NoteTypeMap
+	// 3. Conteúdo frontmatter (type: X ou marcas de código)
+	if content != "" {
+		lowerContent := strings.ToLower(content)
+		if strings.Contains(lowerContent, "type: drawing") || strings.Contains(lowerContent, "type: desenho") {
+			return NoteTypeDrawing
+		}
+		if strings.Contains(lowerContent, "type: spreadsheet") || strings.Contains(lowerContent, "type: planilha") {
+			return NoteTypeSpreadsheet
+		}
+		if strings.Contains(lowerContent, "type: typst") {
+			return NoteTypeTypst
+		}
+		if strings.Contains(lowerContent, "type: mermaid") || strings.Contains(lowerContent, "```mermaid") {
+			return NoteTypeMermaid
+		}
+		if strings.Contains(lowerContent, "type: mindmap") || strings.Contains(lowerContent, "type: markmap") ||
+			strings.Contains(lowerContent, "```markmap") || strings.Contains(lowerContent, "--- markmap") ||
+			strings.Contains(lowerContent, "# markmap") || strings.Contains(lowerContent, "# mindmap") {
+			return NoteTypeMindmap
+		}
+		if strings.Contains(lowerContent, "type: map") || strings.Contains(lowerContent, "type: mapa") {
+			return NoteTypeMap
+		}
 	}
 
-	// 4. Nome de arquivo como última heurística
+	// 4. Nome de arquivo como heurística adicional
 	lowerFile := strings.ToLower(arquivo)
 	if strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
 		return NoteTypeMindmap
 	}
-	if strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") {
+	if strings.Contains(lowerFile, "drawing") || strings.Contains(lowerFile, "desenho") {
+		return NoteTypeDrawing
+	}
+	if strings.Contains(lowerFile, "spreadsheet") || strings.Contains(lowerFile, "planilha") {
+		return NoteTypeSpreadsheet
+	}
+	if strings.Contains(lowerFile, "typst") {
+		return NoteTypeTypst
+	}
+	if strings.Contains(lowerFile, "mermaid") {
+		return NoteTypeMermaid
+	}
+	if strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") || strings.Contains(lowerFile, "map-") {
 		return NoteTypeMap
 	}
 
@@ -175,36 +193,13 @@ func DisplayName(name string) string {
 // AllowedFilePrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
 var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/", "epubs/"}
 
-// NoteIcon retorna o emoji correspondente ao tipo de nota.
+// NoteIcon retorna o nome do ícone Lucide correspondente ao tipo de nota vindo do mapa de configuração centralizado.
 func NoteIcon(arquivo string, tags []string) string {
-	switch DetectNoteType(tags, "", arquivo) {
-	case NoteTypePDF:
-		return "📕"
-	case NoteTypeEPUB:
-		return "📒"
-	case NoteTypeTypst:
-		return "📘"
-	case NoteTypeDrawing:
-		return "🎨"
-	case NoteTypeSpreadsheet:
-		return "📊"
-	case NoteTypeMermaid:
-		return "🧜"
-	case NoteTypeMindmap:
-		return "🔱"
-	case NoteTypeMap:
-		return "🗺️"
-	case NoteTypeYoutube:
-		return "🎬"
-	case NoteTypeArticle:
-		return "📰"
-	case NoteTypeCapture:
-		return "🌐"
-	case NoteTypeAttachment:
-		return "📦"
-	case NoteTypeArchive:
-		return "💾"
-	default:
-		return "📄"
-	}
+	noteType := DetectNoteType(tags, "", arquivo)
+	return icons.GetIcon(string(noteType))
+}
+
+// NoteIconColor retorna a classe Tailwind de cor sortida exclusiva para cada ícone vinda do mapa de configuração centralizado.
+func NoteIconColor(iconName string) string {
+	return icons.GetColor(iconName)
 }

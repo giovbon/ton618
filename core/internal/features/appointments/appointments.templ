@@ -1,6 +1,7 @@
 package appointments
 
 import "ton618/core/web/layout"
+import "ton618/core/internal/ui/icons"
 
 templ Agenda(title string) {
     @layout.Layout(title, false, agendaContent())
@@ -29,7 +30,7 @@ templ agendaContent() {
                         </button>
                         <div class="w-[1px] bg-zinc-800/60 self-stretch"></div>
                         <button id="agenda-purge" class="bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 px-5 py-2.5 text-[13px] font-semibold transition-all flex items-center justify-center gap-2 shrink-0" title="Excluir anteriores a 7 dias">
-                            🗑️ Limpar
+                            @icons.Icon("trash-2", "w-4 h-4") Limpar
                         </button>
                     </div>
                 </div>

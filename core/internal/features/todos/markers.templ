@@ -3,6 +3,7 @@ package todos
 import (
 	"strconv"
 	"ton618/core/internal/core/db"
+	"ton618/core/internal/ui/icons"
 )
 
 templ MarkersList(markers []db.TodoMarker) {
@@ -55,7 +56,9 @@ templ MarkersList(markers []db.TodoMarker) {
                                 <input type="color" name="color" value={ m.Color } hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" class="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0" />
                             </form>
 
-                            <button hx-delete={ string(templ.URL("/api/todo-markers/remove?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all text-sm px-2 cursor-pointer flex-shrink-0">✕</button>
+                            <button hx-delete={ string(templ.URL("/api/todo-markers/remove?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all p-1 cursor-pointer flex-shrink-0">
+                                @icons.Icon("x", "w-3.5 h-3.5")
+                            </button>
                         </div>
                     }
                 }
@@ -71,8 +74,8 @@ templ MarkersList(markers []db.TodoMarker) {
                 <input type="color" name="color" value="#3b82f6"
                     class="w-10 h-[38px] rounded cursor-pointer border border-zinc-700 p-0" />
                 <button type="submit"
-                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors">
-                    + Adicionar
+                    class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors flex items-center gap-1.5">
+                    @icons.Icon("plus", "w-3.5 h-3.5") Adicionar
                 </button>
             </form>
         </div>

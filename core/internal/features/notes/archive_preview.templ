@@ -1,6 +1,7 @@
 package notes
 
 import "fmt"
+import "ton618/core/internal/ui/icons"
 
 templ ArchivePreview(files []string) {
     if len(files) == 0 {
@@ -35,13 +36,13 @@ templ ArchivePreview(files []string) {
         
         <div class="flex gap-2 mt-4">
             <button type="button" hx-post="/api/bulk-archive" hx-include="#bulk-preview-area [name='files']" hx-target="#bulk-preview-area"
-                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors">
-                📦 Arquivar Selecionadas
+                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                @icons.Icon("archive", "w-4 h-4") Arquivar Selecionadas
             </button>
             <button type="button" hx-post="/api/bulk-delete" hx-include="#bulk-preview-area [name='files']" hx-target="#bulk-preview-area"
-                class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors"
+                class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
                 hx-confirm="Tem certeza que deseja excluir as notas selecionadas permanentemente?">
-                🗑️ Excluir Selecionadas
+                @icons.Icon("trash-2", "w-4 h-4") Excluir Selecionadas
             </button>
         </div>
     }

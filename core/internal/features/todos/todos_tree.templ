@@ -3,6 +3,7 @@ package todos
 import (
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/processor"
+	"ton618/core/internal/ui/icons"
 	"strings"
     "fmt"
     "encoding/base64"
@@ -33,20 +34,16 @@ func getMarkerColor(todoType string, markers []db.TodoMarker) string {
 	return "#3b82f6"
 }
 
-func getTodoIcon(todo processor.TodoItem, markers []db.TodoMarker) string {
+func getTodoIconName(todo processor.TodoItem) string {
     t := strings.ToUpper(todo.Type)
     if t == "TASK" {
         if todo.Status == "completed" {
-            return "✓"
+            return "check-square"
         }
-        return "⬜"
+        return "square"
     }
-    if t == "TODO" { return "🔵" }
-    if t == "DOING" { return "🟡" }
-    if t == "DONE" { return "🟢" }
-    if t == "FIXME" { return "🟡" }
-    if t == "BUG" { return "🔴" }
-    return "🔵"
+    if t == "BUG" { return "bug" }
+    return "circle-dot"
 }
 
 func b64(s string) string {
@@ -65,7 +62,9 @@ templ TodoTree(files []FileGroup, markers []db.TodoMarker, count int) {
                 <div class="todo-tree-item">
                     <div class="todo-tree-folder expanded" onclick={ toggleFolder(fileId) }>
                         <div class="toggle" id={ "toggle-icon-" + fileId }>▼</div>
-                        <div class="folder-icon">📄</div>
+                        <div class="folder-icon flex items-center justify-center">
+                            @icons.Icon("file-text", "w-3.5 h-3.5 text-zinc-400")
+                        </div>
                         <div class="folder-name">{ file.Name }</div>
                         <div class="folder-count">{ fmt.Sprint(file.Count) }</div>
                     </div>
@@ -75,7 +74,9 @@ templ TodoTree(files []FileGroup, markers []db.TodoMarker, count int) {
                             <div class="todo-tree-item">
                                 <div class="todo-tree-folder expanded" onclick={ toggleFolder(sectionId) }>
                                     <div class="toggle" id={ "toggle-icon-" + sectionId }>▼</div>
-                                    <div class="folder-icon">#️⃣</div>
+                                    <div class="folder-icon flex items-center justify-center">
+                                        @icons.Icon("hash", "w-3.5 h-3.5 text-zinc-500")
+                                    </div>
                                     <div class="folder-name">{ section.Name }</div>
                                     <div class="folder-count">{ fmt.Sprint(len(section.Todos)) }</div>
                                 </div>
@@ -91,7 +92,9 @@ templ TodoTree(files []FileGroup, markers []db.TodoMarker, count int) {
                                             escapedText := strings.ReplaceAll(todo.Text, "'", "\\'")
                                         }}
                                         <div class={ "todo-tree-todo " + typeClass + " " + statusClass } onclick={ openTodo(todo.File, todo.Line, escapedText) }>
-                                            <div class="todo-icon">{ getTodoIcon(todo, markers) }</div>
+                                            <div class="todo-icon flex items-center justify-center">
+                                                @icons.Icon(getTodoIconName(todo), "w-3.5 h-3.5")
+                                            </div>
                                             <div class="todo-content">
                                                 <span class="todo-type" style={ "background: " + markerColor + "20; color: " + markerColor }>{ todo.Type }</span>
                                                 <span class="todo-text">{ todo.Text }</span>
