@@ -203,7 +203,7 @@ templ mapContent(data domain.EditorData) {
         fd.append("tags", "map");
 
         try {
-            var r = await fetch("/api/note/save", { method: "POST", body: fd });
+            var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: getAuthHeaders() });
             if (!r.ok && r.status !== 303) throw new Error("HTTP " + r.status);
             saveInProgress = false;
             setStatus("saved");
@@ -414,7 +414,7 @@ templ mapContent(data domain.EditorData) {
         if (!confirm('Duplicar "' + filename + '"?')) return;
         var fd = new FormData();
         fd.append("filename", filename);
-        fetch("/api/note/duplicate", { method: "POST", body: fd })
+        fetch("/api/note/duplicate", { method: "POST", body: fd, headers: getAuthHeaders() })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data && data.new_filename) window.location.href = "/map?file=" + encodeURIComponent(data.new_filename);

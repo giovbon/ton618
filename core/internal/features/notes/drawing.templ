@@ -160,7 +160,7 @@ templ drawingContent(data domain.EditorData) {
             fd.append("silent", "true");
 
             try {
-                var r = await fetch("/api/note/save", { method: "POST", body: fd });
+                var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });
                 if (!r.ok) throw new Error("HTTP " + r.status);
                 saveInProgress = false;
                 setStatus("saved");

@@ -1726,6 +1726,7 @@
             var resp = await fetch("/file/save", {
                 method: "POST",
                 body: fd,
+                headers: EditorCommon.getAuthHeaders(),
             });
             if (resp.ok || resp.status === 303) {
                 setStatus("saved");
@@ -1783,6 +1784,7 @@
                 var renameResp = await fetch("/file/rename", {
                     method: "POST",
                     body: renameFd,
+                    headers: EditorCommon.getAuthHeaders(),
                 });
                 if (!renameResp.ok) {
                     throw new Error("Erro ao renomear no servidor");
@@ -1803,6 +1805,7 @@
             var saveResp = await fetch("/file/save", {
                 method: "POST",
                 body: fd,
+                headers: EditorCommon.getAuthHeaders(),
             });
             if (saveResp.ok || saveResp.status === 303) {
                 setStatus("saved");
@@ -1829,7 +1832,7 @@
         if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
         var fd = new FormData();
         fd.append("filename", filename);
-        fetch("/file/delete", { method: "POST", body: fd })
+        fetch("/file/delete", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
             .then(function () {
                 window.location.href = "/";
             })
@@ -1847,7 +1850,7 @@
         var fd = new FormData();
         fd.append("filename", filename);
 
-        fetch("/api/note/duplicate", { method: "POST", body: fd })
+        fetch("/api/note/duplicate", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
             .then(function (r) {
                 if (!r.ok) {
                     return r.text().then(function (t) { throw new Error(t); });
@@ -1919,6 +1922,7 @@
             var resp = await fetch("/api/upload-image", {
                 method: "POST",
                 body: fd,
+                headers: EditorCommon.getAuthHeaders(),
             });
             var data = await resp.json();
             if (data.ok && editor) {

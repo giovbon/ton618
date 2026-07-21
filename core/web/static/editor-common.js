@@ -272,7 +272,7 @@
             if (!confirm(confirmMsg || 'Excluir definitivamente "' + filename + '"?')) return;
             var fd = new FormData();
             fd.append("filename", filename);
-            fetch("/file/delete", { method: "POST", body: fd })
+            fetch("/file/delete", { method: "POST", body: fd, headers: this.getAuthHeaders() })
                 .then(function () { window.location.href = "/"; })
                 .catch(function () { window.location.href = "/"; });
         },
@@ -286,7 +286,7 @@
             var fd = new FormData();
             fd.append("filename", filename);
 
-            fetch("/api/note/duplicate", { method: "POST", body: fd })
+            fetch("/api/note/duplicate", { method: "POST", body: fd, headers: this.getAuthHeaders() })
                 .then(function (r) {
                     if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
                     return r.json();
@@ -324,7 +324,7 @@
                     var renameFd = new FormData();
                     renameFd.append("old", currentFilename);
                     renameFd.append("new", fullNewName);
-                    var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd });
+                    var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd, headers: this.getAuthHeaders() });
                     if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
                 }
 
@@ -334,7 +334,7 @@
                 saveFd.append("content", content);
                 saveFd.append("tags", opts.tags || "");
 
-                var saveResp = await fetch("/api/note/save", { method: "POST", body: saveFd });
+                var saveResp = await fetch("/api/note/save", { method: "POST", body: saveFd, headers: this.getAuthHeaders() });
                 if (!saveResp.ok) throw new Error("Erro ao salvar sob novo nome");
 
                 if (opts.onSaved) opts.onSaved(content, fullNewName);

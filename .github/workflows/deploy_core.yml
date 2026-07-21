@@ -30,7 +30,20 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: 🔧 Setup QEMU (binfmt)
+      - name: � Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: core/web/package-lock.json
+
+      - name: 🧪 Rodar testes unitários JS (auth headers, editor-common)
+        working-directory: ./core/web
+        run: |
+          npm install --legacy-peer-deps
+          npm test
+
+      - name: �🔧 Setup QEMU (binfmt)
         uses: docker/setup-qemu-action@v3
 
       - name: 🔧 Setup Docker Buildx

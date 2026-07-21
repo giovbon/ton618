@@ -14,8 +14,8 @@ var Config = map[string]IconSpec{
 	// ── TIPOS DE NOTAS E ARQUIVOS ──
 	"nota":        {Icon: "sticky-note", Color: "text-amber-400"},
 	"markdown":    {Icon: "sticky-note", Color: "text-amber-400"},
-	"desenho":     {Icon: "pencil-ruler", Color: "text-pink-400"},
-	"drawing":     {Icon: "pencil-ruler", Color: "text-pink-400"},
+	"desenho":     {Icon: "line-squiggle", Color: "text-pink-400"},
+	"drawing":     {Icon: "line-squiggle", Color: "text-pink-400"},
 	"typst":       {Icon: "book-down", Color: "text-cyan-400"},
 	"mermaid":     {Icon: "vector-square", Color: "text-purple-400"},
 	"mindmap":     {Icon: "chart-no-axes-gantt", Color: "text-emerald-400"},
@@ -54,8 +54,8 @@ var Config = map[string]IconSpec{
 	"save":     {Icon: "save", Color: "text-emerald-400"},
 	"arquivar": {Icon: "archive", Color: "text-zinc-500"},
 	"duplicar": {Icon: "copy", Color: "text-zinc-500"},
-	"excluir":  {Icon: "trash-2", Color: "text-zinc-500"},
-	"delete":   {Icon: "trash-2", Color: "text-zinc-500"},
+	"excluir":  {Icon: "trash", Color: "text-zinc-500"},
+	"delete":   {Icon: "trash", Color: "text-zinc-500"},
 }
 
 // GetSpec retorna a especificação (ícone e cor) para uma chave.

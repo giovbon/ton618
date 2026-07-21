@@ -135,15 +135,15 @@ templ Navbar() {
                 <!-- Nav links — icon + label only for key destinations -->
                 <a id="nav-agenda" href="/agenda"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">
-                    @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4") Agenda
+                    @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 " + icons.GetColor("agenda")) Agenda
                 </a>
                 <a id="nav-todos" href="/todos"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
-                    @icons.Icon(icons.GetIcon("task"), "w-4 h-4") Task
+                    @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task")) Task
                 </a>
                 <a id="nav-database" href="/database"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors" title="Tabulator">
-                    @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4") Tabulator
+                    @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) Tabulator
                 </a>
 
                 <!-- Utility icons (cinza conforme especificado) -->
