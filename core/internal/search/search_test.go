@@ -20,7 +20,7 @@ func TestBuildFTSQuery_EmptyString(t *testing.T) {
 
 func TestBuildFTSQuery_SingleWord(t *testing.T) {
 	result := buildFTSQuery("palavra")
-	expected := `(tags:palavra* OR arquivo:palavra* OR secao:palavra* OR texto:palavra* OR texto_stemmed:palavr*)`
+	expected := `(tags:palavra* OR arquivo:palavra* OR secao:palavra* OR texto:palavra*)`
 	if result != expected {
 		t.Errorf("esperado %q, got %q", expected, result)
 	}
@@ -54,7 +54,7 @@ func TestBuildFTSQuery_StopwordSkipped(t *testing.T) {
 
 func TestBuildFTSQuery_ShortWordNoStar(t *testing.T) {
 	result := buildFTSQuery("go")
-	expected := `(tags:go OR arquivo:go OR secao:go OR texto:go OR texto_stemmed:go)`
+	expected := `(tags:go OR arquivo:go OR secao:go OR texto:go)`
 	if result != expected {
 		t.Errorf("esperado %q (sem sufixo *), got %q", expected, result)
 	}
@@ -443,13 +443,13 @@ func TestSearch_ResultadosOrdenadosPorScore(t *testing.T) {
 	}
 }
 
-func TestSearch_StemmingMatch(t *testing.T) {
+func TestSearch_ExactMatchOnly(t *testing.T) {
 	store := newTestStore(t)
 	defer store.Close()
 
 	now := time.Now()
 
-	// Insere documento com a palavra "configurar" (radical: configur)
+	// Insere documento com a palavra "configurar"
 	store.InsertDocument(db.Document{
 		ID:        "doc-stem",
 		Tipo:      "markdown",
@@ -458,23 +458,30 @@ func TestSearch_StemmingMatch(t *testing.T) {
 		Texto:     "vamos configurar este banco de dados",
 		Timestamp: now.Format(time.RFC3339),
 	})
-	// IndexFTS agora lematiza o texto e insere em texto_stemmed
 	store.IndexFTS("doc-stem", "markdown", "notas/config.md", "Geral", "vamos configurar este banco de dados", "")
 
-	// Busca por "configurações" (radical: configur)
-	results, err := Search(context.Background(), store, "configurações", 0, 20,
+	// Busca exata por "configurar" deve encontrar
+	results, err := Search(context.Background(), store, "configurar", 0, 20,
 		func(s string) int { return 0 },
 		func(s string) float64 { return 0.0 },
 	)
 	if err != nil {
 		t.Fatalf("Search() error: %v", err)
 	}
-
 	if len(results.Hits) == 0 {
-		t.Fatal("deveria encontrar a nota com 'configurar' ao buscar por 'configurações' via stemming")
+		t.Fatal("deveria encontrar 'configurar' ao buscar por 'configurar'")
 	}
-	if results.Hits[0].Doc.Arquivo != "notas/config.md" {
-		t.Errorf("nota config.md deveria ser retornada. Got: %s", results.Hits[0].Doc.Arquivo)
+
+	// Busca por "configurações" NÃO deve mais encontrar (stemming removido)
+	results, err = Search(context.Background(), store, "configurações", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+	if len(results.Hits) > 0 {
+		t.Error("NÃO deveria encontrar 'configurar' ao buscar por 'configurações' — stemming foi removido")
 	}
 }
 

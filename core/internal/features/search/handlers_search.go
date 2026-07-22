@@ -135,19 +135,6 @@ func buildContextSnippet(query, text string) string {
 		}
 	}
 
-	// Também inclui radicais/stems dos termos de busca (ex: "juiza" -> stem "juiz")
-	queryStemsStr := search.GetQueryStems(query)
-	if queryStemsStr != "" {
-		stems := strings.Split(queryStemsStr, ",")
-		for _, st := range stems {
-			st = cleanTermForMatching(st)
-			if len(st) > 1 && !seen[st] {
-				seen[st] = true
-				cleanTerms = append(cleanTerms, st)
-			}
-		}
-	}
-
 	if len(cleanTerms) == 0 {
 		if len(text) > 250 {
 			return text[:250] + "..."
@@ -301,6 +288,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 	// Build template data
 	seenFiles := make(map[string]bool)
+	noteContentCache := make(map[string]string)   // cache para findQueryLine
+	weightCache := make(map[string]float64)        // cache para GetSynapticWeight
 	var items []domain.SearchResultItem
 	for _, hit := range results.Hits {
 		// Clean snippet: strip HTML, show context around query
@@ -375,7 +364,11 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Injeção de tags dinâmicas baseadas no decaimento sináptico
-		weight := ctx.Store.GetSynapticWeight(hit.Doc.Arquivo)
+		weight, ok := weightCache[hit.Doc.Arquivo]
+		if !ok {
+			weight = ctx.Store.GetSynapticWeight(hit.Doc.Arquivo)
+			weightCache[hit.Doc.Arquivo] = weight
+		}
 		if weight <= 0.105 {
 			userTags = append(userTags, "esquecida")
 		} else if weight <= 0.25 {
@@ -405,7 +398,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		seenFiles[hit.Doc.Arquivo] = true
 
 		// Compute line number: find first line in the note that matches the query
-		line := findQueryLine(ctx, hit.Doc.Arquivo, query)
+		line := findQueryLineWithCache(ctx, hit.Doc.Arquivo, query, noteContentCache)
 
 		displayTime := hit.Doc.Timestamp
 		if t, err := time.Parse(time.RFC3339, hit.Doc.Timestamp); err == nil {
@@ -452,17 +445,6 @@ func hasVisibleMatch(query, snippet, arquivo, secao string, tags []string) bool 
 			cleanTerms = append(cleanTerms, cleaned)
 		}
 	}
-	queryStemsStr := search.GetQueryStems(query)
-	if queryStemsStr != "" {
-		for _, st := range strings.Split(queryStemsStr, ",") {
-			st = cleanTermForMatching(st)
-			if len(st) > 1 && !seen[st] {
-				seen[st] = true
-				cleanTerms = append(cleanTerms, st)
-			}
-		}
-	}
-
 	if len(cleanTerms) == 0 {
 		return true // Se busca é só por tags ou vazia, não descarte nada
 	}
@@ -495,13 +477,23 @@ func hasVisibleMatch(query, snippet, arquivo, secao string, tags []string) bool 
 	return false
 }
 
-// findQueryLine encontra a primeira linha no conteúdo da nota que contém os termos buscados.
-func findQueryLine(ctx *HandlerContext, arquivo, query string) int {
+// findQueryLineWithCache encontra a primeira linha no conteúdo da nota que contém os termos buscados.
+// Usa um cache para evitar ler a mesma nota do banco múltiplas vezes.
+func findQueryLineWithCache(ctx *HandlerContext, arquivo, query string, cache map[string]string) int {
 	if query == "" {
 		return 0
 	}
-	content, err := ctx.Store.GetNote(arquivo)
-	if err != nil || content == "" {
+	content, ok := cache[arquivo]
+	if !ok {
+		var err error
+		content, err = ctx.Store.GetNote(arquivo)
+		if err != nil || content == "" {
+			cache[arquivo] = ""
+			return 0
+		}
+		cache[arquivo] = content
+	}
+	if content == "" {
 		return 0
 	}
 

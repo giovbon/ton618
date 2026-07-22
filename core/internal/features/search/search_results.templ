@@ -3,7 +3,6 @@ package search
 import (
 	"strconv"
 	"ton618/core/internal/core/domain"
-	searchpkg "ton618/core/internal/search"
 	"ton618/core/internal/ui/icons"
 )
 
@@ -15,7 +14,7 @@ func getLineHash(line int) string {
 }
 
 templ SearchResults(data domain.SearchResultsData) {
-	<div id="search-metadata" data-stems={ searchpkg.GetQueryStems(data.Query) } class="hidden"></div>
+	<div id="search-metadata" data-stems="" class="hidden"></div>
 	if data.Query != "" {
 		<p class="text-[11px] font-medium text-zinc-500 mb-4 tracking-wide uppercase">
 			{ strconv.Itoa(data.Total) } resultado

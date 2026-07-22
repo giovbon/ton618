@@ -97,6 +97,36 @@ func (s *Store) GetDocument(id string) (*Document, error) {
 	return &doc, nil
 }
 
+// BatchGetTimestamps returns a map of doc ID to timestamp for all given doc IDs.
+// Executa uma única query SQL com IN clause em vez de N queries individuais.
+func (s *Store) BatchGetTimestamps(docIDs []string) (map[string]string, error) {
+	if len(docIDs) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(docIDs))
+	args := make([]any, len(docIDs))
+	for i, id := range docIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := "SELECT id, timestamp FROM documents WHERE id IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(docIDs))
+	for rows.Next() {
+		var id, ts string
+		if err := rows.Scan(&id, &ts); err != nil {
+			return nil, err
+		}
+		result[id] = ts
+	}
+	return result, rows.Err()
+}
+
 // GetDocumentsByFile returns all documents belonging to a file, ordered by position.
 func (s *Store) GetDocumentsByFile(arquivo string) ([]Document, error) {
 	rows, err := s.Q.GetDocumentsByFile(s.queryCtx(), sql.NullString{String: arquivo, Valid: true})

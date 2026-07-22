@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"ton618/core/internal/processor"
 )
 
 // FTSResult represents a single result row from a full-text search query.
@@ -30,11 +28,10 @@ func (s *Store) IndexFTS(docID, tipo, arquivo, secao, texto, tags string) error 
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 	s.DB.Exec("DELETE FROM docs_fts WHERE doc_id = ?", docID)
-	stemmedText := processor.StemText(texto)
 	_, err := s.DB.Exec(`
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, texto_stemmed)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		docID, tipo, arquivo, secao, texto, tags, stemmedText,
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		docID, tipo, arquivo, secao, texto, tags,
 	)
 	return err
 }

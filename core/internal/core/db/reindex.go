@@ -57,8 +57,8 @@ func (s *Store) ReplaceFileIndexes(
 	defer docStmt.Close()
 
 	ftsStmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, texto_stemmed) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) 
+		VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -72,9 +72,8 @@ func (s *Store) ReplaceFileIndexes(
 		); err != nil {
 			return err
 		}
-		stemmedText := processor.StemText(doc.Texto)
 		if _, err := ftsStmt.Exec(
-			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr, stemmedText,
+			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
 		); err != nil {
 			return err
 		}

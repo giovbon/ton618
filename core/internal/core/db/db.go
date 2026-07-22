@@ -126,7 +126,6 @@ func initSchema(database *sql.DB) error {
 		secao,
 		texto,
 		tags,
-		texto_stemmed,
 		tokenize='unicode61'
 	);
 
@@ -379,6 +378,23 @@ func migrate(database *sql.DB) {
 		)`)
 		database.Exec("DELETE FROM file_mods")
 		markApplied(9)
+	}
+
+	// v9b: recria tabela fts5 sem texto_stemmed (lematização removida)
+	if !isApplied(22) {
+		database.Exec("DROP TABLE IF EXISTS docs_fts")
+		database.Exec(`
+		CREATE VIRTUAL TABLE docs_fts USING fts5(
+			doc_id,
+			tipo,
+			arquivo,
+			secao,
+			texto,
+			tags,
+			tokenize='unicode61'
+		)`)
+		database.Exec("DELETE FROM file_mods")
+		markApplied(22)
 	}
 
 	// v10: adiciona coluna sort_order aos marcadores de TODO (0 = sem ordem definida)

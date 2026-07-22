@@ -10,7 +10,6 @@ import (
 	"unicode"
 
 	"ton618/core/internal/core/db"
-	"ton618/core/internal/processor"
 )
 
 type SearchHit struct {
@@ -98,12 +97,29 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 	heuristicTerms := extractTerms(rawQuery)
 	cleanedQuery := cleanQuery(rawQuery)
 
+	// ── Batch-load timestamps para evitar N+1 ──
+	docIDs := make([]string, len(results))
+	for i, r := range results {
+		docIDs[i] = r.DocID
+	}
+	timestampMap, _ := store.BatchGetTimestamps(docIDs)
+
+	// ── Cache para getSynapticWeight e getBacklinkCount ──
+	weightCache := make(map[string]float64, len(results))
+	backlinkCache := make(map[string]int, len(results))
+
 	var hits []SearchHit
 	for _, r := range results {
-		// Fetch full doc
-		doc, _ := store.GetDocument(r.DocID)
-		if doc == nil {
-			continue
+		// Converte FTSResult → Document diretamente, sem chamar GetDocument
+		ts := timestampMap[r.DocID]
+		doc := db.Document{
+			ID:        r.DocID,
+			Tipo:      r.Tipo,
+			Arquivo:   r.Arquivo,
+			Secao:     r.Secao,
+			Texto:     r.Texto,
+			Tags:      r.Tags,
+			Timestamp: ts,
 		}
 
 		// Filtro de tags como segunda linha de defesa (garante exatidão)
@@ -128,11 +144,22 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		hit := SearchHit{
 			ID:    r.DocID,
 			Score: r.Rank,
-			Doc:   *doc,
+			Doc:   doc,
 		}
 
-		weight := getSynapticWeight(doc.Arquivo)
-		backlinkCount := getBacklinkCount(strings.ToLower(doc.Arquivo))
+		// Cache para peso sináptico
+		weight, ok := weightCache[doc.Arquivo]
+		if !ok {
+			weight = getSynapticWeight(doc.Arquivo)
+			weightCache[doc.Arquivo] = weight
+		}
+
+		// Cache para contagem de backlinks
+		backlinkCount, ok := backlinkCache[doc.Arquivo]
+		if !ok {
+			backlinkCount = getBacklinkCount(strings.ToLower(doc.Arquivo))
+			backlinkCache[doc.Arquivo] = backlinkCount
+		}
 
 		score, details := scoreFragment(&hit, heuristicTerms, cleanedQuery, weight, backlinkCount)
 		hit.FinalScore = score
@@ -250,20 +277,12 @@ func buildFTSQuery(raw string) string {
 				continue
 			}
 			wLower := strings.ToLower(w)
-			wStemmed := processor.StemText(wLower)
 			
 			if len(wLower) > 2 {
 				wLower += "*"
 			}
-			if len(wStemmed) > 2 {
-				wStemmed += "*"
-			}
 			
-			if wStemmed != "" {
-				parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+` OR texto_stemmed:`+wStemmed+`)`)
-			} else {
-				parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
-			}
+			parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
 		}
 	}
 
@@ -410,28 +429,7 @@ func removeAccents(s string) string {
 	return r.Replace(s)
 }
 
-// GetQueryStems extrai os radicais dos termos relevantes da busca.
-func GetQueryStems(query string) string {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return ""
-	}
-	terms := extractTerms(query)
-	var stems []string
-	seen := make(map[string]bool)
-	for _, t := range terms {
-		tLower := strings.ToLower(t)
-		if len(tLower) <= 2 {
-			continue
-		}
-		stem := processor.StemText(tLower)
-		if stem != "" && !seen[stem] {
-			seen[stem] = true
-			stems = append(stems, stem)
-		}
-	}
-	return strings.Join(stems, ",")
-}
+
 
 
 

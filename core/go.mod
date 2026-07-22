@@ -6,7 +6,6 @@ require (
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
 	github.com/a-h/templ v0.3.1020
-	github.com/freeeve/go-stemmers v0.0.0-20260606195828-3c78df9017f5
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	gopkg.in/yaml.v3 v3.0.1
