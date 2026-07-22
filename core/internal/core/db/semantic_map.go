@@ -9,7 +9,6 @@ import (
 	"sync"
 )
 
-
 // SemanticMapPoint representa uma nota projetada no plano 2D via PCA.
 type SemanticMapPoint struct {
 	Filename string  `json:"filename"`
@@ -20,7 +19,7 @@ type SemanticMapPoint struct {
 }
 
 // maxClusters é o número máximo de clusters (cores) no mapa.
-const maxClusters = 5
+const maxClusters = 10
 
 // ── Cache thread-safe ──
 
@@ -92,19 +91,25 @@ func (s *Store) GetSemanticMapPoints() ([]SemanticMapPoint, error) {
 
 // ── PCA 384D → 2D ──
 
-// getAllEmbeddingsGrouped retorna o embedding do primeiro chunk de cada nota.
+// getAllEmbeddingsGrouped retorna a média (mean pooling) dos embeddings
+// de todos os chunks de cada nota.
 func (s *Store) getAllEmbeddingsGrouped() (map[string][]float32, error) {
 	rows, err := s.DB.Query(`
 		SELECT ne.chunk_id, ne.embedding
 		FROM note_embeddings ne
-		WHERE ne.chunk_id LIKE '%#0'
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string][]float32)
+	// Acumula soma e contagem por filename para mean pooling
+	type accumulator struct {
+		sum   []float32
+		count int
+	}
+	acc := make(map[string]*accumulator)
+
 	for rows.Next() {
 		var chunkID string
 		var blob []byte
@@ -122,30 +127,47 @@ func (s *Store) getAllEmbeddingsGrouped() (map[string][]float32, error) {
 				break
 			}
 		}
-		if _, exists := result[filename]; exists {
-			continue // já temos, pula
+
+		a, ok := acc[filename]
+		if !ok {
+			a = &accumulator{sum: make([]float32, EmbeddingDim)}
+			acc[filename] = a
 		}
 
-		emb := make([]float32, EmbeddingDim)
 		for i := 0; i < EmbeddingDim; i++ {
 			bits := binary.LittleEndian.Uint32(blob[i*4 : (i+1)*4])
-			emb[i] = math.Float32frombits(bits)
+			a.sum[i] += math.Float32frombits(bits)
+		}
+		a.count++
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Mean pooling: média aritmética de todos os chunks
+	result := make(map[string][]float32, len(acc))
+	for filename, a := range acc {
+		emb := make([]float32, EmbeddingDim)
+		invCount := 1.0 / float32(a.count)
+		for i := 0; i < EmbeddingDim; i++ {
+			emb[i] = a.sum[i] * invCount
 		}
 		result[filename] = emb
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // computePCA2D reduz embeddings 384D → 2D via PCA clássica.
 // Etapas:
 //
-//	1. Guard-clause: se N < 2, retorna pontos em (0,0)
-//	2. Constrói matriz N×384 a partir do map
-//	3. Centraliza (subtrai média de cada dimensão)
-//	4. Calcula matriz de covariância 384×384 (amostral: divisão por N-1)
-//	5. Power iteration para top-2 autovetores
-//	6. Projeta cada ponto nos 2 componentes
-//	7. Atribui clusters via K-means (2D)
+//  1. Guard-clause: se N < 2, retorna pontos em (0,0)
+//  2. Constrói matriz N×384 a partir do map
+//  3. Centraliza (subtrai média de cada dimensão)
+//  4. Calcula matriz de covariância 384×384 (amostral: divisão por N-1)
+//  5. Power iteration para top-2 autovetores
+//  6. Projeta cada ponto nos 2 componentes
+//  7. Atribui clusters via K-means (2D)
 func computePCA2D(embeddings map[string][]float32) ([]SemanticMapPoint, error) {
 	n := len(embeddings)
 

@@ -1459,17 +1459,7 @@
         if (arrow) arrow.classList.toggle("rotate-90", backlinksVisible);
     }
 
-    // ── Similar Notes ──
-    var similarVisible = true;
-    function toggleSimilar() {
-        similarVisible = !similarVisible;
-        var el = document.getElementById("similar-content");
-        var arrow = document.getElementById("similar-arrow");
-        if (el) el.classList.toggle("hidden", !similarVisible);
-        if (arrow) arrow.classList.toggle("rotate-90", similarVisible);
-    }
-
-    function updateToc() {
+function updateToc() {
         if (!editor || editor.isDestroyed) return;
         var headings = [];
         editor.state.doc.descendants(function (node, pos) {
@@ -1923,7 +1913,6 @@
     window.duplicateCurrentNote = duplicateCurrentNote;
     window.toggleToc = toggleToc;
     window.toggleBacklinks = toggleBacklinks;
-    window.toggleSimilar = toggleSimilar;
     window.updateToc = updateToc;
     window.applyToc = applyToc;
 })();

@@ -556,16 +556,246 @@ func TestGetSemanticMapPoints_cacheInvalida(t *testing.T) {
 	}
 }
 
-func TestGetSemanticMapPoints_apenasChunkZero(t *testing.T) {
+func TestGetSemanticMapPoints_meanPooling(t *testing.T) {
 	store := newTestStore(t)
-	blob, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
-	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#0", blob)
-	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#1", blob)
-	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#2", blob)
+
+	// 3 chunks com embeddings diferentes — o mean pooling deve gerar 1 ponto
+	// que representa a média dos 3.
+	blob0, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
+	blob1, _ := serializeEmbedding(rampEmbedding(0.5, 0.2))
+	blob2, _ := serializeEmbedding(rampEmbedding(0.0, 0.8))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#0", blob0)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#1", blob1)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/teste.md#2", blob2)
 
 	points, _ := store.GetSemanticMapPoints()
 	if len(points) != 1 {
-		t.Errorf("esperado 1 ponto (1 nota, 3 chunks), got %d", len(points))
+		t.Fatalf("esperado 1 ponto (1 nota, 3 chunks), got %d", len(points))
+	}
+
+	// Notas de outras notas não devem interferir
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/outra.md#0", blob0)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/outra.md#1", blob1)
+
+	points, _ = store.GetSemanticMapPoints()
+	if len(points) != 2 {
+		t.Errorf("esperado 2 pontos (2 notas), got %d", len(points))
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_embeddingUnicoChunk(t *testing.T) {
+	store := newTestStore(t)
+
+	// Nota com 1 chunk: o embedding final deve ser o próprio chunk
+	blob, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/unica.md#0", blob)
+
+	points, _ := store.GetSemanticMapPoints()
+	if len(points) != 1 {
+		t.Fatalf("esperado 1 ponto, got %d", len(points))
+	}
+
+	// Nota com 1 chunk + 1 chunk extra idêntico: mean pooling deve dar o mesmo resultado
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/unica.md#1", blob)
+
+	points2, _ := store.GetSemanticMapPoints()
+	if len(points2) != 1 {
+		t.Fatalf("esperado 1 ponto após inserir chunk duplicado, got %d", len(points2))
+	}
+
+	// A média de 2 embeddings iguais deve ser o próprio embedding
+	// Logo a posição PCA deve ser a mesma
+	if points[0].X != points2[0].X || points[0].Y != points2[0].Y {
+		t.Errorf("chunks idênticos deveriam produzir mesma posição: antes (%.6f,%.6f) depois (%.6f,%.6f)",
+			points[0].X, points[0].Y, points2[0].X, points2[0].Y)
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_chunksDiferentes_ordem(t *testing.T) {
+	store := newTestStore(t)
+
+	blobA, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
+	blobB, _ := serializeEmbedding(rampEmbedding(0.0, 1.0))
+
+	// Insere chunks em ordem: #0, #1
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/ordem.md#0", blobA)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/ordem.md#1", blobB)
+
+	points1, _ := store.GetSemanticMapPoints()
+
+	// Reseta o cache manualmente
+	mapCache.mu.Lock()
+	mapCache.checksum = 0
+	mapCache.points = nil
+	mapCache.mu.Unlock()
+
+	// Agora insere na ordem inversa
+	store2 := newTestStore(t)
+	store2.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/ordem.md#1", blobB)
+	store2.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`, "notes/ordem.md#0", blobA)
+
+	points2, _ := store2.GetSemanticMapPoints()
+
+	if len(points1) != 1 || len(points2) != 1 {
+		t.Fatalf("ambos deveriam ter 1 ponto: %d vs %d", len(points1), len(points2))
+	}
+
+	// A média deve ser a mesma independente da ordem dos chunks
+	if points1[0].X != points2[0].X || points1[0].Y != points2[0].Y {
+		t.Errorf("posição deveria ser independente da ordem: ordem1 (%.6f,%.6f) vs ordem2 (%.6f,%.6f)",
+			points1[0].X, points1[0].Y, points2[0].X, points2[0].Y)
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_notasComMultiposChunks(t *testing.T) {
+	store := newTestStore(t)
+
+	// Nota curta: 1 chunk
+	blobShort, _ := serializeEmbedding(rampEmbedding(0.5, 0.1))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/curta.md#0", blobShort)
+
+	// Nota média: 3 chunks
+	blobM0, _ := serializeEmbedding(rampEmbedding(0.5, 0.1))
+	blobM1, _ := serializeEmbedding(rampEmbedding(0.6, 0.15))
+	blobM2, _ := serializeEmbedding(rampEmbedding(0.55, 0.12))
+	for i, b := range [][]byte{blobM0, blobM1, blobM2} {
+		store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+			sprintf("notes/media.md#%d", i), b)
+	}
+
+	// Nota longa: 10 chunks
+	for i := 0; i < 10; i++ {
+		blob, _ := serializeEmbedding(rampEmbedding(float32(i)*0.1, 0.0))
+		store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+			sprintf("notes/longa.md#%d", i), blob)
+	}
+
+	points, _ := store.GetSemanticMapPoints()
+	if len(points) != 3 {
+		t.Fatalf("esperado 3 pontos (3 notas), got %d", len(points))
+	}
+
+	// Verifica que os 3 filenames estão presentes
+	files := make(map[string]bool)
+	for _, p := range points {
+		files[p.Filename] = true
+	}
+	for _, f := range []string{"notes/curta.md", "notes/media.md", "notes/longa.md"} {
+		if !files[f] {
+			t.Errorf("filename %s não encontrado nos resultados", f)
+		}
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_semNaN(t *testing.T) {
+	store := newTestStore(t)
+
+	// Vários chunks com valores extremos não devem produzir NaN
+	for i := 0; i < 5; i++ {
+		blob, _ := serializeEmbedding(rampEmbedding(1e10, float32(i)*1e-10))
+		store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+			sprintf("notes/extrema.md#%d", i), blob)
+	}
+	for i := 0; i < 3; i++ {
+		blob, _ := serializeEmbedding(rampEmbedding(-1e10, float32(i)*1e-10))
+		store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+			sprintf("notes/negativa.md#%d", i), blob)
+	}
+
+	points, _ := store.GetSemanticMapPoints()
+	for _, p := range points {
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+			t.Errorf("ponto %s tem NaN após mean pooling: (%.6f, %.6f)", p.Filename, p.X, p.Y)
+		}
+		if math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) {
+			t.Errorf("ponto %s tem Inf após mean pooling: (%.6f, %.6f)", p.Filename, p.X, p.Y)
+		}
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_cacheInvalidaComChunks(t *testing.T) {
+	store := newTestStore(t)
+
+	blob, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/teste.md#0", blob)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/teste.md#1", blob)
+
+	points1, _ := store.GetSemanticMapPoints()
+
+	// Adiciona nova nota — deve invalidar o cache
+	blob2, _ := serializeEmbedding(rampEmbedding(-1.0, 0.0))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/nova.md#0", blob2)
+
+	points2, _ := store.GetSemanticMapPoints()
+
+	if len(points2) != 2 {
+		t.Errorf("cache não invalidou: antes %d ponto(s), depois %d", len(points1), len(points2))
+	}
+
+	// Remove a nova nota — deve invalidar o cache novamente
+	store.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE 'notes/nova.md%'`)
+
+	points3, _ := store.GetSemanticMapPoints()
+
+	if len(points3) != 1 {
+		t.Errorf("cache não invalidou após deleção: esperado 1, got %d", len(points3))
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_blobInvalido(t *testing.T) {
+	store := newTestStore(t)
+
+	// Embedding válido
+	blob, _ := serializeEmbedding(rampEmbedding(1.0, 0.0))
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/valida.md#0", blob)
+
+	// Embedding com blob de tamanho inválido (deve ser ignorado)
+	store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+		"notes/invalida.md#0", []byte{1, 2, 3})
+
+	points, _ := store.GetSemanticMapPoints()
+	if len(points) != 1 {
+		t.Fatalf("esperado 1 ponto (blob inválido ignorado), got %d", len(points))
+	}
+	if points[0].Filename != "notes/valida.md" {
+		t.Errorf("filename inesperado: %s", points[0].Filename)
+	}
+}
+
+func TestGetSemanticMapPoints_meanPooling_todasNotasComMultiplosChunks(t *testing.T) {
+	store := newTestStore(t)
+
+	// 5 notas, cada uma com 4 chunks
+	for n := 0; n < 5; n++ {
+		for c := 0; c < 4; c++ {
+			blob, _ := serializeEmbedding(rampEmbedding(
+				float32(n+1)*0.3,
+				float32(c)*0.05,
+			))
+			store.DB.Exec(`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
+				sprintf("notes/nota_%d.md#%d", n, c), blob)
+		}
+	}
+
+	points, _ := store.GetSemanticMapPoints()
+	if len(points) != 5 {
+		t.Fatalf("esperado 5 pontos (5 notas, 4 chunks cada), got %d", len(points))
+	}
+
+	for _, p := range points {
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+			t.Errorf("ponto %s tem NaN", p.Filename)
+		}
+		if p.Cluster < 0 || p.Cluster >= maxClusters {
+			t.Errorf("cluster %d fora do range", p.Cluster)
+		}
 	}
 }
 

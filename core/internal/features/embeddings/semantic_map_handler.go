@@ -62,7 +62,7 @@ const mapHTML = `<main class="w-full px-0">
             @mouseleave="endPan"
             @wheel.prevent="onWheel">
             <svg id="semantic-map-svg"
-                class="w-full h-full transition-transform duration-100 ease-out"
+                class="w-full h-full"
                 :style="viewportStyle">
             </svg>
             <div x-show="tooltip.show"
@@ -91,4 +91,3 @@ const mapHTML = `<main class="w-full px-0">
     </div>
 </main>
 <script src="/static/semantic-map.js"></script>`
-

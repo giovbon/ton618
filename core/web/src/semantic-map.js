@@ -15,8 +15,19 @@
 (function () {
   "use strict";
 
-  // Cinco cores de cluster (uma por bolinha)
-  var CLUSTER_COLORS = ["#818cf8", "#34d399", "#fbbf24", "#f472b6", "#fb923c"];
+  // 10 cores distintas para cada cluster
+  var CLUSTER_COLORS = [
+    "#818cf8", // violeta
+    "#34d399", // verde esmeralda
+    "#fbbf24", // amarelo
+    "#f472b6", // rosa
+    "#fb923c", // laranja
+    "#67e8f9", // ciano
+    "#a78bfa", // roxo
+    "#f87171", // vermelho
+    "#6ee7b7", // menta
+    "#fcd34d", // douado
+  ]
   var API_URL = "/api/embeddings/map";
   var PADDING = 40; // px de margem interna no SVG
 
@@ -48,8 +59,21 @@
           );
         },
 
+        resizeTimer: null,
+
         init: function () {
-          this.load();
+          var self = this;
+          self.load();
+
+          // Re-renderiza ao redimensionar a janela (debounced)
+          window.addEventListener("resize", function () {
+            if (self.resizeTimer) clearTimeout(self.resizeTimer);
+            self.resizeTimer = setTimeout(function () {
+              if (self.points.length > 0) {
+                self.render();
+              }
+            }, 150);
+          });
         },
 
         load: function () {
@@ -110,7 +134,7 @@
           var drawW = svgW - PADDING * 2;
           var drawH = svgH - PADDING * 2;
 
-          // Cria círculos com cor baseada no cluster
+          // Cria cículos com cor baseada no cluster (10 cores)
           for (i = 0; i < pts.length; i++) {
             (function (pt) {
               var cx = PADDING + ((pt.x - minX) / rangeX) * drawW;
@@ -133,24 +157,26 @@
               circle.classList.add("cursor-pointer");
 
               // Hover: aumenta e mostra tooltip
-              circle.addEventListener("mouseenter", function (e) {
+              circle.addEventListener("mouseenter", function () {
                 this.setAttribute("r", "9");
                 this.setAttribute("opacity", "1");
                 var container = svg.closest("#semantic-map-container") || svg.parentElement;
-                var rect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
+                var containerRect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
+                var circleRect = this.getBoundingClientRect();
                 self.tooltip = {
                   show: true,
-                  x: e.clientX - rect.left,
-                  y: e.clientY - rect.top,
+                  x: circleRect.left - containerRect.left + circleRect.width / 2,
+                  y: circleRect.top - containerRect.top,
                   text: pt.title || pt.filename,
                 };
               });
 
-              circle.addEventListener("mousemove", function (e) {
+              circle.addEventListener("mousemove", function () {
                 var container = svg.closest("#semantic-map-container") || svg.parentElement;
-                var rect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
-                self.tooltip.x = e.clientX - rect.left;
-                self.tooltip.y = e.clientY - rect.top;
+                var containerRect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
+                var circleRect = this.getBoundingClientRect();
+                self.tooltip.x = circleRect.left - containerRect.left + circleRect.width / 2;
+                self.tooltip.y = circleRect.top - containerRect.top;
               });
 
               circle.addEventListener("mouseleave", function () {
@@ -215,16 +241,16 @@
           var newZoom = this.zoom * delta;
           if (newZoom < 0.2 || newZoom > 10) return;
 
-          // Zoom centrado no mouse
+          // Zoom centrado no mouse — leva em conta transform-origin: center center
           var rect = e.target.closest("#semantic-map-container").getBoundingClientRect();
           var mx = e.clientX - rect.left;
           var my = e.clientY - rect.top;
+          var cx = rect.width / 2;
+          var cy = rect.height / 2;
+          var ratio = newZoom / this.zoom;
 
-          var centerW = rect.width / 2;
-          var centerH = rect.height / 2;
-
-          this.panX = mx - (mx - this.panX) * (newZoom / this.zoom);
-          this.panY = my - (my - this.panY) * (newZoom / this.zoom);
+          this.panX = this.panX * ratio + (mx - cx) * (1 - ratio);
+          this.panY = this.panY * ratio + (my - cy) * (1 - ratio);
           this.zoom = newZoom;
         },
       };

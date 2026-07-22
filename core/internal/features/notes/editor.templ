@@ -1,7 +1,5 @@
 package notes
 
-import "strconv"
-import "fmt"
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
 import "ton618/core/internal/core/staticver"
@@ -108,44 +106,12 @@ templ editorContent(data domain.EditorData) {
 	                        }
 	                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ domain.DisplayName(name) }</a>
 	                    }
-	                    if len(data.Backlinks.Level2) > 0 {
-	                        if len(data.Backlinks.Level1) == 1 {
-	                            { ". E esta nota tambem cita " }
-	                        } else {
-	                            { ". E essas notas tambem citam " }
-	                        }
-	                        for i, name := range data.Backlinks.Level2 {
-	                            if i > 0 {
-	                                { ", " }
-	                            }
-	                            <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ domain.DisplayName(name) }</a>
-	                        }
-	                        { "." }
-	                    }
+
 	                </div>
 	            </div>
 	        }
 	    }
 
-	    if len(data.SimilarNotes) > 0 {
-	        <div id="similar-area" class="mb-3">
-	            <button id="toggle-similar-btn" onclick="toggleSimilar()" class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors">
-	                <svg id="similar-arrow" class="w-3 h-3 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-	                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
-	                </svg>
-	                NOTAS SEMELHANTES
-	            </button>
-	            <div id="similar-content" class="mt-2 text-[12px] text-zinc-400 leading-relaxed">
-	                Semelhante a:
-	                for i, item := range data.SimilarNotes {
-	                    if i > 0 {
-	                        { ", " }
-	                    }
-	                    <a href={ templ.SafeURL("/editor?file=" + item.Filename) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium" title={ fmt.Sprintf("Similaridade: %d%%", item.Percentage) }>{ item.DisplayName } <span class="text-[10px] text-zinc-500 font-normal">({ strconv.Itoa(item.Percentage) }%)</span></a>
-	                }
-	            </div>
-	        </div>
-	    }
 
 
     <!-- Wikilink autocomplete -->

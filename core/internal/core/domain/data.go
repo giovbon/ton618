@@ -164,21 +164,14 @@ func FilterUserTags(tags []string) []string {
 
 // ── EditorData ──
 
-type SimilarNoteItem struct {
+type EditorData struct {
+	Title       string
 	Filename    string
 	DisplayName string
-	Percentage  int
-}
-
-type EditorData struct {
-	Title        string
-	Filename     string
-	DisplayName  string
-	Content      string
-	Tags         []string
-	AllTags      []string
-	Backlinks    *BacklinksResult
-	SimilarNotes []SimilarNoteItem
+	Content     string
+	Tags        []string
+	AllTags     []string
+	Backlinks   *BacklinksResult
 }
 
 // DisplayName extrai o nome do arquivo da rota ou caminho

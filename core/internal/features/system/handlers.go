@@ -775,7 +775,6 @@ func (ctx *HandlerContext) HandlePostSemanticDevice(w http.ResponseWriter, r *ht
 // GET /api/settings/semantic-thresholds
 func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r *http.Request) {
 	searchThreshold := 20 // default: 20%
-	notesThreshold := 40  // default: 40%
 
 	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
@@ -786,19 +785,9 @@ func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r 
 			}
 		}
 	}
-	if val, err := ctx.Store.GetSetting("similar_notes_threshold"); err == nil && val != "" {
-		if v, err := strconv.Atoi(val); err == nil {
-			if v == 72 {
-				notesThreshold = 40
-			} else {
-				notesThreshold = v
-			}
-		}
-	}
 
 	httputil.WriteJSON(w, map[string]int{
 		"search_threshold": searchThreshold,
-		"notes_threshold":  notesThreshold,
 	})
 }
 
@@ -811,7 +800,6 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 	}
 	var body struct {
 		SearchThreshold *int `json:"search_threshold,omitempty"`
-		NotesThreshold  *int `json:"notes_threshold,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "json invalido", http.StatusBadRequest)
@@ -824,17 +812,6 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 			return
 		}
 		if err := ctx.Store.SetSetting("semantic_search_threshold", strconv.Itoa(*body.SearchThreshold)); err != nil {
-			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if body.NotesThreshold != nil {
-		if *body.NotesThreshold < 0 || *body.NotesThreshold > 100 {
-			http.Error(w, "notes_threshold deve ser entre 0 e 100", http.StatusBadRequest)
-			return
-		}
-		if err := ctx.Store.SetSetting("similar_notes_threshold", strconv.Itoa(*body.NotesThreshold)); err != nil {
 			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
 			return
 		}

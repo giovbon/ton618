@@ -661,9 +661,6 @@ func TestNoteService_GetBacklinks_TwoLevels(t *testing.T) {
 		getBacklinksFn: func(_ string) ([]string, error) {
 			return []string{"notes/a.md", "notes/b.md"}, nil
 		},
-		getLinksByFilesFn: func(fromFiles []string, _ map[string]bool) ([]string, error) {
-			return []string{"notes/c.md", "notes/a.md"}, nil
-		},
 	}
 
 	svc, _ := newMockService(t, links)
@@ -676,19 +673,12 @@ func TestNoteService_GetBacklinks_TwoLevels(t *testing.T) {
 	if len(result.Level1) != 2 {
 		t.Errorf("esperado 2 Level1, got %d", len(result.Level1))
 	}
-	// Level2 não filtra Level1, apenas a nota atual
-	if len(result.Level2) != 2 {
-		t.Errorf("esperado 2 Level2 (c.md, a.md), got %v", result.Level2)
-	}
 }
 
 func TestNoteService_GetBacklinks_FiltersCurrentNote(t *testing.T) {
 	links := &mockLinkStore{
 		getBacklinksFn: func(_ string) ([]string, error) {
 			return []string{"notes/a.md"}, nil
-		},
-		getLinksByFilesFn: func(_ []string, _ map[string]bool) ([]string, error) {
-			return []string{"notes/a.md", "notes/teste.md"}, nil
 		},
 	}
 
@@ -699,9 +689,8 @@ func TestNoteService_GetBacklinks_FiltersCurrentNote(t *testing.T) {
 		t.Fatalf("GetBacklinks: %v", err)
 	}
 
-	// "notes/teste.md" deve ser filtrado do Level2 (case-insensitive)
-	if len(result.Level2) != 1 || result.Level2[0] != "notes/a.md" {
-		t.Errorf("esperado Level2=[notes/a.md] (excluindo a propria nota), got %v", result.Level2)
+	if len(result.Level1) != 1 || result.Level1[0] != "notes/a.md" {
+		t.Errorf("esperado Level1=[notes/a.md], got %v", result.Level1)
 	}
 }
 

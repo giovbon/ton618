@@ -373,34 +373,13 @@ func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 // Nível 1: notas que linkam PARA esta nota.
 // Nível 2: notas que as notas de nível 1 linkam (excluindo a nota atual).
 func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, error) {
-	// Nível 1: quem linka PARA esta nota
 	level1, err := s.links.GetBacklinks(filename)
 	if err != nil {
 		return nil, fmt.Errorf("get backlinks: %w", err)
 	}
 
-	if len(level1) == 0 {
-		return &domain.BacklinksResult{}, nil
-	}
-
-	// Nível 2: para quem as Level1 linkam (excluindo a nota atual)
-	level2, err := s.links.GetLinksByFiles(level1, nil)
-	if err != nil {
-		return nil, fmt.Errorf("get links by files: %w", err)
-	}
-
-	// Filtra a propria nota do nivel 2 (case-insensitive)
-	filenameLower := strings.ToLower(filename)
-	filtered := make([]string, 0, len(level2))
-	for _, l2 := range level2 {
-		if strings.ToLower(l2) != filenameLower {
-			filtered = append(filtered, l2)
-		}
-	}
-
 	return &domain.BacklinksResult{
 		Level1: level1,
-		Level2: filtered,
 	}, nil
 }
 

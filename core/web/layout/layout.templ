@@ -89,14 +89,9 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var s_search = document.getElementById("semantic-search-threshold");
-                    var s_notes = document.getElementById("similar-notes-threshold");
                     if (s_search && data.search_threshold) {
                         s_search.value = data.search_threshold;
                         document.getElementById("semantic-search-threshold-display").innerText = data.search_threshold + "%";
-                    }
-                    if (s_notes && data.notes_threshold) {
-                        s_notes.value = data.notes_threshold;
-                        document.getElementById("similar-notes-threshold-display").innerText = data.notes_threshold + "%";
                     }
                 })
                 .catch(function() {});
@@ -104,8 +99,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
 
         function saveSemanticThreshold(type, value) {
             var body = {};
-            if (type === 'search') body.search_threshold = parseInt(value, 10);
-            if (type === 'notes') body.notes_threshold = parseInt(value, 10);
+            body.search_threshold = parseInt(value, 10);
 
             fetch("/api/settings/semantic-thresholds", {
                 method: "POST",
