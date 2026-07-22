@@ -17,9 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"unicode"
-	"unicode/utf8"
-
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/core/domain"
 	"ton618/core/internal/processor"
@@ -87,154 +84,6 @@ func extractSearchTerms(query string) []string {
 	return terms
 }
 
-// normalizeAccentsWithMap converte uma string UTF-8 para minúsculas e sem acentos,
-// retornando também um slice normToOrig que mapeia cada índice de byte da string normalizada
-// para o índice de byte correspondente na string original.
-func normalizeAccentsWithMap(s string) (string, []int) {
-	var sb strings.Builder
-	normToOrig := make([]int, 0, len(s)+1)
-
-	for origIdx, r := range s {
-		normRuneStr := removeAccents(strings.ToLower(string(r)))
-		sb.WriteString(normRuneStr)
-		for i := 0; i < len(normRuneStr); i++ {
-			normToOrig = append(normToOrig, origIdx)
-		}
-	}
-	normToOrig = append(normToOrig, len(s))
-	return sb.String(), normToOrig
-}
-
-// isWordStartBoundary verifica se a posição byteIdx dentro de text está no início de uma palavra.
-func isWordStartBoundary(text string, byteIdx int) bool {
-	if byteIdx <= 0 {
-		return true
-	}
-	r, _ := utf8.DecodeLastRuneInString(text[:byteIdx])
-	return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_'
-}
-
-// buildContextSnippet gera um trecho do texto com contexto ao redor de termos encontrados.
-// Mapeia os índices de byte com precisão UTF-8 e suporta frases e termos com acentos.
-func buildContextSnippet(query, text string) string {
-	const before = 80
-	const after = 120
-
-	if text == "" {
-		return "..."
-	}
-
-	terms := extractSearchTerms(query)
-	var cleanTerms []string
-	seen := make(map[string]bool)
-	for _, term := range terms {
-		cleaned := cleanTermForMatching(term)
-		if len(cleaned) > 1 && !seen[cleaned] {
-			seen[cleaned] = true
-			cleanTerms = append(cleanTerms, cleaned)
-		}
-	}
-
-	if len(cleanTerms) == 0 {
-		if len(text) > 250 {
-			return text[:250] + "..."
-		}
-		return text
-	}
-
-	normText, normToOrig := normalizeAccentsWithMap(text)
-
-	type match struct {
-		start int // índice de byte na string original text
-		end   int // índice de byte na string original text
-	}
-	var matches []match
-
-	for _, term := range cleanTerms {
-		termNorm := removeAccents(strings.ToLower(term))
-		if termNorm == "" {
-			continue
-		}
-
-		searchStart := 0
-		for {
-			idx := strings.Index(normText[searchStart:], termNorm)
-			if idx < 0 {
-				break
-			}
-			normPos := searchStart + idx
-			if isWordStartBoundary(normText, normPos) {
-				origStart := normToOrig[normPos]
-				origEnd := normToOrig[normPos+len(termNorm)]
-
-				matches = append(matches, match{start: origStart, end: origEnd})
-			}
-
-			searchStart = normPos + len(termNorm)
-			if searchStart >= len(normText) {
-				break
-			}
-		}
-	}
-
-	if len(matches) == 0 {
-		return ""
-	}
-
-	// Ordena os matches pelo início
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].start < matches[j].start
-	})
-
-	// Constrói janelas de contexto fundindo as sobrepostas ou próximas
-	const gapThreshold = 150
-	type window struct {
-		start, end int
-	}
-	var windows []window
-
-	for _, m := range matches {
-		start := m.start - before
-		if start < 0 {
-			start = 0
-		}
-		end := m.end + after
-		if end > len(text) {
-			end = len(text)
-		}
-
-		if len(windows) > 0 {
-			last := &windows[len(windows)-1]
-			if start <= last.end+gapThreshold {
-				if end > last.end {
-					last.end = end
-				}
-				continue
-			}
-		}
-		windows = append(windows, window{start: start, end: end})
-	}
-
-	// Monta o snippet final com reticências
-	var parts []string
-	for i, w := range windows {
-		part := text[w.start:w.end]
-		if w.start > 0 {
-			part = "... " + part
-		}
-		if w.end < len(text) {
-			part = part + " ..."
-		}
-
-		if i > 0 {
-			parts = append(parts, "...")
-		}
-		parts = append(parts, part)
-	}
-
-	return strings.Join(parts, " ")
-}
-
 func removeAccents(s string) string {
 	r := strings.NewReplacer(
 		"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
@@ -288,73 +137,45 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 	// Build template data
 	seenFiles := make(map[string]bool)
-	noteContentCache := make(map[string]string)   // cache para findQueryLine
-	weightCache := make(map[string]float64)        // cache para GetSynapticWeight
+	weightCache := make(map[string]float64) // cache para GetSynapticWeight
 	var items []domain.SearchResultItem
 	for _, hit := range results.Hits {
-		// Clean snippet: strip HTML, show context around query
-		snippet := hit.Doc.Texto
-		// Strip basic HTML tags
-		snippet = strings.ReplaceAll(snippet, "<p>", "")
-		snippet = strings.ReplaceAll(snippet, "</p>", " ")
-		snippet = strings.ReplaceAll(snippet, "<br>", " ")
-		snippet = strings.ReplaceAll(snippet, "<br/>", " ")
-		snippet = strings.ReplaceAll(snippet, "<strong>", "")
-		snippet = strings.ReplaceAll(snippet, "</strong>", "")
-		snippet = strings.ReplaceAll(snippet, "<em>", "")
-		snippet = strings.ReplaceAll(snippet, "</em>", "")
-		snippet = strings.ReplaceAll(snippet, "<code>", "")
-		snippet = strings.ReplaceAll(snippet, "</code>", "")
-		snippet = strings.ReplaceAll(snippet, "<pre>", "")
-		snippet = strings.ReplaceAll(snippet, "</pre>", "")
-		snippet = strings.ReplaceAll(snippet, "<h1>", "")
-		snippet = strings.ReplaceAll(snippet, "</h1>", " - ")
-		snippet = strings.ReplaceAll(snippet, "<h2>", "")
-		snippet = strings.ReplaceAll(snippet, "</h2>", " - ")
-		snippet = strings.ReplaceAll(snippet, "<h3>", "")
-		snippet = strings.ReplaceAll(snippet, "</h3>", " - ")
-		snippet = strings.ReplaceAll(snippet, "<ul>", "")
-		snippet = strings.ReplaceAll(snippet, "</ul>", "")
-		snippet = strings.ReplaceAll(snippet, "<li>", "  ")
-		snippet = strings.ReplaceAll(snippet, "</li>", "")
-		snippet = strings.ReplaceAll(snippet, "<a[^>]*>", "")
-		snippet = strings.ReplaceAll(snippet, "</a>", "")
-		// Normalize whitespace
-		snippet = strings.Join(strings.Fields(snippet), " ")
+		// Pula PDFs e anexos na busca global (não fazem sentido como resultado textual)
+		if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(hit.Doc.Arquivo), ".pdf") {
+			continue
+		}
+		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
+			continue
+		}
 
-		// Extract multi-term context windows with ellipsis between distant terms
-		snippet = buildContextSnippet(query, snippet)
+		// Deduplica por arquivo de nota
+		if seenFiles[hit.Doc.Arquivo] {
+			continue
+		}
+		seenFiles[hit.Doc.Arquivo] = true
 
-		// Fallback: se o buildContextSnippet não encontrou o termo literalmente no texto
-		// (match ocorreu só via stem/lematização), usa o snippet do FTS5 como contexto.
-		// O snippet do FTS5 já aponta para a região correta do texto, mas usa <b> para marcar.
-		// Removemos as tags <b>/<\/b> e deixamos o JS de highlight cuidar da marcação visual.
+		// Usa o snippet do FTS5 diretamente (já contém contexto ao redor dos termos)
+		// Remove as marcações <b> do SQLite snippet(); o JS de highlight cuida da marcação visual
+		snippet := ""
 		if len(hit.Highlight) > 0 {
-			ftsSnippets := hit.Highlight["texto"]
-			if len(ftsSnippets) > 0 {
-				ftsSnip := ftsSnippets[0]
-				// Verifica se o snippet atual contém algum dos termos buscados
-				terms := extractSearchTerms(query)
-				snippetHasMatch := false
-				snippetLower := strings.ToLower(snippet)
-				snippetNorm := removeAccents(snippetLower)
-				for _, term := range terms {
-					if strings.Contains(snippetNorm, removeAccents(strings.ToLower(term))) {
-						snippetHasMatch = true
-						break
-					}
-				}
-				// Se o snippet atual não tem match literal, usa o snippet do FTS5 limpo
-				if !snippetHasMatch && ftsSnip != "" {
-					// Remove as marcações <b>/<\/b> que o SQLite snippet() inseriu
-					ftsSnip = strings.ReplaceAll(ftsSnip, "<b>", "")
-					ftsSnip = strings.ReplaceAll(ftsSnip, "</b>", "")
-					snippet = ftsSnip
-				}
+			if ftsSnippets, ok := hit.Highlight["texto"]; ok && len(ftsSnippets) > 0 {
+				snippet = strings.ReplaceAll(ftsSnippets[0], "<b>", "")
+				snippet = strings.ReplaceAll(snippet, "</b>", "")
 			}
 		}
+		if snippet == "" {
+			// Fallback: primeiros 300 caracteres do texto
+			text := hit.Doc.Texto
+			if len(text) > 300 {
+				text = text[:300] + "..."
+			}
+			snippet = text
+		}
+		// Normaliza espaços em branco
+		snippet = strings.Join(strings.Fields(snippet), " ")
+
 		tags := db.TagsToSlice(hit.Doc.Tags)
-		// Filtra tags de tipo de nota para que não apareçam como tags comuns na interface do usuário
+		// Filtra tags de tipo de nota
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
@@ -377,28 +198,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 
 		noteType := string(domain.DetectNoteType(tags, hit.Doc.Texto, hit.Doc.Arquivo))
 
-		// Pula PDFs e anexos na busca global (nao fazem sentido como resultado textual)
-		if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(hit.Doc.Arquivo), ".pdf") {
-			continue
-		}
-		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
-			continue
-		}
-
-		// Deduplica por arquivo de nota para não exibir o mesmo arquivo várias vezes na busca
-		if seenFiles[hit.Doc.Arquivo] {
-			continue
-		}
-
-		// Descarta falsos positivos que não possuem correspondência nos campos visíveis
-		if !hasVisibleMatch(query, snippet, hit.Doc.Arquivo, hit.Doc.Secao, userTags) {
-			continue
-		}
-
-		seenFiles[hit.Doc.Arquivo] = true
-
-		// Compute line number: find first line in the note that matches the query
-		line := findQueryLineWithCache(ctx, hit.Doc.Arquivo, query, noteContentCache)
+		// Compute line number from the already-loaded text (sem DB call)
+		line := findQueryLineInText(hit.Doc.Texto, query)
 
 		displayTime := hit.Doc.Timestamp
 		if t, err := time.Parse(time.RFC3339, hit.Doc.Timestamp); err == nil {
@@ -433,67 +234,10 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	SearchResults(data).Render(r.Context(), w)
 }
 
-// hasVisibleMatch verifica se ao menos um dos termos (ou seus radicais) está presente em algum campo visível do resultado.
-func hasVisibleMatch(query, snippet, arquivo, secao string, tags []string) bool {
-	terms := extractSearchTerms(query)
-	var cleanTerms []string
-	seen := make(map[string]bool)
-	for _, term := range terms {
-		cleaned := cleanTermForMatching(term)
-		if len(cleaned) > 1 && !seen[cleaned] {
-			seen[cleaned] = true
-			cleanTerms = append(cleanTerms, cleaned)
-		}
-	}
-	if len(cleanTerms) == 0 {
-		return true // Se busca é só por tags ou vazia, não descarte nada
-	}
-
-	searchTarget := strings.ToLower(snippet + " " + arquivo + " " + secao + " " + strings.Join(tags, " "))
-	normTarget := removeAccents(searchTarget)
-
-	for _, t := range cleanTerms {
-		normTerm := removeAccents(strings.ToLower(t))
-		if normTerm == "" {
-			continue
-		}
-
-		searchStart := 0
-		for {
-			idx := strings.Index(normTarget[searchStart:], normTerm)
-			if idx < 0 {
-				break
-			}
-			pos := searchStart + idx
-			if isWordStartBoundary(normTarget, pos) {
-				return true
-			}
-			searchStart = pos + len(normTerm)
-			if searchStart >= len(normTarget) {
-				break
-			}
-		}
-	}
-	return false
-}
-
-// findQueryLineWithCache encontra a primeira linha no conteúdo da nota que contém os termos buscados.
-// Usa um cache para evitar ler a mesma nota do banco múltiplas vezes.
-func findQueryLineWithCache(ctx *HandlerContext, arquivo, query string, cache map[string]string) int {
-	if query == "" {
-		return 0
-	}
-	content, ok := cache[arquivo]
-	if !ok {
-		var err error
-		content, err = ctx.Store.GetNote(arquivo)
-		if err != nil || content == "" {
-			cache[arquivo] = ""
-			return 0
-		}
-		cache[arquivo] = content
-	}
-	if content == "" {
+// findQueryLineInText encontra a primeira linha no texto que contém os termos buscados.
+// Usa o texto já carregado em memória, sem consultar o banco.
+func findQueryLineInText(text, query string) int {
+	if query == "" || text == "" {
 		return 0
 	}
 
@@ -508,7 +252,7 @@ func findQueryLineWithCache(ctx *HandlerContext, arquivo, query string, cache ma
 		normalizedTerms = append(normalizedTerms, removeAccents(strings.ToLower(term)))
 	}
 
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(text, "\n")
 	// Skip frontmatter
 	startIdx := 0
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {

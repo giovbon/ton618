@@ -13,118 +13,6 @@ import (
 	"ton618/core/internal/core/db"
 )
 
-// ── buildContextSnippet ─────────────────────────────────────────
-
-func TestBuildContextSnippet_EmptyText(t *testing.T) {
-	result := buildContextSnippet("test", "")
-	if result != "..." {
-		t.Errorf("esperado '...', got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_NoMatch(t *testing.T) {
-	text := "This is a long text about something else entirely."
-	result := buildContextSnippet("nonexistent", text)
-	if result != "" {
-		t.Errorf("esperado '' para sem correspondência, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_BasicMatch(t *testing.T) {
-	text := "The quick brown fox jumps over the lazy dog."
-	result := buildContextSnippet("fox", text)
-	if !strings.Contains(result, "fox") {
-		t.Errorf("snippet deve conter o termo buscado, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_MultipleTerms(t *testing.T) {
-	text := "Go is a statically typed compiled programming language designed at Google."
-	result := buildContextSnippet("Go Google", text)
-	if !strings.Contains(result, "Go") || !strings.Contains(result, "Google") {
-		t.Errorf("snippet deve conter ambos os termos, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_ExactPhrase(t *testing.T) {
-	text := "The Go programming language is known for its simplicity and concurrency support."
-	result := buildContextSnippet(`"programming language"`, text)
-	if !strings.Contains(result, "programming language") {
-		t.Errorf("snippet deve conter a frase exata, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_LongTextTruncation(t *testing.T) {
-	text := strings.Repeat("word ", 200)
-	result := buildContextSnippet("nothing", text)
-	if result != "" {
-		t.Errorf("esperado '' para busca sem match, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_AccentsAndUTF8Shift(t *testing.T) {
-	// Texto com múltiplos caracteres acentuados de 2 bytes antes do termo buscado
-	text := "A introdução e a apresentação das configurações da automação são essenciais. No final temos a palavra ALVO que buscamos."
-	result := buildContextSnippet("ALVO", text)
-	if !strings.Contains(result, "ALVO") {
-		t.Errorf("snippet deve conter a palavra ALVO sem deslocamento de bytes UTF-8, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_StemMatching(t *testing.T) {
-	// A busca é por "juiza", mas o texto contém a forma flexionada "juiz"
-	text := "O processo seguiu para análise. O juiz Marcelo definiu a sentença do caso."
-	result := buildContextSnippet("juiza", text)
-	if !strings.Contains(result, "juiz") {
-		t.Errorf("snippet deve encontrar o radical 'juiz' ao buscar 'juiza', got %q", result)
-	}
-}
-
-func TestHasVisibleMatch(t *testing.T) {
-	// 1. Termo visível no snippet (via radical)
-	if !hasVisibleMatch("juiza", "... O juiz definiu ...", "nota.md", "Geral", nil) {
-		t.Errorf("esperado true quando o radical do termo está presente no snippet")
-	}
-
-	// 2. Termo visível na seção
-	if !hasVisibleMatch("juiza", "Texto genérico sem a palavra", "nota.md", "Decisão da Juíza", nil) {
-		t.Errorf("esperado true quando o termo está presente na seção")
-	}
-
-	// 3. Falso positivo (termo estava apenas em URL limpa e não em nenhum campo visível)
-	if hasVisibleMatch("juiza", "Texto da nota sobre Andrew Tate em Miami sem a palavra", "captura-tate.md", "Notícias", []string{"redpill"}) {
-		t.Errorf("esperado false para resultado falso positivo sem termo visível")
-	}
-
-	// 4. Teste de limite de palavra: o radical "cas" da palavra "casa" NÃO deve casar com "poucas"
-	if hasVisibleMatch("casa", "Poucas horas após fazer os supostos gestos racistas...", "captura-tate.md", "Geral", nil) {
-		t.Errorf("esperado false pois 'cas' está dentro de 'poucas' e não no início da palavra")
-	}
-
-	// 5. O radical "cas" deve casar com "caso" ou "casos"
-	if !hasVisibleMatch("casa", "Relembre o caso...", "captura-tate.md", "Geral", nil) {
-		t.Errorf("esperado true pois 'caso' começa com o radical 'cas'")
-	}
-}
-
-func TestBuildContextSnippet_IgnoresTagsAndOperators(t *testing.T) {
-	text := "Some text with a tag and operator filter."
-	result := buildContextSnippet("-exclude #tag +tags:something", text)
-	if !strings.Contains(result, "text") {
-		t.Errorf("deve ignorar operadores e mostrar o texto, got %q", result)
-	}
-}
-
-func TestBuildContextSnippet_FarApartTerms(t *testing.T) {
-	text := "The first part of a very long document that discusses various topics. " +
-		strings.Repeat("padding ", 50) +
-		"The second part talks about Go and concurrency."
-	result := buildContextSnippet("first Go", text)
-	if !strings.Contains(result, "first") || !strings.Contains(result, "Go") {
-		t.Errorf("snippet deve conter ambos os termos separados, got %q", result)
-	}
-}
-
 func TestExtractSearchTerms(t *testing.T) {
 	tests := []struct {
 		query    string
@@ -152,21 +40,7 @@ func TestExtractSearchTerms(t *testing.T) {
 	}
 }
 
-func TestBuildContextSnippet_SpecialCharacters(t *testing.T) {
-	text := "In this class we will learn C++ and how it differs from C# and Java."
-	result := buildContextSnippet("C++", text)
-	if !strings.Contains(result, "C++") {
-		t.Errorf("snippet deve conter 'C++', got %q", result)
-	}
-
-	result2 := buildContextSnippet("C#", text)
-	if !strings.Contains(result2, "C#") {
-		t.Errorf("snippet deve conter 'C#', got %q", result2)
-	}
-}
-
-func TestFindQueryLine_SpecialCharactersAndMultipleTerms(t *testing.T) {
-	ctx := newTestContext(t)
+func TestFindQueryLineInText_SpecialCharactersAndMultipleTerms(t *testing.T) {
 	noteContent := `---
 title: Test Note
 ---
@@ -174,27 +48,25 @@ This is a test note.
 Let's learn C++ coding on line 5.
 We also write C# on line 6.
 And web apps with .NET on line 7.`
-	
-	saveTestNote(t, ctx, "notes/test-spec.md", noteContent, "")
 
 	// 1. Single term with special character
-	line := findQueryLine(ctx, "notes/test-spec.md", "C++")
+	line := findQueryLineInText(noteContent, "C++")
 	if line != 5 {
 		t.Errorf("esperado linha 5 para 'C++', got %d", line)
 	}
 
-	lineCsharp := findQueryLine(ctx, "notes/test-spec.md", "C#")
+	lineCsharp := findQueryLineInText(noteContent, "C#")
 	if lineCsharp != 6 {
 		t.Errorf("esperado linha 6 para 'C#', got %d", lineCsharp)
 	}
 
-	lineDotnet := findQueryLine(ctx, "notes/test-spec.md", ".NET")
+	lineDotnet := findQueryLineInText(noteContent, ".NET")
 	if lineDotnet != 7 {
 		t.Errorf("esperado linha 7 para '.NET', got %d", lineDotnet)
 	}
 
 	// 2. Multiple terms (some not on same line, should fallback to first term line)
-	lineMulti := findQueryLine(ctx, "notes/test-spec.md", "C++ Java")
+	lineMulti := findQueryLineInText(noteContent, "C++ Java")
 	if lineMulti != 5 {
 		t.Errorf("esperado linha 5 para 'C++ Java' (fallback para primeiro termo), got %d", lineMulti)
 	}
