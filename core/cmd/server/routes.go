@@ -98,6 +98,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
 	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
 	mux.Post("/api/embeddings/reset", embeddingsCtx.HandleEmbeddingReset)
+	mux.Get("/api/embeddings/map", embeddingsCtx.HandleSemanticMap)
+	mux.Get("/mapa-semantico", embeddingsCtx.HandleSemanticMapPage)
 
 	// APPOINTMENTS
 	mux.Get("/agenda", appointmentsCtx.HandleAgendaPage)

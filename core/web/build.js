@@ -38,7 +38,8 @@ await esbuild.build({
     "src/database.js",
     "src/mindmap.js",
     "src/map.js",
-    "src/semantic.js"
+    "src/semantic.js",
+    "src/semantic-map.js"
   ],
   bundle: true,
   minify: true,

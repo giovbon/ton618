@@ -165,6 +165,63 @@ Para dar controle sobre a precisão da IA, adicionou-se sliders de configuraçã
 
 > ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
 
+### 3.8 Mapa Semântico (Galáxia de Notas) — PCA 2D
+
+📍 `internal/core/db/semantic_map.go` | `internal/features/embeddings/semantic_map_handler.go` | `web/src/semantic-map.js`
+
+**Adicionada em**: 22/07/2026
+
+Visualização 2D interativa de todas as notas indexadas, reduzindo os embeddings de 384 dimensões para 2 via PCA (Análise de Componentes Principais).
+
+#### Arquitetura
+
+```
+Go (PCA 384D→2D) → JSON /api/embeddings/map → Browser (SVG + Alpine.js)
+```
+
+- **PCA server-side em Go puro** (stdlib, sem dependências):
+  - Centralização dos dados (subtração da média por dimensão)
+  - Matriz de covariância 384×384 (divisão por N-1)
+  - Power iteration para top-2 autovetores (50 iterações)
+  - Deflação de Hotelling para o segundo componente
+  - Projeção de cada embedding nos 2 componentes principais
+- **K-means++ pós-PCA**: até 5 clusters para atribuir cores às bolinhas
+- **Cache thread-safe**: `sync.RWMutex` + checksum FNV-1a dos filenames. Invalida quando o número de notas indexadas muda.
+
+#### Rotas
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/embeddings/map` | JSON com `{points, count}` |
+| GET | `/mapa-semantico` | Página HTML com scatter plot SVG |
+
+#### Frontend
+
+- **SVG nativo** renderizado no browser (sem D3.js, Cytoscape.js ou qualquer biblioteca de gráficos)
+- **Pan e zoom** via Alpine.js (rolagem do mouse e botões +, −, ⟲)
+- **Tooltip** com nome da nota ao passar o mouse
+- **Clique** na bolinha → abre o editor da nota
+- **5 cores de cluster** (violeta, verde, amarelo, rosa, laranja) para distinção visual
+
+#### Guard-Clauses e Robustez
+
+- **N < 2 notas**: retorna mapa vazio (sem erro)
+- **Embeddings idênticos** (matriz de covariância zero): todos os pontos em (0,0)
+- **K-means**: `K = min(5, N)`, centróides vazios são recolocados
+- **Cache duplo** com double-check locking: leituras concorrentes são livres, escritas exclusivas
+
+#### Testes
+
+📍 `internal/core/db/semantic_map_test.go` — 27 testes unitários e de integração:
+
+| Categoria | Testes | Cobertura |
+|-----------|--------|-----------|
+| PCA | 6 | Guard-clauses, embeddings idênticos, 100 pontos, determinismo, agrupamento intra-cluster |
+| K-Means | 5 | 2/3 clusters, k > N, lista vazia, 1 cluster |
+| Cache | 5 | Checksum ordem-independente, sem colisão, 1000 chaves, thread safety (20R/5W) |
+| Ágebra Linear | 4 | Normalização, power iteration, deflação, ortogonalidade |
+| Integração DB | 5 | Banco vazio, com embeddings, cache hit/miss, apenas chunk #0 |
+
 ## 4. Banco de Dados
 
 ### 4.1 Tabelas Principais

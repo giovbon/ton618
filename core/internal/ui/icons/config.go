@@ -36,10 +36,14 @@ var Config = map[string]IconSpec{
 
 	// ── NAVEGAÇÃO & HEADER ──
 	"agenda":    {Icon: "calendar", Color: "text-sky-400"},
-	"task":      {Icon: "list-todo", Color: "text-amber-400"},
-	"todos":     {Icon: "list-todo", Color: "text-amber-400"},
+	"task":      {Icon: "construction", Color: "text-amber-400"},
+	"todos":     {Icon: "construction", Color: "tindigo-700"},
 	"tabulator": {Icon: "layers", Color: "text-sky-400"},
 	"captura":   {Icon: "link", Color: "text-emerald-400"},
+	"mapa-semantico": {Icon: "compass", Color: "text-violet-400"},
+	"semantic-map":   {Icon: "compass", Color: "text-violet-400"},
+	"compass":        {Icon: "compass", Color: "text-violet-400"},
+	"galaxy":         {Icon: "compass", Color: "text-violet-400"},
 
 	// ── UTILIDADES & MENUS ──
 	"config":   {Icon: "settings", Color: "text-zinc-400"},
