@@ -47,39 +47,55 @@
     };
 
     // ── Detecção de tipo de nota (duplicado do backend para formatação) ──
+    // Converte valor de cor para atributo class ou style.
+    // Se for hex (#F54927), rgb() ou hsl(), retorna {style:"color:#F54927"}.
+    // Se for classe Tailwind (text-pink-400), retorna {class:"text-pink-400"}.
+    function resolveColor(color) {
+        if (!color) return {class: "", style: ""};
+        if (color.charAt(0) === '#' || color.indexOf('rgb(') === 0 || color.indexOf('rgba(') === 0 || color.indexOf('hsl(') === 0 || color.indexOf('hsla(') === 0) {
+            return {class: "", style: "color:" + color};
+        }
+        return {class: color, style: ""};
+    }
+
     function getLucideIcon(type) {
-        var cls = "w-3.5 h-3.5";
+        var baseCls = "w-3.5 h-3.5";
         var iconName = type;
-        var colorClass = "";
+        var colorVal = "";
 
         if (window.TON_ICON_CONFIG && window.TON_ICON_CONFIG[type]) {
             iconName = window.TON_ICON_CONFIG[type].Icon || type;
-            colorClass = window.TON_ICON_CONFIG[type].Color || "";
+            colorVal = window.TON_ICON_CONFIG[type].Color || "";
         }
+
+        var colorRes = resolveColor(colorVal);
+        var cls = colorRes.class ? baseCls + " " + colorRes.class : baseCls;
+        var sty = colorRes.style || "";
+        var styleAttr = sty ? 'style="' + sty + '"' : '';
 
         switch (iconName) {
             case "pdf": case "book-text":
-                return `<svg class="${cls} ${colorClass || 'text-red-500'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>`;
             case "epub": case "book-open":
-                return `<svg class="${cls} ${colorClass || 'text-indigo-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>`;
             case "package": case "package-plus": case "anexo":
-                return `<svg class="${cls} ${colorClass || 'text-amber-200'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16h6"/><path d="M19 13v6"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16h6"/><path d="M19 13v6"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>`;
             case "archive": case "arquivo":
-                return `<svg class="${cls} ${colorClass || 'text-zinc-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>`;
             case "table": case "planilha": case "spreadsheet":
-                return `<svg class="${cls} ${colorClass || 'text-sky-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>`;
             case "pencil-ruler": case "desenho": case "drawing":
-                return `<svg class="${cls} ${colorClass || 'text-pink-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.7 11.3a2 2 0 0 0-.57 1.21L8 16l3.49-.13a2 2 0 0 0 1.21-.57L17 11"/><path d="M2 22h20"/><path d="M4 18v-4h4"/><path d="M12 18v-2h4"/><path d="M18 18v-4h4"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.7 11.3a2 2 0 0 0-.57 1.21L8 16l3.49-.13a2 2 0 0 0 1.21-.57L17 11"/><path d="M2 22h20"/><path d="M4 18v-4h4"/><path d="M12 18v-2h4"/><path d="M18 18v-4h4"/></svg>`;
             case "book-down": case "typst":
-                return `<svg class="${cls} ${colorClass || 'text-cyan-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13V7"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m9 10 3 3 3-3"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13V7"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m9 10 3 3 3-3"/></svg>`;
             case "vector-square": case "mermaid":
-                return `<svg class="${cls} ${colorClass || 'text-purple-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="4" height="4" x="3" y="3"/><rect width="4" height="4" x="17" y="3"/><rect width="4" height="4" x="3" y="17"/><rect width="4" height="4" x="17" y="17"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="4" height="4" x="3" y="3"/><rect width="4" height="4" x="17" y="3"/><rect width="4" height="4" x="3" y="17"/><rect width="4" height="4" x="17" y="17"/></svg>`;
             case "chart-no-axes-gantt": case "mindmap": case "markmap":
-                return `<svg class="${cls} ${colorClass || 'text-emerald-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/></svg>`;
             case "map": case "mapa":
-                return `<svg class="${cls} ${colorClass || 'text-orange-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0-1.788 0l-3.648 1.824a2 2 0 0 1-1.788 0L2.35 5.11a1 1 0 0 0-1.35 1.348l4.086 8.172a2 2 0 0 0 1.788 0l3.648-1.824a2 2 0 0 1 1.788 0l4.532 2.266a1 1 0 0 0 1.35-1.348l-4.086-8.172Z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0-1.788 0l-3.648 1.824a2 2 0 0 1-1.788 0L2.35 5.11a1 1 0 0 0-1.35 1.348l4.086 8.172a2 2 0 0 0 1.788 0l3.648-1.824a2 2 0 0 1 1.788 0l4.532 2.266a1 1 0 0 0 1.35-1.348l-4.086-8.172Z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>`;
             default: // sticky-note
-                return `<svg class="${cls} ${colorClass || 'text-amber-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg>`;
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg>`;
         }
     }
 

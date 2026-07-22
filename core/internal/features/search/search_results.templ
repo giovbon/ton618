@@ -32,8 +32,8 @@ templ SearchResults(data domain.SearchResultsData) {
 					<div class="relative z-10">
 						<div class="flex items-center gap-2 min-w-0 mb-2">
 							{{
-								iconName := domain.NoteIcon(res.Arquivo, res.RawTags)
-								iconColor := domain.NoteIconColor(iconName)
+								iconName := icons.GetIcon(res.Tipo)
+								iconColor := icons.GetColor(res.Tipo)
 							}}
 							<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
 								@icons.Icon(iconName, "w-3 h-3 " + iconColor) { res.Tipo }

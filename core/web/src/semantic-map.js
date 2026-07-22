@@ -136,25 +136,27 @@
               circle.addEventListener("mouseenter", function (e) {
                 this.setAttribute("r", "9");
                 this.setAttribute("opacity", "1");
-                var rect = svg.getBoundingClientRect();
+                var container = svg.closest("#semantic-map-container") || svg.parentElement;
+                var rect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
                 self.tooltip = {
                   show: true,
-                  x: e.clientX - rect.left + 12,
-                  y: e.clientY - rect.top - 10,
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top,
                   text: pt.title || pt.filename,
                 };
               });
 
               circle.addEventListener("mousemove", function (e) {
-                var rect = svg.getBoundingClientRect();
-                self.tooltip.x = e.clientX - rect.left + 12;
-                self.tooltip.y = e.clientY - rect.top - 10;
+                var container = svg.closest("#semantic-map-container") || svg.parentElement;
+                var rect = container ? container.getBoundingClientRect() : svg.getBoundingClientRect();
+                self.tooltip.x = e.clientX - rect.left;
+                self.tooltip.y = e.clientY - rect.top;
               });
 
               circle.addEventListener("mouseleave", function () {
                 this.setAttribute("r", "6");
                 this.setAttribute("opacity", "0.75");
-                self.tooltip = { show: false, x: 0, y: 0, text: "" };
+                self.tooltip.show = false;
               });
 
               // Clique: abre a nota

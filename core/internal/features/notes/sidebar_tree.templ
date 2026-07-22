@@ -23,8 +23,9 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
 
 templ SidebarNoteItem(n domain.NoteItem, query string) {
     {{
-        iconName := getNoteIcon(n.Arquivo, n.Type, n.Tags)
-        iconColor := domain.NoteIconColor(iconName)
+        displayType := getDisplayType(n)
+        iconName := icons.GetIcon(displayType)
+        iconColor := icons.GetColor(displayType)
     }}
     <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-sky-500/30 hover:bg-sky-950/10 transition-all duration-300 group">
         <div class="flex-1 min-w-0">

@@ -13,6 +13,8 @@ func SVGString(name string, class string) string {
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M12 13V7"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m9 10 3 3 3-3"/></svg>`
 	case "vector-square", "workflow", "mermaid":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="4" height="4" x="3" y="3"/><rect width="4" height="4" x="17" y="3"/><rect width="4" height="4" x="3" y="17"/><rect width="4" height="4" x="17" y="17"/></svg>`
+	case "git-fork":
+		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"/><path d="M12 13v2"/></svg>`
 	case "chart-no-axes-gantt", "network", "markmap", "mindmap":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/></svg>`
 	case "map", "mapa":

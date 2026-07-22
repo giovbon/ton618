@@ -19,11 +19,10 @@ templ indexContent() {
                 id="btn-search-notes"
                 type="button"
                 onclick="setSearchMode('notes')"
-                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/10 text-sky-400 border-sky-500/20"
+                class="flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40"
                 title="Busca de Notas (por nome do arquivo)"
             >
-                @icons.Icon("file-text", "w-3.5 h-3.5")
-                <span class="hidden lg:inline">Notas</span>
+                @icons.Icon(icons.GetIcon("busca-notas"), "w-4 h-4")
             </button>
 
             <!-- Busca Global -->
@@ -31,11 +30,10 @@ templ indexContent() {
                 id="btn-search-global"
                 type="button"
                 onclick="setSearchMode('global')"
-                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                class="flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
                 title="Busca Global no Conteúdo (com lematização)"
             >
-                @icons.Icon("search", "w-3.5 h-3.5")
-                <span class="hidden lg:inline">Global</span>
+                @icons.Icon(icons.GetIcon("busca-global"), "w-4 h-4")
             </button>
 
             <!-- Busca Semântica -->
@@ -43,11 +41,10 @@ templ indexContent() {
                 id="btn-search-semantic"
                 type="button"
                 onclick="setSearchMode('semantic')"
-                class="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                class="flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
                 title="Busca Semântica por Similaridade (IA)"
             >
-                @icons.Icon("sparkles", "w-3.5 h-3.5")
-                <span class="hidden lg:inline">Semântica</span>
+                @icons.Icon(icons.GetIcon("busca-semantica"), "w-4 h-4")
             </button>
         </div>
 
@@ -192,9 +189,9 @@ templ indexContent() {
         var semanticContainer = document.getElementById("semantic-container");
 
         // Reset classes dos botões
-        btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
-        btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
-        btnSemantic.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnNotes.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnGlobal.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnSemantic.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
 
         // Esconde todos os inputs e containers
         localInput.classList.add("hidden");
@@ -206,17 +203,17 @@ templ indexContent() {
 
         // Ativa o modo selecionado
         if (mode === "notes") {
-            btnNotes.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40";
+            btnNotes.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40";
             localInput.classList.remove("hidden");
             compactContainer.classList.remove("hidden");
             localInput.focus();
         } else if (mode === "global") {
-            btnGlobal.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+            btnGlobal.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
             globalInput.classList.remove("hidden");
             globalContainer.classList.remove("hidden");
             globalInput.focus();
         } else if (mode === "semantic") {
-            btnSemantic.className = "flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 text-[10px] font-bold tracking-wide uppercase rounded-lg transition-all duration-300 border bg-violet-500/20 text-violet-400 border-violet-500/40";
+            btnSemantic.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-violet-500/20 text-violet-400 border-violet-500/40";
             semanticInput.classList.remove("hidden");
             semanticContainer.classList.remove("hidden");
             document.getElementById("semantic-panel").classList.remove("hidden");

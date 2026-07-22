@@ -67,8 +67,13 @@ const mapHTML = `<main class="w-full px-0">
             </svg>
             <div x-show="tooltip.show"
                 :style="'left: ' + tooltip.x + 'px; top: ' + tooltip.y + 'px'"
-                class="absolute pointer-events-none bg-zinc-900/95 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 shadow-xl z-10 backdrop-blur-sm"
-                x-transition.duration.100ms>
+                class="absolute pointer-events-none bg-zinc-900/80 border border-zinc-700/80 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-200 shadow-xl z-10 backdrop-blur-md -translate-x-1/2 -translate-y-full -mt-3"
+                x-transition:enter="transition ease-out duration-100"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="transition ease-in duration-75"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95">
                 <span x-text="tooltip.text"></span>
             </div>
             <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
