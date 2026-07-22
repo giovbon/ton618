@@ -4,6 +4,7 @@ import "strconv"
 import "fmt"
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ Editor(data domain.EditorData) {
@@ -22,14 +23,7 @@ templ editorContent(data domain.EditorData) {
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
-        <button
-            id="save-btn"
-            onclick="saveNow()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
-            title="Arquivar / Salvar"
-        >
-            @icons.Icon(icons.GetIcon("arquivar"), "w-4 h-4 " + icons.GetColor("arquivar"))
-        </button>
+
         <button
             id="duplicate-editor-btn"
             onclick="duplicateCurrentNote()"
@@ -610,5 +604,5 @@ templ editorContent(data domain.EditorData) {
     }
 </style>
 
-<script src="/static/editor-init.js?v=1"></script>
+<script src={ staticver.URL("/static/editor-init.js") }></script>
 }

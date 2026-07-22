@@ -14,8 +14,8 @@ var Config = map[string]IconSpec{
 	// ── TIPOS DE NOTAS E ARQUIVOS ──
 	"nota":        {Icon: "sticky-note", Color: "text-amber-400"},
 	"markdown":    {Icon: "sticky-note", Color: "text-amber-400"},
-	"desenho":     {Icon: "line-squiggle", Color: "text-pink-400"},
-	"drawing":     {Icon: "line-squiggle", Color: "text-pink-400"},
+	"desenho":     {Icon: "pencil", Color: "text-pink-400"},
+	"drawing":     {Icon: "pencil", Color: "text-pink-400"},
 	"typst":       {Icon: "book-down", Color: "text-cyan-400"},
 	"mermaid":     {Icon: "vector-square", Color: "text-purple-400"},
 	"mindmap":     {Icon: "chart-no-axes-gantt", Color: "text-emerald-400"},
@@ -38,8 +38,8 @@ var Config = map[string]IconSpec{
 	"agenda":    {Icon: "calendar", Color: "text-sky-400"},
 	"task":      {Icon: "list-todo", Color: "text-amber-400"},
 	"todos":     {Icon: "list-todo", Color: "text-amber-400"},
-	"tabulator": {Icon: "container", Color: "text-sky-400"},
-	"captura":   {Icon: "pickaxe", Color: "text-emerald-400"},
+	"tabulator": {Icon: "layers", Color: "text-sky-400"},
+	"captura":   {Icon: "link", Color: "text-emerald-400"},
 
 	// ── UTILIDADES & MENUS ──
 	"config":   {Icon: "settings", Color: "text-zinc-400"},

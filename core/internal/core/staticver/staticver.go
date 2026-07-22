@@ -200,3 +200,25 @@ func mimeTypeByExt(ext string) string {
 		return ""
 	}
 }
+
+// ── Cache global para templates ────────────────────────────────────
+
+var defaultCache *Cache
+
+// SetDefault define o cache padrão usado por URL().
+// Deve ser chamado na inicialização do servidor (main.go).
+func SetDefault(c *Cache) {
+	defaultCache = c
+}
+
+// URL retorna o caminho versionado para um arquivo estático.
+// Ex: URL("/static/editor.js") → "/static/editor.js?v=a1b2c3d4e5f6"
+// Se o cache não foi inicializado, retorna o path original sem versão.
+func URL(path string) string {
+	if defaultCache == nil {
+		return path
+	}
+	trimmed := strings.TrimPrefix(path, "/static/")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	return defaultCache.VersionedPath(trimmed)
+}

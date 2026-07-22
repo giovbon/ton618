@@ -1,12 +1,7 @@
-import { createIcons, icons } from 'lucide';
-
-// ── Lucide Icons Rendering ──
+// ── Lucide Icons Rendering (DEPRECATED - ícones são inline SVG via server) ──
+// Mantido como noop para compatibilidade com código legado que chama renderLucideIcons()
 export function renderLucideIcons() {
-    try {
-        createIcons({ icons });
-    } catch (e) {
-        console.warn("Lucide render error:", e);
-    }
+    // Icons now rendered server-side in icons.templ - no client-side rendering needed
 }
 
 // @ts-ignore

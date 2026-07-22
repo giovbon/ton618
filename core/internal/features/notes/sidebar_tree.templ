@@ -16,6 +16,7 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
             for _, n := range notes {
                 @SidebarNoteItem(n, query)
             }
+            @PromptRenameScript()
         </div>
     }
 }
@@ -44,7 +45,9 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
         }
         
         <button type="button" 
-            onclick={ promptRename(n.Arquivo, getFilename(n.Arquivo)) }
+            data-oldname={ n.Arquivo }
+            data-currenttitle={ getFilename(n.Arquivo) }
+            onclick="promptRenameNote(this)"
             class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1 rounded-md hover:bg-zinc-900/60" title="Editar título">
             @icons.Icon("edit-3", "w-3.5 h-3.5")
         </button>
@@ -137,13 +140,19 @@ func highlightText(text, query string) templ.Component {
     return templ.Raw(highlighted)
 }
 
-script promptRename(oldName, currentTitle string) {
-    const newTitle = prompt("Novo título:", currentTitle);
-    if (newTitle && newTitle.trim() !== "") {
-        htmx.ajax("POST", "/api/notes/rename", {
-            values: { old: oldName, new: newTitle },
-            target: "#sidebar-tree",
-            swap: "none"
-        });
-    }
+templ PromptRenameScript() {
+    <script type="text/javascript">
+        function promptRenameNote(btn) {
+            var oldName = btn.getAttribute("data-oldname");
+            var currentTitle = btn.getAttribute("data-currenttitle");
+            var newTitle = prompt("Novo título:", currentTitle);
+            if (newTitle && newTitle.trim() !== "") {
+                htmx.ajax("POST", "/api/notes/rename", {
+                    values: { old: oldName, new: newTitle },
+                    target: "#sidebar-tree",
+                    swap: "none"
+                });
+            }
+        }
+    </script>
 }

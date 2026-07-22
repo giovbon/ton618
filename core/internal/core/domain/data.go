@@ -30,14 +30,14 @@ const (
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
 // que NÃO devem ser exibidas ao usuário na interface.
 var InternalTypeTags = map[string]bool{
-	"typst":      true,
-	"drawing":    true,
+	"typst":       true,
+	"drawing":     true,
 	"spreadsheet": true,
-	"mermaid":    true,
-	"mindmap":    true,
-	"markmap":    true,
-	"map":        true,
-	"mapa":       true,
+	"mermaid":     true,
+	"mindmap":     true,
+	"markmap":     true,
+	"map":         true,
+	"mapa":        true,
 }
 
 // EditorRoute retorna a rota de URL do editor correto para este tipo de nota.

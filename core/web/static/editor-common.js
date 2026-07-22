@@ -256,7 +256,10 @@
 
         // ── getCurrentFilename: obtém filename do input com fallback ──
         getCurrentFilename: function (filenameInput) {
-            var name = filenameInput.dataset.filename || filenameInput.value.trim();
+            var input = (filenameInput && filenameInput.value !== undefined) ? filenameInput : document.getElementById("file-name");
+            if (!input) return "";
+            var name = (input.dataset && input.dataset.filename) || input.value.trim();
+            if (!name) return "";
             return this.normalizeFilename(name);
         },
 
@@ -267,9 +270,11 @@
 
         // ── deleteCurrentNote: genérico para todos os tipos de nota ──
         deleteCurrentNote: function (filenameInput, confirmMsg) {
-            var filename = this.getCurrentFilename(filenameInput);
+            var input = (filenameInput && filenameInput.value !== undefined) ? filenameInput : document.getElementById("file-name");
+            var msg = typeof filenameInput === "string" ? filenameInput : confirmMsg;
+            var filename = this.getCurrentFilename(input);
             if (!filename) return;
-            if (!confirm(confirmMsg || 'Excluir definitivamente "' + filename + '"?')) return;
+            if (!confirm(msg || 'Excluir definitivamente "' + filename + '"?')) return;
             var fd = new FormData();
             fd.append("filename", filename);
             fetch("/file/delete", { method: "POST", body: fd, headers: this.getAuthHeaders() })
@@ -279,9 +284,12 @@
 
         // ── duplicateCurrentNote: genérico para todos os tipos de nota ──
         duplicateCurrentNote: function (filenameInput, redirectBase, confirmMsg) {
-            var filename = this.getCurrentFilename(filenameInput);
+            var input = (filenameInput && filenameInput.value !== undefined) ? filenameInput : document.getElementById("file-name");
+            var base = typeof redirectBase === "string" ? redirectBase : (window.location.pathname || "/editor");
+            var msg = typeof confirmMsg === "string" ? confirmMsg : null;
+            var filename = this.getCurrentFilename(input);
             if (!filename) return;
-            if (!confirm(confirmMsg || 'Duplicar "' + filename + '"?')) return;
+            if (!confirm(msg || 'Duplicar "' + filename + '"?')) return;
 
             var fd = new FormData();
             fd.append("filename", filename);
@@ -293,7 +301,7 @@
                 })
                 .then(function (data) {
                     if (data && data.new_filename) {
-                        window.location.href = (redirectBase || "/editor") + "?file=" + encodeURIComponent(data.new_filename);
+                        window.location.href = base + "?file=" + encodeURIComponent(data.new_filename);
                     }
                 })
                 .catch(function (err) {
@@ -375,6 +383,13 @@
                 }
             });
         }
+    };
+
+    window.deleteCurrentNote = function (filenameInput, confirmMsg) {
+        return window.EditorCommon.deleteCurrentNote(filenameInput, confirmMsg);
+    };
+    window.duplicateCurrentNote = function (filenameInput, redirectBase, confirmMsg) {
+        return window.EditorCommon.duplicateCurrentNote(filenameInput, redirectBase, confirmMsg);
     };
 
     // Close backlinks popover clicking outside

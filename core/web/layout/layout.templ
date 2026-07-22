@@ -1,6 +1,7 @@
 package layout
 
 import "context"
+import "ton618/core/internal/core/staticver"
 
 func getLayoutClass(ctx context.Context) string {
     if val, ok := ctx.Value("is_full_width").(bool); ok && val {
@@ -22,9 +23,9 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
-    <script src="/static/js/vendor/htmx.min.js?v=2" defer></script>
-    <script src="/static/js/app.js?v=7" defer></script>
-    <script src="/static/js/vendor/alpine.min.js?v=3" defer></script>
+    <script src={ staticver.URL("/static/js/vendor/htmx.min.js") } defer></script>
+    <script src={ staticver.URL("/static/js/app.js") } defer></script>
+    <script src={ staticver.URL("/static/js/vendor/alpine.min.js") } defer></script>
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.store('settings', {
@@ -200,11 +201,11 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
         }
     </script>
     <!-- Helpers compartilhados entre todos os editores (generateHash, setStatus, HTTP wrappers) -->
-    <script src="/static/editor-common.js?v=4"></script>
-    <link rel="stylesheet" href="/static/app.css?v=5" />
+    <script src={ staticver.URL("/static/editor-common.js") }></script>
+    <link rel="stylesheet" href={ staticver.URL("/static/app.css") } />
 
     if loadTipTap {
-    <script src="/static/editor.js?v=2"></script>
+    <script src={ staticver.URL("/static/editor.js") }></script>
     }
     <style>
         [x-cloak] {
@@ -361,7 +362,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     @SettingsModal()
 
     <!-- Semantic indexing bridge (desktop-only) — usa o módulo compartilhado semantic.js -->
-    <script src="/static/semantic.js?v=2"></script>
+    <script src={ staticver.URL("/static/semantic.js") }></script>
 </body>
 
 </html>

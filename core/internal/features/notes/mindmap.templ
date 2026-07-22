@@ -2,6 +2,7 @@ package notes
 
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ Mindmap(data domain.EditorData) {
@@ -22,14 +23,7 @@ templ mindmapContent(data domain.EditorData) {
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
         @BacklinksPopover(data.Backlinks)
-        <button
-            id="save-btn"
-            onclick="saveMindmap()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
-            title="Salvar (Ctrl+S)"
-        >
-            @icons.Icon(icons.GetIcon("arquivar"), "w-4 h-4 " + icons.GetColor("arquivar"))
-        </button>
+
         <button
             id="duplicate-editor-btn"
             onclick="duplicateCurrentNote()"
@@ -243,7 +237,7 @@ templ mindmapContent(data domain.EditorData) {
 </style>
 
 <!-- Carrega bundles compilados locais -->
-<script src="/static/mindmap.js?v=6"></script>
+<script src={ staticver.URL("/static/mindmap.js") }></script>
 
 <script type="module">
     import { CodeJar } from '/static/codejar.js?v=8';

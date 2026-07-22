@@ -1,6 +1,7 @@
 package notes
 
 import "ton618/core/web/layout"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ Database(title string) {
@@ -175,5 +176,5 @@ templ databaseContent() {
     }
 </style>
 
-<script src="/static/database.js?v=1"></script>
+<script src={ staticver.URL("/static/database.js") }></script>
 }

@@ -1,6 +1,7 @@
 package appointments
 
 import "ton618/core/web/layout"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ Agenda(title string) {
@@ -92,8 +93,8 @@ templ agendaContent() {
         }
     </style>
 
-    <script src="/static/js/vendor/suncalc.min.js?v=2"></script>
-    <script src="/static/js/vendor/chrono.min.js?v=2"></script>
+    <script src={ staticver.URL("/static/js/vendor/suncalc.min.js") }></script>
+    <script src={ staticver.URL("/static/js/vendor/chrono.min.js") }></script>
     <script src="/static/js/autocomplete.js?v=30"></script>
     <script type="module" src="/static/js/agenda/main.js?v=1"></script>
 }

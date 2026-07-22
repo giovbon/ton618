@@ -1827,44 +1827,12 @@
 
     // ── Delete current note ──
     function deleteCurrentNote() {
-        var filename = filenameInput.value;
-        if (!filename) return;
-        if (!confirm('Excluir definitivamente "' + filename + '"?')) return;
-        var fd = new FormData();
-        fd.append("filename", filename);
-        fetch("/file/delete", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
-            .then(function () {
-                window.location.href = "/";
-            })
-            .catch(function () {
-                window.location.href = "/";
-            });
+        EditorCommon.deleteCurrentNote(filenameInput);
     }
 
     // ── Duplicate current note ──
     function duplicateCurrentNote() {
-        var filename = filenameInput.dataset.filename || originalFilename;
-        if (!filename) return;
-        if (!confirm('Duplicar esta nota "' + filename + '"?')) return;
-
-        var fd = new FormData();
-        fd.append("filename", filename);
-
-        fetch("/api/note/duplicate", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
-            .then(function (r) {
-                if (!r.ok) {
-                    return r.text().then(function (t) { throw new Error(t); });
-                }
-                return r.json();
-            })
-            .then(function (data) {
-                if (data && data.new_filename) {
-                    window.location.href = "/editor?file=" + encodeURIComponent(data.new_filename);
-                }
-            })
-            .catch(function (err) {
-                alert("Erro ao duplicar nota: " + err.message);
-            });
+        EditorCommon.duplicateCurrentNote(filenameInput, "/editor");
     }
 
     // ── Ctrl+S ──
@@ -1876,7 +1844,8 @@
     });
 
     // ── Save button ──
-    document.getElementById("save-btn").addEventListener("click", saveNow);
+    var saveBtn = document.getElementById("save-btn");
+    if (saveBtn) saveBtn.addEventListener("click", saveNow);
 
     // ── Frontmatter toggle ──
     document

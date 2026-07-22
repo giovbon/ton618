@@ -125,6 +125,7 @@ func main() {
 	}
 	// Monta o handler com ETags automáticos
 	r.Handle("/static/*", http.StripPrefix("/static/", staticCache.Handler(staticDir)))
+	staticver.SetDefault(staticCache) // disponibiliza URL() para os templates
 
 	// Protege as rotas dinâmicas com BasicAuth
 	r.Group(func(r chi.Router) {

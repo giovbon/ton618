@@ -90,6 +90,7 @@ Serve como referência para manter consistência em contribuições futuras.
 - **IIFE para scripts no browser**: O build do esbuild usa `format: "iife"` para gerar código que não polui o escopo global além do que é explicitamente exposto.
 - **Web Worker para tarefas pesadas**: `semantic-worker.js` (ESM module) executa inferência ONNX em thread separada — não bloqueia UI.
 - **var, function, sem arrow functions nos fontes do browser**: O build target é es2020 e algumas páginas usam IIFE. Manter compatibilidade.
+- **Ícones Lucide são inline SVG server-side**: Todos os ícones são renderizados como `<svg>` direto no HTML pelo `icons.templ`. **Não depende de JS do lado do cliente.** Ícones não reconhecidos viram um círculo genérico (fallback). O pacote npm `lucide` foi removido — zero dependência de JS para ícones.
 
 ### 2.3 Testes
 
@@ -214,7 +215,19 @@ O runtime ONNX tenta WebGPU primeiro (se disponível), depois cai para CPU (WASM
 
 Usado nos testes JS para silenciar rejeições intencionais (testes de `embed_error` e timeout). Não usar em produção.
 
-## 6.4 Download do Modelo de IA
+## 6.5 Cache de Estáticos e Versionamento Automático
+
+📍 `internal/core/staticver/staticver.go`
+
+Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SHA256 do conteúdo) e `Cache-Control: immutable` por 1 ano.
+
+- `staticver.URL("/static/arquivo.js")` gera URL com hash: `/static/arquivo.js?v=a1b2c3d4e5f6`
+- Quando o arquivo muda, o hash muda → URL muda → browser baixa o novo
+- **Não precisa mais incrementar `?v=N` manualmente** nos templates
+- Chamar `staticver.SetDefault(cache)` no `main.go` para registrar o cache global
+- Exceções (strings JS dentro de `<script>`): `codejar.js` e `mermaid.min.js` ainda usam `?v=N` manual
+
+## 6.6 Download do Modelo de IA
 
 📍 `web/download_model.js`
 

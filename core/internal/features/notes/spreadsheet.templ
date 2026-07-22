@@ -2,6 +2,7 @@ package notes
 
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ Spreadsheet(data domain.EditorData) {
@@ -21,14 +22,7 @@ templ spreadsheetContent(data domain.EditorData) {
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
         @BacklinksPopover(data.Backlinks)
-        <button
-            id="save-btn"
-            onclick="saveSpreadsheet()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
-            title="Salvar"
-        >
-            @icons.Icon(icons.GetIcon("arquivar"), "w-4 h-4 " + icons.GetColor("arquivar"))
-        </button>
+
         <button
             id="duplicate-editor-btn"
             onclick="duplicateCurrentNote()"
@@ -60,8 +54,8 @@ templ spreadsheetContent(data domain.EditorData) {
 </div>
 
 <!-- Jspreadsheet CSS e JS -->
-<link rel="stylesheet" href="/static/spreadsheet.css?v=2" />
-<script src="/static/spreadsheet.js?v=2"></script>
+<link rel="stylesheet" href={ staticver.URL("/static/spreadsheet.css") } />
+<script src={ staticver.URL("/static/spreadsheet.js") }></script>
 <style>
     /* Estilos globais para dropdowns e menus flutuantes que são renderizados no body (não afetados pelo filter invert) */
     .jss_contextmenu, .jcalendar, .jdropdown {
@@ -273,6 +267,7 @@ templ spreadsheetContent(data domain.EditorData) {
 
         function duplicateCurrentNote() {
             EditorCommon.duplicateCurrentNote(filenameInput, "/spreadsheet", 'Duplicar esta planilha "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
+        }
 
         async function doRename() {
             function getSheetContent() {

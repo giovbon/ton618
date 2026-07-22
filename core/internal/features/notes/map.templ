@@ -2,6 +2,7 @@ package notes
 
 import "ton618/core/web/layout"
 import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
 import "ton618/core/internal/ui/icons"
 
 templ MapNote(data domain.EditorData) {
@@ -33,8 +34,7 @@ templ mapContent(data domain.EditorData) {
             </div>
         </div>
 
-        <button id="save-btn" onclick="saveMap()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60" title="Salvar">@icons.Icon(icons.GetIcon("arquivar"), "w-4 h-4 " + icons.GetColor("arquivar"))</button>
+
         <button onclick="duplicateCurrentNote()"
             class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60" title="Duplicar">@icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))</button>
         <button onclick="deleteCurrentNote()"
@@ -135,7 +135,7 @@ templ mapContent(data domain.EditorData) {
     }
 </style>
 <script src="/static/leaflet.js"></script>
-<script src="/static/map.js?v=4"></script>
+<script src={ staticver.URL("/static/map.js") }></script>
 
 <script>
 (function(){
