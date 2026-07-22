@@ -378,8 +378,16 @@ func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, er
 		return nil, fmt.Errorf("get backlinks: %w", err)
 	}
 
+	// Exclui backlinks da própria nota (self-link não faz sentido)
+	filtered := make([]string, 0, len(level1))
+	for _, bl := range level1 {
+		if bl != filename {
+			filtered = append(filtered, bl)
+		}
+	}
+
 	return &domain.BacklinksResult{
-		Level1: level1,
+		Level1: filtered,
 	}, nil
 }
 

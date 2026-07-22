@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"ton618/core/internal/core/staticver"
 	"ton618/core/internal/httputil"
 	"ton618/core/web/layout"
 )
@@ -47,12 +48,13 @@ func mapPage() mapPageComponent {
 type mapPageComponent struct{}
 
 func (mapPageComponent) Render(ctx context.Context, w io.Writer) error {
-	_, err := io.WriteString(w, mapHTML)
+	_, err := io.WriteString(w, mapPageHTML())
 	return err
 }
 
-// mapHTML é o conteúdo da página do mapa (full-width, sem bordas, sem legenda de clusters).
-const mapHTML = `<main class="w-full px-0">
+// mapPageHTML retorna o conteúdo da página do mapa (full-width, sem bordas, sem legenda de clusters).
+func mapPageHTML() string {
+	return `<main class="w-full px-0">
     <div x-data="semanticMapState()" class="relative">
         <div id="semantic-map-container"
             class="relative w-full h-[calc(100vh-57px)] bg-zinc-950 overflow-hidden select-none"
@@ -90,4 +92,5 @@ const mapHTML = `<main class="w-full px-0">
         </div>
     </div>
 </main>
-<script src="/static/semantic-map.js"></script>`
+<script src="` + staticver.URL("/static/semantic-map.js") + `"></script>`
+}

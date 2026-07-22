@@ -678,7 +678,7 @@ func TestNoteService_GetBacklinks_TwoLevels(t *testing.T) {
 func TestNoteService_GetBacklinks_FiltersCurrentNote(t *testing.T) {
 	links := &mockLinkStore{
 		getBacklinksFn: func(_ string) ([]string, error) {
-			return []string{"notes/a.md"}, nil
+			return []string{"notes/a.md", "notes/teste.md"}, nil
 		},
 	}
 
@@ -690,7 +690,7 @@ func TestNoteService_GetBacklinks_FiltersCurrentNote(t *testing.T) {
 	}
 
 	if len(result.Level1) != 1 || result.Level1[0] != "notes/a.md" {
-		t.Errorf("esperado Level1=[notes/a.md], got %v", result.Level1)
+		t.Errorf("esperado Level1=[notes/a.md] (self-link notes/teste.md filtrado), got %v", result.Level1)
 	}
 }
 
