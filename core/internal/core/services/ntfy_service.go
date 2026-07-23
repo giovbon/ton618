@@ -86,8 +86,19 @@ func (s *NtfyService) checkAndSendDailyAppointmentsAt(now time.Time) {
 		return
 	}
 
-	tomorrow := now.Add(24 * time.Hour)
-	tomorrowStart := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, tomorrow.Location())
+	// Usa o timezone configurado pelo usuário (mesmo do frontend da agenda)
+	// para que "amanhã" seja calculado no horário local correto.
+	loc := time.UTC
+	if tzName, err2 := s.store.GetSetting("agenda_timezone"); err2 == nil && tzName != "" {
+		if parsed, err3 := time.LoadLocation(tzName); err3 == nil {
+			loc = parsed
+		}
+	}
+
+	nowLocal := now.In(loc)
+	// "Amanhã" começa à meia-noite do próximo dia no fuso do usuário
+	tomorrowLocal := nowLocal.AddDate(0, 0, 1)
+	tomorrowStart := time.Date(tomorrowLocal.Year(), tomorrowLocal.Month(), tomorrowLocal.Day(), 0, 0, 0, 0, loc)
 	tomorrowEnd := tomorrowStart.Add(24 * time.Hour)
 
 	for _, a := range apps {
@@ -95,14 +106,16 @@ func (s *NtfyService) checkAndSendDailyAppointmentsAt(now time.Time) {
 		if err != nil {
 			continue
 		}
+		// Interpreta o horário da nota no mesmo timezone do usuário
+		tLocal := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 
-		if t.After(tomorrowStart) && t.Before(tomorrowEnd) {
+		if tLocal.After(tomorrowStart) && tLocal.Before(tomorrowEnd) {
 			logID := "daily_" + a.ID
 			sent, _ := s.store.HasNotificationBeenSent(logID)
 			if !sent {
 				title := "Lembrete: Agendamento Amanhã"
 				msg := fmt.Sprintf("Você tem um agendamento amanhã às %s:\n%s", t.Format("15:04"), a.Description)
-				
+
 				err := s.SendNotification(title, msg, "default", "calendar")
 				if err != nil {
 					slog.Error("ntfy daily send failed", "error", err)

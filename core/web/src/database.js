@@ -52,20 +52,34 @@
     // Se for classe Tailwind (text-pink-400), retorna {class:"text-pink-400"}.
     function resolveColor(color) {
         if (!color) return {class: "", style: ""};
-        if (color.charAt(0) === '#' || color.indexOf('rgb(') === 0 || color.indexOf('rgba(') === 0 || color.indexOf('hsl(') === 0 || color.indexOf('hsla(') === 0) {
-            return {class: "", style: "color:" + color};
+        var c = color.trim();
+        if (c.charAt(0) === '#' || c.indexOf('rgb(') === 0 || c.indexOf('rgba(') === 0 || c.indexOf('hsl(') === 0 || c.indexOf('hsla(') === 0) {
+            return {class: "", style: "color:" + c};
         }
-        return {class: color, style: ""};
+        return {class: c, style: ""};
     }
 
     function getLucideIcon(type) {
         var baseCls = "w-3.5 h-3.5";
-        var iconName = type;
+        var key = String(type || "").toLowerCase().trim();
+        var iconName = key;
         var colorVal = "";
 
-        if (window.TON_ICON_CONFIG && window.TON_ICON_CONFIG[type]) {
-            iconName = window.TON_ICON_CONFIG[type].Icon || type;
-            colorVal = window.TON_ICON_CONFIG[type].Color || "";
+        if (window.TON_ICON_CONFIG && window.TON_ICON_CONFIG[key]) {
+            iconName = window.TON_ICON_CONFIG[key].Icon || key;
+            colorVal = window.TON_ICON_CONFIG[key].Color || "";
+        } else if (window.TON_ICON_CONFIG) {
+            for (var k in window.TON_ICON_CONFIG) {
+                if (window.TON_ICON_CONFIG[k].Icon === key) {
+                    iconName = key;
+                    colorVal = window.TON_ICON_CONFIG[k].Color || "";
+                    break;
+                }
+            }
+        }
+
+        if (!colorVal && window.TON_ICON_CONFIG && window.TON_ICON_CONFIG["nota"]) {
+            colorVal = window.TON_ICON_CONFIG["nota"].Color || "#F54927";
         }
 
         var colorRes = resolveColor(colorVal);
@@ -78,22 +92,26 @@
                 return `<svg class="${cls}" ${styleAttr} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>`;
             case "epub": case "book-open":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>`;
-            case "package": case "package-plus": case "anexo":
+            case "package": case "package-plus": case "anexo": case "attachment":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16h6"/><path d="M19 13v6"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>`;
             case "archive": case "arquivo":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>`;
             case "table": case "planilha": case "spreadsheet":
                 return `<svg class="${cls}" ${styleAttr} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>`;
-            case "pencil-ruler": case "desenho": case "drawing":
+            case "pencil": case "pencil-ruler": case "desenho": case "drawing":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.7 11.3a2 2 0 0 0-.57 1.21L8 16l3.49-.13a2 2 0 0 0 1.21-.57L17 11"/><path d="M2 22h20"/><path d="M4 18v-4h4"/><path d="M12 18v-2h4"/><path d="M18 18v-4h4"/></svg>`;
             case "book-down": case "typst":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13V7"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m9 10 3 3 3-3"/></svg>`;
-            case "vector-square": case "mermaid":
-                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="4" height="4" x="3" y="3"/><rect width="4" height="4" x="17" y="3"/><rect width="4" height="4" x="3" y="17"/><rect width="4" height="4" x="17" y="17"/></svg>`;
+            case "git-fork": case "vector-square": case "mermaid":
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"/><path d="M12 13v2"/></svg>`;
             case "chart-no-axes-gantt": case "mindmap": case "markmap":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/></svg>`;
-            case "map": case "mapa":
+            case "pin": case "map": case "mapa":
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0-1.788 0l-3.648 1.824a2 2 0 0 1-1.788 0L2.35 5.11a1 1 0 0 0-1.35 1.348l4.086 8.172a2 2 0 0 0 1.788 0l3.648-1.824a2 2 0 0 1 1.788 0l4.532 2.266a1 1 0 0 0 1.35-1.348l-4.086-8.172Z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>`;
+            case "video": case "youtube":
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>`;
+            case "newspaper": case "artigo": case "article":
+                return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>`;
             default: // sticky-note
                 return `<svg class="${cls}" ${styleAttr} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg>`;
         }
@@ -104,17 +122,30 @@
         var t = String(tagsStr || "").toLowerCase();
         var ty = String(typeStr || "").toLowerCase();
 
-        if (f.indexOf("pdfs/") === 0) return { url: "/file?name=" + encodeURIComponent(file), icon: getLucideIcon("pdf"), blank: true };
-        if (f.indexOf("attachments/") === 0) return { url: "/file/download?name=" + encodeURIComponent(file), icon: getLucideIcon("package"), blank: true };
-        if (f.indexOf("archives/") === 0 || ty === "arquivo") return { url: "/file/download?name=" + encodeURIComponent(file), icon: getLucideIcon("archive"), blank: true };
-        if (f.indexOf("epubs/") === 0 || ty === "epub" || f.indexOf(".epub") > 0) return { url: "/epub/reader?file=" + encodeURIComponent(file), icon: getLucideIcon("epub"), blank: false };
-        if (t.indexOf("spreadsheet") !== -1 || f.indexOf("sheet") !== -1 || ty === "spreadsheet" || ty === "planilha") return { url: "/spreadsheet?file=" + encodeURIComponent(file), icon: getLucideIcon("table"), blank: false };
-        if (t.indexOf("drawing") !== -1 || f.indexOf("drawing") !== -1 || ty === "drawing" || ty === "desenho") return { url: "/drawing?file=" + encodeURIComponent(file), icon: getLucideIcon("pencil-ruler"), blank: false };
-        if (t.indexOf("typst") !== -1 || ty === "typst") return { url: "/typst?file=" + encodeURIComponent(file), icon: getLucideIcon("book-down"), blank: false };
-        if (t.indexOf("mermaid") !== -1 || ty === "mermaid") return { url: "/mermaid?file=" + encodeURIComponent(file), icon: getLucideIcon("vector-square"), blank: false };
-        if (t.indexOf("markmap") !== -1 || t.indexOf("mindmap") !== -1 || ty === "markmap" || ty === "mindmap") return { url: "/mindmap?file=" + encodeURIComponent(file), icon: getLucideIcon("chart-no-axes-gantt"), blank: false };
-        if ((t.indexOf("map") !== -1 || f.indexOf("map") !== -1 || ty === "map" || ty === "mapa") && !(t.indexOf("markmap") !== -1 || t.indexOf("mindmap") !== -1 || ty === "markmap" || ty === "mindmap")) return { url: "/map?file=" + encodeURIComponent(file), icon: getLucideIcon("map"), blank: false };
-        return { url: "/editor?file=" + encodeURIComponent(file), icon: getLucideIcon("sticky-note"), blank: false };
+        if (ty === "desenho" || ty === "drawing") return { typeKey: "desenho", url: "/drawing?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "planilha" || ty === "spreadsheet") return { typeKey: "planilha", url: "/spreadsheet?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "typst") return { typeKey: "typst", url: "/typst?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "mermaid") return { typeKey: "mermaid", url: "/mermaid?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "markmap" || ty === "mindmap") return { typeKey: "mindmap", url: "/mindmap?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "map" || ty === "mapa") return { typeKey: "mapa", url: "/map?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "pdf") return { typeKey: "pdf", url: "/file?name=" + encodeURIComponent(file), blank: true };
+        if (ty === "epub") return { typeKey: "epub", url: "/epub/reader?file=" + encodeURIComponent(file), blank: false };
+        if (ty === "anexo" || ty === "attachment") return { typeKey: "anexo", url: "/file/download?name=" + encodeURIComponent(file), blank: true };
+        if (ty === "arquivo" || ty === "archive") return { typeKey: "arquivo", url: "/file/download?name=" + encodeURIComponent(file), blank: true };
+
+        if (f.indexOf("pdfs/") === 0) return { typeKey: "pdf", url: "/file?name=" + encodeURIComponent(file), blank: true };
+        if (f.indexOf("attachments/") === 0) return { typeKey: "anexo", url: "/file/download?name=" + encodeURIComponent(file), blank: true };
+        if (f.indexOf("archives/") === 0) return { typeKey: "arquivo", url: "/file/download?name=" + encodeURIComponent(file), blank: true };
+        if (f.indexOf("epubs/") === 0 || f.indexOf(".epub") > 0) return { typeKey: "epub", url: "/epub/reader?file=" + encodeURIComponent(file), blank: false };
+
+        if (t.indexOf("spreadsheet") !== -1 || f.indexOf("sheet") !== -1) return { typeKey: "planilha", url: "/spreadsheet?file=" + encodeURIComponent(file), blank: false };
+        if (t.indexOf("drawing") !== -1 || f.indexOf("drawing") !== -1) return { typeKey: "desenho", url: "/drawing?file=" + encodeURIComponent(file), blank: false };
+        if (t.indexOf("typst") !== -1) return { typeKey: "typst", url: "/typst?file=" + encodeURIComponent(file), blank: false };
+        if (t.indexOf("mermaid") !== -1) return { typeKey: "mermaid", url: "/mermaid?file=" + encodeURIComponent(file), blank: false };
+        if (t.indexOf("markmap") !== -1 || t.indexOf("mindmap") !== -1) return { typeKey: "mindmap", url: "/mindmap?file=" + encodeURIComponent(file), blank: false };
+        if ((t.indexOf("map") !== -1 || f.indexOf("map") !== -1) && !(t.indexOf("markmap") !== -1 || t.indexOf("mindmap") !== -1)) return { typeKey: "mapa", url: "/map?file=" + encodeURIComponent(file), blank: false };
+
+        return { typeKey: "nota", url: "/editor?file=" + encodeURIComponent(file), blank: false };
     }
 
     // ── Parser de busca avançada ──
@@ -217,8 +248,9 @@
                             var tagsStr = String(rowData.tags || "");
                             var typeStr = String(rowData.type || rowData.Type || "");
                             var info = detectNoteType(file, tagsStr, typeStr);
+                            var iconHtml = getLucideIcon(info.typeKey);
                             var target = info.blank ? " target='_blank'" : "";
-                            return "<a href='" + info.url + "'" + target + " class='text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 justify-center' title='Abrir'>" + info.icon + " <span class='underline'>Abrir</span></a>";
+                            return "<a href='" + info.url + "'" + target + " class='text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 justify-center' title='Abrir'>" + iconHtml + " <span class='underline'>Abrir</span></a>";
                         };
                         return c;
                     }

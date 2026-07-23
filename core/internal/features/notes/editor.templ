@@ -21,6 +21,7 @@ templ editorContent(data domain.EditorData) {
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
 
         <button
             id="duplicate-editor-btn"
@@ -87,30 +88,6 @@ templ editorContent(data domain.EditorData) {
         </button>
         <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(navegue e edite a indentacao dos titulos)" spellcheck="false"></textarea>
     </div>
-
-
-	    if data.Backlinks != nil {
-	        if len(data.Backlinks.Level1) > 0 {
-	            <div id="backlinks-area" class="mb-3">
-	                <button id="toggle-backlinks-btn" onclick="toggleBacklinks()" class="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600 hover:text-sky-400 transition-colors">
-	                    <svg id="backlinks-arrow" class="w-3 h-3 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-	                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
-	                    </svg>
-	                    BACKLINKS
-	                </button>
-	                <div id="backlinks-content" class="mt-2 text-[12px] text-zinc-400 leading-relaxed">
-	                    Citada por:
-	                    for i, name := range data.Backlinks.Level1 {
-	                        if i > 0 {
-	                            { ", " }
-	                        }
-	                        <a href={ templ.SafeURL("/editor?file=" + name) } class="text-sky-400 hover:text-sky-300 transition-colors font-medium">{ domain.DisplayName(name) }</a>
-	                    }
-
-	                </div>
-	            </div>
-	        }
-	    }
 
 
 

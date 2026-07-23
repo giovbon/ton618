@@ -563,7 +563,7 @@ templ indexContent() {
             stems = stemsEl.dataset.stems.split(",").filter(function(s) { return s.length > 0; });
         }
 
-        document.querySelectorAll(".snippet-text, #global-container a[href^='/editor']").forEach(function (el) {
+        document.querySelectorAll(".snippet-text, #global-container a, .search-section-title, .search-tag-item").forEach(function (el) {
             var html = el.innerHTML;
             terms.forEach(function (w) {
                 var pat = makeAccentInsensitivePattern(w);

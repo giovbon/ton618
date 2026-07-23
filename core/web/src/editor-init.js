@@ -578,12 +578,18 @@
             updateBubble();
             updateTableBubble();
         },
+        onTransaction: function (props) {
+            // Captura mudanças de documento que onUpdate pode perder (delete de nó, paste sem Enter)
+            if (isInitialLoad) return;
+            if (!props.transaction.docChanged) return;
+            if (!editor || editor.isDestroyed) return;
+            setStatus("dirty");
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = setTimeout(doSave, 2000);
+        },
         onUpdate: function () {
             // Pula o primeiro onUpdate (disparado ao carregar o conteudo)
-            if (isInitialLoad) {
-                isInitialLoad = false;
-                return;
-            }
+            if (isInitialLoad) return;
             // Proteção contra destroy durante update
             if (!editor || editor.isDestroyed) return;
             setStatus("dirty");
@@ -830,8 +836,10 @@
                     if (newHtml !== html) {
                         editor.commands.setContent(newHtml);
                     }
-                    // Calcula hash inicial imediatamente, sem timeout adicional
-                    computeInitialHash();
+                    // Calcula hash inicial e garante isInitialLoad = false
+                    computeInitialHash().then(function () {
+                        isInitialLoad = false;
+                    });
                 }, 100);
             })();
         },

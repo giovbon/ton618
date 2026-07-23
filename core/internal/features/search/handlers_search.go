@@ -154,22 +154,25 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		}
 		seenFiles[hit.Doc.Arquivo] = true
 
-		// Usa o snippet do FTS5 diretamente (já contém contexto ao redor dos termos)
-		// Remove as marcações <b> do SQLite snippet(); o JS de highlight cuida da marcação visual
+		// Usa o snippet do FTS5 diretamente apenas se contiver as marcas <b> do SQLite.
+		// Se não contiver <b>, significa que o SQLite FTS retornou apenas o início do texto
+		// (por exemplo, quando o match foi em arquivo/tags). Nesses casos, usamos extractSnippetAroundMatch
+		// para encontrar a palavra no texto completo da nota.
 		snippet := ""
+		hasFTSMatchInText := false
 		if len(hit.Highlight) > 0 {
 			if ftsSnippets, ok := hit.Highlight["texto"]; ok && len(ftsSnippets) > 0 {
-				snippet = strings.ReplaceAll(ftsSnippets[0], "<b>", "")
-				snippet = strings.ReplaceAll(snippet, "</b>", "")
+				rawFts := ftsSnippets[0]
+				if strings.Contains(rawFts, "<b>") {
+					hasFTSMatchInText = true
+					snippet = strings.ReplaceAll(rawFts, "<b>", "")
+					snippet = strings.ReplaceAll(snippet, "</b>", "")
+				}
 			}
 		}
-		if snippet == "" {
-			// Fallback: primeiros 300 caracteres do texto
-			text := hit.Doc.Texto
-			if len(text) > 300 {
-				text = text[:300] + "..."
-			}
-			snippet = text
+
+		if !hasFTSMatchInText || snippet == "" {
+			snippet = extractSnippetAroundMatch(hit.Doc.Texto, query, 150)
 		}
 		// Normaliza espaços em branco
 		snippet = strings.Join(strings.Fields(snippet), " ")
@@ -289,6 +292,64 @@ func findQueryLineInText(text, query string) int {
 
 	// Fallback: retorna a posição aproximada após o frontmatter
 	return startIdx + 1
+}
+
+// extractSnippetAroundMatch encontra a primeira ocorrência de qualquer termo da
+// query no texto e retorna um trecho de até 2*windowSize caracteres centrado
+// nesse match. Se não encontrar nenhum termo, retorna o início do texto.
+func extractSnippetAroundMatch(text, query string, windowSize int) string {
+	if text == "" {
+		return ""
+	}
+
+	terms := extractSearchTerms(query)
+
+	// Tenta achar a posição do primeiro match (case/accent insensitive)
+	matchPos := -1
+	textLower := removeAccents(strings.ToLower(text))
+	for _, term := range terms {
+		normalizedTerm := removeAccents(strings.ToLower(term))
+		if idx := strings.Index(textLower, normalizedTerm); idx != -1 {
+			if matchPos == -1 || idx < matchPos {
+				matchPos = idx
+			}
+		}
+	}
+
+	if matchPos == -1 {
+		// Não encontrou — retorna início do texto
+		if len(text) > windowSize*2 {
+			return text[:windowSize*2] + "..."
+		}
+		return text
+	}
+
+	// Extrai janela centrada no match
+	start := matchPos - windowSize
+	if start < 0 {
+		start = 0
+	}
+	end := matchPos + windowSize
+	if end > len(text) {
+		end = len(text)
+	}
+
+	// Ajusta para não cortar no meio de uma sequência UTF-8 multibyte
+	for start > 0 && text[start]&0xC0 == 0x80 {
+		start--
+	}
+	for end < len(text) && text[end]&0xC0 == 0x80 {
+		end++
+	}
+
+	snippet := text[start:end]
+	if start > 0 {
+		snippet = "..." + snippet
+	}
+	if end < len(text) {
+		snippet = snippet + "..."
+	}
+	return snippet
 }
 
 // ── Bulk Delete (Config → Exclusão) ──
