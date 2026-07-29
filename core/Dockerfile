@@ -1,5 +1,5 @@
 # ─── Estágio 1: Build do bundle web ────────────────
-FROM node:20-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS web-builder
 
 WORKDIR /web
 
@@ -19,7 +19,7 @@ RUN node static/models/download-ort.js
 RUN node build.js
 
 # ─── Estágio 2: Build Go ────────────────────────────
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache ca-certificates upx curl
 
@@ -31,6 +31,7 @@ RUN go mod download
 RUN go install github.com/a-h/templ/cmd/templ@latest
 
 ARG TARGETARCH
+ARG TARGETVARIANT
 ARG BUILD_TAGS="sqlite_fts5"
 COPY . .
 
@@ -40,7 +41,8 @@ COPY --from=web-builder /web/static ./web/static
 # Gerar código do templ antes de compilar
 RUN templ generate
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+RUN GOARM=$(echo "${TARGETVARIANT}" | sed 's/v//') && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${GOARM} go build \
     -tags "${BUILD_TAGS}" \
     -ldflags="-s -w" \
     -o /ton618 ./cmd/server/
