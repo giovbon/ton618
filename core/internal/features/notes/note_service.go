@@ -118,6 +118,22 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return nil
 	}
 
+	// Verifica se a nota de origem existe (no DB ou disco)
+	oldExists := s.notes.NoteExists(oldName)
+	if !oldExists {
+		if _, err := os.Stat(filepath.Join(s.docsDir, oldName)); err == nil {
+			oldExists = true
+		}
+	}
+	if !oldExists {
+		return fmt.Errorf("nota não encontrada: %s", oldName)
+	}
+
+	// Verifica se já existe uma nota com o mesmo nome no banco
+	if s.notes.NoteExists(newName) {
+		return fmt.Errorf("já existe uma nota com o nome: %s", newName)
+	}
+
 	if err := s.notes.RenameNote(oldName, newName); err != nil {
 		return fmt.Errorf("rename note: %w", err)
 	}

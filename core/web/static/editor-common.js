@@ -311,6 +311,8 @@
 
         // ── doRenameContent: renomeia + salva conteúdo, comum a todos os tipos ──
         doRenameContent: async function (filenameInput, getContentFn, redirectBase, opts) {
+            if (filenameInput._isRenaming) return;
+            filenameInput._isRenaming = true;
             opts = opts || {};
             var newName = filenameInput.value.trim();
             if (newName.endsWith(".md")) newName = newName.slice(0, -3);
@@ -318,7 +320,10 @@
             var currentFilename = this.getCurrentFilename(filenameInput);
             var currentDisplayName = this.getDisplayName(currentFilename);
 
-            if (!newName || newName === currentDisplayName) return;
+            if (!newName || newName === currentDisplayName) {
+                filenameInput._isRenaming = false;
+                return;
+            }
 
             var fullNewName = "notes/" + newName + ".md";
 
@@ -333,7 +338,10 @@
                     renameFd.append("old", currentFilename);
                     renameFd.append("new", fullNewName);
                     var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd, headers: this.getAuthHeaders() });
-                    if (!renameResp.ok) throw new Error("Erro ao renomear no servidor");
+                    if (!renameResp.ok) {
+                        var errTxt = await renameResp.text().catch(function () { return ""; });
+                        throw new Error(errTxt || "Erro ao renomear no servidor");
+                    }
                 }
 
                 // 2. Save
@@ -355,6 +363,8 @@
                 alert("Erro ao renomear: " + (e.message || "desconhecido"));
                 filenameInput.value = currentDisplayName;
                 if (opts.setStatus) opts.setStatus("dirty");
+            } finally {
+                filenameInput._isRenaming = false;
             }
         },
 
@@ -365,7 +375,6 @@
             filenameInput.addEventListener("keydown", function (e) {
                 if (e.key === "Enter") {
                     e.preventDefault();
-                    self.doRenameContent(filenameInput, opts.getContent, opts.redirectBase, opts);
                     filenameInput.blur();
                 }
             });

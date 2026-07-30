@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -303,6 +304,83 @@ func TestNoteService_Rename_MesmoNome(t *testing.T) {
 	err := svc.Rename("notes/mesmo.md", "mesmo")
 	if err != nil {
 		t.Fatalf("Rename mesmo nome: %v", err)
+	}
+}
+
+func TestNoteService_Rename_PreventDuplicateTarget(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	svc.Save("nota-origem", "conteudo origem", nil)
+	svc.Save("nota-destino", "conteudo destino", nil)
+
+	err := svc.Rename("nota-origem", "nota-destino")
+	if err == nil {
+		t.Fatal("esperava erro ao renomear para nota existente, mas retornou nil")
+	}
+
+	if !strings.Contains(err.Error(), "já existe uma nota com o nome") {
+		t.Errorf("esperado erro de duplicidade amigável, got %v", err)
+	}
+
+	// Verifica se a nota de origem continua intacta no banco
+	if !store.NoteExists("notes/nota-origem.md") {
+		t.Error("nota-origem deveria ter sido mantida no banco")
+	}
+}
+
+func TestNoteService_Rename_NonExistentSource(t *testing.T) {
+	svc, _, _, cleanup := newTestService(t)
+	defer cleanup()
+
+	err := svc.Rename("notes/nota-que-nao-existe.md", "notes/novo-nome.md")
+	if err == nil {
+		t.Fatal("esperava erro ao renomear nota inexistente, mas retornou nil")
+	}
+
+	if !strings.Contains(err.Error(), "nota não encontrada") {
+		t.Errorf("esperado erro 'nota não encontrada', got %v", err)
+	}
+}
+
+func TestNoteService_Rename_PreservesChunksAndEmbeddings(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	origName := "notes/nota-semantica.md"
+	newName := "notes/nota-semantica-renomeada.md"
+
+	svc.Save(origName, "conteudo com busca semantica", nil)
+
+	// Insere chunks e embeddings para simular indexacao semantica prévia
+	_, err := store.DB.Exec("INSERT INTO note_chunks(chunk_id, filename, chunk_index, content) VALUES (?, ?, ?, ?)", origName+"#0", origName, 0, "conteudo com busca semantica")
+	if err != nil {
+		t.Fatalf("insert chunk: %v", err)
+	}
+
+	blob := make([]byte, 384*4) // 384 float32s
+	_, err = store.DB.Exec("INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)", origName+"#0", blob)
+	if err != nil {
+		t.Fatalf("insert embedding: %v", err)
+	}
+
+	err = svc.Rename(origName, newName)
+	if err != nil {
+		t.Fatalf("Rename falhou: %v", err)
+	}
+
+	// Verifica se os chunks foram atualizados para o novo nome
+	var chunkCount int
+	store.DB.QueryRow("SELECT COUNT(*) FROM note_chunks WHERE filename = ? AND chunk_id = ?", newName, newName+"#0").Scan(&chunkCount)
+	if chunkCount != 1 {
+		t.Errorf("esperado 1 chunk atualizado com o novo nome, got %d", chunkCount)
+	}
+
+	// Verifica se os embeddings foram atualizados para o novo chunk_id
+	var embCount int
+	store.DB.QueryRow("SELECT COUNT(*) FROM note_embeddings WHERE chunk_id = ?", newName+"#0").Scan(&embCount)
+	if embCount != 1 {
+		t.Errorf("esperado 1 embedding atualizado com o novo chunk_id, got %d", embCount)
 	}
 }
 

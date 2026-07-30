@@ -247,6 +247,44 @@ func TestHandleFileRename_Success(t *testing.T) {
 	}
 }
 
+func TestHandleFileRename_DuplicateNameReturns400(t *testing.T) {
+	ctx := newTestContext(t)
+	saveTestNote(t, ctx, "notes/nota1.md", "Conteudo 1", "test")
+	saveTestNote(t, ctx, "notes/nota2.md", "Conteudo 2", "test")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=nota1.md&new=nota2.md")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != 400 {
+		t.Errorf("esperado 400 Bad Request ao tentar renomear para nota existente, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "já existe uma nota com o nome") {
+		t.Errorf("esperado corpo de erro amigável, got %q", rec.Body.String())
+	}
+}
+
+func TestHandleFileRename_NotFoundReturns400(t *testing.T) {
+	ctx := newTestContext(t)
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=nota-inexistente.md&new=novo-nome.md")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != 400 {
+		t.Errorf("esperado 400 Bad Request para nota inexistente, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "nota não encontrada") {
+		t.Errorf("esperado mensagem nota não encontrada, got %q", rec.Body.String())
+	}
+}
+
 // ── HandleUploadAttachment ──────────────────────────────────────
 
 func TestHandleUploadAttachment_Success(t *testing.T) {

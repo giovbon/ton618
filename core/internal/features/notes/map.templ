@@ -238,7 +238,10 @@ templ mapContent(data domain.EditorData) {
         setTimeout(function() { clearInterval(checkTimer); }, 5000);
     }
 
+    var isRenaming = false;
     async function doRename() {
+        if (isRenaming) return;
+        isRenaming = true;
         var newName = filenameInput.value.trim();
         if (newName.endsWith(".md")) newName = newName.slice(0, -3);
         var currentFilename = filenameInput.dataset.filename;
@@ -249,7 +252,10 @@ templ mapContent(data domain.EditorData) {
             filenameInput.dataset.filename = currentFilename;
         }
         var currentDisplayName = currentFilename.split("/").pop().replace(/\.md$/i, "");
-        if (!newName || newName === currentDisplayName) return;
+        if (!newName || newName === currentDisplayName) {
+            isRenaming = false;
+            return;
+        }
         if (saveTimer) clearTimeout(saveTimer);
         var fullNewName = "notes/" + newName + ".md";
         try {
@@ -260,7 +266,10 @@ templ mapContent(data domain.EditorData) {
                 renameFd.append("old", currentFilename);
                 renameFd.append("new", fullNewName);
                 var renameResp = await fetch("/file/rename", { method: "POST", body: renameFd, headers: getAuthHeaders() });
-                if (!renameResp.ok) throw new Error("Erro ao renomear");
+                if (!renameResp.ok) {
+                    var errTxt = await renameResp.text().catch(function () { return ""; });
+                    throw new Error(errTxt || "Erro ao renomear");
+                }
             }
             var saveFd = new FormData();
             saveFd.append("filename", fullNewName);
@@ -273,13 +282,16 @@ templ mapContent(data domain.EditorData) {
             window.location.href = "/map?file=" + encodeURIComponent(fullNewName);
         } catch(e) {
             console.error(e);
+            alert("Erro ao renomear: " + (e.message || "desconhecido"));
             filenameInput.value = currentDisplayName;
             setStatus("dirty");
+        } finally {
+            isRenaming = false;
         }
     }
 
     filenameInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { e.preventDefault(); doRename(); filenameInput.blur(); }
+        if (e.key === "Enter") { e.preventDefault(); filenameInput.blur(); }
     });
     filenameInput.addEventListener("blur", function () { doRename(); });
 

@@ -374,7 +374,12 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	if ft == fileTypeNote {
 		// Note: delega para o NoteService
 		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			msg := err.Error()
+			if strings.Contains(msg, "já existe uma nota") || strings.Contains(msg, "nota não encontrada") || strings.Contains(msg, "UNIQUE constraint failed") {
+				http.Error(w, msg, http.StatusBadRequest)
+			} else {
+				http.Error(w, msg, http.StatusInternalServerError)
+			}
 			return
 		}
 		w.Header().Set("HX-Trigger", "reload-sidebar")

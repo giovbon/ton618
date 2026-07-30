@@ -49,10 +49,21 @@ func (s *Store) DeleteNote(filename string) error {
 func (s *Store) RenameNote(old, new string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.RenameNote(s.queryCtx(), dbgen.RenameNoteParams{
-		Filename:   new,
-		Filename_2: old,
-	})
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE notes SET filename = ? WHERE filename = ?", new, old); err != nil {
+		return err
+	}
+	_, _ = tx.Exec("UPDATE note_chunks SET filename = ?, chunk_id = ? || SUBSTR(chunk_id, LENGTH(?) + 1) WHERE filename = ?", new, new, old, old)
+	_, _ = tx.Exec("INSERT INTO note_embeddings(chunk_id, embedding) SELECT ? || SUBSTR(chunk_id, LENGTH(?) + 1), embedding FROM note_embeddings WHERE chunk_id LIKE ? || '#%'", new, old, old)
+	_, _ = tx.Exec("DELETE FROM note_embeddings WHERE chunk_id LIKE ? || '#%' AND chunk_id NOT LIKE ? || '#%'", old, new)
+
+	return tx.Commit()
 }
 
 // GetAllNotes returns all note filenames and their mtimes, ordered by mtime desc.

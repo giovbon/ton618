@@ -1748,17 +1748,23 @@ function updateToc() {
     filenameInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") {
             e.preventDefault();
-            doRename();
+            filenameInput.blur();
         }
     });
     filenameInput.addEventListener("blur", function () {
         doRename();
     });
 
+    var isRenaming = false;
     async function doRename() {
+        if (isRenaming) return;
+        isRenaming = true;
         var newName = filenameInput.value.trim();
         if (newName.endsWith(".md")) newName = newName.slice(0, -3);
-        if (!newName || newName === originalDisplayName) return;
+        if (!newName || newName === originalDisplayName) {
+            isRenaming = false;
+            return;
+        }
         newName += ".md";
         if (saveTimer) clearTimeout(saveTimer);
         setStatus("saving");
@@ -1774,32 +1780,26 @@ function updateToc() {
         // Converte links do editor de volta para [[wikilinks]]
         finalContent = EditorCommon.wikilinksToMarkdown(finalContent);
 
-        if (originalFilename !== "notes/" + newName) {
-            var renameFd = new FormData();
-            renameFd.append("old", originalFilename);
-            renameFd.append("new", "notes/" + newName);
-            try {
+        try {
+            if (originalFilename !== "notes/" + newName) {
+                var renameFd = new FormData();
+                renameFd.append("old", originalFilename);
+                renameFd.append("new", "notes/" + newName);
                 var renameResp = await fetch("/file/rename", {
                     method: "POST",
                     body: renameFd,
                     headers: EditorCommon.getAuthHeaders(),
                 });
                 if (!renameResp.ok) {
-                    throw new Error("Erro ao renomear no servidor");
+                    var errTxt = await renameResp.text().catch(function () { return ""; });
+                    throw new Error(errTxt || "Erro ao renomear no servidor");
                 }
-            } catch (err) {
-                setStatus("dirty");
-                console.error("Rename failed:", err);
-                alert("Erro ao renomear nota: " + err.message);
-                return;
             }
-        }
 
-        var fd = new FormData();
-        fd.append("filename", newName);
-        fd.append("content", finalContent);
-        fd.append("tags", "");
-        try {
+            var fd = new FormData();
+            fd.append("filename", newName);
+            fd.append("content", finalContent);
+            fd.append("tags", "");
             var saveResp = await fetch("/file/save", {
                 method: "POST",
                 body: fd,
@@ -1818,8 +1818,13 @@ function updateToc() {
             originalDisplayName = newName.replace(/\.md$/, "");
             window.location.href =
                 "/editor?file=" + encodeURIComponent("notes/" + newName);
-        } catch (e) {
+        } catch (err) {
             setStatus("dirty");
+            console.error("Rename failed:", err);
+            alert("Erro ao renomear nota: " + (err.message || "desconhecido"));
+            filenameInput.value = originalDisplayName;
+        } finally {
+            isRenaming = false;
         }
     }
 
