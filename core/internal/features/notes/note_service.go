@@ -118,7 +118,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return nil
 	}
 
-	// Verifica se a nota de origem existe (no DB ou disco)
+	// Verifica se a nota de origem existe (no DB, disco ou file_mods)
 	oldExists := s.notes.NoteExists(oldName)
 	if !oldExists {
 		if _, err := os.Stat(filepath.Join(s.docsDir, oldName)); err == nil {
@@ -126,12 +126,29 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		}
 	}
 	if !oldExists {
-		return fmt.Errorf("nota não encontrada: %s", oldName)
+		if mods, err := s.store.GetFilesModsAndTags(); err == nil {
+			for _, m := range mods {
+				if m.Arquivo == oldName || m.Arquivo == strings.TrimPrefix(oldName, "notes/") {
+					oldExists = true
+					break
+				}
+			}
+		}
 	}
 
 	// Verifica se já existe uma nota com o mesmo nome no banco
 	if s.notes.NoteExists(newName) {
 		return fmt.Errorf("já existe uma nota com o nome: %s", newName)
+	}
+
+	if !oldExists {
+		if processor.IsDraftName(oldName) {
+			// Se a nota de origem é um rascunho gerado automaticamente ainda não salvo no banco nem no disco,
+			// permite a transição para o novo nome sem erro.
+			slog.Info("renomeando rascunho de nota ainda não salvo", "oldName", oldName, "newName", newName)
+			return nil
+		}
+		return fmt.Errorf("nota não encontrada: %s", oldName)
 	}
 
 	if err := s.notes.RenameNote(oldName, newName); err != nil {

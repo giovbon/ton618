@@ -23,23 +23,25 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
 
 templ SidebarNoteItem(n domain.NoteItem, query string) {
     {{
+        filename := getFilename(n.Arquivo)
         displayType := getDisplayType(n)
         iconName := icons.GetIcon(displayType)
         iconColor := icons.GetColor(displayType)
+        visibleTags := getVisibleTags(n.Tags)
     }}
     <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-sky-500/30 hover:bg-sky-950/10 transition-all duration-300 group">
         <div class="flex-1 min-w-0">
             <a href={ templ.SafeURL(getNoteLink(n)) } target={ getTarget(n.Arquivo) } class="block">
                 <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate flex items-center gap-1.5">
                     @icons.Icon(iconName, "w-4 h-4 shrink-0 " + iconColor)
-                    @highlightText(getFilename(n.Arquivo), query)
+                    @highlightText(filename, query)
                 </span>
             </a>
         </div>
         
-        if len(getVisibleTags(n.Tags)) > 0 {
+        if len(visibleTags) > 0 {
             <div class="hidden sm:flex gap-1 shrink-0">
-                for _, t := range getVisibleTags(n.Tags) {
+                for _, t := range visibleTags {
                     <span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#{ t }</span>
                 }
             </div>
@@ -47,7 +49,7 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
         
         <button type="button" 
             data-oldname={ n.Arquivo }
-            data-currenttitle={ getFilename(n.Arquivo) }
+            data-currenttitle={ filename }
             onclick="promptRenameNote(this)"
             class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1 rounded-md hover:bg-zinc-900/60" title="Editar título">
             @icons.Icon("edit-3", "w-3.5 h-3.5")
@@ -80,7 +82,12 @@ func getNoteLink(n domain.NoteItem) string {
     if strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
         return "/file/download?name=" + SafeFileQueryEscape(path)
     }
-    noteType := domain.DetectNoteType(n.Tags, "", path)
+    var noteType domain.NoteType
+    if n.Type != "" {
+        noteType = domain.NoteType(n.Type)
+    } else {
+        noteType = domain.DetectNoteType(n.Tags, "", path)
+    }
     route := noteType.EditorRoute()
     return route + "?file=" + SafeFileQueryEscape(path)
 }
@@ -100,7 +107,7 @@ func getNoteIcon(path string, noteType string, tags []string) string {
 }
 
 func getDisplayType(n domain.NoteItem) string {
-    if n.Type != "" && n.Type != "nota" {
+    if n.Type != "" {
         return n.Type
     }
     return string(domain.DetectNoteType(n.Tags, "", n.Arquivo))

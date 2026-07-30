@@ -290,9 +290,21 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sort.Slice(noteList, func(i, j int) bool {
-		return noteList[i].Mtime > noteList[j].Mtime
-	})
+	sortOpt := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
+	if sortOpt == "name" || sortOpt == "nome" {
+		sort.Slice(noteList, func(i, j int) bool {
+			nameI := strings.ToLower(getSidebarFilename(noteList[i].Arquivo))
+			nameJ := strings.ToLower(getSidebarFilename(noteList[j].Arquivo))
+			if nameI == nameJ {
+				return noteList[i].Mtime > noteList[j].Mtime
+			}
+			return nameI < nameJ
+		})
+	} else {
+		sort.Slice(noteList, func(i, j int) bool {
+			return noteList[i].Mtime > noteList[j].Mtime
+		})
+	}
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	filteredNotes := filterNotes(noteList, q)
@@ -300,6 +312,16 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	notes.SidebarTree(filteredNotes, q).Render(r.Context(), w)
+}
+
+func getSidebarFilename(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) > 0 {
+		name := parts[len(parts)-1]
+		name = strings.TrimPrefix(name, "captura-")
+		return strings.TrimSuffix(name, ".md")
+	}
+	return path
 }
 
 func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {

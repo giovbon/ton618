@@ -49,17 +49,33 @@ templ indexContent() {
         </div>
 
         <div class="relative flex-1">
-            <input
-                id="search-local"
-                type="text"
-                placeholder="Filtrar nomes das notas..."
-                name="q"
-                autocomplete="off"
-                hx-get="/api/sidebar"
-                hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
-                hx-target="#contentArea"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
-            />
+            <div class="flex items-center gap-2">
+                <input
+                    id="search-local"
+                    type="text"
+                    placeholder="Filtrar nomes das notas..."
+                    name="q"
+                    autocomplete="off"
+                    hx-get="/api/sidebar"
+                    hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
+                    hx-include="#sidebar-sort"
+                    hx-target="#contentArea"
+                    class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
+                />
+                <select
+                    id="sidebar-sort"
+                    name="sort"
+                    hx-get="/api/sidebar"
+                    hx-include="#search-local"
+                    hx-target="#contentArea"
+                    hx-trigger="change"
+                    class="px-3 py-2.5 text-[12px] font-medium bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-300 focus:outline-none focus:border-sky-500 transition-all cursor-pointer shrink-0"
+                    title="Ordenar listagem"
+                >
+                    <option value="name">Nome (A-Z)</option>
+                    <option value="mtime" selected>Modificação</option>
+                </select>
+            </div>
             <input
                 id="search-global"
                 type="text"

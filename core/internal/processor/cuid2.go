@@ -3,6 +3,7 @@ package processor
 import (
 	"crypto/rand"
 	"math/big"
+	"strings"
 )
 
 var (
@@ -53,6 +54,22 @@ var (
 	}
 )
 
+var (
+	adjMap  map[string]bool
+	nounMap map[string]bool
+)
+
+func init() {
+	adjMap = make(map[string]bool, len(adjectives))
+	for _, a := range adjectives {
+		adjMap[a] = true
+	}
+	nounMap = make(map[string]bool, len(nouns))
+	for _, n := range nouns {
+		nounMap[n] = true
+	}
+}
+
 // GenerateCUID2 generates a human-readable note name using the diceware approach:
 // adjetivo-substantivo-nn (e.g., "veloz-tigre-42").
 // This is far more memorable than random character strings while still providing
@@ -63,6 +80,41 @@ func GenerateCUID2() string {
 	num := randomInt(10, 99)
 
 	return adj + "-" + noun + "-" + num
+}
+
+// IsCUID2 verifica se o nome segue o padrão gerado automaticamente adjetivo-substantivo-nn.
+func IsCUID2(name string) bool {
+	base := strings.TrimPrefix(name, "notes/")
+	base = strings.TrimSuffix(base, ".md")
+	parts := strings.Split(base, "-")
+	if len(parts) != 3 {
+		return false
+	}
+	if !adjMap[strings.ToLower(parts[0])] {
+		return false
+	}
+	if !nounMap[strings.ToLower(parts[1])] {
+		return false
+	}
+	if len(parts[2]) != 2 || parts[2][0] < '0' || parts[2][0] > '9' || parts[2][1] < '0' || parts[2][1] > '9' {
+		return false
+	}
+	return true
+}
+
+// IsDraftName verifica se um nome de arquivo é um rascunho recém-criado / gerado automaticamente.
+func IsDraftName(name string) bool {
+	if IsCUID2(name) {
+		return true
+	}
+	base := strings.TrimPrefix(name, "notes/")
+	base = strings.TrimSuffix(base, ".md")
+	baseLower := strings.ToLower(base)
+	return strings.HasPrefix(baseLower, "captura-") ||
+		strings.HasPrefix(baseLower, "draft-") ||
+		strings.HasPrefix(baseLower, "rascunho-") ||
+		strings.HasPrefix(baseLower, "untitled") ||
+		strings.HasPrefix(baseLower, "nova-nota")
 }
 
 func randomChoice(list []string) string {

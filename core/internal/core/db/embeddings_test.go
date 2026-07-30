@@ -788,10 +788,10 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		// embeddable tanto no Go (IsNoteEmbeddable não abre o arquivo por performance)
 		// quanto no SQL (não faz busca no texto completo por performance).
 		// Na prática, a aplicação sincroniza as tags baseadas no frontmatter ao salvar a nota.
-		{"notes/desenho-fm.md", "type: drawing\n# Desenho", []string{}, true},
-		{"notes/planilha-fm.md", "type: spreadsheet\n# Planilha", []string{}, true},
-		{"notes/fluxo-fm.md", "type: mermaid\n# Mermaid", []string{}, true},
-		{"notes/fm-map.md", "type: map\n# Mapa", []string{}, true},
+		{"notes/fm-test1.md", "type: drawing\n# Desenho", []string{}, true},
+		{"notes/fm-test2.md", "type: spreadsheet\n# Planilha", []string{}, true},
+		{"notes/fm-test3.md", "type: mermaid\n# Mermaid", []string{}, true},
+		{"notes/fm-test4.md", "type: map\n# Mapa", []string{}, true},
 		{"notes/fm-mapa.md", "type: mapa\n# Mapa", []string{}, false},
 
 		// Não indexáveis por heurística de nome de arquivo

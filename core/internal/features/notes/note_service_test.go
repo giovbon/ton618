@@ -404,6 +404,15 @@ func TestNoteService_Rename_SameName(t *testing.T) {
 	}
 }
 
+func TestNoteService_Rename_UnsavedDraft(t *testing.T) {
+	svc, _ := newMockService(t)
+	// Renomear uma nota rascunho que ainda não foi salva no banco nem no disco
+	err := svc.Rename("notes/impar-lareira-99.md", "notes/minha-nova-nota.md")
+	if err != nil {
+		t.Errorf("renomear rascunho não salvo não deve falhar, got %v", err)
+	}
+}
+
 func TestNoteService_Rename_NormalizesAndRenames(t *testing.T) {
 	var renamedOld, renamedNew string
 	var deletedOld string
