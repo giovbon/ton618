@@ -565,7 +565,7 @@
             T.Link,
             T.Markdown.configure({
                 transformPastedText: true,
-                transformCopiedText: true,
+                transformCopiedText: false,
             }),
             T.CodeBlockLowlightExt.configure({
                 lowlight: T.lowlight,
@@ -1681,6 +1681,12 @@ function updateToc() {
             frontmatterText = e.target.value;
             e.target.style.height = "auto";
             e.target.style.height = e.target.scrollHeight + "px";
+            // Marca como alterado e agenda save (inclusive ao clicar em tag sugerida)
+            if (!isInitialLoad) {
+                setStatus("dirty");
+                if (saveTimer) clearTimeout(saveTimer);
+                saveTimer = setTimeout(doSave, 2000);
+            }
         }
     });
 
