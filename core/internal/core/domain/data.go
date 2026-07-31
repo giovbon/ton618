@@ -124,6 +124,10 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 		if strings.Contains(lowerContent, "type: map") || strings.Contains(lowerContent, "type: mapa") {
 			return NoteTypeMap
 		}
+
+		if isMermaidContent(lowerContent) {
+			return NoteTypeMermaid
+		}
 	}
 
 	// 4. Nome de arquivo como heurística adicional
@@ -148,6 +152,29 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 	}
 
 	return NoteTypeMarkdown
+}
+
+func isMermaidContent(lowerContent string) bool {
+	text := strings.TrimSpace(lowerContent)
+	if strings.HasPrefix(text, "---") {
+		if idx := strings.Index(text[3:], "---"); idx != -1 {
+			text = strings.TrimSpace(text[idx+6:])
+		}
+	}
+	keywords := []string{
+		"gantt", "graph ", "graph\n", "graph\r", "flowchart",
+		"sequencediagram", "classdiagram", "statediagram",
+		"erdiagram", "pie", "gitgraph", "journey", "timeline",
+		"zenuml", "architecture-beta", "kanban", "block-beta",
+		"packet-beta", "c4diagram", "sankey-beta", "quadrantchart",
+		"requirementdiagram",
+	}
+	for _, kw := range keywords {
+		if strings.HasPrefix(text, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // FilterUserTags remove as tags internas de tipo de editor de uma lista de tags,

@@ -157,6 +157,9 @@ func (s *NoteService) Rename(oldName, newName string) error {
 
 	os.Rename(filepath.Join(s.docsDir, oldName), filepath.Join(s.docsDir, newName))
 
+	// Captura tags da nota original para preservar em caso de tipos especiais
+	oldTags, _ := s.tags.GetFileTags(oldName)
+
 	// Remove todos os registros antigos do DB numa transação atômica
 	if err := s.store.DeleteAllFileRecords(oldName); err != nil {
 		slog.Error("delete all file records on rename", "file", oldName, "error", err)
@@ -178,6 +181,15 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		parts := strings.Split(newName, "/")
 		base := parts[len(parts)-1]
 		newTitle := strings.TrimSuffix(base, ".md")
+
+		// Preserva tags de tipo interno no frontmatter da nota (ex: mermaid, typst, drawing, spreadsheet, mindmap, map)
+		for _, tag := range oldTags {
+			if domain.InternalTypeTags[strings.ToLower(tag)] {
+				if newContent, err := UpdateFrontmatterProperty(content, "type", strings.ToLower(tag)); err == nil {
+					content = newContent
+				}
+			}
+		}
 
 		// Atualiza a propriedade 'title' no frontmatter da nota (tanto físico quanto DB)
 		if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {

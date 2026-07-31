@@ -459,6 +459,9 @@ templ typstContent(data domain.EditorData) {
             setStatus("saving");
 
             var content = jar.toString();
+            if (!content.trim().startsWith("---")) {
+                content = "---\ntype: typst\n---\n" + content;
+            }
             var currentHash = await generateHash(content);
 
             if (currentHash === lastSavedHash) {
@@ -475,7 +478,7 @@ templ typstContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             fd.append("content", content);
-            fd.append("tags", "");
+            fd.append("tags", "typst");
             fd.append("silent", "true");
 
             try {
@@ -510,8 +513,13 @@ templ typstContent(data domain.EditorData) {
         }
 
         async function doRename() {
-            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/typst", {
+            await EditorCommon.doRenameContent(filenameInput, function() {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: typst\n---\n" + c;
+                return c;
+            }, "/typst", {
                 setStatus: setStatus,
+                tags: "typst",
                 onSaved: async function (content) {
                     lastSavedHash = await generateHash(content);
                 }
@@ -527,8 +535,13 @@ templ typstContent(data domain.EditorData) {
         }
 
         EditorCommon.setupRenameListeners(filenameInput, {
-            getContent: function () { return jar.toString(); },
+            getContent: function () {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: typst\n---\n" + c;
+                return c;
+            },
             redirectBase: "/typst",
+            tags: "typst",
             setStatus: setStatus
         });
 

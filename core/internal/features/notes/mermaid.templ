@@ -353,6 +353,9 @@ templ mermaidContent(data domain.EditorData) {
             setStatus("saving");
 
             var content = jar.toString();
+            if (!content.trim().startsWith("---")) {
+                content = "---\ntype: mermaid\n---\n" + content;
+            }
             var currentHash = await generateHash(content);
 
             if (currentHash === lastSavedHash) {
@@ -369,7 +372,7 @@ templ mermaidContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             fd.append("content", content);
-            fd.append("tags", "");
+            fd.append("tags", "mermaid");
             fd.append("silent", "true");
 
             try {
@@ -399,8 +402,13 @@ templ mermaidContent(data domain.EditorData) {
         }
 
         async function doRename() {
-            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/mermaid", {
+            await EditorCommon.doRenameContent(filenameInput, function() {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: mermaid\n---\n" + c;
+                return c;
+            }, "/mermaid", {
                 setStatus: setStatus,
+                tags: "mermaid",
                 onSaved: async function (content) {
                     lastSavedHash = await generateHash(content);
                 }
@@ -416,8 +424,13 @@ templ mermaidContent(data domain.EditorData) {
         }
 
         EditorCommon.setupRenameListeners(filenameInput, {
-            getContent: function () { return jar.toString(); },
+            getContent: function () {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: mermaid\n---\n" + c;
+                return c;
+            },
             redirectBase: "/mermaid",
+            tags: "mermaid",
             setStatus: setStatus
         });
 

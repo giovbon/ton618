@@ -430,6 +430,9 @@ templ mindmapContent(data domain.EditorData) {
             setStatus("saving");
 
             var content = jar.toString();
+            if (!content.trim().startsWith("---")) {
+                content = "---\ntype: mindmap\n---\n" + content;
+            }
             var currentHash = await generateHash(content);
 
             if (currentHash === lastSavedHash) {
@@ -446,7 +449,7 @@ templ mindmapContent(data domain.EditorData) {
             var fd = new FormData();
             fd.append("filename", filename);
             fd.append("content", content);
-            fd.append("tags", "");
+            fd.append("tags", "mindmap");
             fd.append("silent", "true");
 
             try {
@@ -481,8 +484,13 @@ templ mindmapContent(data domain.EditorData) {
         }
 
         async function doRename() {
-            await EditorCommon.doRenameContent(filenameInput, function() { return jar.toString(); }, "/mindmap", {
+            await EditorCommon.doRenameContent(filenameInput, function() {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: mindmap\n---\n" + c;
+                return c;
+            }, "/mindmap", {
                 setStatus: setStatus,
+                tags: "mindmap",
                 onSaved: async function (content) {
                     lastSavedHash = await generateHash(content);
                 }
@@ -498,8 +506,13 @@ templ mindmapContent(data domain.EditorData) {
         }
 
         EditorCommon.setupRenameListeners(filenameInput, {
-            getContent: function () { return jar.toString(); },
+            getContent: function () {
+                var c = jar.toString();
+                if (!c.trim().startsWith("---")) c = "---\ntype: mindmap\n---\n" + c;
+                return c;
+            },
             redirectBase: "/mindmap",
+            tags: "mindmap",
             setStatus: setStatus
         });
 
