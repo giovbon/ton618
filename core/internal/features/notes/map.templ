@@ -201,6 +201,7 @@ templ mapContent(data domain.EditorData) {
         fd.append("filename", filename);
         fd.append("content", fullContent);
         fd.append("tags", "map");
+        fd.append("silent", "true");
 
         try {
             var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: getAuthHeaders() });

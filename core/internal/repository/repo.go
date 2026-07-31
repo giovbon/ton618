@@ -47,14 +47,6 @@ type LinkStore interface {
 	GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]string, error)
 }
 
-// ── Keywords ──
-
-// KeywordStore define operações na coluna keywords da tabela notes.
-type KeywordStore interface {
-	SetNoteKeywords(filename string, keywords []string) error
-	GetNoteKeywords(filename string) ([]string, error)
-}
-
 // ── Popularidade ──
 
 // PopStore define operações na tabela popularity.

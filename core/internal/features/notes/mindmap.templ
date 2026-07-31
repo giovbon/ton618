@@ -56,7 +56,7 @@ templ mindmapContent(data domain.EditorData) {
         </div>
 
         <!-- Painel Direito: Visualizador do Mapa Mental (SVG) -->
-        <div class="flex-1 flex flex-col bg-zinc-950 border border-zinc-850/80 rounded-xl overflow-hidden relative min-w-0" id="preview-panel">
+        <div class="hidden md:flex flex-1 flex-col bg-zinc-950 border border-zinc-850/80 rounded-xl overflow-hidden relative min-w-0" id="preview-panel">
             <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
                 <button
                     id="fit-btn"
@@ -74,8 +74,8 @@ templ mindmapContent(data domain.EditorData) {
 
 <style>
     .mindmap-editor-panel {
-        height: 300px;
-        flex-shrink: 0;
+        height: 100%;
+        flex: 1 1 0%;
     }
     @media (min-width: 768px) {
         .mindmap-editor-panel {
@@ -109,6 +109,21 @@ templ mindmapContent(data domain.EditorData) {
     
     .editor-codejar:focus {
         border-color: #3f3f46 !important;
+    }
+
+    @media (max-width: 767px) {
+        .editor-codejar {
+            border: none !important;
+            border-radius: 0 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            padding: 8px 4px !important;
+        }
+        .editor-codejar:focus {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
     }
 
     .editor-codejar:empty::before {
@@ -374,6 +389,10 @@ templ mindmapContent(data domain.EditorData) {
         // Aplica highlight no conteúdo inicial (CodeJar não faz isso automático)
         highlight(editorEl);
 
+        function isMobile() {
+            return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent);
+        }
+
         function setStatus(s) {
             currentStatus = s;
             EditorCommon.setStatus(statusEl, s);
@@ -381,7 +400,7 @@ templ mindmapContent(data domain.EditorData) {
 
         function handleChange() {
             setStatus("dirty");
-            if (mmWrapper) {
+            if (!isMobile() && mmWrapper) {
                 try {
                     mmWrapper.update(jar.toString());
                 } catch (e) {
@@ -428,6 +447,7 @@ templ mindmapContent(data domain.EditorData) {
             fd.append("filename", filename);
             fd.append("content", content);
             fd.append("tags", "");
+            fd.append("silent", "true");
 
             try {
                 var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });
@@ -496,11 +516,9 @@ templ mindmapContent(data domain.EditorData) {
             setStatus("saved");
             lastSavedHash = await generateHash(jar.toString());
 
-            // Inicializa o Markmap se disponível globalmente
-            if (window.initMindmap) {
+            // Inicializa o Markmap apenas no desktop se disponível globalmente
+            if (!isMobile() && window.initMindmap) {
                 mmWrapper = window.initMindmap(svgEl, jar.toString());
-            } else {
-                console.error("Função initMindmap não encontrada.");
             }
         })();
 

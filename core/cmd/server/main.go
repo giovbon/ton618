@@ -82,16 +82,9 @@ func main() {
 		}
 	}()
 
-	// 5. Inicializa os repositórios por domínio
-	noteRepo := db.NewNoteRepo(store)
-	tagRepo := db.NewTagRepo(store)
-	linkRepo := db.NewLinkRepo(store)
-	popRepo := db.NewPopRepo(store)
-	fileModRepo := db.NewFileModRepo(store)
-
 	// 6. Inicializa os contextos das Features
-	backupService := services.NewBackupService(noteRepo, fileModRepo, cfg.DocsDir)
-	notesService := notes.NewNoteService(store, noteRepo, tagRepo, linkRepo, popRepo, fileModRepo, cfg.DocsDir)
+	backupService := services.NewBackupService(store, store, cfg.DocsDir)
+	notesService := notes.NewNoteService(store, store, store, store, store, store, cfg.DocsDir)
 
 	captureService := notes.NewCaptureService(store)
 	typstService := notes.NewTypstService()

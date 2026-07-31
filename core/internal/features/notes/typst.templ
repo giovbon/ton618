@@ -10,37 +10,58 @@ templ Typst(data domain.EditorData) {
 
 templ typstContent(data domain.EditorData) {
 <script>
+    function isMobile() {
+        return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent);
+    }
     window.autoCompile = localStorage.getItem("typst-auto-compile") !== "false";
     window.toggleAutoCompile = function(checked) {
         window.autoCompile = checked;
         localStorage.setItem("typst-auto-compile", checked);
     };
     window.shouldAutoCompile = function() {
+        if (isMobile()) return false;
         var panel = document.getElementById("preview-panel");
         var isVisible = panel && !panel.classList.contains("hidden");
         return window.autoCompile === true && isVisible;
     };
     window.triggerCompile = function() {
+        if (isMobile()) return;
         document.body.dispatchEvent(new Event("typst-compile"));
     };
     window.togglePreview = function() {
+        if (isMobile()) return;
         var panel = document.getElementById("preview-panel");
         var btn = document.getElementById("toggle-preview-btn");
         if (panel.classList.contains("hidden")) {
             panel.classList.remove("hidden");
             btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
             btn.classList.remove("text-zinc-500");
+            localStorage.setItem("typst-preview-open", "true");
             window.triggerCompile();
         } else {
             panel.classList.add("hidden");
             btn.classList.remove("bg-zinc-800", "text-sky-400", "border-sky-500/30");
             btn.classList.add("text-zinc-500");
+            localStorage.setItem("typst-preview-open", "false");
         }
     };
     document.addEventListener("DOMContentLoaded", function() {
+        if (isMobile()) return;
         var toggle = document.getElementById("auto-compile-toggle");
         if (toggle) {
             toggle.checked = window.autoCompile;
+        }
+        if (localStorage.getItem("typst-preview-open") === "true") {
+            var panel = document.getElementById("preview-panel");
+            var btn = document.getElementById("toggle-preview-btn");
+            if (panel && panel.classList.contains("hidden")) {
+                panel.classList.remove("hidden");
+                if (btn) {
+                    btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
+                    btn.classList.remove("text-zinc-500");
+                }
+                window.triggerCompile();
+            }
         }
     });
     document.addEventListener("htmx:afterOnLoad", function(evt) {
@@ -79,8 +100,8 @@ templ typstContent(data domain.EditorData) {
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
         @BacklinksPopover(data.Backlinks)
         
-        <!-- Toggle Auto-Compilar -->
-        <div class="flex items-center gap-1.5 bg-zinc-900/40 px-2 py-1 rounded-lg border border-zinc-800 shrink-0 select-none">
+        <!-- Toggle Auto-Compilar (Desktop apenas) -->
+        <div class="hidden md:flex items-center gap-1.5 bg-zinc-900/40 px-2 py-1 rounded-lg border border-zinc-800 shrink-0 select-none">
             <input
                 id="auto-compile-toggle"
                 type="checkbox"
@@ -92,21 +113,21 @@ templ typstContent(data domain.EditorData) {
             </label>
         </div>
 
-        <!-- Botão de Compilar Manual -->
+        <!-- Botão de Compilar Manual (Desktop apenas) -->
         <button
             id="compile-btn"
             onclick="triggerCompile()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            class="hidden md:inline-flex text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
             title="Compilar Visualização (Alt+Enter)"
         >
             @icons.Icon("sparkles", "w-4 h-4")
         </button>
 
-        <!-- Botão Toggle Preview -->
+        <!-- Botão Toggle Preview (Desktop apenas) -->
         <button
             id="toggle-preview-btn"
             onclick="togglePreview()"
-            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 flex items-center gap-1"
+            class="hidden md:flex text-zinc-500 hover:text-sky-400 transition-colors shrink-0 text-[11px] font-bold px-2 py-1 rounded-md hover:bg-zinc-900/60 border border-zinc-800 items-center gap-1"
             title="Alternar Visualização (Preview)"
         >
             @icons.Icon("file-text", "w-3.5 h-3.5") Preview
@@ -252,6 +273,21 @@ templ typstContent(data domain.EditorData) {
     
     .editor-codejar:focus {
         border-color: #3f3f46 !important;
+    }
+
+    @media (max-width: 767px) {
+        .editor-codejar {
+            border: none !important;
+            border-radius: 0 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            padding: 8px 4px !important;
+        }
+        .editor-codejar:focus {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
     }
 
     .editor-codejar:empty::before {
@@ -440,6 +476,7 @@ templ typstContent(data domain.EditorData) {
             fd.append("filename", filename);
             fd.append("content", content);
             fd.append("tags", "");
+            fd.append("silent", "true");
 
             try {
                 var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });

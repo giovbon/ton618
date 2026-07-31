@@ -145,10 +145,6 @@ templ Navbar() {
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Tabulator">
                     @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) Tabulator
                 </a>
-                <a id="nav-mapa-semantico" href="/mapa-semantico"
-                    class="flex items-center gap-1.5 text-zinc-400 hover:text-violet-400 transition-colors" title="Mapa Semântico">
-                    @icons.Icon(icons.GetIcon("compass"), "w-4 h-4 " + icons.GetColor("compass")) Mapa
-                </a>
 
                 <!-- Utility icons (cinza conforme especificado) -->
                 <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Ajuda">
@@ -266,12 +262,6 @@ templ Navbar() {
                         <span class="text-[11px] font-bold tracking-wider">TABULATOR</span>
                     </a>
 
-                    <a id="mobile-nav-mapa-semantico" href="/mapa-semantico" @click="mobileMenuOpen = false"
-                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-violet-400 hover:bg-zinc-900/50 transition-colors">
-                        @icons.Icon(icons.GetIcon("compass"), "w-4 h-4 " + icons.GetColor("compass"))
-                        <span class="text-[11px] font-bold tracking-wider">MAPA</span>
-                    </a>
-
                     <a href="/help" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
                         @icons.Icon(icons.GetIcon("ajuda"), "w-4 h-4 " + icons.GetColor("ajuda"))
@@ -313,11 +303,6 @@ templ Navbar() {
                 if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 transition-all';
                 const mNav = document.getElementById('mobile-nav-database');
                 if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 transition-colors';
-            } else if (path === '/mapa-semantico' || path === '/semantic-map') {
-                const nav = document.getElementById('nav-mapa-semantico');
-                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-violet-950/40 border border-violet-500/30 text-violet-400 flex items-center gap-1.5 transition-all';
-                const mNav = document.getElementById('mobile-nav-mapa-semantico');
-                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-violet-400 bg-violet-950/40 border border-violet-500/20 transition-colors';
             }
         })();
     </script>

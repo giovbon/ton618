@@ -370,6 +370,7 @@ templ mermaidContent(data domain.EditorData) {
             fd.append("filename", filename);
             fd.append("content", content);
             fd.append("tags", "");
+            fd.append("silent", "true");
 
             try {
                 var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });

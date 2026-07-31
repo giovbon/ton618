@@ -30,11 +30,15 @@ func (s *TypstService) resolvePath() string {
 		return path
 	}
 
-	// Fallback para $HOME/.local/bin/typst
+	// Fallback para $HOME/.local/bin/typst e $HOME/.cargo/bin/typst
 	if home, err := os.UserHomeDir(); err == nil {
 		localPath := filepath.Join(home, ".local", "bin", "typst")
 		if _, err := os.Stat(localPath); err == nil {
 			return localPath
+		}
+		cargoPath := filepath.Join(home, ".cargo", "bin", "typst")
+		if _, err := os.Stat(cargoPath); err == nil {
+			return cargoPath
 		}
 	}
 
