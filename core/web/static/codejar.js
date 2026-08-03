@@ -534,6 +534,9 @@ export function CodeJar(editor, highlight, opt = {}) {
         // @ts-ignore
         return editor.getRootNode().getSelection();
     }
+    // Initial highlight on CodeJar creation
+    doHighlight(editor);
+
     return {
         updateOptions(newOptions) { Object.assign(options, newOptions); },
         updateCode(code, callOnUpdate = true) {

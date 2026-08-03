@@ -544,6 +544,9 @@ templ typstContent(data domain.EditorData) {
         const jar = CodeJar(editorEl, highlight, { tab: "  " });
         EditorCommon.setupCodeJarActiveLine(editorEl);
 
+        // Aplica highlight no conteúdo inicial (garante destaque ao abrir a nota)
+        highlight(editorEl);
+
         function setStatus(s) {
             currentStatus = s;
             EditorCommon.setStatus(statusEl, s);
