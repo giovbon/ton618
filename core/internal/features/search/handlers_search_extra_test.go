@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -370,7 +371,9 @@ func TestHandleSearch_IntegrationSpecialCharacters(t *testing.T) {
 	}
 	
 	// The snippet must contain the context containing "C++"
-	if !strings.Contains(bodyStr, "code in C++ today") {
+	// Como o backend agora embute as tags de highlight, limpamos o HTML para a verificação do teste
+	cleanBody := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(bodyStr, "")
+	if !strings.Contains(cleanBody, "code in C++ today") {
 		t.Errorf("esperado encontrar o snippet contendo 'code in C++ today' no output HTML, got %q", bodyStr)
 	}
 }

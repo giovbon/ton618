@@ -161,10 +161,10 @@ templ typstContent(data domain.EditorData) {
     </div>
 
     <!-- Layout Dividido (Split-Pane) -->
-    <div class="flex flex-col md:flex-row flex-1 gap-4 overflow-hidden min-h-0 relative">
+    <div class="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0 relative" id="typst-split-container">
         <!-- Painel Esquerdo: Editor de Código -->
-        <div class="flex-1 flex flex-col min-w-0 relative">
-            <div class="flex-1 w-full relative min-h-0">
+        <div class="flex flex-col min-w-0 relative" id="typst-editor-panel" style="flex: 0 0 50%; width: 50%;">
+            <div class="flex-1 w-full relative min-h-0 h-full">
                 <div
                     id="typst-editor"
                     class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
@@ -188,8 +188,20 @@ templ typstContent(data domain.EditorData) {
             </div>
         </div>
 
+        <!-- Divisor arrastável -->
+        <div id="typst-resizer"
+             class="hidden md:flex w-2 shrink-0 cursor-col-resize items-center justify-center group relative z-10"
+             title="Arraste para redimensionar">
+            <div class="w-px h-full bg-zinc-800 group-hover:bg-sky-500/60 transition-colors duration-150 absolute"></div>
+            <div class="relative z-10 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <span class="w-0.5 h-3 rounded-full bg-sky-400/80 block"></span>
+                <span class="w-0.5 h-3 rounded-full bg-sky-400/80 block"></span>
+                <span class="w-0.5 h-3 rounded-full bg-sky-400/80 block"></span>
+            </div>
+        </div>
+
         <!-- Painel Direito: Visualizador de Preview -->
-        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0 hidden" id="preview-panel">
+        <div class="flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-y-auto relative p-6 min-w-0 hidden" id="preview-panel" style="flex: 1 1 0%;">
             <!-- Spinner de Processamento -->
             <div id="typst-compile-indicator" class="absolute top-4 right-4 bg-zinc-950/80 text-sky-400 px-2 py-1 rounded-md text-[10px] font-mono tracking-wider uppercase border border-zinc-800 htmx-indicator">
                 ⚡ Compilando
@@ -204,6 +216,71 @@ templ typstContent(data domain.EditorData) {
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    var STORAGE_KEY = 'typst-editor-pct';
+    var MIN_PCT = 15;
+    var MAX_PCT = 85;
+
+    function applyPct(pct) {
+        var editorPanel = document.getElementById('typst-editor-panel');
+        var previewPanel = document.getElementById('preview-panel');
+        if (!editorPanel || !previewPanel) return;
+        editorPanel.style.flex = '0 0 ' + pct + '%';
+        editorPanel.style.width = pct + '%';
+        previewPanel.style.flex = '0 0 ' + (100 - pct) + '%';
+        previewPanel.style.width = (100 - pct) + '%';
+    }
+
+    // Restaura posição salva
+    var saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+    if (saved >= MIN_PCT && saved <= MAX_PCT) {
+        applyPct(saved);
+    }
+
+    var resizer = document.getElementById('typst-resizer');
+    var container = document.getElementById('typst-split-container');
+    if (!resizer || !container) return;
+
+    var dragging = false;
+
+    resizer.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        dragging = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        // Overlay para capturar eventos sobre iframes/SVGs
+        var overlay = document.createElement('div');
+        overlay.id = 'resizer-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+        document.body.appendChild(overlay);
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        var rect = container.getBoundingClientRect();
+        var pct = ((e.clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(MIN_PCT, Math.min(MAX_PCT, pct));
+        applyPct(pct);
+    });
+
+    document.addEventListener('mouseup', function(e) {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        var overlay = document.getElementById('resizer-overlay');
+        if (overlay) overlay.remove();
+        var rect = container.getBoundingClientRect();
+        var editorPanel = document.getElementById('typst-editor-panel');
+        if (editorPanel) {
+            var pct = (editorPanel.offsetWidth / rect.width) * 100;
+            localStorage.setItem(STORAGE_KEY, pct.toFixed(1));
+        }
+    });
+})();
+</script>
 
 
 <style>
@@ -354,57 +431,99 @@ templ typstContent(data domain.EditorData) {
                 return tokenPlace;
             }
 
-            // 1. Comments block /* ... */
+            // 1. YAML Frontmatter (---\ntype: typst\n---)
+            html = html.replace(/^---[\s\S]*?---\n?/m, function(match) {
+                return addToken(match, "text-zinc-500 font-mono text-xs");
+            });
+
+            // 2. Block Comments /* ... */
             html = html.replace(/\/\*[\s\S]*?\*\//g, function(match) {
                 return addToken(match, "text-zinc-500 italic");
             });
 
-            // 2. Comments line // ...
+            // 3. Line Comments // ...
             html = html.replace(/\/\/.*/g, function(match) {
                 return addToken(match, "text-zinc-500 italic");
             });
 
-            // 3. Triple backtick code blocks ``` ... ```
+            // 4. Code Blocks ```lang ... ``` and Inline Code `...`
             html = html.replace(/```[\s\S]*?```/g, function(match) {
-                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+                return addToken(match, "text-emerald-300 bg-zinc-900/80 px-1 py-0.5 rounded font-mono border border-zinc-800");
             });
-
-            // 4. Single backtick code ` ... `
             html = html.replace(/`[^`\n]+`/g, function(match) {
-                return addToken(match, "text-amber-400 bg-zinc-900/50 px-1 rounded font-mono");
+                return addToken(match, "text-emerald-300 bg-zinc-900/80 px-1 rounded font-mono border border-zinc-800/50");
             });
 
-            // 5. String literals
-            html = html.replace(/"[^"\\]*(?:\\.[^"\\]*)*"/g, function(match) {
+            // 5. String Literals "..."
+            html = html.replace(/"(?:[^"\\]|\\.)*"/g, function(match) {
                 return addToken(match, "text-emerald-400");
             });
 
-            // 6. Keywords/Commands starting with #
+            // 6. Labels <label-id> (after HTML escaping &lt;label-id&gt;)
+            html = html.replace(/&lt;[a-zA-Z0-9_:-]+&gt;/g, function(match) {
+                return addToken(match, "text-amber-300 bg-amber-950/40 px-1 rounded font-mono text-xs border border-amber-800/40");
+            });
+
+            // 7. References @label-id
+            html = html.replace(/@[a-zA-Z0-9_:-]+/g, function(match) {
+                return addToken(match, "text-amber-400 font-semibold");
+            });
+
+            // 8. Math Mode $ ... $ (multiline and inline)
+            html = html.replace(/\$[\s\S]*?\$/g, function(match) {
+                return addToken(match, "text-purple-300 font-medium bg-purple-950/30 px-1 rounded");
+            });
+
+            // 9. Commands & Keywords starting with #
+            html = html.replace(/#(?:let|set|show|import|include|if|else|for|while|return|context|eval|panic|assert)\b/g, function(match) {
+                return addToken(match, "text-sky-400 font-extrabold");
+            });
             html = html.replace(/#[a-zA-Z_][a-zA-Z0-9_.-]*/g, function(match) {
                 return addToken(match, "text-sky-400 font-bold");
             });
 
-            // 7. Headings (=, ==, === etc) at start of line
-            html = html.replace(/^={1,6}\s+[^\n]+/gm, function(match) {
-                return addToken(match, "text-white font-black");
+            // 10. Named Parameters (parameter:)
+            html = html.replace(/\b([a-zA-Z_][a-zA-Z0-9_-]*)\s*:/g, function(match) {
+                return addToken(match, "text-violet-300 font-medium");
             });
 
-            // 8. Math formulas $...$
-            html = html.replace(/\$[^\$\n]+\$/g, function(match) {
-                return addToken(match, "text-purple-400 font-semibold");
+            // 11. Quantities & Units (12pt, 1.5em, 100%, 1fr, 2.5cm, 10mm, 90deg, 200ms, 4s)
+            html = html.replace(/\b\d+(?:\.\d+)?(?:pt|mm|cm|in|em|rem|fr|%|deg|rad|s|ms)\b/g, function(match) {
+                return addToken(match, "text-orange-400 font-mono");
             });
 
-            // 9. Bold *text*
+            // 12. Booleans & Special Values
+            html = html.replace(/\b(?:true|false|none|auto|lrt|rtl|top|bottom|left|right|center)\b/g, function(match) {
+                return addToken(match, "text-amber-400 font-semibold");
+            });
+
+            // 13. Headings (= Heading, == Heading)
+            html = html.replace(/^(=+)\s+([^\n]+)/gm, function(match, hashes) {
+                var level = hashes.length;
+                var cls = level === 1 ? "text-sky-300 font-black text-base" : level === 2 ? "text-sky-400 font-bold" : "text-sky-400/90 font-semibold";
+                return addToken(match, cls);
+            });
+
+            // 14. List Markers
+            html = html.replace(/^(\s*-\s+)/gm, function(match) {
+                return addToken(match, "text-sky-400 font-bold");
+            });
+            html = html.replace(/^(\s*(?:\+|\d+\.)\s+)/gm, function(match) {
+                return addToken(match, "text-sky-400 font-bold");
+            });
+            html = html.replace(/^(\s*\/[^\n:]+:)/gm, function(match) {
+                return addToken(match, "text-amber-400 font-semibold");
+            });
+
+            // 15. Bold *text* & Italic _text_
             html = html.replace(/\*[^*\n]+\*/g, function(match) {
                 return addToken(match, "font-bold text-zinc-100");
             });
-
-            // 10. Italic _text_
             html = html.replace(/_[^_\n]+_/g, function(match) {
                 return addToken(match, "italic text-zinc-100");
             });
 
-            // Restore tokens recursively to handle nested highlights (e.g. bold/italic containing strings)
+            // Restore tokens recursively to handle nested highlights
             var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
             var lastHtml;
             do {

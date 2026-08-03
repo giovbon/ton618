@@ -438,6 +438,18 @@ templ indexContent() {
         }, 600);
     });
 
+    function editorRouteForTipo(tipo) {
+        switch (tipo) {
+            case "desenho":    return "/drawing";
+            case "planilha":   return "/spreadsheet";
+            case "typst":      return "/typst";
+            case "mermaid":    return "/mermaid";
+            case "markmap":    return "/mindmap";
+            case "mapa":       return "/map";
+            default:           return "/editor";
+        }
+    }
+
     function renderSemanticResults(results, query) {
         var el = document.getElementById("semantic-results");
 
@@ -453,8 +465,9 @@ templ indexContent() {
             if (simVal < 0) simVal = 0;
             var similarity = Math.round(simVal * 100);
             var similarityColor = similarity > 75 ? "text-green-400" : similarity > 50 ? "text-yellow-400" : "text-zinc-500";
+            var route = editorRouteForTipo(r.tipo || "");
 
-            html += '<a href="/editor?file=' + encodeURIComponent(r.filename) + '"' +
+            html += '<a href="' + route + '?file=' + encodeURIComponent(r.filename) + '"' +
                 ' class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-violet-500/30 hover:bg-violet-950/10 transition-all duration-300 group">' +
                 '<div class="flex items-center gap-2 min-w-0">' +
                 '<svg class="w-3.5 h-3.5 text-zinc-600 group-hover:text-violet-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
@@ -563,7 +576,7 @@ templ indexContent() {
             stems = stemsEl.dataset.stems.split(",").filter(function(s) { return s.length > 0; });
         }
 
-        document.querySelectorAll(".snippet-text, #global-container a, .search-section-title, .search-tag-item").forEach(function (el) {
+        document.querySelectorAll("#global-container a, .search-section-title, .search-tag-item").forEach(function (el) {
             var html = el.innerHTML;
             terms.forEach(function (w) {
                 var pat = makeAccentInsensitivePattern(w);

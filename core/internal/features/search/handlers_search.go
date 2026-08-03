@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -154,28 +155,32 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		}
 		seenFiles[hit.Doc.Arquivo] = true
 
-		// Usa o snippet do FTS5 diretamente apenas se contiver as marcas <b> do SQLite.
-		// Se não contiver <b>, significa que o SQLite FTS retornou apenas o início do texto
-		// (por exemplo, quando o match foi em arquivo/tags). Nesses casos, usamos extractSnippetAroundMatch
-		// para encontrar a palavra no texto completo da nota.
+		// Usa o snippet do FTS5 diretamente apenas se contiver as marcas __HL_START__ do SQLite.
 		snippet := ""
 		hasFTSMatchInText := false
 		if len(hit.Highlight) > 0 {
 			if ftsSnippets, ok := hit.Highlight["texto"]; ok && len(ftsSnippets) > 0 {
 				rawFts := ftsSnippets[0]
-				if strings.Contains(rawFts, "<b>") {
+				if strings.Contains(rawFts, "__HL_START__") {
 					hasFTSMatchInText = true
-					snippet = strings.ReplaceAll(rawFts, "<b>", "")
-					snippet = strings.ReplaceAll(snippet, "</b>", "")
+					snippet = rawFts
 				}
 			}
 		}
 
 		if !hasFTSMatchInText || snippet == "" {
 			snippet = extractSnippetAroundMatch(hit.Doc.Texto, query, 150)
+			snippet = highlightSnippetManual(snippet, query)
 		}
+		
 		// Normaliza espaços em branco
 		snippet = strings.Join(strings.Fields(snippet), " ")
+
+		// Segurança: Escapa HTML do snippet original para evitar XSS, mas preserva as tags de highlight
+		safeSnippet := html.EscapeString(snippet)
+		safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">`)
+		safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_END__", "</span>")
+		snippet = safeSnippet
 
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		// Filtra tags de tipo de nota
@@ -348,6 +353,47 @@ func extractSnippetAroundMatch(text, query string, windowSize int) string {
 	}
 	if end < len(text) {
 		snippet = snippet + "..."
+	}
+	return snippet
+}
+
+func makeAccentInsensitivePatternGo(str string) string {
+	charMap := map[rune]string{
+		'a': "[aáàâãäAÁÀÂÃÄ]", 'á': "[aáàâãäAÁÀÂÃÄ]", 'à': "[aáàâãäAÁÀÂÃÄ]", 'â': "[aáàâãäAÁÀÂÃÄ]", 'ã': "[aáàâãäAÁÀÂÃÄ]", 'ä': "[aáàâãäAÁÀÂÃÄ]",
+		'e': "[eéèêëEÉÈÊË]", 'é': "[eéèêëEÉÈÊË]", 'è': "[eéèêëEÉÈÊË]", 'ê': "[eéèêëEÉÈÊË]", 'ë': "[eéèêëEÉÈÊË]",
+		'i': "[iíìîïIÍÌÎÏ]", 'í': "[iíìîïIÍÌÎÏ]", 'ì': "[iíìîïIÍÌÎÏ]", 'î': "[iíìîïIÍÌÎÏ]", 'ï': "[iíìîïIÍÌÎÏ]",
+		'o': "[oóòôõöOÓÒÔÕÖ]", 'ó': "[oóòôõöOÓÒÔÕÖ]", 'ò': "[oóòôõöOÓÒÔÕÖ]", 'ô': "[oóòôõöOÓÒÔÕÖ]", 'õ': "[oóòôõöOÓÒÔÕÖ]", 'ö': "[oóòôõöOÓÒÔÕÖ]",
+		'u': "[uúùûüUÚÙÛÜ]", 'ú': "[uúùûüUÚÙÛÜ]", 'ù': "[uúùûüUÚÙÛÜ]", 'û': "[uúùûüUÚÙÛÜ]", 'ü': "[uúùûüUÚÙÛÜ]",
+		'c': "[cçCÇ]", 'ç': "[cçCÇ]",
+	}
+	var pattern strings.Builder
+	for _, ch := range strings.ToLower(str) {
+		if val, ok := charMap[ch]; ok {
+			pattern.WriteString(val)
+		} else {
+			pattern.WriteString(regexp.QuoteMeta(string(ch)))
+		}
+	}
+	return pattern.String()
+}
+
+func highlightSnippetManual(snippet, query string) string {
+	terms := extractSearchTerms(query)
+	var pats []string
+	for _, term := range terms {
+		if len(term) > 1 {
+			pats = append(pats, makeAccentInsensitivePatternGo(term))
+		}
+	}
+	if len(pats) == 0 {
+		return snippet
+	}
+	sort.Slice(pats, func(i, j int) bool { return len(pats[i]) > len(pats[j]) })
+	
+	reStr := "(?i)(" + strings.Join(pats, "|") + ")"
+	re, err := regexp.Compile(reStr)
+	if err == nil {
+		snippet = re.ReplaceAllString(snippet, "__HL_START__${1}__HL_END__")
 	}
 	return snippet
 }

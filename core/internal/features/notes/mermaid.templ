@@ -42,9 +42,9 @@ templ mermaidContent(data domain.EditorData) {
     </div>
 
     <!-- Layout Dividido Verticalmente -->
-    <div class="flex flex-col flex-1 gap-4 overflow-hidden min-h-0 relative">
+    <div class="flex flex-col flex-1 overflow-hidden min-h-0 relative" id="mermaid-split-container">
         <!-- Painel Superior: Visualizador (Diagrama) -->
-        <div class="flex-1 flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-auto relative p-6 min-w-0" id="preview-panel">
+        <div class="flex flex-col bg-zinc-900/10 border border-zinc-800/60 rounded-xl overflow-auto relative p-6 min-w-0" id="mermaid-preview-panel" style="flex: 1 1 0%;">
             <!-- Botão de copiar PNG -->
             <button
                 id="copy-png-btn"
@@ -71,8 +71,20 @@ templ mermaidContent(data domain.EditorData) {
             </div>
         </div>
 
+        <!-- Divisor arrastável (horizontal) -->
+        <div id="mermaid-resizer"
+             class="h-2 shrink-0 cursor-row-resize flex items-center justify-center group relative z-10"
+             title="Arraste para redimensionar">
+            <div class="h-px w-full bg-zinc-800 group-hover:bg-violet-500/60 transition-colors duration-150 absolute"></div>
+            <div class="relative z-10 flex flex-row gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <span class="h-0.5 w-3 rounded-full bg-violet-400/80 block"></span>
+                <span class="h-0.5 w-3 rounded-full bg-violet-400/80 block"></span>
+                <span class="h-0.5 w-3 rounded-full bg-violet-400/80 block"></span>
+            </div>
+        </div>
+
         <!-- Painel Inferior: Editor de Código -->
-        <div class="h-[280px] shrink-0 flex flex-col min-w-0 relative">
+        <div class="flex flex-col min-w-0 relative" id="mermaid-editor-panel" style="flex: 0 0 30%;">
             <div class="flex-1 w-full relative min-h-0">
                 <div
                     id="mermaid-editor"
@@ -83,6 +95,74 @@ templ mermaidContent(data domain.EditorData) {
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    var STORAGE_KEY = 'mermaid-editor-pct';
+    var MIN_PCT = 10;   // editor mínimo 10% da altura
+    var MAX_PCT = 70;   // editor máximo 70% da altura
+
+    function applyPct(pct) {
+        var previewPanel = document.getElementById('mermaid-preview-panel');
+        var editorPanel  = document.getElementById('mermaid-editor-panel');
+        if (!previewPanel || !editorPanel) return;
+        editorPanel.style.flex  = '0 0 ' + pct + '%';
+        editorPanel.style.height = pct + '%';
+        previewPanel.style.flex = '0 0 ' + (100 - pct) + '%';
+        previewPanel.style.height = (100 - pct) + '%';
+    }
+
+    // Restaura posição salva
+    var saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+    if (saved >= MIN_PCT && saved <= MAX_PCT) {
+        applyPct(saved);
+    }
+
+    var resizer   = document.getElementById('mermaid-resizer');
+    var container = document.getElementById('mermaid-split-container');
+    if (!resizer || !container) return;
+
+    var dragging = false;
+
+    resizer.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        dragging = true;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+        var overlay = document.createElement('div');
+        overlay.id = 'resizer-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:row-resize;';
+        document.body.appendChild(overlay);
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        var rect = container.getBoundingClientRect();
+        // pct = quanto o editor ocupa (medido de baixo para cima)
+        var fromBottom = rect.bottom - e.clientY;
+        var pct = (fromBottom / rect.height) * 100;
+        pct = Math.max(MIN_PCT, Math.min(MAX_PCT, pct));
+        applyPct(pct);
+    });
+
+    document.addEventListener('mouseup', function(e) {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        var overlay = document.getElementById('resizer-overlay');
+        if (overlay) overlay.remove();
+        // Salva posição atual
+        var editorPanel = document.getElementById('mermaid-editor-panel');
+        if (editorPanel) {
+            var rect = container.getBoundingClientRect();
+            var pct = (editorPanel.offsetHeight / rect.height) * 100;
+            localStorage.setItem(STORAGE_KEY, pct.toFixed(1));
+        }
+    });
+})();
+</script>
+
 
 <style>
     /* Editor CodeJar */

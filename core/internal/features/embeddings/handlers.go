@@ -35,6 +35,7 @@ type searchEmbeddingRequest struct {
 type semanticSearchResult struct {
 	Filename string  `json:"filename"`
 	Distance float64 `json:"distance"`
+	Tipo     string  `json:"tipo"`
 }
 
 type searchEmbeddingResponse struct {
@@ -153,6 +154,7 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 		results = append(results, semanticSearchResult{
 			Filename: h.Filename,
 			Distance: h.Distance,
+			Tipo:     string(h.NoteType),
 		})
 	}
 

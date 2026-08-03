@@ -18,6 +18,7 @@ const EmbeddingDim = 384
 type SimilarResult struct {
 	Filename string
 	Distance float64
+	NoteType domain.NoteType
 }
 
 // EmbeddingStatus contem o status de indexacao semantica.
@@ -228,9 +229,11 @@ func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarRes
 		seen[r.Filename] = true
 
 		// Filtra por tipo embeddable (pode ter mudado desde a indexação)
-		if !s.isNoteEmbeddable(r.Filename, allTags[r.Filename]) {
+		fileTags := allTags[r.Filename]
+		if !s.isNoteEmbeddable(r.Filename, fileTags) {
 			continue
 		}
+		r.NoteType = domain.DetectNoteType(fileTags, "", r.Filename)
 		results = append(results, r)
 		if len(results) >= limit {
 			break
