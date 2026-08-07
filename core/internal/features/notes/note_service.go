@@ -83,12 +83,7 @@ func (s *NoteService) SaveWithContext(ctx context.Context, filename, content str
 
 // Delete remove uma nota do banco e do disco.
 func (s *NoteService) Delete(filename string) error {
-	if !strings.HasPrefix(filename, "notes/") {
-		filename = "notes/" + filename
-	}
-	if !strings.HasSuffix(filename, ".md") {
-		filename += ".md"
-	}
+	filename = NoteFilename(filename)
 
 	if err := s.store.DeleteAllFileRecords(filename); err != nil {
 		slog.Error("delete all file records", "file", filename, "error", err)
@@ -359,6 +354,9 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 		}
 
 		noteType := domain.DetectNoteType(tags, "", item.Arquivo)
+		if noteType == domain.NoteTypeImage {
+			continue
+		}
 		userTags := domain.FilterUserTags(tags)
 
 		items = append(items, domain.NoteItem{

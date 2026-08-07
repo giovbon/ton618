@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"path/filepath"
 	"strings"
 	"ton618/core/internal/ui/icons"
 )
@@ -25,6 +26,7 @@ const (
 	NoteTypeAttachment  NoteType = "anexo"
 	NoteTypeArchive     NoteType = "arquivo"
 	NoteTypeEPUB        NoteType = "epub"
+	NoteTypeImage       NoteType = "imagem"
 )
 
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
@@ -99,6 +101,11 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 	}
 	if strings.HasPrefix(arquivo, "epubs/") || strings.HasSuffix(strings.ToLower(arquivo), ".epub") {
 		return NoteTypeEPUB
+	}
+
+	ext := strings.ToLower(filepath.Ext(arquivo))
+	if strings.HasPrefix(arquivo, "notes/img_") || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" || ext == ".svg" {
+		return NoteTypeImage
 	}
 
 	// 3. Conteúdo frontmatter (type: X ou marcas de código)

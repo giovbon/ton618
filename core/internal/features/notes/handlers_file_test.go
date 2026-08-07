@@ -571,3 +571,36 @@ func TestHandleFileRename_ArchiveSuccess(t *testing.T) {
 		t.Error("old archive should be deleted from disk")
 	}
 }
+
+func TestHandleFileDelete_ImageFile(t *testing.T) {
+	ctx := newTestContext(t)
+	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
+	os.MkdirAll(notesDir, 0755)
+
+	imgPath := filepath.Join(notesDir, "img_12345_test.png")
+	os.WriteFile(imgPath, []byte("fake image data"), 0644)
+	filename := "notes/img_12345_test.png"
+	ctx.Store.SetFileMod(filename, "2026-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=" + filename)
+	req := httptest.NewRequest("POST", "/file/delete", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200 ao deletar imagem, got %d", rec.Code)
+	}
+
+	// Verifica se a imagem física foi removida
+	if _, err := os.Stat(imgPath); !os.IsNotExist(err) {
+		t.Error("imagem física deveria ter sido deletada do disco")
+	}
+
+	// Verifica se o registro file_mods foi limpo
+	mod, _ := ctx.Store.GetFileMod(filename)
+	if mod != "" {
+		t.Error("file_mod da imagem deveria ser removido do banco")
+	}
+}

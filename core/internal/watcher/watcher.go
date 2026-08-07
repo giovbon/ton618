@@ -239,8 +239,10 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 		}
 	}
 
-	// Track file mod
-	store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
+	// Track file mod (apenas para arquivos que não são imagens isoladas)
+	if tipo != "imagem" {
+		store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
+	}
 
 	return nil
 }

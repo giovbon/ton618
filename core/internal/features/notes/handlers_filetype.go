@@ -33,6 +33,7 @@ const (
 	fileTypePDF                  // PDF em pdfs/ ou notes/
 	fileTypeEPUB                 // EPUB em epubs/
 	fileTypeZip                  // ZIP/attachment em attachments/ (ou archives/)
+	fileTypeImage                // Imagem em notes/ ou attachments/
 )
 
 // resolveFileInfo determina o tipo, nome lógico e caminho completo de um arquivo.
@@ -73,6 +74,20 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 		filename = sd + "/" + basename
 		fullPath = filepath.Join(docsDir, sd, basename)
 		return fileTypeZip, filename, fullPath, true
+
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg":
+		basename := filepath.Base(raw)
+		sd := "notes"
+		if strings.HasPrefix(raw, "attachments/") {
+			sd = "attachments"
+		}
+		filename = sd + "/" + basename
+		var err error
+		fullPath, err = safeJoin(docsDir, filename)
+		if err != nil {
+			return fileTypeImage, "", "", false
+		}
+		return fileTypeImage, filename, fullPath, true
 
 	default:
 		// Nota markdown — sanitiza o nome para prevenir path traversal

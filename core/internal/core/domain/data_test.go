@@ -54,6 +54,20 @@ func TestDetectNoteType_Mermaid(t *testing.T) {
 			arquivo:  "notes/Calendário Acadêmico 2026-2.md",
 			expected: NoteTypeMarkdown,
 		},
+		{
+			name:     "Image file with img_ prefix",
+			tags:     nil,
+			content:  "",
+			arquivo:  "notes/img_172300000_foto.png",
+			expected: NoteTypeImage,
+		},
+		{
+			name:     "Image file with jpeg extension",
+			tags:     nil,
+			content:  "",
+			arquivo:  "notes/foto.jpeg",
+			expected: NoteTypeImage,
+		},
 	}
 
 	for _, tt := range tests {

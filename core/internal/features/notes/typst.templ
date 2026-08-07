@@ -32,21 +32,34 @@ templ typstContent(data domain.EditorData) {
         if (isMobile()) return;
         var panel = document.getElementById("preview-panel");
         var btn = document.getElementById("toggle-preview-btn");
+        var editorPanel = document.getElementById("typst-editor-panel");
         if (panel.classList.contains("hidden")) {
             panel.classList.remove("hidden");
             btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
             btn.classList.remove("text-zinc-500");
             localStorage.setItem("typst-preview-open", "true");
+            if (window.applySavedPct) window.applySavedPct();
             window.triggerCompile();
         } else {
             panel.classList.add("hidden");
             btn.classList.remove("bg-zinc-800", "text-sky-400", "border-sky-500/30");
             btn.classList.add("text-zinc-500");
             localStorage.setItem("typst-preview-open", "false");
+            if (editorPanel) {
+                editorPanel.style.flex = "1 1 100%";
+                editorPanel.style.width = "100%";
+            }
         }
     };
     document.addEventListener("DOMContentLoaded", function() {
-        if (isMobile()) return;
+        var editorPanel = document.getElementById("typst-editor-panel");
+        if (isMobile()) {
+            if (editorPanel) {
+                editorPanel.style.flex = "1 1 100%";
+                editorPanel.style.width = "100%";
+            }
+            return;
+        }
         var toggle = document.getElementById("auto-compile-toggle");
         if (toggle) {
             toggle.checked = window.autoCompile;
@@ -60,7 +73,13 @@ templ typstContent(data domain.EditorData) {
                     btn.classList.add("bg-zinc-800", "text-sky-400", "border-sky-500/30");
                     btn.classList.remove("text-zinc-500");
                 }
+                if (window.applySavedPct) window.applySavedPct();
                 window.triggerCompile();
+            }
+        } else {
+            if (editorPanel) {
+                editorPanel.style.flex = "1 1 100%";
+                editorPanel.style.width = "100%";
             }
         }
     });
@@ -163,7 +182,7 @@ templ typstContent(data domain.EditorData) {
     <!-- Layout Dividido (Split-Pane) -->
     <div class="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0 relative" id="typst-split-container">
         <!-- Painel Esquerdo: Editor de Código -->
-        <div class="flex flex-col min-w-0 relative" id="typst-editor-panel" style="flex: 0 0 50%; width: 50%;">
+        <div class="flex flex-col min-w-0 relative w-full flex-1" id="typst-editor-panel">
             <div class="flex-1 w-full relative min-h-0 h-full">
                 <div
                     id="typst-editor"
@@ -227,17 +246,29 @@ templ typstContent(data domain.EditorData) {
         var editorPanel = document.getElementById('typst-editor-panel');
         var previewPanel = document.getElementById('preview-panel');
         if (!editorPanel || !previewPanel) return;
+        if (isMobile() || previewPanel.classList.contains('hidden')) {
+            editorPanel.style.flex = '1 1 100%';
+            editorPanel.style.width = '100%';
+            previewPanel.style.flex = '';
+            previewPanel.style.width = '';
+            return;
+        }
         editorPanel.style.flex = '0 0 ' + pct + '%';
         editorPanel.style.width = pct + '%';
         previewPanel.style.flex = '0 0 ' + (100 - pct) + '%';
         previewPanel.style.width = (100 - pct) + '%';
     }
 
-    // Restaura posição salva
-    var saved = parseFloat(localStorage.getItem(STORAGE_KEY));
-    if (saved >= MIN_PCT && saved <= MAX_PCT) {
-        applyPct(saved);
-    }
+    window.applySavedPct = function() {
+        var saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+        if (saved >= MIN_PCT && saved <= MAX_PCT) {
+            applyPct(saved);
+        } else {
+            applyPct(50);
+        }
+    };
+
+    window.applySavedPct();
 
     var resizer = document.getElementById('typst-resizer');
     var container = document.getElementById('typst-split-container');

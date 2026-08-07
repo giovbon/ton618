@@ -111,12 +111,11 @@ func copyFile(src, dst string) error {
 // 1. Tenha extensao .md
 // 2. Esteja no diretorio notes/
 func NoteFilename(name string) string {
-	// Garante extensao .md
-	if !strings.HasSuffix(name, ".md") {
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext == "" {
 		name += ".md"
 	}
-	// Garante prefixo notes/
-	if !strings.HasPrefix(name, "notes/") {
+	if !strings.HasPrefix(name, "notes/") && !strings.HasPrefix(name, "pdfs/") && !strings.HasPrefix(name, "attachments/") && !strings.HasPrefix(name, "archives/") && !strings.HasPrefix(name, "epubs/") {
 		name = "notes/" + name
 	}
 	return name

@@ -278,8 +278,16 @@
             var fd = new FormData();
             fd.append("filename", filename);
             fetch("/file/delete", { method: "POST", body: fd, headers: this.getAuthHeaders() })
-                .then(function () { window.location.href = "/"; })
-                .catch(function () { window.location.href = "/"; });
+                .then(function (r) {
+                    if (r.ok || r.status === 303) {
+                        window.location.href = "/";
+                    } else {
+                        return r.text().then(function (t) { alert("Erro ao excluir nota: " + (t || r.statusText)); });
+                    }
+                })
+                .catch(function (err) {
+                    alert("Erro ao excluir nota: " + err.message);
+                });
         },
 
         // ── duplicateCurrentNote: genérico para todos os tipos de nota ──
