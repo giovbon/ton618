@@ -89,6 +89,16 @@ func main() {
 	captureService := notes.NewCaptureService(store)
 	typstService := notes.NewTypstService()
 
+	// 7. Agendador de Auto-Tag (Inatividade)
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		notes.ApplyDecayTags(store, notesService)
+		for range ticker.C {
+			notes.ApplyDecayTags(store, notesService)
+		}
+	}()
+
 	sysCtx := system.NewHandlerContext(cfg, store, backupService, notesService)
 	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService, typstService)
 	todosCtx := todos.NewHandlerContext(cfg, store)

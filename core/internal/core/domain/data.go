@@ -230,3 +230,10 @@ func NoteIcon(arquivo string, tags []string) string {
 func NoteIconColor(iconName string) string {
 	return icons.GetColor(iconName)
 }
+
+// AutoTagRule define uma regra de auto-tagging baseada na idade da nota.
+type AutoTagRule struct {
+	Days int    `json:"days"`
+	Tag  string `json:"tag"`
+}
+

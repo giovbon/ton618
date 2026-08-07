@@ -111,6 +111,42 @@ templ SettingsModal() {
 
                     <div id="bulk-preview-area" class="mt-6"></div>
 
+                    <!-- Auto-Tagging por Inatividade -->
+                    <div class="border-t border-zinc-800 pt-6 mt-6" x-data="autoTagConfig()">
+                        <div class="flex items-center gap-2 mb-2">
+                            <h3 class="text-sm font-bold text-zinc-200">Auto-Tag (Notas Inativas)</h3>
+                        </div>
+                        <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                            Adicione tags automaticamente a notas que não são modificadas há um certo número de dias. Se a nota for editada, a tag será removida.
+                        </p>
+                        
+                        <div class="space-y-3 mb-4">
+                            <template x-for="(rule, index) in rules" :key="index">
+                                <div class="flex items-center gap-3 bg-zinc-800/50 p-2 rounded-lg border border-zinc-700/50">
+                                    <input type="number" x-model.number="rule.days" min="1" placeholder="Dias" class="w-20 bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:border-sky-500" />
+                                    <span class="text-xs text-zinc-400">dias</span>
+                                    <span class="text-zinc-600">→</span>
+                                    <span class="text-zinc-500 text-sm">#</span>
+                                    <input type="text" x-model="rule.tag" placeholder="tag" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:border-sky-500" />
+                                    <button type="button" @click="rules.splice(index, 1)" class="text-zinc-500 hover:text-red-400 p-1 rounded-md transition-colors text-xl font-bold leading-none">
+                                        &times;
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <button type="button" @click="rules.push({days: 30, tag: ''})" class="text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors">
+                                + Adicionar Regra
+                            </button>
+                            <button type="button" @click="saveRules()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg transition-colors">
+                                Salvar Regras
+                            </button>
+                        </div>
+                        <p x-show="saved" x-transition.duration.500ms class="text-xs text-emerald-400 mt-2 text-right hidden" :class="{'hidden': false}">✓ Salvo com sucesso!</p>
+                        <p x-show="error" x-text="errorMsg" class="text-xs text-red-400 mt-2 text-right hidden" :class="{'hidden': !error}"></p>
+                    </div>
+
                     <!-- Cleanup orphan images -->
                     <div class="border-t border-zinc-800 pt-6 mt-6">
                         <p class="text-[10px] text-zinc-600 mb-3">
@@ -344,4 +380,45 @@ templ SettingsModal() {
             </div>
         </div>
     </div>
+    
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('autoTagConfig', () => ({
+                rules: [],
+                saved: false,
+                error: false,
+                errorMsg: '',
+                init() {
+                    fetch('/api/settings/auto-tag')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (Array.isArray(data)) this.rules = data;
+                        })
+                        .catch(e => console.error('Erro ao carregar auto-tag:', e));
+                },
+                saveRules() {
+                    this.saved = false;
+                    this.error = false;
+                    fetch('/api/settings/auto-tag', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.rules)
+                    })
+                    .then(async r => {
+                        if (!r.ok) {
+                            const txt = await r.text();
+                            throw new Error(txt || 'Erro ao salvar');
+                        }
+                        this.saved = true;
+                        setTimeout(() => this.saved = false, 3000);
+                    })
+                    .catch(e => {
+                        this.error = true;
+                        this.errorMsg = e.message;
+                        setTimeout(() => this.error = false, 5000);
+                    });
+                }
+            }));
+        });
+    </script>
 }

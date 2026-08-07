@@ -821,4 +821,56 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 	w.Write([]byte(`{"status":"success"}`))
 }
 
-// ── Helpers ──
+// HandleGetAutoTagSettings retorna as configurações de regras de Auto-Tag por inatividade
+// GET /api/settings/auto-tag
+func (ctx *HandlerContext) HandleGetAutoTagSettings(w http.ResponseWriter, r *http.Request) {
+	val, err := ctx.Store.GetSetting("auto_tag_decay_config")
+	if err != nil || val == "" {
+		val = "[]"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(val))
+}
+
+// HandlePostAutoTagSettings salva as configurações de regras de Auto-Tag por inatividade
+// POST /api/settings/auto-tag
+func (ctx *HandlerContext) HandlePostAutoTagSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var rules []domain.AutoTagRule
+	if err := json.NewDecoder(r.Body).Decode(&rules); err != nil {
+		http.Error(w, "json invalido", http.StatusBadRequest)
+		return
+	}
+	
+	// Validação básica
+	for i, rule := range rules {
+		if rule.Days <= 0 {
+			http.Error(w, "os dias devem ser maiores que zero", http.StatusBadRequest)
+			return
+		}
+		rules[i].Tag = strings.TrimSpace(rule.Tag)
+		rules[i].Tag = strings.TrimPrefix(rules[i].Tag, "#")
+		if rules[i].Tag == "" {
+			http.Error(w, "a tag não pode ser vazia", http.StatusBadRequest)
+			return
+		}
+	}
+
+	configJSON, err := json.Marshal(rules)
+	if err != nil {
+		http.Error(w, "erro ao processar dados", http.StatusInternalServerError)
+		return
+	}
+
+	if err := ctx.Store.SetSetting("auto_tag_decay_config", string(configJSON)); err != nil {
+		http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"success"}`))
+}
+
