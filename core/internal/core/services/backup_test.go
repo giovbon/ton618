@@ -71,6 +71,9 @@ func TestBackup_FullIncludesPDFs(t *testing.T) {
 	os.WriteFile(filepath.Join(docsDir, "notes", "nota1.md"), []byte("# Nota"), 0644)
 	os.MkdirAll(filepath.Join(docsDir, "pdfs"), 0755)
 	os.WriteFile(filepath.Join(docsDir, "pdfs", "doc.pdf"), []byte("%PDF-1.4 fake content for testing backup full mode"), 0644)
+	os.MkdirAll(filepath.Join(docsDir, "attachments"), 0755)
+	os.WriteFile(filepath.Join(docsDir, "attachments", "foto.png"), []byte("fake image data"), 0644)
+
 	store.SetFileMod("pdfs/doc.pdf", time.Now().Format(time.RFC3339))
 	store.SaveNote("notes/nota1.md", "# Nota", time.Now().Format(time.RFC3339))
 
@@ -86,6 +89,9 @@ func TestBackup_FullIncludesPDFs(t *testing.T) {
 	}
 	if !strings.Contains(zipStr, "pdfs/doc.pdf") {
 		t.Error("backup full deveria conter pdfs/doc.pdf")
+	}
+	if !strings.Contains(zipStr, "attachments/foto.png") {
+		t.Error("backup full deveria conter attachments/foto.png")
 	}
 
 	t.Logf("Backup full gerado: %d bytes", len(data))

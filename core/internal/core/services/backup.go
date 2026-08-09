@@ -104,7 +104,6 @@ func jsonToCSV(jsonStr string) ([]byte, error) {
 // Create gera um ZIP com todas as notas, PDFs e anexos (se full for verdadeiro).
 func (s *BackupService) Create(full bool) ([]byte, error) {
 	allNotes, _ := s.notes.GetAllNotes()
-	allMods, _ := s.fileMod.GetAllFileMods()
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -124,7 +123,6 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 		originalFilename := filename
 		if !strings.HasSuffix(filename, ".md") {
 			filename += ".md"
-			originalFilename = filename
 		}
 
 		_, body := parseFrontmatterBody(content)
@@ -156,23 +154,45 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 		}
 
 		addToZip(zw, zipFilename, zipData, repository.ParseMtime(mtimeStr))
+		seen[filename] = true
 		seen[originalFilename] = true
+		seen[zipFilename] = true
 	}
 
-	// 2. Arquivos do disco (PDFs, attachments, notas sem conteúdo no DB)
+	// 2. Arquivos do disco (PDFs, attachments, imagens, notas sem conteúdo no DB, etc.)
 	if full {
-		for filename := range allMods {
-			if strings.HasPrefix(filename, "archives/") || seen[filename] {
-				continue
+		_ = filepath.WalkDir(s.docsDir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
 			}
-			fullPath := filepath.Join(s.docsDir, filename)
-			data, err := os.ReadFile(fullPath)
+
+			relPath, err := filepath.Rel(s.docsDir, path)
 			if err != nil {
-				continue
+				return nil
 			}
-			mtimeStr, _ := s.fileMod.GetFileMod(filename)
-			addToZip(zw, filename, data, repository.ParseMtime(mtimeStr))
-		}
+			relPath = filepath.ToSlash(relPath)
+
+			if strings.HasPrefix(relPath, "archives/") || seen[relPath] {
+				return nil
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+
+			info, err := d.Info()
+			var modTime time.Time
+			if err == nil {
+				modTime = info.ModTime()
+			} else if mtimeStr, _ := s.fileMod.GetFileMod(relPath); mtimeStr != "" {
+				modTime = repository.ParseMtime(mtimeStr)
+			}
+
+			addToZip(zw, relPath, data, modTime)
+			seen[relPath] = true
+			return nil
+		})
 	}
 
 	if err := zw.Close(); err != nil {

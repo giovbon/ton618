@@ -200,11 +200,11 @@ templ SettingsModal() {
                             <a id="backup-download-notas-btn" href="/api/backup?full=false" download
                                 class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors w-full mt-2"
                                 onclick="
-                                        this.classList.add('opacity-50', 'pointer-events-none');
+                                        this.classList.add('opacity-50');
                                         let originalText = this.innerHTML;
                                         this.innerHTML = '⏳ Gerando...';
                                         setTimeout(() => {
-                                            this.classList.remove('opacity-50', 'pointer-events-none');
+                                            this.classList.remove('opacity-50');
                                             this.innerHTML = originalText;
                                         }, 3000);
                                     ">
@@ -226,11 +226,11 @@ templ SettingsModal() {
                             <a id="backup-download-full-btn" href="/api/backup?full=true" download
                                 class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors w-full mt-2"
                                 onclick="
-                                        this.classList.add('opacity-50', 'pointer-events-none');
+                                        this.classList.add('opacity-50');
                                         let originalText = this.innerHTML;
                                         this.innerHTML = '⏳ Gerando...';
                                         setTimeout(() => {
-                                            this.classList.remove('opacity-50', 'pointer-events-none');
+                                            this.classList.remove('opacity-50');
                                             this.innerHTML = originalText;
                                         }, 10000);
                                     ">
