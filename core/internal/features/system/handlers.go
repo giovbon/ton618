@@ -774,13 +774,11 @@ func (ctx *HandlerContext) HandlePostSemanticDevice(w http.ResponseWriter, r *ht
 // HandleGetSemanticThresholds retorna os thresholds configurados para buscas semânticas
 // GET /api/settings/semantic-thresholds
 func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r *http.Request) {
-	searchThreshold := 20 // default: 20%
+	searchThreshold := 35 // default: 35%
 
 	if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
-			if v == 50 {
-				searchThreshold = 20
-			} else {
+			if v >= 10 && v <= 100 {
 				searchThreshold = v
 			}
 		}

@@ -104,11 +104,12 @@ Serve como referência para manter consistência em contribuições futuras.
 
 ```
 Browser (Transformers.js) → POST /api/embeddings/save → SQLite (vec0)
-Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
+Usa o modelo: Xenova/multilingual-e5-small
 ```
 
 - Geração **exclusivamente no browser** (Transformers.js no Web Worker). Não há pipeline servidor-side.
-- Modelo: `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dims, q8 ~120MB).
+- Modelo: `Xenova/multilingual-e5-small` (384 dims, q8 ~118MB).
+- **Prefixos obrigatórios (e5):** documentos/chunks com `passage: ` e consultas com `query: ` — sem eles a qualidade despenca.
 - Cacheado no IndexedDB do browser após primeiro download.
 
 ### 3.2 Chunking
@@ -122,6 +123,8 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 
 - **Lazy**: Só indexa quando o usuário abre a busca semântica.
 - Título extraído do primeiro `# ` e prefixado em cada chunk.
+- **Prefixo `passage: `** adicionado ao texto enviado ao modelo na indexação (requisito do e5). O conteúdo armazenado no banco (`note_chunks.content`) permanece limpo, sem o prefixo.
+- **Limpeza preserva quebras de linha:** o markdown é limpo colapsando apenas espaços/tabs (`[ \t]+ → " "`), mantendo os `\n`. Isso permite que `chunkText` quebre em parágrafos (evitando fragmentos cortados no meio da frase que geravam embeddings ruidosos). Corrigido em 09/08/2026.
 - Markdown limpo antes do chunking: remove blocos de código, imagens, mantém só texto de links.
 - `Promise.all` para paralelizar chunks de uma mesma nota.
 
@@ -129,6 +132,7 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 
 - `note_chunks.indexed_mtime` armazena o mtime da nota no momento da indexação.
 - `GetPendingEmbeddingNotes()` compara com `notes.mtime` para detectar desatualizados.
+- **Invalidação por versão de modelo:** ao trocar de modelo de embeddings, `EnsureEmbeddingModelVersion` (chave `embedding_model_version` em settings) limpa todos os embeddings antigos na inicialização, forçando re-indexação completa no browser. **Alterada em:** 09/08/2026 (MiniLM-L12-v2 → multilingual-e5-small; v2 em 09/08/2026 inclui fix do chunking).
 - Notas não-indexáveis (drawing, spreadsheet, mermaid, mapa) são excluídas via SQL.
 
 ### 3.5 Notas Indexáveis vs Não-Indexáveis (Regras de Paridade)
@@ -138,6 +142,7 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 - **Tipos Não-Indexáveis:** Desenhos/Excalidraw (`NoteTypeDrawing`), planilhas (`NoteTypeSpreadsheet`), diagramas Mermaid (`NoteTypeMermaid`), mapas geográficos (`NoteTypeMap`), arquivos/PDFs na pasta `pdfs/` (`NoteTypePDF`), anexos na pasta `attachments/` (`NoteTypeAttachment`) e notas arquivadas na pasta `archives/` (`NoteTypeArchive`).
 - **Paridade Go/SQL:** O método Go `IsNoteEmbeddable` (que valida as gravações) e as queries SQL (`GetPendingEmbeddingNotes` e `CountEmbeddableNotes`) devem estar em perfeita paridade quanto a essa lógica de exclusão de notas. Para manter a performance, a detecção de tipo é baseada apenas no caminho do arquivo, tags e heurísticas de nome de arquivo (ex: conter `mapa.` ou `mapa-` no nome), sem abrir o conteúdo completo das notas.
 - **Garantia via Teste:** O teste de integração `TestIsNoteEmbeddableMatchesSQL` garante que qualquer divergência futura entre Go e SQL na lógica de exclusão de notas quebrará os testes locais e o CI/CD. Adicionalmente, o teste `TestDeleteNoteCleansEmbeddingsAndOrphanStatus` garante que a remoção de notas limpa seus respectivos chunks e embeddings, e que o cálculo de status de indexação é resiliente a registros órfãos pré-existentes.
+- **Correção de paridade (09/08/2026):** o teste `TestIsNoteEmbeddableMatchesSQL` pegou uma divergência real — a tag `deletar` era excluída no SQL (`CountEmbeddableNotes`/`GetPendingEmbeddingNotes`) mas não no Go. Corrigido em `isNoteEmbeddable`, que agora também exclui notas com a tag `deletar`.
 
 ### 3.6 SimilarNotes — Estratégia do Voto Majoritário
 
@@ -156,12 +161,13 @@ O recurso **"Notas Semelhantes"** no editor usa os embeddings armazenados para r
 📍 Rota `/api/settings/semantic-thresholds` | `internal/features/system/handlers.go`
 
 Para dar controle sobre a precisão da IA, adicionou-se sliders de configuração na aba **Semântica**:
-- **Busca Semântica Global**: Define a similaridade mínima exigida na busca geral (padrão 50%). Controla a tolerância de resultados em `internal/features/embeddings/handlers.go`.
+- **Busca Semântica Global**: Define a similaridade mínima exigida na busca geral (padrão 35%). Controla a tolerância de resultados em `internal/features/embeddings/handlers.go`.
 - **Notas Semelhantes**: Define a similaridade mínima para a aba do rodapé do editor (padrão 72%). Controla a exibição em `internal/features/notes/handlers_common.go`.
 - **Persistência**: Ambos os percentuais são armazenados no SQLite na tabela de configurações como `semantic_search_threshold` e `similar_notes_threshold`.
 - **Conversão de Métrica**: O banco de dados utiliza distância euclidiana L2 (sqlite-vec MATCH). A conversão a partir de porcentagem de similaridade de cosseno $c$ ocorre pela fórmula:
   $$dist_{L2} = \sqrt{2 \times (1 - c)}$$
 - **Alterada em**: 14/07/2026 — implementação dos thresholds dinâmicos e UI de sliders.
+- **Alterada em**: 09/08/2026 — padrão da busca global definido em 35% (validado empiricamente com o e5-small); removido o mapeamento especial que tratava 50% como 20% (o valor armazenado agora é usado literalmente, faixa válida 10–100%).
 
 > ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
 
@@ -288,7 +294,7 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 
 📍 `web/download_model.js`
 
-- O modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX q8, ~120MB) é baixado do **HuggingFace** usando `wget`.
+- O modelo `Xenova/multilingual-e5-small` (ONNX q8, ~118MB) é baixado do **HuggingFace** usando `wget`.
 - **`wget` é obrigatório** — lidou melhor com o XetHub/CAS Bridge do que `fetch()` ou `http.get()` do Node. Não substituir.
 - O script gera automaticamente versões comprimidas (`.gz` e `.br`) ao lado do arquivo original.
 - O Dockerfile **não** executa este script. O modelo é baixado pelo navegador via Transformers.js (CDN do HuggingFace + IndexedDB).
@@ -328,11 +334,11 @@ O sistema consagra três modalidades complementares de pesquisa textual e semân
 | --- | --- | --- | --- |
 | **Busca de Notas** | Filtro instantâneo no menu focado exclusivamente no nome/título dos arquivos Markdown. | Busca local indexada por correspondência parcial (`LIKE %q%`). | Azul (Sky) |
 | **Busca Global** | Busca textual de termos no conteúdo interno de todas as notas do sistema. | SQLite FTS5 (tabela virtual) + Lematização (Stemming) em pt-BR. | Azul (Exato) e Roxo (Lematizado) |
-| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`MiniLM-L12-v2` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
+| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`multilingual-e5-small` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
 
 
 ## Como Funciona a Busca Semântica
-Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
+Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local multilingual-e5-small (com o prefixo `passage:` no texto enviado ao modelo).
 Pesquisa KNN: Quando você digita uma busca semântica, o navegador gera o vetor da sua pergunta e o envia ao banco de dados SQLite. O banco usa a extensão vetorial sqlite-vec para rodar um cálculo KNN (Vizinhos Mais Próximos) e encontrar quais chunks de notas no banco têm a direção vetorial mais parecida (similaridade de cosseno).
 
 ## Como Funcionam as Notas Relacionadas (Critérios)

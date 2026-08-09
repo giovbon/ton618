@@ -52,6 +52,14 @@ func main() {
 	defer store.Close()
 	slog.Info("Banco SQLite pronto")
 
+	// Se o modelo de embeddings mudou, descarta os embeddings antigos para
+	// que o browser re-indexe tudo com o modelo novo (ex: MiniLM-L12 → e5-small).
+	if reset, verr := store.EnsureEmbeddingModelVersion(db.EmbeddingModelVersion); verr != nil {
+		slog.Warn("verificar versao do modelo de embeddings", "error", verr)
+	} else if reset {
+		slog.Info("Modelo de embeddings mudou — embeddings antigos removidos; aguardando re-indexação no browser")
+	}
+
 	// 2.5. Migrar notas .md do disco para o banco
 	imported, migErr := store.MigrateNotesFromDisk(cfg.DocsDir)
 	if migErr != nil {

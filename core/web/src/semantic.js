@@ -300,7 +300,8 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
       .replace(/^=+\s*/gm, "")                    // remove marcadores de heading (=
       .replace(/`[^`]*`/g, "")                    // remove código inline
       .replace(/\/\/[^\n]*/g, "")                 // remove comentários //
-      .replace(/\s+/g, " ")                       // colapsa múltiplos espaços
+      .replace(/[ \t]+/g, " ")                    // colapsa espaços/tabs (PRESERVA \n)
+      .replace(/\n{3,}/g, "\n\n")                 // parágrafos: no máx. uma linha em branco
       .trim();
   } else {
     cleanContent = content
@@ -308,7 +309,8 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
       .replace(/```[\s\S]*?```/g, "")            // remove blocos de código
       .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")     // remove imagens ![alt](url)
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")    // links [text](url) → texto
-      .replace(/\s+/g, " ")                       // colapsa múltiplos espaços
+      .replace(/[ \t]+/g, " ")                    // colapsa espaços/tabs (PRESERVA \n)
+      .replace(/\n{3,}/g, "\n\n")                 // parágrafos: no máx. uma linha em branco
       .trim();
   }
 
@@ -331,7 +333,8 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
     if (idx >= chunksText.length) {
       return Promise.resolve();
     }
-    return self.embed(chunksText[idx]).then(function(embedding) {
+    // O modelo e5-small exige prefixo "passage:" para documentos (indexação).
+    return self.embed("passage: " + chunksText[idx]).then(function(embedding) {
       // Valida NaN/Inf antes de incluir no resultado
       for (var ei = 0; ei < embedding.length; ei++) {
         if (!isFinite(embedding[ei]) || isNaN(embedding[ei])) {
@@ -384,7 +387,8 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
  */
 SemanticIndex.prototype.search = function(query, limit) {
   limit = limit || 10;
-  return this.embed(query).then(function(embedding) {
+  // O modelo e5-small exige prefixo "query:" para consultas (busca).
+  return this.embed("query: " + query).then(function(embedding) {
     return fetch(SEARCH_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -6,13 +6,23 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 
 	dbgen "ton618/core/internal/core/db/generated"
 	"ton618/core/internal/core/domain"
 )
 
-// EmbeddingDim e a dimensao do vetor produzido pelo modelo multilingual-MiniLM-L12-v2.
+// EmbeddingDim e a dimensao do vetor produzido pelo modelo e5-small (384 dims).
 const EmbeddingDim = 384
+
+// EmbeddingModelVersion identifica a versão do pipeline de embeddings em uso
+// (modelo + lógica de chunking). Quando esta constante muda, os embeddings
+// antigos são descartados para que o browser re-indexe tudo de novo.
+// v2: inclui a correção do chunking (preservação de quebras de linha).
+const EmbeddingModelVersion = "multilingual-e5-small-v2"
+
+// EmbeddingModelVersionKey é a chave em settings que guarda a versão corrente do modelo.
+const EmbeddingModelVersionKey = "embedding_model_version"
 
 // SimilarResult representa um resultado de busca semantica por proximidade vetorial.
 type SimilarResult struct {
@@ -140,6 +150,27 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	return tx.Commit()
 }
 
+// EnsureEmbeddingModelVersion verifica se a versão do modelo persistida em settings
+// corresponde à esperada. Se não corresponder, limpa todos os embeddings/chunks
+// (forçando re-indexação completa pelo browser) e grava a nova versão.
+// Retorna true se houve reset. Usado para invalidar embeddings ao trocar de modelo.
+func (s *Store) EnsureEmbeddingModelVersion(version string) (bool, error) {
+	current, err := s.GetSetting(EmbeddingModelVersionKey)
+	if err != nil {
+		return false, err
+	}
+	if current == version {
+		return false, nil
+	}
+	if err := s.ResetAllEmbeddings(); err != nil {
+		return false, err
+	}
+	if err := s.SetSetting(EmbeddingModelVersionKey, version); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // ResetAllEmbeddings apaga todos os registros de chunks e embeddings
 // das tabelas note_chunks e note_embeddings. Usado para reset completo
 // do índice semântico (ex: pela aba Semântica das Configurações).
@@ -243,7 +274,15 @@ func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarRes
 }
 
 // isNoteEmbeddable determina se uma nota deve ser indexada para busca semântica com base no seu tipo.
+// Deve permanecer em paridade com as queries SQL (CountEmbeddableNotes / GetPendingEmbeddingNotes).
 func (s *Store) isNoteEmbeddable(filename string, tags []string) bool {
+	// Notas marcadas para exclusão (tag "deletar") não são indexadas — paridade com o SQL.
+	for _, t := range tags {
+		if strings.ToLower(strings.TrimSpace(t)) == "deletar" {
+			return false
+		}
+	}
+
 	noteType := domain.DetectNoteType(tags, "", filename)
 	return noteType == domain.NoteTypeMarkdown ||
 		noteType == domain.NoteTypeTypst ||

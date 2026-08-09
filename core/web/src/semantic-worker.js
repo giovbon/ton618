@@ -11,7 +11,7 @@
  * Web Worker que executa inferência de embeddings com Transformers.js.
  * Roda em thread separada para não bloquear a UI.
  *
- * Modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
+ * Modelo: Xenova/multilingual-e5-small (exige prefixo query:/passage: no caller)
  * - Suporte nativo a português e múltiplos idiomas
  * - Dimensão de saída: 384
  * - Tamanho quantizado (q8): ~120MB (cacheado pelo browser após 1ª carga)
@@ -52,7 +52,7 @@ env.useBrowserCache = typeof self !== "undefined" && typeof self.caches !== "und
 env.backends.onnx.wasm.wasmPaths = "/static/models/ort/";
 
 /** @type {string} Nome do modelo HuggingFace para embeddings multilingues */
-const MODEL_NAME = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+const MODEL_NAME = "Xenova/multilingual-e5-small";
 
 /**
  * Device de execução: lido da query string (?device=wasm ou ?device=auto).

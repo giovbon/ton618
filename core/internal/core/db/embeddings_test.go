@@ -1090,3 +1090,60 @@ func TestResetAllEmbeddings(t *testing.T) {
 		t.Errorf("PendingNotes (%d) deveria ser igual a TotalNotes (%d) após reset", status.PendingNotes, status.TotalNotes)
 	}
 }
+
+func TestEnsureEmbeddingModelVersion(t *testing.T) {
+	s := newTestStore(t)
+
+	// Cria uma nota indexada
+	s.SaveNote("notes/a.md", "# Nota A", "2024-01-01T00:00:00Z")
+	s.SetFileTags("notes/a.md", []string{})
+	s.SaveNoteChunks("notes/a.md", []ChunkInfo{
+		makeChunk("notes/a.md", 0, "Chunk 0", 0.1),
+	})
+
+	// Primeira chamada: versão ausente → deve resetar e gravar a versão
+	reset, err := s.EnsureEmbeddingModelVersion("modelo-v1")
+	if err != nil {
+		t.Fatalf("EnsureEmbeddingModelVersion: %v", err)
+	}
+	if !reset {
+		t.Errorf("primeira chamada deveria resetar (versão ausente), got reset=%v", reset)
+	}
+
+	// Verifica que a versão foi persistida
+	got, err := s.GetSetting(EmbeddingModelVersionKey)
+	if err != nil || got != "modelo-v1" {
+		t.Errorf("versão persistida deveria ser 'modelo-v1', got %q (err=%v)", got, err)
+	}
+
+	// Embaralha a versão com dados para o próximo cenário
+	s.SaveNoteChunks("notes/a.md", []ChunkInfo{
+		makeChunk("notes/a.md", 0, "Chunk novo", 0.1),
+	})
+	s.SetSetting(EmbeddingModelVersionKey, "modelo-antigo")
+
+	// Segunda chamada: versão diferente → deve resetar de novo
+	reset, err = s.EnsureEmbeddingModelVersion("modelo-v1")
+	if err != nil {
+		t.Fatalf("EnsureEmbeddingModelVersion (mismatch): %v", err)
+	}
+	if !reset {
+		t.Errorf("versão divergente deveria resetar, got reset=%v", reset)
+	}
+
+	// Após o reset, não deve haver embeddings/chunks
+	var embCount int
+	s.DB.QueryRow(`SELECT COUNT(*) FROM note_embeddings`).Scan(&embCount)
+	if embCount != 0 {
+		t.Errorf("note_embeddings deveria estar vazio após mismatch, got %d", embCount)
+	}
+
+	// Terceira chamada: mesma versão → NÃO deve resetar
+	reset, err = s.EnsureEmbeddingModelVersion("modelo-v1")
+	if err != nil {
+		t.Fatalf("EnsureEmbeddingModelVersion (mesma versão): %v", err)
+	}
+	if reset {
+		t.Errorf("mesma versão NÃO deveria resetar, got reset=%v", reset)
+	}
+}
