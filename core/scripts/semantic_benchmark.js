@@ -12,7 +12,7 @@ env.allowLocalModels = true;
 env.allowRemoteModels = false;
 env.localModelPath = localModelDir;
 
-const MODEL_NAME = "Xenova/multilingual-e5-small";
+const MODEL_NAME = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
 
 // ── Dataset de Teste (Golden Dataset) ──
 const dataset = [
@@ -72,8 +72,7 @@ async function runBenchmark() {
   console.log("\n📦 Gerando embeddings dos documentos do Golden Dataset...");
   const docEmbeddings = [];
   for (const doc of dataset) {
-    // e5-small exige prefixo "passage:" para documentos
-    const output = await pipe("passage: " + doc.text, { pooling: "mean", normalize: true });
+    const output = await pipe(doc.text, { pooling: "mean", normalize: true });
     docEmbeddings.push({
       ...doc,
       embedding: Array.from(output.data)
@@ -91,8 +90,7 @@ async function runBenchmark() {
     console.log(`❓ Query: "${q.text}"`);
     console.log(`🎯 Categoria Esperada: ${q.expectedCategory}`);
 
-    // e5-small exige prefixo "query:" para consultas
-    const qOutput = await pipe("query: " + q.text, { pooling: "mean", normalize: true });
+    const qOutput = await pipe(q.text, { pooling: "mean", normalize: true });
     const qEmbedding = Array.from(qOutput.data);
 
     // Calcular similaridade com todos os documentos

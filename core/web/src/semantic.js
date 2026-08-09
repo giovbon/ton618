@@ -38,8 +38,12 @@
  * @property {number} distance - Distância cosseno (menor = mais similar)
  */
 
-/** @type {string} URL do Web Worker de embeddings */
-var WORKER_URL = "/static/semantic-worker.js";
+/** @type {string} URL do Web Worker de embeddings.
+ * Vem de data-semantic-worker no <body> (hash via staticver) — muda automaticamente
+ * quando o worker é alterado. Fallback para a URL sem versão. */
+var WORKER_URL =
+    (typeof document !== "undefined" && document.body && document.body.getAttribute("data-semantic-worker")) ||
+    "/static/semantic-worker.js";
 /** @type {string} Endpoint para salvar embedding */
 var SAVE_ENDPOINT = "/api/embeddings/save";
 /** @type {string} Endpoint para busca semântica */
@@ -333,8 +337,7 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
     if (idx >= chunksText.length) {
       return Promise.resolve();
     }
-    // O modelo e5-small exige prefixo "passage:" para documentos (indexação).
-    return self.embed("passage: " + chunksText[idx]).then(function(embedding) {
+    return self.embed(chunksText[idx]).then(function(embedding) {
       // Valida NaN/Inf antes de incluir no resultado
       for (var ei = 0; ei < embedding.length; ei++) {
         if (!isFinite(embedding[ei]) || isNaN(embedding[ei])) {
@@ -387,8 +390,7 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
  */
 SemanticIndex.prototype.search = function(query, limit) {
   limit = limit || 10;
-  // O modelo e5-small exige prefixo "query:" para consultas (busca).
-  return this.embed("query: " + query).then(function(embedding) {
+  return this.embed(query).then(function(embedding) {
     return fetch(SEARCH_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

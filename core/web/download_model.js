@@ -7,7 +7,7 @@
  * ATENÇÃO:
  * - O uso de `wget` é proposital — lida melhor com a CDN (XetHub/CAS Bridge)
  *   do HuggingFace que alternatives como `fetch()` ou `http.get()` do Node.
- * - As URLs apontam para o modelo `Xenova/multilingual-e5-small`.
+ * - As URLs apontam para o modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2`.
  * - A lista de arquivos (`files[]`) e o diretório de saída (`MODEL_DIR`)
  *   NÃO DEVEM ser alterados sem validação completa.
  *
@@ -24,7 +24,7 @@ import { gzipSync, brotliCompressSync, constants } from 'zlib';
 import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MODEL_DIR = join(__dirname, 'static/models/Xenova/multilingual-e5-small');
+const MODEL_DIR = join(__dirname, 'static/models/Xenova/paraphrase-multilingual-MiniLM-L12-v2');
 
 const files = [
   'config.json',
@@ -103,7 +103,7 @@ async function downloadWithRetry(url, destPath, retries = 3) {
 
 async function run() {
   for (const file of files) {
-    const url = `https://huggingface.co/Xenova/multilingual-e5-small/resolve/main/${file}`;
+    const url = `https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/${file}`;
     const dest = join(MODEL_DIR, file);
     if (existsSync(dest) && existsSync(dest + '.br')) {
       console.log(`${file} already exists, skipping.`);

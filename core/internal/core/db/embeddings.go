@@ -1,11 +1,14 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 
 	dbgen "ton618/core/internal/core/db/generated"
@@ -15,11 +18,28 @@ import (
 // EmbeddingDim e a dimensao do vetor produzido pelo modelo e5-small (384 dims).
 const EmbeddingDim = 384
 
-// EmbeddingModelVersion identifica a versão do pipeline de embeddings em uso
-// (modelo + lógica de chunking). Quando esta constante muda, os embeddings
-// antigos são descartados para que o browser re-indexe tudo de novo.
-// v2: inclui a correção do chunking (preservação de quebras de linha).
-const EmbeddingModelVersion = "multilingual-e5-small-v2"
+// EmbeddingModelName é o modelo de embeddings usado pelo frontend. Deve permanecer
+// em sincronia com o MODEL_NAME do semantic-worker.js (fonte única no backend).
+// ATENÇÃO: o e5-small foi testado e REVERTIDO em 09/08/2026 — produz embeddings
+// colapsados (cosine ~0.85 para textos não relacionados) no Transformers.js v4 + q8.
+const EmbeddingModelName = "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+
+// Parâmetros de chunking (devem refletir web/src/semantic.js).
+const chunkMaxChars = 1500
+const chunkOverlapChars = 200
+
+// EmbeddingModelVersion é um fingerprint determinístico do pipeline de embeddings
+// (modelo + chunking + prefixos). Quando qualquer parâmetro muda, o fingerprint
+// muda automaticamente e os embeddings antigos são invalidados no próximo boot —
+// sem bump manual.
+var EmbeddingModelVersion = computeEmbeddingVersion()
+
+func computeEmbeddingVersion() string {
+	payload := EmbeddingModelName +
+		"|chunk:" + strconv.Itoa(chunkMaxChars) + "/" + strconv.Itoa(chunkOverlapChars)
+	sum := sha256.Sum256([]byte(payload))
+	return "minilm-" + hex.EncodeToString(sum[:6])
+}
 
 // EmbeddingModelVersionKey é a chave em settings que guarda a versão corrente do modelo.
 const EmbeddingModelVersionKey = "embedding_model_version"

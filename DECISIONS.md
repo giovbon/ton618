@@ -104,13 +104,13 @@ Serve como referência para manter consistência em contribuições futuras.
 
 ```
 Browser (Transformers.js) → POST /api/embeddings/save → SQLite (vec0)
-Usa o modelo: Xenova/multilingual-e5-small
+Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 - Geração **exclusivamente no browser** (Transformers.js no Web Worker). Não há pipeline servidor-side.
-- Modelo: `Xenova/multilingual-e5-small` (384 dims, q8 ~118MB).
-- **Prefixos obrigatórios (e5):** documentos/chunks com `passage: ` e consultas com `query: ` — sem eles a qualidade despenca.
+- Modelo: `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dims, q8 ~120MB).
 - Cacheado no IndexedDB do browser após primeiro download.
+- **⚠️ e5-small REVERTIDO (09/08/2026):** o `Xenova/multilingual-e5-small` foi testado e **descartado** — no Transformers.js v4 + q8 ele produz **embeddings colapsados** (cosine ~0.85 até para textos não relacionados; o MiniLM dá ~0.15), fazendo a busca semântica retornar muito ruído. O MiniLM-L12 discrimina corretamente neste ambiente.
 
 ### 3.2 Chunking
 
@@ -123,7 +123,7 @@ Usa o modelo: Xenova/multilingual-e5-small
 
 - **Lazy**: Só indexa quando o usuário abre a busca semântica.
 - Título extraído do primeiro `# ` e prefixado em cada chunk.
-- **Prefixo `passage: `** adicionado ao texto enviado ao modelo na indexação (requisito do e5). O conteúdo armazenado no banco (`note_chunks.content`) permanece limpo, sem o prefixo.
+- **Sem prefixos de instrução:** o MiniLM-L12 não usa `query:`/`passage:` (diferente do e5). Texto enviado ao modelo = título + conteúdo limpo.
 - **Limpeza preserva quebras de linha:** o markdown é limpo colapsando apenas espaços/tabs (`[ \t]+ → " "`), mantendo os `\n`. Isso permite que `chunkText` quebre em parágrafos (evitando fragmentos cortados no meio da frase que geravam embeddings ruidosos). Corrigido em 09/08/2026.
 - Markdown limpo antes do chunking: remove blocos de código, imagens, mantém só texto de links.
 - `Promise.all` para paralelizar chunks de uma mesma nota.
@@ -132,7 +132,8 @@ Usa o modelo: Xenova/multilingual-e5-small
 
 - `note_chunks.indexed_mtime` armazena o mtime da nota no momento da indexação.
 - `GetPendingEmbeddingNotes()` compara com `notes.mtime` para detectar desatualizados.
-- **Invalidação por versão de modelo:** ao trocar de modelo de embeddings, `EnsureEmbeddingModelVersion` (chave `embedding_model_version` em settings) limpa todos os embeddings antigos na inicialização, forçando re-indexação completa no browser. **Alterada em:** 09/08/2026 (MiniLM-L12-v2 → multilingual-e5-small; v2 em 09/08/2026 inclui fix do chunking).
+- **Invalidação por versão de modelo:** o backend deriva um **fingerprint** do pipeline de embeddings (modelo + chunking) — `EmbeddingModelVersion`. Quando qualquer parâmetro muda, o fingerprint muda automaticamente e `EnsureEmbeddingModelVersion` limpa os embeddings antigos na inicialização, forçando re-indexação no browser. **Sem bump manual.** Alterada em: 09/08/2026 (retorno ao MiniLM-L12 após teste do e5-small).
+- **⚠️ Cache do worker (bug real, 09/08/2026):** o `semantic.js` criava o Web Worker via `/static/semantic-worker.js` **sem hash** na URL — o navegador cacheia o worker antigo (MiniLM) e a reindexação gerava vetores do modelo errado. **Corrigido:** o servidor agora injeta `window.SEMANTIC_WORKER_URL` com hash via `staticver.URL()` no `layout.templ`, e o `semantic.js` usa essa URL. O hash muda automaticamente com o conteúdo — sem `WORKER_VERSION` manual.
 - Notas não-indexáveis (drawing, spreadsheet, mermaid, mapa) são excluídas via SQL.
 
 ### 3.5 Notas Indexáveis vs Não-Indexáveis (Regras de Paridade)
@@ -294,7 +295,7 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 
 📍 `web/download_model.js`
 
-- O modelo `Xenova/multilingual-e5-small` (ONNX q8, ~118MB) é baixado do **HuggingFace** usando `wget`.
+- O modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX q8, ~120MB) é baixado do **HuggingFace** usando `wget`.
 - **`wget` é obrigatório** — lidou melhor com o XetHub/CAS Bridge do que `fetch()` ou `http.get()` do Node. Não substituir.
 - O script gera automaticamente versões comprimidas (`.gz` e `.br`) ao lado do arquivo original.
 - O Dockerfile **não** executa este script. O modelo é baixado pelo navegador via Transformers.js (CDN do HuggingFace + IndexedDB).
@@ -324,6 +325,17 @@ Caso no futuro seja necessário suportar fallback remoto, é preciso:
 1. Adicionar `https://huggingface.co` (e possivelmente `https://cdn-lfs.huggingface.co`) ao `connect-src` do CSP.
 2. Testar manualmente, pois o bloqueio do CSP não gera erro no servidor — aparece apenas no console do navegador.
 
+### 6.7 Variantes do ONNX Runtime WASM (redução de imagem)
+
+📍 `web/static/models/download-ort.js`
+
+O `download-ort.js` copia **apenas a variante do ORT realmente usada** pelo Transformers.js, reduzindo `web/static/models/ort/` de ~74MB para ~22MB:
+
+- **`ort-wasm-simd-threaded.asyncify`** (22MB): obrigatória — é a variante usada para inferência em CPU quando o servidor **não** envia COOP/COEP (numThreads forçado a 1).
+- **Removidas (CPU-only, decisão 09/08/2026)**: `jsep` (WebGPU — o `semantic_device` foi fixado em `wasm`), `ort-wasm-simd-threaded` (base, exigiria cross-origin isolated/multi-thread) e `jspi` (experimental).
+
+> ⚠️ Para reativar WebGPU no futuro, basta adicionar `ort-wasm-simd-threaded.jsep.wasm`/`.mjs` ao `ALLOWED` e voltar `semantic_device` para `auto`. Se o servidor um dia enviar COOP/COEP (multi-thread), incluir também a variante base `ort-wasm-simd-threaded.wasm`.
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
@@ -334,11 +346,11 @@ O sistema consagra três modalidades complementares de pesquisa textual e semân
 | --- | --- | --- | --- |
 | **Busca de Notas** | Filtro instantâneo no menu focado exclusivamente no nome/título dos arquivos Markdown. | Busca local indexada por correspondência parcial (`LIKE %q%`). | Azul (Sky) |
 | **Busca Global** | Busca textual de termos no conteúdo interno de todas as notas do sistema. | SQLite FTS5 (tabela virtual) + Lematização (Stemming) em pt-BR. | Azul (Exato) e Roxo (Lematizado) |
-| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`multilingual-e5-small` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
+| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`MiniLM-L12-v2` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
 
 
 ## Como Funciona a Busca Semântica
-Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local multilingual-e5-small (com o prefixo `passage:` no texto enviado ao modelo).
+Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
 Pesquisa KNN: Quando você digita uma busca semântica, o navegador gera o vetor da sua pergunta e o envia ao banco de dados SQLite. O banco usa a extensão vetorial sqlite-vec para rodar um cálculo KNN (Vizinhos Mais Próximos) e encontrar quais chunks de notas no banco têm a direção vetorial mais parecida (similaridade de cosseno).
 
 ## Como Funcionam as Notas Relacionadas (Critérios)

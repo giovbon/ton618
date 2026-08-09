@@ -60,7 +60,6 @@ Acesse o painel de configurações clicando no ícone de engrenagem no cabeçalh
 - **📅 Agenda:** Configuração do fuso horário local e coordenadas utilizadas para o cálculo do nascer e pôr do sol nos painéis visuais.
 - **🔔 Ntfy:** Permite cadastrar o servidor e tópicos do Ntfy para receber notificações de tarefas agendadas em outros dispositivos.
 - **🧠 Semântica:** Opções de gerenciamento da inteligência artificial local:
-  * **Modo de Execução:** Alterna entre processamento por CPU (WASM) ou GPU (WebGPU) no navegador.
   * **Sensibilidade da IA (Thresholds):** Sliders para calibrar a nota mínima de corte (similaridade) para a busca semântica global e para as notas recomendadas no rodapé.
   * **Resetar Índice:** Apaga todos os vetores de busca salvos e força a reindexação completa das notas físicas.
 
