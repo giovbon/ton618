@@ -3,8 +3,6 @@ package notes
 import (
 	"encoding/json"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -117,10 +115,6 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 				continue
 			}
 
-			if err := writeToDiskPreservingMtime(noteSvc.docsDir, n.Arquivo, newContent, mtime); err != nil {
-				slog.Error("ApplyDecayTags: erro ao escrever arquivo", "file", n.Arquivo, "error", err)
-			}
-
 			modifiedCount++
 		}
 	}
@@ -129,12 +123,4 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 		slog.Info("Varredura de auto-tagging concluída", "notas_modificadas", modifiedCount)
 	}
 	return nil
-}
-
-func writeToDiskPreservingMtime(docsDir, filename, content string, mtime time.Time) error {
-	fullPath := filepath.Join(docsDir, filename)
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-		return err
-	}
-	return os.Chtimes(fullPath, mtime, mtime)
 }

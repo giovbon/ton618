@@ -97,8 +97,9 @@ func (c *AppConfig) EnsureDirs() error {
 			return err
 		}
 	}
-	// Create monitored subdirectories
-	for _, sub := range []string{"links", "voice", "pdfs", "attachments", "archives"} {
+	// Cria apenas os diretórios para arquivos binários físicos (PDFs, anexos, archives, EPUBs).
+	// Notas são armazenadas exclusivamente no banco SQLite — não há pasta docs/notes/ nem docs/links/.
+	for _, sub := range []string{"pdfs", "attachments", "archives"} {
 		if err := os.MkdirAll(filepath.Join(c.DocsDir, sub), 0755); err != nil {
 			return err
 		}

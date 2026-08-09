@@ -779,10 +779,13 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 
 		// Não indexáveis por tags
 		{"notes/desenho.md", "# Desenho", []string{"drawing"}, false},
+		{"notes/desenho-pt.md", "# Desenho PT", []string{"desenho"}, false},
 		{"notes/planilha.md", "# Planilha", []string{"spreadsheet"}, false},
+		{"notes/planilha-pt.md", "# Planilha PT", []string{"planilha"}, false},
 		{"notes/fluxo.md", "# Mermaid", []string{"mermaid"}, false},
 		{"notes/mapa-tag.md", "# Mapa", []string{"map"}, false},
 		{"notes/mapa-tag-pt.md", "# Mapa", []string{"mapa"}, false},
+		{"notes/deletar.md", "# Deletar", []string{"deletar"}, false},
 
 		// Nota: Casos com frontmatter (conteúdo) sem tags associadas são considerados
 		// embeddable tanto no Go (IsNoteEmbeddable não abre o arquivo por performance)
@@ -797,6 +800,8 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		// Não indexáveis por heurística de nome de arquivo
 		{"notes/mapa-exato.md", "# Mapa", []string{}, false},
 		{"notes/mapa.md", "# Mapa", []string{}, false},
+		{"notes/img_1786140118423_image.png.md", "---tags: [deletar]---", []string{"deletar"}, false},
+		{"notes/img_sample.png.md", "# Image note", []string{}, false},
 	}
 
 	// 1. Salva todas as notas e suas tags no banco de teste

@@ -7,7 +7,6 @@ import (
 
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -81,15 +80,14 @@ func (s *NoteService) SaveWithContext(ctx context.Context, filename, content str
 	return s.processAndSave(ctx, filename, content, mtime)
 }
 
-// Delete remove uma nota do banco e do disco.
+// Delete remove uma nota do banco SQLite.
+// Notas vivem exclusivamente no banco — não há arquivo em disco para remover.
 func (s *NoteService) Delete(filename string) error {
 	filename = NoteFilename(filename)
 
 	if err := s.store.DeleteAllFileRecords(filename); err != nil {
 		slog.Error("delete all file records", "file", filename, "error", err)
 	}
-
-	os.Remove(filepath.Join(s.docsDir, filename))
 
 	return nil
 }
@@ -113,13 +111,8 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return nil
 	}
 
-	// Verifica se a nota de origem existe (no DB, disco ou file_mods)
+	// Verifica se a nota de origem existe no banco (única fonte de verdade)
 	oldExists := s.notes.NoteExists(oldName)
-	if !oldExists {
-		if _, err := os.Stat(filepath.Join(s.docsDir, oldName)); err == nil {
-			oldExists = true
-		}
-	}
 	if !oldExists {
 		if mods, err := s.store.GetFilesModsAndTags(); err == nil {
 			for _, m := range mods {
@@ -138,7 +131,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 
 	if !oldExists {
 		if processor.IsDraftName(oldName) {
-			// Se a nota de origem é um rascunho gerado automaticamente ainda não salvo no banco nem no disco,
+			// Se a nota de origem é um rascunho gerado automaticamente ainda não salvo no banco,
 			// permite a transição para o novo nome sem erro.
 			slog.Info("renomeando rascunho de nota ainda não salvo", "oldName", oldName, "newName", newName)
 			return nil
@@ -150,8 +143,6 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		return fmt.Errorf("rename note: %w", err)
 	}
 
-	os.Rename(filepath.Join(s.docsDir, oldName), filepath.Join(s.docsDir, newName))
-
 	// Captura tags da nota original para preservar em caso de tipos especiais
 	oldTags, _ := s.tags.GetFileTags(oldName)
 
@@ -160,17 +151,8 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		slog.Error("delete all file records on rename", "file", oldName, "error", err)
 	}
 
-	newPath := filepath.Join(s.docsDir, newName)
-	var content string
-	hasPhysFile := false
-
-	if data, err := os.ReadFile(newPath); err == nil {
-		content = string(data)
-		hasPhysFile = true
-	} else {
-		// Fallback para o conteúdo indexado antigo caso a leitura física falhe
-		content, _ = s.notes.GetNote(newName)
-	}
+	// Lê conteúdo do banco (única fonte de verdade — não há arquivo em disco)
+	content, _ := s.notes.GetNote(newName)
 
 	if content != "" {
 		parts := strings.Split(newName, "/")
@@ -186,14 +168,9 @@ func (s *NoteService) Rename(oldName, newName string) error {
 			}
 		}
 
-		// Atualiza a propriedade 'title' no frontmatter da nota (tanto físico quanto DB)
+		// Atualiza a propriedade 'title' no frontmatter da nota no banco
 		if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
 			content = newContent
-			if hasPhysFile {
-				if err := os.WriteFile(newPath, []byte(newContent), 0644); err != nil {
-					slog.Error("write updated frontmatter after rename", "file", newName, "error", err)
-				}
-			}
 		}
 
 		if err := s.processAndSave(context.Background(), newName, content, time.Now().UTC()); err != nil {
@@ -437,25 +414,16 @@ func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, er
 // ── privado ──
 
 // processAndSave centraliza o processamento e indexação do markdown.
+// As notas vivem exclusivamente no banco SQLite — content é sempre fornecido pelo caller.
 // O contexto é propagado para ReplaceFileIndexes, permitindo cancelamento.
 func (s *NoteService) processAndSave(ctx context.Context, filename, content string, modTime time.Time) error {
-	var docs []processor.Document
-	var links []string
-	var fileTags []string
-
-	if content != "" {
-		docs, links, fileTags = processor.ProcessMarkdownContent(
-			[]byte(content), filename, modTime, modTime,
-		)
-	} else {
-		fullPath := filepath.Join(s.docsDir, filename)
-		contentBytes, err := os.ReadFile(fullPath)
-		if err != nil {
-			return err
-		}
-		content = string(contentBytes)
-		docs, links, fileTags = processor.ProcessMarkdownContent(contentBytes, filename, modTime, modTime)
+	if content == "" {
+		return fmt.Errorf("processAndSave: conteúdo vazio para %s", filename)
 	}
+
+	docs, links, fileTags := processor.ProcessMarkdownContent(
+		[]byte(content), filename, modTime, modTime,
+	)
 
 	// 2. Extrai TODOs estruturados
 	var todos []processor.TodoItem

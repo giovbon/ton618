@@ -434,23 +434,27 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 
 // HandleBackup baixa um ZIP com todas as notas (markdown), e opcionalmente PDFs e anexos,
 // excluindo a pasta archives/.
+// Usa streaming direto para o ResponseWriter para evitar acumular centenas de MB em memória
+// e garantir que o Content-Type correto seja enviado ao navegador antes do corpo.
 func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) {
 	full := r.URL.Query().Get("full") == "true"
-	data, err := ctx.Backup.Create(full)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	filename := "ton618-backup-notas-" + processor.GenerateCUID2() + ".zip"
 	if full {
 		filename = "ton618-backup-completo-" + processor.GenerateCUID2() + ".zip"
 	}
 
+	// Define os headers ANTES de iniciar a escrita para garantir application/zip no navegador.
+	// Se os headers forem escritos depois do primeiro Write(), o Go usará text/plain (causa do bug de .txt).
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
-	w.Write(data)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	if err := ctx.Backup.CreateStream(w, full); err != nil {
+		// Neste ponto os headers já foram enviados, não é possível chamar http.Error.
+		// Loga o erro para diagnóstico.
+		slog.Error("HandleBackup: erro ao gerar backup", "err", err, "full", full)
+	}
 }
 
 // HandleDuplicateNote duplicates an existing note or file, prefixing the name with "copia-".

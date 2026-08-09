@@ -85,13 +85,20 @@ WHERE n.content != ''
   AND n.filename NOT LIKE 'pdfs/%'
   AND n.filename NOT LIKE 'attachments/%'
   AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE 'notes/img_%'
+  AND n.filename NOT LIKE '%.png.md'
+  AND n.filename NOT LIKE '%.jpg.md'
+  AND n.filename NOT LIKE '%.jpeg.md'
+  AND n.filename NOT LIKE '%.gif.md'
+  AND n.filename NOT LIKE '%.webp.md'
+  AND n.filename NOT LIKE '%.svg.md'
   AND n.filename NOT LIKE '%mapa-%'
   AND n.filename NOT LIKE '%mapa.%'
   AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
   )
 `
 
@@ -1094,13 +1101,20 @@ WHERE (
   AND n.filename NOT LIKE 'pdfs/%'
   AND n.filename NOT LIKE 'attachments/%'
   AND n.filename NOT LIKE 'archives/%'
+  AND n.filename NOT LIKE 'notes/img_%'
+  AND n.filename NOT LIKE '%.png.md'
+  AND n.filename NOT LIKE '%.jpg.md'
+  AND n.filename NOT LIKE '%.jpeg.md'
+  AND n.filename NOT LIKE '%.gif.md'
+  AND n.filename NOT LIKE '%.webp.md'
+  AND n.filename NOT LIKE '%.svg.md'
   AND n.filename NOT LIKE '%mapa-%'
   AND n.filename NOT LIKE '%mapa.%'
   AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','spreadsheet','mermaid','map','mapa')
+      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
   )
 ORDER BY n.mtime DESC
 LIMIT ?

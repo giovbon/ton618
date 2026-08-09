@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/httputil"
@@ -205,12 +206,23 @@ func (ctx *HandlerContext) HandleEmbeddingPending(w http.ResponseWriter, r *http
 		c := p.Content
 		if len(c) > 10000 {
 			slog.Debug("conteudo truncado para chunking semantic", "file", p.Filename, "original_len", len(c), "truncated_to", 10000)
-			c = c[:10000]
+			c = safeTruncateUTF8(c, 10000)
 		}
 		items = append(items, pendingItem{Filename: p.Filename, Content: c})
 	}
 
 	httputil.WriteJSON(w, items)
+}
+
+// safeTruncateUTF8 trunca uma string em no máximo maxBytes sem cortar caracteres UTF-8 multi-byte ao meio.
+func safeTruncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
+		maxBytes--
+	}
+	return s[:maxBytes]
 }
 
 // HandleEmbeddingReset apaga todos os chunks e embeddings do banco.

@@ -305,7 +305,7 @@ type PendingNote struct {
 }
 
 // GetPendingEmbeddingNotes retorna notas sem chunks indexados, em batches de `limit`.
-// Usa SQL para filtrar notas não-indexáveis, eliminando overfetch desnecessário.
+// Usa SQL para filtrar notas não-indexáveis e aplica isNoteEmbeddable para garantia total.
 func (s *Store) GetPendingEmbeddingNotes(limit int) ([]PendingNote, error) {
 	if limit <= 0 {
 		limit = 20
@@ -316,8 +316,15 @@ func (s *Store) GetPendingEmbeddingNotes(limit int) ([]PendingNote, error) {
 		return nil, err
 	}
 
+	allTags, _ := s.GetAllFileTags()
+
 	result := make([]PendingNote, 0, len(rows))
 	for _, r := range rows {
+		fileTags := allTags[r.Filename]
+		if !s.isNoteEmbeddable(r.Filename, fileTags) {
+			continue
+		}
+
 		content := ""
 		if r.Content.Valid {
 			content = r.Content.String

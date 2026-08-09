@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,13 +102,72 @@ func jsonToCSV(jsonStr string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Create gera um ZIP com todas as notas, PDFs e anexos (se full for verdadeiro).
-func (s *BackupService) Create(full bool) ([]byte, error) {
+var binaryCompressedExts = map[string]bool{
+	".zip":  true,
+	".rar":  true,
+	".7z":   true,
+	".tar":  true,
+	".gz":   true,
+	".tgz":  true,
+	".bz2":  true,
+	".tbz2": true,
+	".xz":   true,
+	".txz":  true,
+	".lzma": true,
+	".zst":  true,
+	".apk":  true,
+	".jar":  true,
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+	".webp": true,
+	".heic": true,
+	".heif": true,
+	".tiff": true,
+	".ico":  true,
+	".mp3":  true,
+	".m4a":  true,
+	".aac":  true,
+	".flac": true,
+	".ogg":  true,
+	".opus": true,
+	".wav":  true,
+	".wma":  true,
+	".mp4":  true,
+	".mkv":  true,
+	".avi":  true,
+	".mov":  true,
+	".webm": true,
+	".flv":  true,
+	".wmv":  true,
+	".mpeg": true,
+	".mpg":  true,
+	".iso":  true,
+	".img":  true,
+	".dmg":  true,
+	".bin":  true,
+	".exe":  true,
+	".dll":  true,
+	".so":   true,
+	".dylib": true,
+	".pdf":  true,
+	".epub": true,
+}
+
+func selectCompressionMethod(filename string) uint16 {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if binaryCompressedExts[ext] {
+		return zip.Store
+	}
+	return zip.Deflate
+}
+
+// CreateStream gera o arquivo ZIP enviando o fluxo de dados diretamente para out (ex: http.ResponseWriter).
+func (s *BackupService) CreateStream(out io.Writer, full bool) error {
 	allNotes, _ := s.notes.GetAllNotes()
 
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-
+	zw := zip.NewWriter(out)
 	seen := make(map[string]bool)
 
 	// 1. Notas do DB — conteúdo markdown
@@ -176,11 +236,6 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 				return nil
 			}
 
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-
 			info, err := d.Info()
 			var modTime time.Time
 			if err == nil {
@@ -189,14 +244,23 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 				modTime = repository.ParseMtime(mtimeStr)
 			}
 
-			addToZip(zw, relPath, data, modTime)
+			_ = addFileToZip(zw, relPath, path, modTime)
 			seen[relPath] = true
 			return nil
 		})
 	}
 
 	if err := zw.Close(); err != nil {
-		return nil, fmt.Errorf("backup: close zip: %w", err)
+		return fmt.Errorf("backup: close zip: %w", err)
+	}
+	return nil
+}
+
+// Create gera um ZIP em memória (para uso onde []byte é necessário).
+func (s *BackupService) Create(full bool) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := s.CreateStream(&buf, full); err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
 }
@@ -204,7 +268,7 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 func addToZip(zw *zip.Writer, name string, data []byte, modTime time.Time) {
 	h := &zip.FileHeader{
 		Name:   name,
-		Method: zip.Deflate,
+		Method: selectCompressionMethod(name),
 	}
 	if !modTime.IsZero() {
 		h.SetModTime(modTime)
@@ -214,4 +278,35 @@ func addToZip(zw *zip.Writer, name string, data []byte, modTime time.Time) {
 		return
 	}
 	w.Write(data)
+}
+
+func addFileToZip(zw *zip.Writer, zipName string, filePath string, modTime time.Time) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	h := &zip.FileHeader{
+		Name:   zipName,
+		Method: selectCompressionMethod(zipName),
+	}
+	if !modTime.IsZero() {
+		h.SetModTime(modTime)
+	} else {
+		h.SetModTime(info.ModTime())
+	}
+
+	w, err := zw.CreateHeader(h)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w, file)
+	return err
 }

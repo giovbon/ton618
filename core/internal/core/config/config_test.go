@@ -190,11 +190,19 @@ func TestEnsureDirs_CriaDiretorios(t *testing.T) {
 		}
 	}
 
-	// Verifica subdiretorios monitorados
-	for _, sub := range []string{"links", "voice", "pdfs", "attachments", "archives"} {
+	// Verifica subdiretorios monitorados (apenas arquivos binários físicos)
+	for _, sub := range []string{"pdfs", "attachments", "archives"} {
 		path := filepath.Join(cfg.DocsDir, sub)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			t.Fatalf("subdiretorio %q nao foi criado", path)
+		}
+	}
+
+	// Confirma que notes/, links/ e voice/ NÃO são criados (notas vivem só no banco)
+	for _, sub := range []string{"notes", "links", "voice"} {
+		path := filepath.Join(cfg.DocsDir, sub)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("subdiretorio %q nao deveria ser criado automaticamente", path)
 		}
 	}
 }
