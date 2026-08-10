@@ -20,7 +20,7 @@ func (ctx *HandlerContext) HandleMindmap(w http.ResponseWriter, r *http.Request)
 	if !nd.Exists {
 		nd.Content = "---\ntype: markmap\n---\n# Meu Markmap\n\n- Tópico Principal\n  - Subtópico 1\n  - Subtópico 2\n- Outro Tópico"
 	} else {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 		if redirectIfWrongEditor(w, r, noteType, "/mindmap", filename) {
 			return
 		}

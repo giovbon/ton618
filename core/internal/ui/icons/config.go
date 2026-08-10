@@ -1,6 +1,10 @@
 package icons
 
-import "strings"
+import (
+	"sort"
+	"strings"
+	"sync"
+)
 
 // IconSpec define o par de ícone (Lucide) e cor (Tailwind CSS) de um elemento.
 type IconSpec struct {
@@ -152,6 +156,29 @@ func GetSpec(key string) IconSpec {
 	return IconSpec{Icon: "sticky-note", Color: "#F54927"}
 }
 
+// iconColorByIcon é o mapa reverso ícone (lowercased) → cor, construído uma
+// única vez de forma determinística (chaves ordenadas) para evitar que
+// GetColor dependa da ordem de iteração de mapas em Go (que é aleatória).
+var (
+	iconColorOnce   sync.Once
+	iconColorByIcon map[string]string
+)
+
+func buildIconColorMap() {
+	iconColorByIcon = make(map[string]string, len(Config))
+	keys := make([]string, 0, len(Config))
+	for k := range Config {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		icon := strings.ToLower(Config[k].Icon)
+		if _, exists := iconColorByIcon[icon]; !exists {
+			iconColorByIcon[icon] = FormatColor(Config[k].Color)
+		}
+	}
+}
+
 // GetIcon retorna o nome do ícone para uma chave.
 func GetIcon(key string) string {
 	return GetSpec(key).Icon
@@ -160,16 +187,24 @@ func GetIcon(key string) string {
 // GetColor retorna a classe ou estilo de cor para uma chave ou nome de ícone.
 func GetColor(keyOrIcon string) string {
 	k := strings.ToLower(strings.TrimSpace(keyOrIcon))
-	if k != "" {
-		if spec, exists := Config[k]; exists {
+	if k == "" {
+		if spec, exists := Config["nota"]; exists {
 			return FormatColor(spec.Color)
 		}
-		for _, spec := range Config {
-			if strings.EqualFold(spec.Icon, k) {
-				return FormatColor(spec.Color)
-			}
-		}
+		return "#F54927"
 	}
+
+	// Chave direta primeiro (mais específica).
+	if spec, exists := Config[k]; exists {
+		return FormatColor(spec.Color)
+	}
+
+	// Nome de ícone → cor (determinístico).
+	iconColorOnce.Do(buildIconColorMap)
+	if c, exists := iconColorByIcon[k]; exists {
+		return c
+	}
+
 	if spec, exists := Config["nota"]; exists {
 		return FormatColor(spec.Color)
 	}

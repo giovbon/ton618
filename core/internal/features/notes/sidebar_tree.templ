@@ -86,7 +86,7 @@ func getNoteLink(n domain.NoteItem) string {
     if n.Type != "" {
         noteType = domain.NoteType(n.Type)
     } else {
-        noteType = domain.DetectNoteType(n.Tags, "", path)
+        noteType = domain.DetectNoteType(n.Tags, path)
     }
     route := noteType.EditorRoute()
     return route + "?file=" + SafeFileQueryEscape(path)
@@ -110,7 +110,7 @@ func getDisplayType(n domain.NoteItem) string {
     if n.Type != "" {
         return n.Type
     }
-    return string(domain.DetectNoteType(n.Tags, "", n.Arquivo))
+    return string(domain.DetectNoteType(n.Tags, n.Arquivo))
 }
 
 func getVisibleTags(tags []string) []string {

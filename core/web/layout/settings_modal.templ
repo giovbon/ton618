@@ -72,25 +72,7 @@ templ SettingsModal() {
 
                     <form id="bulk-archive-form" hx-post="/api/bulk-delete" hx-target="#bulk-preview-area">
                         <input type="hidden" name="preview" value="true" />
-                        <!-- Filtro 1: Por Idade -->
-                        <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 mb-6">
-                            <label class="flex items-center gap-3 cursor-pointer mb-3">
-                                <input type="checkbox" name="by_age" value="true" class="accent-sky-500 w-4 h-4 rounded" onchange="document.getElementById('age-inputs').style.opacity = this.checked ? '1' : '0.5';" />
-                                <span class="text-sm font-semibold text-zinc-200">Filtrar por idade</span>
-                            </label>
-                            <div id="age-inputs" class="ml-7 space-y-2 opacity-50 transition-opacity">
-                                <label class="block text-xs text-zinc-500">Notas mais velhas que: 
-                                    <span id="age-value-display" class="text-sky-400 font-bold">2 anos</span>
-                                </label>
-                                <input type="range" name="age_years" min="1" max="10" value="2" step="1"
-                                    class="w-full accent-sky-500 cursor-pointer" oninput="document.getElementById('age-value-display').innerText = this.value + (this.value == 1 ? ' ano' : ' anos')" />
-                                <div class="flex justify-between text-[10px] text-zinc-600">
-                                    <span>1 ano</span><span>5 anos</span><span>10 anos</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Filtro 2: Por Tag (múltiplas) -->
+                        <!-- Filtro: Por Tag (múltiplas) -->
                         <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 mb-6">
                             <label class="flex items-center gap-3 cursor-pointer mb-3">
                                 <input type="checkbox" name="by_tag" value="true" class="accent-sky-500 w-4 h-4 rounded" onchange="document.getElementById('filter-tag-names').disabled = !this.checked;" />
@@ -114,10 +96,10 @@ templ SettingsModal() {
                     <!-- Auto-Tagging por Inatividade -->
                     <div class="border-t border-zinc-800 pt-6 mt-6" x-data="autoTagConfig()">
                         <div class="flex items-center gap-2 mb-2">
-                            <h3 class="text-sm font-bold text-zinc-200">Auto-Tag (Notas Inativas)</h3>
+                            <h3 class="text-sm font-bold text-zinc-200">Auto-Tag</h3>
                         </div>
                         <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
-                            Adicione tags automaticamente a notas que não são modificadas há um certo número de dias. Se a nota for editada, a tag será removida.
+                            Adicione tags automaticamente a notas que não são abertas há um certo número de dias (baseado na última vez que a nota foi aberta). Ao clicar em "Aplicar Tags Agora", a tag é adicionada às notas inativas e removida das que foram abertas recentemente (abaixo dos dias configurados).
                         </p>
                         
                         <div class="space-y-3 mb-4">
@@ -135,16 +117,27 @@ templ SettingsModal() {
                             </template>
                         </div>
                         
-                        <div class="flex items-center justify-between">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
                             <button type="button" @click="rules.push({days: 30, tag: ''})" class="text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors">
                                 + Adicionar Regra
                             </button>
-                            <button type="button" @click="saveRules()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg transition-colors">
-                                Salvar Regras
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="applyTags()" :disabled="applying"
+                                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-700/40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-2">
+                                    <span x-show="!applying">▶️ Aplicar Tags Agora</span>
+                                    <span x-show="applying" class="inline-flex items-center gap-2">
+                                        <span class="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
+                                        Aplicando...
+                                    </span>
+                                </button>
+                                <button type="button" @click="saveRules()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg transition-colors">
+                                    Salvar Regras
+                                </button>
+                            </div>
                         </div>
                         <p x-show="saved" x-transition.duration.500ms class="text-xs text-emerald-400 mt-2 text-right hidden" :class="{'hidden': false}">✓ Salvo com sucesso!</p>
                         <p x-show="error" x-text="errorMsg" class="text-xs text-red-400 mt-2 text-right hidden" :class="{'hidden': !error}"></p>
+                        <p x-show="applyMsg" x-text="applyMsg" x-transition.duration.500ms class="text-xs mt-2 text-right"></p>
                     </div>
 
                     <!-- Cleanup orphan images -->
@@ -368,6 +361,8 @@ templ SettingsModal() {
                 saved: false,
                 error: false,
                 errorMsg: '',
+                applying: false,
+                applyMsg: '',
                 init() {
                     fetch('/api/settings/auto-tag')
                         .then(r => r.json())
@@ -397,6 +392,32 @@ templ SettingsModal() {
                         this.errorMsg = e.message;
                         setTimeout(() => this.error = false, 5000);
                     });
+                },
+                async applyTags() {
+                    this.applyMsg = '';
+                    this.applying = true;
+                    try {
+                        // Envia as regras digitadas na tela — o servidor salva e aplica.
+                        // Assim o botão usa o que está visível, mesmo sem clicar em "Salvar Regras".
+                        const r = await fetch('/api/settings/auto-tag/apply', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(this.rules)
+                        });
+                        const data = await r.json().catch(() => ({}));
+                        if (!r.ok) throw new Error(data.error || 'Erro ao aplicar tags');
+                        this.saved = true;
+                        setTimeout(() => this.saved = false, 3000);
+                        this.applyMsg = data.modified > 0
+                            ? '✓ ' + data.modified + (data.modified === 1 ? ' nota atualizada!' : ' notas atualizadas!')
+                            : '✓ Nenhuma nota precisou de atualização.';
+                        // Atualiza a sidebar com as novas tags
+                        document.body.dispatchEvent(new Event('reload-sidebar'));
+                    } catch (e) {
+                        this.applyMsg = '✗ ' + e.message;
+                    } finally {
+                        this.applying = false;
+                    }
                 }
             }));
         });

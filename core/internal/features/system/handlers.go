@@ -19,6 +19,7 @@ import (
 	"ton618/core/internal/features/todos"
 	"ton618/core/internal/httputil"
 	"ton618/core/internal/processor"
+	"ton618/core/internal/ui/icons"
 	"ton618/core/internal/watcher"
 )
 
@@ -448,6 +449,14 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			row["type"] = n.Type
 			row["Type"] = n.Type
 
+			// SSOT de ícones/abertura: o servidor renderiza o SVG do ícone e a URL
+			// de abertura (mesma lógica usada na sidebar). O frontend apenas injeta —
+			// eliminando a duplicação client-side que causava ícones divergentes.
+			row["_icon"] = icons.SVGString(icons.GetIcon(n.Type), "w-3.5 h-3.5")
+			openURL, openBlank := domain.NoteOpenTarget(domain.NoteType(n.Type), n.Arquivo)
+			row["_url"] = openURL
+			row["_blank"] = openBlank
+
 			// Guardar no mapa temporário para atualizar o cache em lote depois
 			newCacheEntries[n.Arquivo] = dbCacheEntry{
 				Mtime: n.Mtime,
@@ -842,7 +851,7 @@ func (ctx *HandlerContext) HandlePostAutoTagSettings(w http.ResponseWriter, r *h
 		http.Error(w, "json invalido", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validação básica
 	for i, rule := range rules {
 		if rule.Days <= 0 {
@@ -872,3 +881,55 @@ func (ctx *HandlerContext) HandlePostAutoTagSettings(w http.ResponseWriter, r *h
 	w.Write([]byte(`{"status":"success"}`))
 }
 
+// HandleApplyAutoTag executa manualmente a aplicação das regras de Auto-Tag por inatividade.
+// Ao contrário do comportamento anterior (agendador em background a cada 6h), a aplicação
+// agora é disparada pelo usuário. Retorna quantas notas tiveram as tags alteradas.
+//
+// Opcionalmente, o corpo da requisição pode conter as regras (mesmo formato de
+// POST /api/settings/auto-tag). Se vierem regras válidas, elas são salvas e usadas
+// nesta aplicação — assim o botão "Aplicar Tags Agora" usa exatamente o que está
+// digitado na tela, sem exigir clicar em "Salvar Regras" antes.
+// POST /api/settings/auto-tag/apply
+func (ctx *HandlerContext) HandleApplyAutoTag(w http.ResponseWriter, r *http.Request) {
+	// Se o corpo trouxer regras, salva-as antes de aplicar (mesma validação do POST de config).
+	if r.Body != nil && r.ContentLength > 0 {
+		var incomingRules []domain.AutoTagRule
+		if err := json.NewDecoder(r.Body).Decode(&incomingRules); err != nil {
+			http.Error(w, "json invalido", http.StatusBadRequest)
+			return
+		}
+		for i, rule := range incomingRules {
+			if rule.Days <= 0 {
+				http.Error(w, "os dias devem ser maiores que zero", http.StatusBadRequest)
+				return
+			}
+			incomingRules[i].Tag = strings.TrimSpace(rule.Tag)
+			incomingRules[i].Tag = strings.TrimPrefix(incomingRules[i].Tag, "#")
+			if incomingRules[i].Tag == "" {
+				http.Error(w, "a tag não pode ser vazia", http.StatusBadRequest)
+				return
+			}
+		}
+		configJSON, err := json.Marshal(incomingRules)
+		if err != nil {
+			http.Error(w, "erro ao processar dados", http.StatusInternalServerError)
+			return
+		}
+		if err := ctx.Store.SetSetting("auto_tag_decay_config", string(configJSON)); err != nil {
+			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	modified, err := notes.ApplyDecayTags(ctx.Store, ctx.Notes)
+	if err != nil {
+		http.Error(w, "erro ao aplicar tags: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "success",
+		"modified": modified,
+	})
+}

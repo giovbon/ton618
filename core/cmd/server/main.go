@@ -97,15 +97,8 @@ func main() {
 	captureService := notes.NewCaptureService(store)
 	typstService := notes.NewTypstService()
 
-	// 7. Agendador de Auto-Tag (Inatividade)
-	go func() {
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-		notes.ApplyDecayTags(store, notesService)
-		for range ticker.C {
-			notes.ApplyDecayTags(store, notesService)
-		}
-	}()
+	// 7. Auto-Tag (Inatividade): não roda mais em background —
+	// o usuário dispara a aplicação manualmente via POST /api/settings/auto-tag/apply.
 
 	sysCtx := system.NewHandlerContext(cfg, store, backupService, notesService)
 	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService, typstService)

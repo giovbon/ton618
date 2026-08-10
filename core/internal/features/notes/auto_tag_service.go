@@ -10,31 +10,46 @@ import (
 	"ton618/core/internal/core/domain"
 )
 
-// ApplyDecayTags verifica a idade das notas e aplica (ou remove)
-// tags configuradas pelo usuário baseando-se na inatividade (idade do mtime).
-func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
+// ApplyDecayTags verifica a inatividade das notas e aplica (ou remove)
+// tags configuradas pelo usuário.
+//
+// Critério de inatividade: usa a data da ÚLTIMA ABERTURA
+// (popularity.last_interacted_at) quando disponível. Para notas que nunca
+// foram abertas (sem registro em popularity), cai para a data da última
+// edição (mtime).
+//
+// Retorna o número de notas cujas tags foram alteradas.
+func ApplyDecayTags(store *db.Store, noteSvc *NoteService) (int, error) {
 	slog.Info("Iniciando varredura de auto-tagging (decay)...")
-	
+
 	val, err := store.GetSetting("auto_tag_decay_config")
 	if err != nil || val == "" || val == "[]" {
 		// Nenhuma regra configurada
-		return nil
+		return 0, nil
 	}
 
 	var rules []domain.AutoTagRule
 	if err := json.Unmarshal([]byte(val), &rules); err != nil {
 		slog.Error("ApplyDecayTags: erro ao dar parse nas regras", "error", err)
-		return err
+		return 0, err
 	}
 
 	if len(rules) == 0 {
-		return nil
+		return 0, nil
+	}
+
+	// Data da última abertura de cada nota (popularity.last_interacted_at).
+	// Serve de referência de inatividade, com fallback para o mtime.
+	lastInteracted, err := store.GetAllLastInteracted()
+	if err != nil {
+		slog.Error("ApplyDecayTags: erro ao buscar última interação", "error", err)
+		return 0, err
 	}
 
 	notesList, err := noteSvc.GetMany()
 	if err != nil {
 		slog.Error("ApplyDecayTags: erro ao listar notas", "error", err)
-		return err
+		return 0, err
 	}
 
 	modifiedCount := 0
@@ -48,12 +63,18 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 			continue
 		}
 
-		mtime, err := time.Parse(time.RFC3339, n.Mtime)
+		// Data de referência: última abertura quando disponível, senão mtime.
+		refTimeStr := lastInteracted[n.Arquivo]
+		if refTimeStr == "" {
+			refTimeStr = n.Mtime
+		}
+
+		refTime, err := time.Parse(time.RFC3339, refTimeStr)
 		if err != nil {
 			continue
 		}
 
-		ageDays := time.Since(mtime).Hours() / 24.0
+		ageDays := time.Since(refTime).Hours() / 24.0
 
 		// Mapa rápido das tags atuais para busca e modificação
 		currentTagsMap := make(map[string]bool)
@@ -66,7 +87,7 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 		// Para cada regra configurada, verifica se a nota atende o critério de idade
 		for _, rule := range rules {
 			targetTag := rule.Tag
-			
+
 			if ageDays >= float64(rule.Days) {
 				// Deveria ter a tag
 				if !currentTagsMap[targetTag] {
@@ -97,7 +118,7 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 
 			// Atualiza a propriedade no frontmatter
 			newTagsStr := strings.Join(newTags, ", ")
-			
+
 			newContent, err := UpdateFrontmatterProperty(content, "tags", newTagsStr)
 			if err != nil {
 				slog.Error("ApplyDecayTags: erro ao atualizar frontmatter", "file", n.Arquivo, "error", err)
@@ -109,7 +130,7 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 				slog.Error("ApplyDecayTags: erro ao salvar no bd", "file", n.Arquivo, "error", err)
 				continue
 			}
-			
+
 			if err := store.SetFileTags(n.Arquivo, newTags); err != nil {
 				slog.Error("ApplyDecayTags: erro ao setar file tags", "file", n.Arquivo, "error", err)
 				continue
@@ -122,5 +143,5 @@ func ApplyDecayTags(store *db.Store, noteSvc *NoteService) error {
 	if modifiedCount > 0 {
 		slog.Info("Varredura de auto-tagging concluída", "notas_modificadas", modifiedCount)
 	}
-	return nil
+	return modifiedCount, nil
 }

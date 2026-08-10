@@ -20,7 +20,7 @@ func (ctx *HandlerContext) HandleMermaid(w http.ResponseWriter, r *http.Request)
 	if !nd.Exists {
 		nd.Content = "---\ntype: mermaid\n---\ngraph TD\n    A[Início] --> B(Processamento)\n    B --> C{Decisão}\n    C -->|Sim| D[Resultado 1]\n    C -->|Não| E[Resultado 2]"
 	} else {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 		if redirectIfWrongEditor(w, r, noteType, "/mermaid", filename) {
 			return
 		}

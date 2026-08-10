@@ -38,6 +38,27 @@ func (s *Store) GetAllPopularity() (map[string]int, error) {
 	return result, nil
 }
 
+// GetAllLastInteracted returns a map of arquivo -> last_interacted_at (RFC3339)
+// for all files with a popularity record. Arquivos nunca abertos/visitados não
+// aparecem no mapa — o chamador deve usar um fallback (ex: mtime).
+func (s *Store) GetAllLastInteracted() (map[string]string, error) {
+	rows, err := s.DB.QueryContext(s.queryCtx(), `SELECT arquivo, COALESCE(last_interacted_at, '') FROM popularity`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string)
+	for rows.Next() {
+		var arquivo, lastInteracted string
+		if err := rows.Scan(&arquivo, &lastInteracted); err != nil {
+			return nil, err
+		}
+		result[arquivo] = lastInteracted
+	}
+	return result, rows.Err()
+}
+
 // ResetPopularity deletes the popularity record for a file.
 func (s *Store) ResetPopularity(arquivo string) error {
 	s.WriteMu.Lock()
@@ -52,13 +73,13 @@ func (s *Store) ApplyInteractionReward(arquivo string, interactionType string) e
 
 	var reward float64
 	switch interactionType {
-	case "focus_zoom":           // Abrir/salvar notas, planilhas, desenhos
+	case "focus_zoom": // Abrir/salvar notas, planilhas, desenhos
 		reward = 0.10
-	case "explicit_upvote":      // Clique manual em "Favoritar" ou "Core"
+	case "explicit_upvote": // Clique manual em "Favoritar" ou "Core"
 		reward = 1.00
-	case "explicit_downvote":    // Clique manual em "Depreciar" ou "Rascunho"
+	case "explicit_downvote": // Clique manual em "Depreciar" ou "Rascunho"
 		reward = -2.00
-	case "scroll_past_penalty":  // Notas que estavam acima na busca e foram ignoradas
+	case "scroll_past_penalty": // Notas que estavam acima na busca e foram ignoradas
 		reward = -0.05
 	default:
 		return nil

@@ -269,21 +269,6 @@ function logout() {
 // @ts-ignore
 window.logout = logout;
 
-// ── Age slider: update display live ──
-document.addEventListener("DOMContentLoaded", function () {
-    /** @type {HTMLInputElement | null} */
-    var slider = document.querySelector("#filter-age-slider");
-    if (!slider) return;
-    function updateAgeDisplay() {
-        if (!slider) return;
-        var v = parseInt(slider.value);
-        const display = document.getElementById("age-value-display");
-        if (display) display.textContent = v + (v === 1 ? " ano" : " anos");
-    }
-    slider.addEventListener("input", updateAgeDisplay);
-    updateAgeDisplay();
-});
-
 // ── Stopwords Customizadas (Gerenciado via HTMX) ──
 (function () {
     var auth = localStorage.getItem("ton_auth");

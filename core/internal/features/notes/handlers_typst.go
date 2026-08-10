@@ -21,7 +21,7 @@ func (ctx *HandlerContext) HandleTypst(w http.ResponseWriter, r *http.Request) {
 	if !nd.Exists {
 		nd.Content = "---\ntype: typst\n---\n\n= Titulo\n\nEscreva seu conteudo Typst aqui."
 	} else {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 		if redirectIfWrongEditor(w, r, noteType, "/typst", filename) {
 			return
 		}

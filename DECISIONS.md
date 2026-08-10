@@ -336,6 +336,39 @@ O `download-ort.js` copia **apenas a variante do ORT realmente usada** pelo Tran
 
 > ⚠️ Para reativar WebGPU no futuro, basta adicionar `ort-wasm-simd-threaded.jsep.wasm`/`.mjs` ao `ALLOWED` e voltar `semantic_device` para `auto`. Se o servidor um dia enviar COOP/COEP (multi-thread), incluir também a variante base `ort-wasm-simd-threaded.wasm`.
 
+## 6.8 Auto-Tag por Inatividade — Aplicação Manual (10/08/2026)
+
+📍 `core/internal/features/notes/auto_tag_service.go` | `core/internal/features/system/handlers.go` | `core/web/layout/settings_modal.templ`
+
+O Auto-Tag (Notas Inativas) adiciona/remove tags em notas baseado na inatividade (regras configuradas pelo usuário: `X dias → tag`). A tag é removida se a nota voltar a ficar "jovem".
+
+**Critério de inatividade (10/08/2026):** a referência é a **última abertura** da nota — `popularity.last_interacted_at`, atualizado a cada abertura no editor via `IncrementPopularity` (`focus_zoom`). Para notas nunca abertas (sem registro em `popularity`), o critério **cai para o `mtime`** (última edição). A tag é removida na **próxima aplicação**, quando a nota tiver sido aberta recentemente (abaixo dos dias configurados) — não no momento da abertura.
+
+**Mudança (10/08/2026):** a aplicação **deixou de rodar automaticamente em background** (agendador com `time.Ticker` de 6h em `main.go` — **removido**). Agora a aplicação é **manual**, disparada pelo usuário:
+
+- **Rota:** `POST /api/settings/auto-tag/apply` → `HandleApplyAutoTag` chama `notes.ApplyDecayTags(store, noteSvc)` de forma **síncrona** e retorna `{"status":"success","modified": N}`.
+- **Corpo opcional (10/08/2026):** o endpoint aceita as regras no corpo (mesmo formato de `POST /api/settings/auto-tag`). Se enviadas, são validadas/salvas e usadas nesta aplicação. O botão "Aplicar Tags Agora" envia as regras digitadas na tela — **não exige clicar em "Salvar Regras" antes**. Sem corpo, usa as regras já salvas.
+- **`ApplyDecayTags`** agora retorna `(int, error)` — o `int` é a quantidade de notas cujas tags foram alteradas (antes só retornava `error`). Internamente busca `store.GetAllLastInteracted()` (mapa `arquivo → last_interacted_at`) para decidir a inatividade, com fallback para `mtime`.
+- **UI:** botão verde **"▶️ Aplicar Tags Agora"** na aba Arquivamento das configurações, ao lado de "Salvar Regras". Ao clicar, o botão mostra spinner e o feedback `"✓ N notas atualizadas!"` (ou `"✓ Nenhuma nota precisou de atualização."`). Após aplicar, dispara o evento `reload-sidebar` (via `document.body`) para atualizar as tags na sidebar.
+- **Motivação:** dar controle explícito ao usuário sobre quando as tags são aplicadas, em vez de alterações ocorrerem "sozinhas" em segundo plano.
+- As regras continuam sendo salvas via `POST /api/settings/auto-tag` e lidas via `GET /api/settings/auto-tag` (armazenadas em `auto_tag_decay_config`).
+
+## 6.9 Ícones de Notas — Fonte Única de Verdade (SSOT, 10/08/2026)
+
+📍 `core/internal/core/domain/data.go` | `core/internal/ui/icons/config.go` | `core/internal/features/system/handlers.go` | `core/web/src/database.js`
+
+**Problema resolvido:** notas de um tipo mudavam de ícone "sem motivo" porque o tipo e o ícone eram decididos em **múltiplos lugares com entradas diferentes**:
+- `DetectNoteType` era chamado **com conteúdo** (handlers de editor, busca) e **sem conteúdo** (sidebar, banco, embeddings, `NoteIcon`). Uma nota sem a tag de tipo persistida tinha tipos diferentes conforme o caminho → ícones diferentes.
+- O `database.js` tinha uma **duplicação client-side** (`detectNoteType` + `getLucideIcon`) com SVGs hardcoded que divergiam do servidor (ex: `pin` renderizava ícone de mapa no cliente e de pin no servidor).
+
+**Refatoração (Fonte Única de Verdade):**
+- **`DetectNoteType(tags, arquivo)` agora NÃO recebe conteúdo** — só tags persistidas + caminho + nome. Determinístico em toda a aplicação.
+- **`DetectNoteTypeFromContent(tags, content, arquivo)`** é a variante com conteúdo, usada apenas pelos handlers de editor (decidir qual editor abrir) e pelo backfill.
+- **`NoteService.EnsureTypeTags`** (rodado no `SyncDatabase`/startup) **persiste a tag canônica** de tipo na tabela `tags` para notas cujo tipo vinha só do conteúdo (ex: `type: mermaid` sem tag `mermaid`). Depois do backfill, `DetectNoteType` (sem conteúdo) é correto em 100% dos casos. Canônicas: `NoteTypeCanonicalTag`.
+- **`icons.GetColor` determinístico**: mapa reverso `ícone → cor` construído uma vez com chaves ordenadas (elimina dependência da ordem de iteração de mapas em Go).
+- **API do banco envia o SSOT**: `HandleGetDatabaseData` agora inclui por linha `_icon` (SVG pronto via `icons.SVGString`), `_url` e `_blank` (via `domain.NoteOpenTarget`). O `database.js` apenas injeta esses campos no formatter `abrir_link` — **removeu-se** `detectNoteType`, `getLucideIcon` e `resolveColor` (duplicação client-side).
+- **Paridade**: o ícone da sidebar (server-side) e o da página do Banco de Dados agora vêm da MESMA fonte (SVG do `icons.SVGString`).
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.

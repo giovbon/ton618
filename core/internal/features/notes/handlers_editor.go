@@ -32,7 +32,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	nd, _ := ctx.loadNoteData(filename)
 
 	// Redireciona para o editor especializado se necessário
-	noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+	noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 	if noteType.EditorRoute() != "/editor" {
 		http.Redirect(w, r, noteType.EditorRoute()+"?file="+SafeFileQueryEscape(filename), http.StatusFound)
 		return
@@ -53,7 +53,7 @@ func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Requ
 	nd, _ := ctx.loadNoteData(filename)
 
 	if nd.Exists {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 		if redirectIfWrongEditor(w, r, noteType, "/spreadsheet", filename) {
 			return
 		}
@@ -73,7 +73,7 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 	nd, _ := ctx.loadNoteData(filename)
 
 	if nd.Exists {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, filename)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
 		if redirectIfWrongEditor(w, r, noteType, "/drawing", filename) {
 			return
 		}

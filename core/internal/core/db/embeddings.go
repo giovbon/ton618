@@ -284,7 +284,7 @@ func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarRes
 		if !s.isNoteEmbeddable(r.Filename, fileTags) {
 			continue
 		}
-		r.NoteType = domain.DetectNoteType(fileTags, "", r.Filename)
+		r.NoteType = domain.DetectNoteType(fileTags, r.Filename)
 		results = append(results, r)
 		if len(results) >= limit {
 			break
@@ -303,7 +303,7 @@ func (s *Store) isNoteEmbeddable(filename string, tags []string) bool {
 		}
 	}
 
-	noteType := domain.DetectNoteType(tags, "", filename)
+	noteType := domain.DetectNoteType(tags, filename)
 	return noteType == domain.NoteTypeMarkdown ||
 		noteType == domain.NoteTypeTypst ||
 		noteType == domain.NoteTypeMindmap ||

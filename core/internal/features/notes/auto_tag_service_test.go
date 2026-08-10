@@ -44,7 +44,7 @@ func TestApplyDecayTags(t *testing.T) {
 	defer cleanup()
 
 	now := time.Now()
-	
+
 	// Create a note that is 40 days old
 	oldMtime := now.Add(-45 * 24 * time.Hour)
 	oldNotePath := "notes/old.md"
@@ -72,9 +72,12 @@ func TestApplyDecayTags(t *testing.T) {
 	store.SetSetting("auto_tag_decay_config", string(rulesJSON))
 
 	// Execute service
-	err := ApplyDecayTags(store, svc)
+	modified, err := ApplyDecayTags(store, svc)
 	if err != nil {
 		t.Fatalf("ApplyDecayTags falhou: %v", err)
+	}
+	if modified != 2 {
+		t.Errorf("Esperava 2 notas modificadas, got %d", modified)
 	}
 
 	// Verify old note received tag
@@ -82,7 +85,7 @@ func TestApplyDecayTags(t *testing.T) {
 	if len(tagsOld) != 1 || tagsOld[0] != "stale" {
 		t.Errorf("Esperava a tag 'stale' na nota velha, got %v", tagsOld)
 	}
-	
+
 	// Verify frontmatter was updated for old note
 	contentOld, _ := store.GetNote(oldNotePath)
 	if !strings.Contains(contentOld, "stale") {
@@ -99,5 +102,72 @@ func TestApplyDecayTags(t *testing.T) {
 	contentYoung, _ := store.GetNote(youngNotePath)
 	if strings.Contains(contentYoung, "stale") {
 		t.Errorf("Frontmatter da nota jovem ainda contem a tag stale: %s", contentYoung)
+	}
+}
+
+func TestApplyDecayTagsUsesLastInteracted(t *testing.T) {
+	store, svc, cfg, cleanup := setupTestStoreAndSvc(t)
+	defer cleanup()
+
+	now := time.Now()
+	oldMtime := now.Add(-45 * 24 * time.Hour)    // editada há 45 dias
+	recentOpen := now.Add(-2 * 24 * time.Hour)   // aberta há 2 dias
+	longAgoOpen := now.Add(-60 * 24 * time.Hour) // aberta há 60 dias
+
+	createNote := func(path, content string, mtime time.Time) {
+		store.SaveNote(path, content, mtime.Format(time.RFC3339))
+		store.SetFileMod(path, mtime.Format(time.RFC3339))
+		os.WriteFile(filepath.Join(cfg.DocsDir, path), []byte(content), 0644)
+		os.Chtimes(filepath.Join(cfg.DocsDir, path), mtime, mtime)
+	}
+	setLastInteracted := func(path string, ts time.Time) {
+		_, err := store.DB.Exec(`INSERT OR REPLACE INTO popularity (arquivo, count, weight, last_interacted_at) VALUES (?, 1, 1.0, ?)`, path, ts.Format(time.RFC3339))
+		if err != nil {
+			t.Fatalf("erro ao inserir popularity: %v", err)
+		}
+	}
+
+	// Aberta recentemente (2d) → NÃO deve receber a tag, mesmo com edição antiga (45d)
+	recentPath := "notes/recent.md"
+	createNote(recentPath, "---\ntitle: Recent\n---\nConteudo", oldMtime)
+	setLastInteracted(recentPath, recentOpen)
+
+	// Nunca aberta (sem registro em popularity) → fallback para mtime (45d) → deve receber a tag
+	neverPath := "notes/never.md"
+	createNote(neverPath, "---\ntitle: Never\n---\nConteudo", oldMtime)
+
+	// Aberta há muito tempo (60d) → deve receber a tag
+	longAgoPath := "notes/longago.md"
+	createNote(longAgoPath, "---\ntitle: LongAgo\n---\nConteudo", oldMtime)
+	setLastInteracted(longAgoPath, longAgoOpen)
+
+	rules := []domain.AutoTagRule{{Days: 30, Tag: "stale"}}
+	rulesJSON, _ := json.Marshal(rules)
+	store.SetSetting("auto_tag_decay_config", string(rulesJSON))
+
+	modified, err := ApplyDecayTags(store, svc)
+	if err != nil {
+		t.Fatalf("ApplyDecayTags falhou: %v", err)
+	}
+	if modified != 2 {
+		t.Errorf("Esperava 2 notas modificadas, got %d", modified)
+	}
+
+	// recent.md: NÃO deve ter a tag stale (aberta há 2 dias)
+	tagsRecent, _ := store.GetFileTags(recentPath)
+	if len(tagsRecent) != 0 {
+		t.Errorf("recent.md não deveria ter tags (aberta recentemente), got %v", tagsRecent)
+	}
+
+	// never.md: deve ter a tag (fallback para mtime)
+	tagsNever, _ := store.GetFileTags(neverPath)
+	if len(tagsNever) != 1 || tagsNever[0] != "stale" {
+		t.Errorf("never.md deveria ter a tag stale (fallback mtime), got %v", tagsNever)
+	}
+
+	// longago.md: deve ter a tag (não aberta há 60 dias)
+	tagsLongAgo, _ := store.GetFileTags(longAgoPath)
+	if len(tagsLongAgo) != 1 || tagsLongAgo[0] != "stale" {
+		t.Errorf("longago.md deveria ter a tag stale, got %v", tagsLongAgo)
 	}
 }

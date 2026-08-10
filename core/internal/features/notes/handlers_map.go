@@ -3,7 +3,7 @@ package notes
 import (
 	"fmt"
 	"net/http"
-	
+
 	"ton618/core/internal/core/domain"
 	"ton618/core/internal/processor"
 )
@@ -22,7 +22,7 @@ func (ctx *HandlerContext) HandleMap(w http.ResponseWriter, r *http.Request) {
 
 	// Nota existente com tipo incorreto → redireciona para o editor correto
 	if nd.Exists {
-		noteType := domain.DetectNoteType(nd.FileTags, nd.Content, fileParam)
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, fileParam)
 		if redirectIfWrongEditor(w, r, noteType, "/map", fileParam) {
 			return
 		}

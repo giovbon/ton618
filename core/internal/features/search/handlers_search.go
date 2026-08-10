@@ -22,8 +22,7 @@ import (
 	"ton618/core/internal/core/domain"
 	"ton618/core/internal/processor"
 	"ton618/core/internal/search"
-	
-	
+
 	"ton618/core/internal/watcher"
 )
 
@@ -74,12 +73,12 @@ func extractSearchTerms(query string) []string {
 		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+tags:") || strings.HasPrefix(t, "#") {
 			continue
 		}
-		
+
 		cleaned := cleanTermForMatching(t)
 		if len(cleaned) <= 1 {
 			continue
 		}
-		
+
 		terms = append(terms, cleaned)
 	}
 	return terms
@@ -172,7 +171,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			snippet = extractSnippetAroundMatch(hit.Doc.Texto, query, 150)
 			snippet = highlightSnippetManual(snippet, query)
 		}
-		
+
 		// Normaliza espaços em branco
 		snippet = strings.Join(strings.Fields(snippet), " ")
 
@@ -204,7 +203,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			userTags = append(userTags, "fria")
 		}
 
-		noteType := string(domain.DetectNoteType(tags, hit.Doc.Texto, hit.Doc.Arquivo))
+		noteType := string(domain.DetectNoteType(tags, hit.Doc.Arquivo))
 
 		// Compute line number from the already-loaded text (sem DB call)
 		line := findQueryLineInText(hit.Doc.Texto, query)
@@ -389,7 +388,7 @@ func highlightSnippetManual(snippet, query string) string {
 		return snippet
 	}
 	sort.Slice(pats, func(i, j int) bool { return len(pats[i]) > len(pats[j]) })
-	
+
 	reStr := "(?i)(" + strings.Join(pats, "|") + ")"
 	re, err := regexp.Compile(reStr)
 	if err == nil {
@@ -399,11 +398,9 @@ func highlightSnippetManual(snippet, query string) string {
 }
 
 // ── Bulk Delete (Config → Exclusão) ──
-// Aceita tanto filtros (by_age, by_tag) quanto lista explícita (files[]).
+// Aceita tanto filtro (by_tag) quanto lista explícita (files[]).
 func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Request) {
-	byAge := r.FormValue("by_age") == "true"
 	byTag := r.FormValue("by_tag") == "true"
-	ageYears, _ := strconv.Atoi(r.FormValue("age_years"))
 	tagNamesRaw := strings.TrimSpace(r.FormValue("tag_name"))
 	isPreview := r.FormValue("preview") == "true"
 
@@ -424,39 +421,12 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 		firstFilter = false
 	}
 
-	if len(explicitFiles) == 0 && !byAge && !byTag {
+	if len(explicitFiles) == 0 && !byTag {
 		http.Error(w, "pelo menos um filtro ou lista de arquivos deve estar ativo", http.StatusBadRequest)
 		return
 	}
 
-	// Filter 1: by age
-	if byAge {
-		if ageYears < 1 || ageYears > 10 {
-			http.Error(w, "age_years invalido (1-10)", http.StatusBadRequest)
-			return
-		}
-		cutoff := time.Now().AddDate(-ageYears, 0, 0)
-		allNotes, err := ctx.Store.GetAllNotes()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		for arquivo, mtimeStr := range allNotes {
-			if !notes.IsNoteOrPdf(arquivo) {
-				continue
-			}
-			mtime, err := time.Parse(time.RFC3339, mtimeStr)
-			if err != nil {
-				continue
-			}
-			if mtime.Before(cutoff) {
-				filesToDelete[arquivo] = true
-			}
-		}
-		firstFilter = false
-	}
-
-	// Filter 2: by tag(s) — múltiplas tags separadas por vírgula
+	// Filter: by tag(s) — múltiplas tags separadas por vírgula
 	if byTag {
 		if tagNamesRaw == "" {
 			http.Error(w, "tag_name obrigatorio", http.StatusBadRequest)
@@ -773,7 +743,7 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 
 		if isMd {
 			// Note: save to DB
-			
+
 			if err := ctx.Store.SaveNote(f.Name, string(data), time.Now().Format(time.RFC3339)); err != nil {
 				restoreErrors = append(restoreErrors, fmt.Sprintf("%s: erro ao salvar no banco: %v", f.Name, err))
 				continue
@@ -802,7 +772,7 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 			// Note: read from DB and reindex
 			content, err := ctx.Store.GetNote(arquivo)
 			if err == nil && content != "" {
-				
+
 				if false {
 					slog.Error("reindex archive note", "arquivo", arquivo, "error", err)
 				}

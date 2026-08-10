@@ -330,7 +330,7 @@ func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
 			tags = strings.Split(item.Tags, ",")
 		}
 
-		noteType := domain.DetectNoteType(tags, "", item.Arquivo)
+		noteType := domain.DetectNoteType(tags, item.Arquivo)
 		if noteType == domain.NoteTypeImage {
 			continue
 		}
@@ -386,7 +386,71 @@ func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 			}
 		}
 	}
+
+	// Garante que notas cujo tipo vem do conteúdo tenham a tag canônica persistida,
+	// tornando a detecção de tipo estável e independente de conteúdo.
+	if err := s.EnsureTypeTags(ctx); err != nil {
+		slog.Error("erro ao garantir tags de tipo", "error", err)
+	}
 	return nil
+}
+
+// EnsureTypeTags garante que a tag canônica de tipo esteja persistida na tabela
+// tags para notas cujo tipo é derivável apenas do conteúdo (ex: frontmatter
+// "type: mermaid" sem a tag "mermaid"). Isso torna o tipo (e portanto o ícone)
+// determinístico em toda a aplicação, pois DetectNoteType só depende de tags +
+// caminho + nome — nunca do conteúdo.
+func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		return err
+	}
+
+	for filename := range allNotes {
+		tags, err := s.tags.GetFileTags(filename)
+		if err != nil {
+			continue
+		}
+
+		// Se o tipo já é determinado por tag/caminho, não há o que persistir.
+		detected := domain.DetectNoteType(tags, filename)
+		if isTypeTaggedNoteType(detected) {
+			continue
+		}
+
+		content, err := s.notes.GetNote(filename)
+		if err != nil || content == "" {
+			continue
+		}
+
+		fromContent := domain.DetectNoteTypeFromContent(tags, content, filename)
+		canonical := domain.NoteTypeCanonicalTag(fromContent)
+		if canonical == "" {
+			continue
+		}
+
+		// Persiste a tag canônica (sem duplicar as existentes).
+		merged := make([]string, 0, len(tags)+1)
+		merged = append(merged, tags...)
+		merged = append(merged, canonical)
+		if err := s.tags.SetFileTags(filename, merged); err != nil {
+			slog.Error("EnsureTypeTags: erro ao persistir tag de tipo", "file", filename, "error", err)
+		}
+	}
+	return nil
+}
+
+// isTypeTaggedNoteType indica se o tipo já vem de tags/caminho persistidos
+// (ou seja, não depende do conteúdo para ser estável).
+func isTypeTaggedNoteType(t domain.NoteType) bool {
+	switch t {
+	case domain.NoteTypeDrawing, domain.NoteTypeSpreadsheet, domain.NoteTypeTypst,
+		domain.NoteTypeMermaid, domain.NoteTypeMindmap, domain.NoteTypeMap,
+		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
+		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:
+		return true
+	}
+	return false
 }
 
 // GetBacklinks retorna os backlinks de 2 níveis para uma nota.

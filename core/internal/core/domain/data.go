@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 	"ton618/core/internal/ui/icons"
@@ -62,9 +63,16 @@ func (t NoteType) EditorRoute() string {
 	}
 }
 
-// DetectNoteType determina o tipo de editor de uma nota a partir de suas tags,
-// conteúdo e caminho de arquivo. Esta é a fonte de verdade única para detecção de tipo.
-func DetectNoteType(tags []string, content, arquivo string) NoteType {
+// DetectNoteType determina o tipo de editor de uma nota a partir de dados
+// ESTÁVEIS e determinísticos: tags persistidas + caminho do arquivo + nome do
+// arquivo. NÃO recebe conteúdo — isso garante que a mesma nota tenha SEMPRE o
+// mesmo tipo (e portanto o mesmo ícone), em qualquer lugar da aplicação
+// (sidebar, banco de dados, busca, embeddings).
+//
+// Para tipos derivados apenas do conteúdo (ex: frontmatter "type: X" sem a tag
+// persistida), use DetectNoteTypeFromContent ou garanta a persistência da tag
+// canônica via NoteTypeCanonicalTag (ver NoteService.EnsureTypeTags).
+func DetectNoteType(tags []string, arquivo string) NoteType {
 	// 1. Tags têm prioridade máxima (são explicitamente definidas pelo usuário/editor)
 	for _, t := range tags {
 		switch strings.ToLower(strings.TrimSpace(t)) {
@@ -108,7 +116,43 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 		return NoteTypeImage
 	}
 
-	// 3. Conteúdo frontmatter (type: X ou marcas de código)
+	// 3. Nome de arquivo como heurística adicional
+	lowerFile := strings.ToLower(arquivo)
+	if strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
+		return NoteTypeMindmap
+	}
+	if strings.Contains(lowerFile, "drawing") || strings.Contains(lowerFile, "desenho") {
+		return NoteTypeDrawing
+	}
+	if strings.Contains(lowerFile, "spreadsheet") || strings.Contains(lowerFile, "planilha") {
+		return NoteTypeSpreadsheet
+	}
+	if strings.Contains(lowerFile, "typst") {
+		return NoteTypeTypst
+	}
+	if strings.Contains(lowerFile, "mermaid") {
+		return NoteTypeMermaid
+	}
+	if strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") || strings.Contains(lowerFile, "map-") {
+		return NoteTypeMap
+	}
+
+	return NoteTypeMarkdown
+}
+
+// DetectNoteTypeFromContent é a variante que também considera o CONTEÚDO
+// (frontmatter "type: X" ou blocos de código). Deve ser usada apenas onde o
+// conteúdo já está carregado e não pode faltar (ex: decidir qual editor abrir)
+// e no backfill que persiste a tag canônica. Para decidir o ícone, prefira
+// sempre DetectNoteType (sem conteúdo).
+func DetectNoteTypeFromContent(tags []string, content, arquivo string) NoteType {
+	// Tags e caminho têm prioridade e são determinísticos.
+	nt := DetectNoteType(tags, arquivo)
+	if nt != NoteTypeMarkdown {
+		return nt
+	}
+
+	// Fallback: apenas quando o conteúdo está disponível.
 	if content != "" {
 		lowerContent := strings.ToLower(content)
 		if strings.Contains(lowerContent, "type: drawing") || strings.Contains(lowerContent, "type: desenho") {
@@ -137,28 +181,55 @@ func DetectNoteType(tags []string, content, arquivo string) NoteType {
 		}
 	}
 
-	// 4. Nome de arquivo como heurística adicional
-	lowerFile := strings.ToLower(arquivo)
-	if strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
-		return NoteTypeMindmap
-	}
-	if strings.Contains(lowerFile, "drawing") || strings.Contains(lowerFile, "desenho") {
-		return NoteTypeDrawing
-	}
-	if strings.Contains(lowerFile, "spreadsheet") || strings.Contains(lowerFile, "planilha") {
-		return NoteTypeSpreadsheet
-	}
-	if strings.Contains(lowerFile, "typst") {
-		return NoteTypeTypst
-	}
-	if strings.Contains(lowerFile, "mermaid") {
-		return NoteTypeMermaid
-	}
-	if strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") || strings.Contains(lowerFile, "map-") {
-		return NoteTypeMap
-	}
+	return nt
+}
 
-	return NoteTypeMarkdown
+// NoteTypeCanonicalTag retorna a tag canônica persistida na tabela tags para um
+// tipo especial de nota ("" para tipos sem tag de tipo). Usada para tornar a
+// detecção de tipo estável e independente de conteúdo.
+func NoteTypeCanonicalTag(t NoteType) string {
+	switch t {
+	case NoteTypeDrawing:
+		return "drawing"
+	case NoteTypeSpreadsheet:
+		return "spreadsheet"
+	case NoteTypeTypst:
+		return "typst"
+	case NoteTypeMermaid:
+		return "mermaid"
+	case NoteTypeMindmap:
+		return "markmap"
+	case NoteTypeMap:
+		return "map"
+	case NoteTypeYoutube:
+		return "youtube"
+	case NoteTypeArticle:
+		return "artigo"
+	case NoteTypeCapture:
+		return "captura"
+	}
+	return ""
+}
+
+// NoteOpenTarget retorna a URL para abrir uma nota e se deve abrir em nova aba.
+func NoteOpenTarget(t NoteType, arquivo string) (url string, blank bool) {
+	escaped := escapeFileQuery(arquivo)
+	switch t {
+	case NoteTypePDF:
+		return "/file?name=" + escaped, true
+	case NoteTypeAttachment, NoteTypeArchive:
+		return "/file/download?name=" + escaped, true
+	case NoteTypeEPUB:
+		return "/epub/reader?file=" + escaped, false
+	default:
+		return t.EditorRoute() + "?file=" + escaped, false
+	}
+}
+
+// escapeFileQuery escapa um caminho de arquivo para query string mantendo as
+// barras (evita bloqueio de proxies reversos e mantém o caminho legível).
+func escapeFileQuery(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "%2F", "/")
 }
 
 func isMermaidContent(lowerContent string) bool {
@@ -222,7 +293,7 @@ var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/
 
 // NoteIcon retorna o nome do ícone Lucide correspondente ao tipo de nota vindo do mapa de configuração centralizado.
 func NoteIcon(arquivo string, tags []string) string {
-	noteType := DetectNoteType(tags, "", arquivo)
+	noteType := DetectNoteType(tags, arquivo)
 	return icons.GetIcon(string(noteType))
 }
 
@@ -236,4 +307,3 @@ type AutoTagRule struct {
 	Days int    `json:"days"`
 	Tag  string `json:"tag"`
 }
-
