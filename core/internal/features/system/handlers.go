@@ -793,8 +793,18 @@ func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r 
 		}
 	}
 
+	rrfK := 60 // default do RRF
+	if val, err := ctx.Store.GetSetting("rrf_k"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			if v >= 10 && v <= 100 {
+				rrfK = v
+			}
+		}
+	}
+
 	httputil.WriteJSON(w, map[string]int{
 		"search_threshold": searchThreshold,
+		"rrf_k":            rrfK,
 	})
 }
 
@@ -807,6 +817,7 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 	}
 	var body struct {
 		SearchThreshold *int `json:"search_threshold,omitempty"`
+		RrfK            *int `json:"rrf_k,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "json invalido", http.StatusBadRequest)
@@ -819,6 +830,17 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 			return
 		}
 		if err := ctx.Store.SetSetting("semantic_search_threshold", strconv.Itoa(*body.SearchThreshold)); err != nil {
+			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if body.RrfK != nil {
+		if *body.RrfK < 10 || *body.RrfK > 100 {
+			http.Error(w, "rrf_k deve ser entre 10 e 100", http.StatusBadRequest)
+			return
+		}
+		if err := ctx.Store.SetSetting("rrf_k", strconv.Itoa(*body.RrfK)); err != nil {
 			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
 			return
 		}

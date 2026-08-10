@@ -65,13 +65,22 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                         s_search.value = data.search_threshold;
                         document.getElementById("semantic-search-threshold-display").innerText = data.search_threshold + "%";
                     }
+                    var s_rrf = document.getElementById("rrf-k-slider");
+                    if (s_rrf && data.rrf_k) {
+                        s_rrf.value = data.rrf_k;
+                        document.getElementById("rrf-k-display").innerText = data.rrf_k;
+                    }
                 })
                 .catch(function() {});
         }
 
         function saveSemanticThreshold(type, value) {
             var body = {};
-            body.search_threshold = parseInt(value, 10);
+            if (type === "rrf-k") {
+                body.rrf_k = parseInt(value, 10);
+            } else {
+                body.search_threshold = parseInt(value, 10);
+            }
 
             fetch("/api/settings/semantic-thresholds", {
                 method: "POST",

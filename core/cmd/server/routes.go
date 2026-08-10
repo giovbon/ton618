@@ -95,6 +95,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	// SEARCH (Global Search e Stopwords)
 	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)
 	mux.With(searchLimiter.Middleware).Get("/search", searchCtx.HandleSearch)
+	mux.With(searchLimiter.Middleware).Post("/api/search/hybrid", searchCtx.HandleHybridSearch)
 	// SEMANTIC EMBEDDINGS (gerados no browser via Transformers.js — apenas desktop)
 	mux.With(embLimiter.Middleware).Post("/api/embeddings/search", embeddingsCtx.HandleEmbeddingSearch)
 	mux.Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)

@@ -396,6 +396,23 @@ Regra para Notas Longas: Se a nota que você está editando for longa (≥ 3 chu
 Ordenação: As top 5 notas relacionadas são ordenadas por frequência de matches (notas mais consistentes ao longo do texto vêm primeiro) e depois por proximidade vetorial (distância).
 Nota de Corte (Threshold): Descarta qualquer resultado abaixo do percentual configurado por você (padrão de 72%).
 
+## 8. Busca Híbrida — Reciprocal Rank Fusion (RRF, 10/08/2026)
+
+📍 `internal/search/rrf.go` | `internal/features/search/handlers_hybrid.go` | `internal/features/search/index.templ`
+
+Novo **4º modo de busca "🔀 Híbrido"** que funde os resultados do FTS5 (textual) com a busca semântica via **Reciprocal Rank Fusion**, para melhorar precisão e recall (reduz o ruído de um único motor).
+
+$$RRF(d) = \frac{1}{k + rank_{fts}(d)} + \frac{1}{k + rank_{sem}(d)}, \quad k = 60$$
+
+- **Fusão server-side**: `POST /api/search/hybrid` recebe `{query, embedding, limit}` (o embedding é gerado no browser pelo MiniLM já carregado). Roda os dois motores em **paralelo** (goroutines) e funde em Go.
+- **Módulo puro testável**: `search.ReciprocalRankFusion(ftsRanks, semRanks, k, limit)` — só ordenação/score, sem I/O. Docs que aparecem nos **dois** motores somam as parcelas e sobem.
+- **Filtros**: semântica usa o threshold configurável (`semantic_search_threshold`, padrão 35% → `maxDist`); FTS5 exclui pdfs/anexos (igual ao modo global). O FTS5 já entra re-rankeado com peso sináptico/backlinks.
+- **Degradação graciosa**: se o embedding vier zerado (modelo não pronto), o backend cai para FTS5 puro — sem erro.
+- **Snippet**: do FTS5 com highlight quando o termo casou (`buildSnippet`, extraído para helper reutilizável); senão prévia genérica segura (`buildPlainSnippet`).
+- **Resultado JSON por item**: `filename`, `type` (determinístico via `DetectNoteType`), `rrf_score`, `rank_fts`/`rank_sem`, `sem_similarity` (%), `snippet`, `has_highlight`.
+- **UI**: novo botão/input/container "🔀 Híbrido" em `index.templ`, com badge de similaridade e render unificado. Ícone novo `busca-hybrid` (sparkles, teal) em `icons/config.go`.
+- **Motivação**: a busca semântica sozinha "às vezes é imprecisa"; a fusão RRF é técnica clássica de IR, barata e sem modelo novo.
+
 [HELP do sistema](core/internal/features/system/help.md)
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 

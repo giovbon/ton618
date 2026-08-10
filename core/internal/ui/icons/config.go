@@ -56,6 +56,8 @@ var Config = map[string]IconSpec{
 	"search-global":   {Icon: "search", Color: "text-emerald-400"},
 	"busca-semantica": {Icon: "bot", Color: "text-violet-400"},
 	"search-semantic": {Icon: "bot", Color: "text-violet-400"},
+	"busca-hybrid":    {Icon: "sparkles", Color: "text-teal-400"},
+	"search-hybrid":   {Icon: "sparkles", Color: "text-teal-400"},
 
 	// ── UTILIDADES & MENUS ──
 	"config":   {Icon: "settings", Color: "#696969"},
@@ -182,6 +184,19 @@ func buildIconColorMap() {
 // GetIcon retorna o nome do ícone para uma chave.
 func GetIcon(key string) string {
 	return GetSpec(key).Icon
+}
+
+// IconSVG retorna o SVG completo de um ícone (nome ou chave de tipo) com a classe
+// fornecida e a cor da especificação aplicada — cores raw (hex/rgb/hsl) viram
+// style inline, classes Tailwind ficam no atributo class. Paridade com o templ Icon.
+func IconSVG(name, class string) string {
+	spec := GetSpec(name)
+	cleanClass, styleAttr := ParseClassAndStyle(class + " " + spec.Color)
+	svg := SVGString(spec.Icon, cleanClass)
+	if styleAttr != "" {
+		svg = strings.Replace(svg, "<svg ", `<svg style="`+styleAttr+`" `, 1)
+	}
+	return svg
 }
 
 // GetColor retorna a classe ou estilo de cor para uma chave ou nome de ícone.

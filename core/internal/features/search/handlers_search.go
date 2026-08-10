@@ -154,32 +154,8 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		}
 		seenFiles[hit.Doc.Arquivo] = true
 
-		// Usa o snippet do FTS5 diretamente apenas se contiver as marcas __HL_START__ do SQLite.
-		snippet := ""
-		hasFTSMatchInText := false
-		if len(hit.Highlight) > 0 {
-			if ftsSnippets, ok := hit.Highlight["texto"]; ok && len(ftsSnippets) > 0 {
-				rawFts := ftsSnippets[0]
-				if strings.Contains(rawFts, "__HL_START__") {
-					hasFTSMatchInText = true
-					snippet = rawFts
-				}
-			}
-		}
-
-		if !hasFTSMatchInText || snippet == "" {
-			snippet = extractSnippetAroundMatch(hit.Doc.Texto, query, 150)
-			snippet = highlightSnippetManual(snippet, query)
-		}
-
-		// Normaliza espaços em branco
-		snippet = strings.Join(strings.Fields(snippet), " ")
-
-		// Segurança: Escapa HTML do snippet original para evitar XSS, mas preserva as tags de highlight
-		safeSnippet := html.EscapeString(snippet)
-		safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">`)
-		safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_END__", "</span>")
-		snippet = safeSnippet
+		// Snippet com highlight (helper compartilhado com a busca híbrida).
+		snippet := buildSnippet(hit, query)
 
 		tags := db.TagsToSlice(hit.Doc.Tags)
 		// Filtra tags de tipo de nota
@@ -239,6 +215,57 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	// HTMX: return only the results partial
 	w.Header().Set("Content-Type", "text/html")
 	SearchResults(data).Render(r.Context(), w)
+}
+
+// buildSnippet constrói o snippet de um hit FTS5 com highlight seguro (sem XSS).
+// Usa o highlight nativo do FTS5 quando disponível; caso contrário gera um
+// snippet em torno do termo e aplica highlight manual.
+func buildSnippet(hit search.SearchHit, query string) string {
+	snippet := ""
+	hasFTSMatchInText := false
+	if len(hit.Highlight) > 0 {
+		if ftsSnippets, ok := hit.Highlight["texto"]; ok && len(ftsSnippets) > 0 {
+			rawFts := ftsSnippets[0]
+			if strings.Contains(rawFts, "__HL_START__") {
+				hasFTSMatchInText = true
+				snippet = rawFts
+			}
+		}
+	}
+
+	if !hasFTSMatchInText || snippet == "" {
+		snippet = extractSnippetAroundMatch(hit.Doc.Texto, query, 150)
+		snippet = highlightSnippetManual(snippet, query)
+	}
+
+	// Normaliza espaços em branco
+	snippet = strings.Join(strings.Fields(snippet), " ")
+
+	// Segurança: Escapa HTML do snippet original para evitar XSS, mas preserva as tags de highlight
+	safeSnippet := html.EscapeString(snippet)
+	safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">`)
+	safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_END__", "</span>")
+	return safeSnippet
+}
+
+// buildPlainSnippet retorna uma prévia segura (sem highlight) do conteúdo de uma
+// nota — usada para resultados que vieram apenas da busca semântica (sem termo
+// exato para destacar). Remove frontmatter e colapsa espaços.
+func buildPlainSnippet(content string, limit int) string {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return ""
+	}
+	if strings.HasPrefix(text, "---") {
+		if idx := strings.Index(text[4:], "\n---"); idx != -1 {
+			text = strings.TrimSpace(text[idx+7:])
+		}
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if limit > 0 && len(text) > limit {
+		text = text[:limit] + "…"
+	}
+	return html.EscapeString(text)
 }
 
 // findQueryLineInText encontra a primeira linha no texto que contém os termos buscados.
