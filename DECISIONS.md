@@ -114,10 +114,11 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 
 ### 3.2 Chunking
 
-- `chunkText(text, maxChars=1500, overlapChars=200)` em `web/src/semantic.js`.
+- `chunkText(text, maxChars=700, overlapChars=100)` em `web/src/semantic.js` (parâmetros espelhados no backend via `chunkMaxChars`/`chunkOverlapChars` em `db/embeddings.go`).
 - Quebra por `\n` (parágrafo) se disponível nos primeiros 60% do limite.
 - Fallback para espaço. Último recurso: corte seco no limite.
-- Overlap de 200 caracteres preserva contexto entre chunks.
+- Overlap de 100 caracteres preserva contexto entre chunks.
+- **Redução 1500→700 (10/08/2026):** chunks menores melhoram a precisão da busca semântica/híbrida — notas longas (transcrições) deixam de virar um vetor médio ruidoso e o voto majoritário (3.6/8) fica mais discriminativo. O fingerprint `EmbeddingModelVersion` inclui os parâmetros, então a troca **invalida e reindexa automaticamente** no próximo boot.
 
 ### 3.3 Indexação
 
@@ -269,7 +270,7 @@ Go (PCA 384D→2D) → JSON /api/embeddings/map → Browser (SVG + Alpine.js)
 
 ### 6.1 `chunkText` com `maxChars=0`
 
-`chunkText(text, 0, 0)` causa loop infinito porque `start` nunca avança (`end - overlap = 0`). **Não usar.** Os parâmetros reais (1500, 200) são seguros.
+`chunkText(text, 0, 0)` causa loop infinito porque `start` nunca avança (`end - overlap = 0`). **Não usar.** Os parâmetros reais (700, 100) são seguros.
 
 ### 6.2 WebGPU vs WebNN
 

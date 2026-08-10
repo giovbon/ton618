@@ -69,15 +69,15 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 	if remainingQuery == "" && len(queryTags) > 0 {
 		limitSize = 99999
 	}
-	results, total, err := store.SearchFTS(ftsQuery, from, limitSize)
+	results, total, err := store.SearchFTSWithContext(ctx, ftsQuery, from, limitSize)
 	if err != nil {
 		log.Printf("[Search] FTS5 error: %v, falling back to LIKE\n", err)
-		results, total, _ = store.SearchFTSLike(remainingQuery, 0, limitSize)
+		results, total, _ = store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, limitSize)
 	}
 
 	// 2. If few results, expand with LIKE (fuzzy fallback)
 	if total < 3 && remainingQuery != "" {
-		likeResults, likeTotal, _ := store.SearchFTSLike(remainingQuery, 0, size*3)
+		likeResults, likeTotal, _ := store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, size*3)
 		// Merge, deduplicating
 		seen := make(map[string]bool)
 		for _, r := range results {
@@ -277,11 +277,11 @@ func buildFTSQuery(raw string) string {
 				continue
 			}
 			wLower := strings.ToLower(w)
-			
+
 			if len(wLower) > 2 {
 				wLower += "*"
 			}
-			
+
 			parts = append(parts, `(tags:`+wLower+` OR arquivo:`+wLower+` OR secao:`+wLower+` OR texto:`+wLower+`)`)
 		}
 	}
@@ -410,6 +410,41 @@ func extractTags(raw string) (tags []string, remaining string) {
 	return tags, remaining
 }
 
+// HasExplicitTagFilter indica se a query contém um filtro explícito de tag
+// (`tags:xxx` ou `#hashtag`). Nesses casos o match por tag é intencional e não
+// deve passar pelo gate de evidência da busca híbrida.
+func HasExplicitTagFilter(rawQuery string) bool {
+	tags, _ := extractTags(rawQuery)
+	return len(tags) > 0
+}
+
+// HasContentEvidence indica se algum termo da query aparece no conteúdo da nota
+// (texto/secao/arquivo), desconsiderando ocorrências apenas como hashtag
+// (#termo é rótulo, não menção textual). Usado pela busca híbrida como gate de
+// evidência: docs que casam no FTS só por tag/hashtag precisam de aval semântico.
+// Retorna true quando a query não tem termos verificáveis (ex: só stopwords),
+// para não filtrar indevidamente a busca vazia/lista completa.
+func HasContentEvidence(doc db.Document, rawQuery string) bool {
+	terms := extractTerms(rawQuery)
+	if len(terms) == 0 {
+		return true
+	}
+	// Remove hashtags do texto antes da verificação (rótulo ≠ menção real).
+	texto := nativeHashtag.ReplaceAllString(removeAccents(strings.ToLower(doc.Texto)), " ")
+	secao := removeAccents(strings.ToLower(doc.Secao))
+	arquivo := removeAccents(strings.ToLower(doc.Arquivo))
+	for _, term := range terms {
+		t := removeAccents(strings.ToLower(term))
+		if stopwords[t] || len(t) < 2 {
+			continue
+		}
+		if strings.Contains(texto, t) || strings.Contains(secao, t) || strings.Contains(arquivo, t) {
+			return true
+		}
+	}
+	return false
+}
+
 // removeAccents remove acentos e diacríticos de uma string.
 func removeAccents(s string) string {
 	r := strings.NewReplacer(
@@ -428,8 +463,3 @@ func removeAccents(s string) string {
 	)
 	return r.Replace(s)
 }
-
-
-
-
-

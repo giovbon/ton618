@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -56,6 +57,11 @@ func (s *Store) DeleteFTSByFile(arquivo string) error {
 // Supports operators: +term (mandatory), -term (exclude), "exact phrase", term* (prefix).
 // Pass an empty query or "*" to return all documents.
 func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error) {
+	return s.SearchFTSWithContext(s.queryCtx(), query, from, size)
+}
+
+// SearchFTSWithContext é como SearchFTS, mas respeita o contexto (timeout/cancelamento).
+func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, size int) ([]FTSResult, int, error) {
 	if query == "" || query == "*" {
 		query = ""
 	}
@@ -64,9 +70,9 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 	var total int
 	var countErr error
 	if query == "" {
-		countErr = s.DB.QueryRow("SELECT COUNT(*) FROM docs_fts WHERE tags NOT LIKE '%drawing%'").Scan(&total)
+		countErr = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM docs_fts WHERE tags NOT LIKE '%drawing%'").Scan(&total)
 	} else {
-		countErr = s.DB.QueryRow(
+		countErr = s.DB.QueryRowContext(ctx,
 			"SELECT COUNT(*) FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'",
 			query,
 		).Scan(&total)
@@ -78,14 +84,14 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 	var rows *sql.Rows
 	var err error
 	if query == "" {
-		rows, err = s.DB.Query(`
+		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 			FROM docs_fts
 			WHERE tags NOT LIKE '%drawing%'
 			ORDER BY rowid DESC
 			LIMIT ? OFFSET ?`, size, from)
 	} else {
-		rows, err = s.DB.Query(`
+		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, 4, '__HL_START__', '__HL_END__', '...', 64) as snippet_text
 			FROM docs_fts
 			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'
@@ -112,16 +118,21 @@ func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error
 // SearchFTSLike is a fallback search using LIKE for fuzzy/wildcard patterns
 // that FTS5 does not handle natively (e.g., mid-word substrings).
 func (s *Store) SearchFTSLike(term string, from, size int) ([]FTSResult, int, error) {
+	return s.SearchFTSLikeWithContext(s.queryCtx(), term, from, size)
+}
+
+// SearchFTSLikeWithContext é como SearchFTSLike, mas respeita o contexto.
+func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from, size int) ([]FTSResult, int, error) {
 	pattern := "%" + strings.ToLower(term) + "%"
 
 	var total int
-	s.DB.QueryRow(`
+	s.DB.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM documents
 		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'`,
 		pattern, pattern, pattern,
 	).Scan(&total)
 
-	rows, err := s.DB.Query(`
+	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 		FROM documents
 		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'

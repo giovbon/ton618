@@ -49,9 +49,6 @@ touch "$LOG_FILE"
 # 3. Gerenciamento do ecossistema Go e Node
 cd "$BASE_DIR"
 
-echo -e "${BLUE}📦 Verificando dependências do Go...${NC}"
-go mod tidy
-
 # Otimização do Build Web (TipTap)
 if [ -f "$BASE_DIR/web/package.json" ]; then
     cd "$BASE_DIR/web"
@@ -73,6 +70,13 @@ if command -v templ &> /dev/null; then
 else
     go run github.com/a-h/templ/cmd/templ@latest generate
 fi
+
+# go mod tidy roda DEPOIS do templ generate: os *_templ.go são gitignored e não
+# existem em checkout limpo — se o tidy rodar antes, ele remove a dependência do
+# templ (github.com/a-h/templ) do go.mod e o build quebra com "no required module
+# provides package".
+echo "📦 Verificando dependências do Go..."
+go mod tidy
 
 echo -e "${BLUE}🔨 Compilando binário otimizado (SQLite FTS5)...${NC}"
 # Adicionado flags para deixar o binário ainda menor e rápido no Go

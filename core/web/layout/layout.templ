@@ -70,6 +70,11 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                         s_rrf.value = data.rrf_k;
                         document.getElementById("rrf-k-display").innerText = data.rrf_k;
                     }
+                    var s_hybrid = document.getElementById("hybrid-threshold-slider");
+                    if (s_hybrid && data.hybrid_threshold) {
+                        s_hybrid.value = data.hybrid_threshold;
+                        document.getElementById("hybrid-threshold-display").innerText = data.hybrid_threshold + "%";
+                    }
                 })
                 .catch(function() {});
         }
@@ -78,6 +83,8 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
             var body = {};
             if (type === "rrf-k") {
                 body.rrf_k = parseInt(value, 10);
+            } else if (type === "hybrid") {
+                body.hybrid_threshold = parseInt(value, 10);
             } else {
                 body.search_threshold = parseInt(value, 10);
             }

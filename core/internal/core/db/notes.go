@@ -19,6 +19,40 @@ func (s *Store) GetNote(filename string) (string, error) {
 	return content.String, err
 }
 
+// BatchGetNotesContent retorna o conteúdo de várias notas em uma única query.
+// Notas inexistentes simplesmente não aparecem no mapa. Usado pela busca híbrida
+// para montar snippets dos resultados só-semânticos (evita N+1 de GetNote).
+func (s *Store) BatchGetNotesContent(filenames []string) (map[string]string, error) {
+	if len(filenames) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(filenames))
+	args := make([]any, len(filenames))
+	for i, name := range filenames {
+		placeholders[i] = "?"
+		args[i] = name
+	}
+
+	query := "SELECT filename, content FROM notes WHERE filename IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := s.DB.QueryContext(s.queryCtx(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(filenames))
+	for rows.Next() {
+		var name string
+		var content sql.NullString
+		if err := rows.Scan(&name, &content); err != nil {
+			return nil, err
+		}
+		result[name] = content.String
+	}
+	return result, rows.Err()
+}
+
 // SaveNote inserts or updates a note's content and modification time.
 func (s *Store) SaveNote(filename, content, mtime string) error {
 	s.WriteMu.Lock()
@@ -34,7 +68,7 @@ func (s *Store) SaveNote(filename, content, mtime string) error {
 func (s *Store) DeleteNote(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	
+
 	if err := s.Q.DeleteNote(s.queryCtx(), filename); err != nil {
 		return err
 	}

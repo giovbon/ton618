@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,8 +27,10 @@ const EmbeddingDim = 384
 const EmbeddingModelName = "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
 
 // Parâmetros de chunking (devem refletir web/src/semantic.js).
-const chunkMaxChars = 1500
-const chunkOverlapChars = 200
+// 700/100 desde 10/08/2026: chunks menores melhoram a precisão da busca
+// semântica (notas longas não viram um vetor médio ruidoso).
+const chunkMaxChars = 700
+const chunkOverlapChars = 100
 
 // EmbeddingModelVersion é um fingerprint determinístico do pipeline de embeddings
 // (modelo + chunking + prefixos). Quando qualquer parâmetro muda, o fingerprint
@@ -46,9 +50,11 @@ const EmbeddingModelVersionKey = "embedding_model_version"
 
 // SimilarResult representa um resultado de busca semantica por proximidade vetorial.
 type SimilarResult struct {
-	Filename string
-	Distance float64
-	NoteType domain.NoteType
+	Filename     string
+	Distance     float64
+	NoteType     domain.NoteType
+	ChunkMatches int // chunks dentro do corte (voto majoritário)
+	TotalChunks  int // total de chunks indexados da nota
 }
 
 // EmbeddingStatus contem o status de indexacao semantica.
@@ -228,10 +234,31 @@ func (s *Store) HasEmbedding(filename string) bool {
 	return count > 0
 }
 
+// knnCandidateMultiplier amplia os candidatos do KNN. Antes, uma única nota com
+// mais chunks que `limit*5` ocupava todos os candidatos e "engolia" o corpus
+// (SearchSimilar retornava 1 resultado). Com o multiplicador maior + agregação
+// em Go varrendo TODOS os candidatos, cada nota contribui com 1 resultado.
+const knnCandidateMultiplier = 50
+
 // SearchSimilar realiza busca KNN nos chunks via sqlite-vec e agrega por filename.
 // Retorna os `limit` documentos mais proximos, deduplicando por filename
 // (a menor distância entre chunks de um mesmo filename é a distância da nota).
 func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarResult, error) {
+	return s.SearchSimilarCtx(s.queryCtx(), queryEmbedding, limit)
+}
+
+// SearchSimilarCtx é como SearchSimilar, mas respeita o contexto fornecido
+// (cancelamento/timeout do request — ex: busca híbrida).
+func (s *Store) SearchSimilarCtx(ctx context.Context, queryEmbedding []float32, limit int) ([]SimilarResult, error) {
+	// Sem corte de distância: todos os chunks do janela contam como match.
+	return s.SearchSimilarWithConsensus(ctx, queryEmbedding, limit, math.MaxFloat64)
+}
+
+// SearchSimilarWithConsensus é como SearchSimilarCtx, mas retorna, por filename,
+// quantos chunks estão dentro do corte (maxDist) e o total de chunks indexados —
+// os dados do voto majoritário usado pela busca híbrida para candidatos
+// só-semânticos (nota longa com 1 match acidental é rejeitada no handler).
+func (s *Store) SearchSimilarWithConsensus(ctx context.Context, queryEmbedding []float32, limit int, maxDist float64) ([]SimilarResult, error) {
 	if len(queryEmbedding) != EmbeddingDim {
 		return nil, fmt.Errorf("embedding invalido: esperado %d dimensoes, recebido %d", EmbeddingDim, len(queryEmbedding))
 	}
@@ -244,15 +271,20 @@ func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarRes
 		return nil, err
 	}
 
-	// sqlite-vec KNN query: busca nos chunks, faz JOIN com note_chunks para obter filename
-	rows, err := s.DB.Query(`
+	// sqlite-vec KNN query: busca os `k` chunks mais próximos (k ampliado) e faz
+	// JOIN com note_chunks para obter filename. A deduplicação por filename
+	// acontece em Go (primeira ocorrência = menor distância, já que a lista vem
+	// ordenada por distância) — varrendo todos os candidatos, uma nota gigante
+	// não monopoliza o resultado.
+	k := limit * knnCandidateMultiplier
+	rows, err := s.DB.QueryContext(ctx, `
 		SELECT nc.filename, ne.distance
 		FROM note_embeddings ne
 		JOIN note_chunks nc ON nc.chunk_id = ne.chunk_id
 		WHERE ne.embedding MATCH ?
 		  AND ne.k = ?
 		ORDER BY ne.distance ASC
-	`, blob, limit*5)
+	`, blob, k)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite-vec search: %w", err)
 	}
@@ -261,36 +293,106 @@ func (s *Store) SearchSimilar(queryEmbedding []float32, limit int) ([]SimilarRes
 	// Obtém todas as tags para filtrar por tipo indexável
 	allTags, tagsErr := s.GetAllFileTags()
 	if tagsErr != nil {
-		slog.Warn("SearchSimilar: erro ao obter tags para filtro", "error", tagsErr)
+		slog.Warn("SearchSimilarWithConsensus: erro ao obter tags para filtro", "error", tagsErr)
 		allTags = make(map[string][]string)
 	}
 
-	var results []SimilarResult
-	seen := make(map[string]bool) // deduplica por filename
+	// Primeira passada: menor distância + contagem de chunks dentro do corte,
+	// por filename (a lista vem ordenada por distância).
+	type acc struct {
+		res     SimilarResult
+		matches int
+	}
+	first := make(map[string]*acc)
 	for rows.Next() {
-		var r SimilarResult
-		if err := rows.Scan(&r.Filename, &r.Distance); err != nil {
-			slog.Warn("SearchSimilar: erro ao fazer scan de resultado", "error", err)
+		var filename string
+		var distance float64
+		if err := rows.Scan(&filename, &distance); err != nil {
+			slog.Warn("SearchSimilarWithConsensus: erro ao fazer scan de resultado", "error", err)
 			continue
 		}
-		// Deduplica: a primeira ocorrência de cada filename tem a menor distância
-		if seen[r.Filename] {
-			continue
+		a, ok := first[filename]
+		if !ok {
+			// Filtra por tipo embeddable (pode ter mudado desde a indexação)
+			fileTags := allTags[filename]
+			if !s.isNoteEmbeddable(filename, fileTags) {
+				continue
+			}
+			a = &acc{res: SimilarResult{
+				Filename: filename,
+				Distance: distance,
+				NoteType: domain.DetectNoteType(fileTags, filename),
+			}}
+			first[filename] = a
 		}
-		seen[r.Filename] = true
-
-		// Filtra por tipo embeddable (pode ter mudado desde a indexação)
-		fileTags := allTags[r.Filename]
-		if !s.isNoteEmbeddable(r.Filename, fileTags) {
-			continue
-		}
-		r.NoteType = domain.DetectNoteType(fileTags, r.Filename)
-		results = append(results, r)
-		if len(results) >= limit {
-			break
+		if distance <= maxDist {
+			a.matches++
 		}
 	}
-	return results, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Ordena por distância e trunca em `limit`.
+	sorted := make([]SimilarResult, 0, len(first))
+	for _, a := range first {
+		sorted = append(sorted, a.res)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Distance < sorted[j].Distance })
+	if len(sorted) > limit {
+		sorted = sorted[:limit]
+	}
+
+	// Total de chunks por candidato (voto majoritário distingue nota curta de
+	// nota longa com 1 match acidental).
+	names := make([]string, len(sorted))
+	for i, r := range sorted {
+		names[i] = r.Filename
+	}
+	totals, err := s.countChunksByFile(ctx, names)
+	if err != nil {
+		slog.Warn("SearchSimilarWithConsensus: erro ao contar chunks", "error", err)
+		totals = make(map[string]int)
+	}
+
+	for i := range sorted {
+		a := first[sorted[i].Filename]
+		sorted[i].ChunkMatches = a.matches
+		sorted[i].TotalChunks = totals[sorted[i].Filename]
+	}
+	return sorted, nil
+}
+
+// countChunksByFile retorna o total de chunks indexados por filename (uma query).
+func (s *Store) countChunksByFile(ctx context.Context, filenames []string) (map[string]int, error) {
+	result := make(map[string]int, len(filenames))
+	if len(filenames) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(filenames))
+	args := make([]any, len(filenames))
+	for i, name := range filenames {
+		placeholders[i] = "?"
+		args[i] = name
+	}
+
+	query := "SELECT filename, COUNT(*) FROM note_chunks WHERE filename IN (" + strings.Join(placeholders, ",") + ") GROUP BY filename"
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name string
+		var count int
+		if err := rows.Scan(&name, &count); err != nil {
+			return result, err
+		}
+		result[name] = count
+	}
+	return result, rows.Err()
 }
 
 // isNoteEmbeddable determina se uma nota deve ser indexada para busca semântica com base no seu tipo.

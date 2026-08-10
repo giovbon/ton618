@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -575,6 +576,102 @@ func TestSearchSimilar_ChunkGrouping(t *testing.T) {
 	}
 	if results[0].Filename != filenameA {
 		t.Fatalf("esperado que o filenameA estivesse no topo pois seu 4º chunk e o mais proximo. Got: %s", results[0].Filename)
+	}
+}
+
+// TestSearchSimilar_NotaGiganteNaoMonopoliza garante que uma única nota com muitos
+// chunks não ocupe todos os candidatos do KNN, escondendo as demais notas do corpus.
+// Antes do fix, com k = limit*5 = 50, uma nota de 60 chunks "engolia" o resultado.
+func TestSearchSimilar_NotaGiganteNaoMonopoliza(t *testing.T) {
+	s := newTestStore(t)
+
+	// Nota gigante: 60 chunks idênticos ao embedding da query (todos muito próximos).
+	gigante := "notes/gigante.md"
+	s.SaveNote(gigante, "# Gigante", "2024-01-01T00:00:00Z")
+	s.SetFileTags(gigante, []string{})
+	chunksG := make([]ChunkInfo, 0, 60)
+	for i := 0; i < 60; i++ {
+		chunksG = append(chunksG, makeChunk(gigante, i, "conteudo gigante", 1.0))
+	}
+	if err := s.SaveNoteChunks(gigante, chunksG); err != nil {
+		t.Fatalf("SaveNoteChunks gigante: %v", err)
+	}
+
+	// Nota pequena: um único chunk, um pouco menos similar.
+	pequena := "notes/pequena.md"
+	s.SaveNote(pequena, "# Pequena", "2024-01-01T00:00:00Z")
+	s.SetFileTags(pequena, []string{})
+	if err := s.SaveNoteChunks(pequena, []ChunkInfo{makeChunk(pequena, 0, "conteudo pequeno", 0.99)}); err != nil {
+		t.Fatalf("SaveNoteChunks pequena: %v", err)
+	}
+
+	queryEmb := make([]float32, EmbeddingDim)
+	queryEmb[0] = 1.0
+
+	results, err := s.SearchSimilar(queryEmb, 10)
+	if err != nil {
+		t.Fatalf("SearchSimilar: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("esperado 2 resultados (gigante + pequena), got %d: %+v", len(results), results)
+	}
+	// A mais similar (gigante, distância ~0) deve vir primeiro.
+	if results[0].Filename != gigante {
+		t.Errorf("esperava %s primeiro, got %s", gigante, results[0].Filename)
+	}
+	if results[1].Filename != pequena {
+		t.Errorf("esperava %s em segundo, got %s", pequena, results[1].Filename)
+	}
+}
+
+// TestSearchSimilarWithConsensus_ContaChunks verifica a contagem de chunks dentro
+// do corte (ChunkMatches) e o total de chunks (TotalChunks) — dados do voto
+// majoritário da busca híbrida.
+func TestSearchSimilarWithConsensus_ContaChunks(t *testing.T) {
+	s := newTestStore(t)
+
+	longa := "notes/longa_consenso.md"
+	s.SaveNote(longa, "# Longa", "2024-01-01T00:00:00Z")
+	s.SetFileTags(longa, []string{})
+	chunks := []ChunkInfo{
+		makeChunk(longa, 0, "Chunk 0", 0.9),
+		makeChunk(longa, 1, "Chunk 1", 0.8),
+		makeChunk(longa, 2, "Chunk 2", -1.0), // fora do corte
+	}
+	if err := s.SaveNoteChunks(longa, chunks); err != nil {
+		t.Fatalf("SaveNoteChunks longa: %v", err)
+	}
+
+	queryEmb := make([]float32, EmbeddingDim)
+	queryEmb[0] = 1.0
+
+	// Corte de 50% → maxDist = sqrt(2*(1-0.5)) = 1.0
+	maxDist := math.Sqrt(2.0 * (1.0 - 0.5))
+	results, err := s.SearchSimilarWithConsensus(context.Background(), queryEmb, 10, maxDist)
+	if err != nil {
+		t.Fatalf("SearchSimilarWithConsensus: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("esperado 1 resultado, got %d", len(results))
+	}
+	r := results[0]
+	if r.Filename != longa {
+		t.Fatalf("esperado %s, got %s", longa, r.Filename)
+	}
+	if r.TotalChunks != 3 {
+		t.Errorf("TotalChunks esperado 3, got %d", r.TotalChunks)
+	}
+	if r.ChunkMatches != 2 {
+		t.Errorf("ChunkMatches esperado 2 (0.9 e 0.8 dentro do corte), got %d", r.ChunkMatches)
+	}
+
+	// Sem corte (MaxFloat64): todos os chunks do janela contam como match.
+	resultsAll, err := s.SearchSimilarWithConsensus(context.Background(), queryEmb, 10, math.MaxFloat64)
+	if err != nil {
+		t.Fatalf("SearchSimilarWithConsensus (sem corte): %v", err)
+	}
+	if len(resultsAll) != 1 || resultsAll[0].ChunkMatches != 3 {
+		t.Errorf("sem corte: esperava ChunkMatches=3, got %+v", resultsAll)
 	}
 }
 

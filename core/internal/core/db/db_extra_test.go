@@ -32,6 +32,32 @@ func TestSaveNote_Update(t *testing.T) {
 	}
 }
 
+func TestBatchGetNotesContent(t *testing.T) {
+	s := newTestStore(t)
+
+	s.SaveNote("notes/a.md", "conteudo A", "2024-01-01T00:00:00Z")
+	s.SaveNote("notes/b.md", "conteudo B", "2024-01-01T00:00:00Z")
+
+	got, err := s.BatchGetNotesContent([]string{"notes/a.md", "notes/b.md", "notes/inexistente.md"})
+	if err != nil {
+		t.Fatalf("BatchGetNotesContent: %v", err)
+	}
+	if got["notes/a.md"] != "conteudo A" {
+		t.Errorf("a.md: esperado 'conteudo A', got %q", got["notes/a.md"])
+	}
+	if got["notes/b.md"] != "conteudo B" {
+		t.Errorf("b.md: esperado 'conteudo B', got %q", got["notes/b.md"])
+	}
+	if _, ok := got["notes/inexistente.md"]; ok {
+		t.Errorf("inexistente.md não deveria aparecer no resultado")
+	}
+
+	// Lista vazia não deve ser erro.
+	if _, err := s.BatchGetNotesContent(nil); err != nil {
+		t.Errorf("batch vazio: %v", err)
+	}
+}
+
 func TestGetNote_NaoExistente(t *testing.T) {
 	s := newTestStore(t)
 	got, err := s.GetNote("notes/nao-existe.md")

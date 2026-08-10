@@ -318,8 +318,9 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
       .trim();
   }
 
-  // 3. Divide em chunks de ~1500 caracteres
-  var rawChunks = chunkText(cleanContent, 1500, 200);
+  // 3. Divide em chunks de ~700 caracteres (700/100 desde 10/08/2026 — ver
+  //    EmbeddingModelVersion: a mudança do parâmetro invalida os embeddings no boot)
+  var rawChunks = chunkText(cleanContent, 700, 100);
   if (rawChunks.length === 0) rawChunks = [""];
 
   // Concatena o título em cada parte para manter a relevância global da nota
