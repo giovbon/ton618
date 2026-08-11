@@ -1,6 +1,7 @@
 package notes
 
 import (
+    "strconv"
     "strings"
     "ton618/core/internal/core/domain"
     "ton618/core/internal/ui/icons"
@@ -17,6 +18,51 @@ templ SidebarTree(notes []domain.NoteItem, query string) {
                 @SidebarNoteItem(n, query)
             }
             @PromptRenameScript()
+        </div>
+    }
+}
+
+// SidebarTreePaginated é a variante com scroll infinito usada pela busca de
+// Notas: primeira página (from=0) com a sentinela de carregamento.
+templ SidebarTreePaginated(notes []domain.NoteItem, query string, from, size, total int) {
+    if len(notes) == 0 {
+        <div class="text-center py-16" id="sidebar-tree">
+            <p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p>
+        </div>
+    } else {
+        <div class="space-y-2" id="sidebar-tree">
+            for _, n := range notes {
+                @SidebarNoteItem(n, query)
+            }
+            @SidebarMoreSentinel(from, size, total)
+            @PromptRenameScript()
+        </div>
+    }
+}
+
+// SidebarTreeMore é o partial de "carregar mais": só os itens + a sentinela do
+// próximo from (a resposta substitui a sentinela via hx-swap="outerHTML").
+templ SidebarTreeMore(notes []domain.NoteItem, query string, from, size, total int) {
+    if len(notes) > 0 {
+        for _, n := range notes {
+            @SidebarNoteItem(n, query)
+        }
+        @SidebarMoreSentinel(from, size, total)
+    }
+}
+
+// SidebarMoreSentinel dispara o próximo carregamento quando entra no viewport
+// (hx-trigger="revealed"). Some quando não há mais resultados.
+templ SidebarMoreSentinel(from, size, total int) {
+    if from+size < total {
+        <div
+            hx-get={ "/api/sidebar?from=" + strconv.Itoa(from+size) + "&size=" + strconv.Itoa(size) }
+            hx-trigger="revealed"
+            hx-swap="outerHTML"
+            hx-include="#search-local"
+            class="py-4 text-center text-[11px] text-zinc-500 animate-pulse"
+        >
+            Carregando mais...
         </div>
     }
 }

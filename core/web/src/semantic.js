@@ -109,6 +109,9 @@ SemanticIndex.prototype._ensureWorker = function() {
     switch (msg.type) {
       case "ready":
         self._modelReady = true;
+        // Marca no localStorage para a próxima visita pré-aquecer o modelo em
+        // background (busca Híbrida abre sem espera). A busca Global não usa IA.
+        localStorage.setItem("ton618_semantic_model_ready", "1");
         self._onReadyCallbacks.forEach(function(cb) { cb(); });
         self._onReadyCallbacks = [];
         break;
@@ -128,11 +131,14 @@ SemanticIndex.prototype._ensureWorker = function() {
       case "pong":
         if (msg.loaded && !self._modelReady) {
           self._modelReady = true;
+          localStorage.setItem("ton618_semantic_model_ready", "1");
           self._onReadyCallbacks.forEach(function(cb) { cb(); });
           self._onReadyCallbacks = [];
         }
         break;
       case "error":
+        // Falha ao carregar o modelo: não insiste no pré-aquecimento das próximas visitas.
+        localStorage.removeItem("ton618_semantic_model_ready");
         self._onErrorCallbacks.forEach(function(cb) { cb(msg.message); });
         break;
     }

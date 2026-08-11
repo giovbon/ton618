@@ -298,9 +298,37 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	filteredNotes := filterNotes(noteList, q)
 
+	// Paginação do scroll infinito da busca de Notas (from>0 = "carregar mais").
+	from, _ := strconv.Atoi(r.URL.Query().Get("from"))
+	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+	if size <= 0 {
+		size = 50
+	}
+	if from < 0 {
+		from = 0
+	}
+	if size > 200 {
+		size = 200
+	}
+
+	total := len(filteredNotes)
+	var page []domain.NoteItem
+	if from < total {
+		end := from + size
+		if end > total {
+			end = total
+		}
+		page = filteredNotes[from:end]
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	notes.SidebarTree(filteredNotes, q).Render(r.Context(), w)
+
+	if from > 0 {
+		notes.SidebarTreeMore(page, q, from, size, total).Render(r.Context(), w)
+		return
+	}
+	notes.SidebarTreePaginated(page, q, 0, size, total).Render(r.Context(), w)
 }
 
 func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {

@@ -126,6 +126,12 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	if size <= 0 {
 		size = 20
 	}
+	if from < 0 {
+		from = 0
+	}
+	if size > 100 {
+		size = 100
+	}
 
 	results, err := search.Search(rCtx, ctx.Store, query, from, size,
 		ctx.Store.GetBacklinkCount, ctx.Store.GetSynapticWeight)
@@ -201,20 +207,22 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	total := results.Total
-	if len(items) < total {
-		total = len(items)
-	}
-
+	// Total real de matches (não truncado pela página) — usado pelo header e pela
+	// sentinela de scroll infinito para decidir se ainda há resultados além do from.
 	data := domain.SearchResultsData{
 		Query:   query,
 		Results: items,
-		Total:   total,
+		Total:   results.Total,
 	}
 
-	// HTMX: return only the results partial
+	// HTMX: from > 0 é uma requisição de "carregar mais" (scroll infinito) — retorna
+	// só os itens + a sentinela do próximo from (a resposta substitui a sentinela).
 	w.Header().Set("Content-Type", "text/html")
-	SearchResults(data).Render(r.Context(), w)
+	if from > 0 {
+		SearchResultsMore(data, from, size).Render(r.Context(), w)
+		return
+	}
+	SearchResults(data, size).Render(r.Context(), w)
 }
 
 // buildSnippet constrói o snippet de um hit FTS5 com highlight seguro (sem XSS).
