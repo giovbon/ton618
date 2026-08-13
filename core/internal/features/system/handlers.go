@@ -298,9 +298,37 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	filteredNotes := filterNotes(noteList, q)
 
+	// Paginação do scroll infinito da busca de Notas (from>0 = "carregar mais").
+	from, _ := strconv.Atoi(r.URL.Query().Get("from"))
+	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+	if size <= 0 {
+		size = 50
+	}
+	if from < 0 {
+		from = 0
+	}
+	if size > 200 {
+		size = 200
+	}
+
+	total := len(filteredNotes)
+	var page []domain.NoteItem
+	if from < total {
+		end := from + size
+		if end > total {
+			end = total
+		}
+		page = filteredNotes[from:end]
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	notes.SidebarTree(filteredNotes, q).Render(r.Context(), w)
+
+	if from > 0 {
+		notes.SidebarTreeMore(page, q, from, size, total).Render(r.Context(), w)
+		return
+	}
+	notes.SidebarTreePaginated(page, q, 0, size, total).Render(r.Context(), w)
 }
 
 func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {
@@ -804,9 +832,25 @@ func (ctx *HandlerContext) HandleGetSemanticThresholds(w http.ResponseWriter, r 
 		}
 	}
 
+	hybridThreshold := 55 // default da busca híbrida (dedicado; fallback em semantic_search_threshold)
+	if val, err := ctx.Store.GetSetting("hybrid_semantic_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			if v >= 10 && v <= 100 {
+				hybridThreshold = v
+			}
+		}
+	} else if val, err := ctx.Store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			if v >= 10 && v <= 100 {
+				hybridThreshold = v
+			}
+		}
+	}
+
 	httputil.WriteJSON(w, map[string]int{
 		"search_threshold": searchThreshold,
 		"rrf_k":            rrfK,
+		"hybrid_threshold": hybridThreshold,
 	})
 }
 
@@ -820,6 +864,7 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 	var body struct {
 		SearchThreshold *int `json:"search_threshold,omitempty"`
 		RrfK            *int `json:"rrf_k,omitempty"`
+		HybridThreshold *int `json:"hybrid_threshold,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "json invalido", http.StatusBadRequest)
@@ -843,6 +888,17 @@ func (ctx *HandlerContext) HandlePostSemanticThresholds(w http.ResponseWriter, r
 			return
 		}
 		if err := ctx.Store.SetSetting("rrf_k", strconv.Itoa(*body.RrfK)); err != nil {
+			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if body.HybridThreshold != nil {
+		if *body.HybridThreshold < 10 || *body.HybridThreshold > 100 {
+			http.Error(w, "hybrid_threshold deve ser entre 10 e 100", http.StatusBadRequest)
+			return
+		}
+		if err := ctx.Store.SetSetting("hybrid_semantic_threshold", strconv.Itoa(*body.HybridThreshold)); err != nil {
 			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
 			return
 		}

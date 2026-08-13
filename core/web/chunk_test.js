@@ -172,11 +172,11 @@ for (i = 0; i < 20; i++) {
 r = chunkText(complex, 1500, 200);
 assert(r.length > 1, "texto complexo -> varios chunks");
 
-// 19. Parametros REAIS usados em semantic.js (1500, 200)
+// 19. Parametros REAIS usados em semantic.js (700, 100)
 var realContent = "# Titulo\n\nPrimeiro paragrafo com conteudo relevante para busca semantica.\n\nSegundo paragrafo com mais informacao util.\n\nTerceiro paragrafo finalizando o texto com conclusoes.\n".repeat(10);
-r = chunkText(realContent, 1500, 200);
+r = chunkText(realContent, 700, 100);
 assert(r.length > 1, "conteudo real -> varios chunks");
-assert(r[0].length <= 1500, "chunk real respeita limite de 1500");
+assert(r[0].length <= 700, "chunk real respeita limite de 700");
 
 // 20. Overlap nao produz chunks vazios
 r = chunkText("conteudo", 1500, 5000);

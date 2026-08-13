@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"math"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/core/domain"
@@ -47,9 +49,27 @@ func isZeroEmbedding(emb []float32) bool {
 	return true
 }
 
-// semanticThresholdPct lê o threshold configurável da busca semântica (padrão 35%).
-func semanticThresholdPct(store *db.Store) int {
-	pct := 35
+// hasDeletarTag indica se a nota está marcada para exclusão (tag "deletar") —
+// mesma regra do lado semântico (isNoteEmbeddable), para os dois motores
+// cobrirem o mesmo universo.
+func hasDeletarTag(tags string) bool {
+	for _, t := range db.TagsToSlice(tags) {
+		if strings.ToLower(strings.TrimSpace(t)) == "deletar" {
+			return true
+		}
+	}
+	return false
+}
+
+// hybridThresholdPct lê o threshold da busca HÍBRIDA (default 55%). Se a setting
+// dedicada não existir, usa a da busca semântica pura (sem migração).
+func hybridThresholdPct(store *db.Store) int {
+	pct := 55
+	if val, err := store.GetSetting("hybrid_semantic_threshold"); err == nil && val != "" {
+		if v, err := strconv.Atoi(val); err == nil && v >= 10 && v <= 100 {
+			return v
+		}
+	}
 	if val, err := store.GetSetting("semantic_search_threshold"); err == nil && val != "" {
 		if v, err := strconv.Atoi(val); err == nil && v >= 10 && v <= 100 {
 			pct = v
@@ -90,11 +110,17 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		limit = 15
 	}
 
+	// Timeout no mesmo padrão da busca global (HandleSearch): evita request
+	// pendurado em lock/DB lento. Vale para as duas goroutines abaixo (o FTS5 e
+	// o KNN agora propagam o contexto para as queries).
+	rCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
 	// A parte semântica só participa se houver um embedding válido.
 	hasSemantic := len(req.Embedding) == db.EmbeddingDim && !isZeroEmbedding(req.Embedding)
 	maxDist := math.MaxFloat64
 	if hasSemantic {
-		pct := semanticThresholdPct(ctx.Store)
+		pct := hybridThresholdPct(ctx.Store)
 		maxDist = math.Sqrt(2.0 * (1.0 - float64(pct)/100.0))
 	}
 
@@ -106,12 +132,13 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 
 	var wg sync.WaitGroup
 	var ftsErr, semErr error
+	var semCandidates []db.SimilarResult
 
 	// 1. FTS5 (textual)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		results, err := search.Search(r.Context(), ctx.Store, req.Query, 0, limit*2,
+		results, err := search.Search(rCtx, ctx.Store, req.Query, 0, limit*2,
 			ctx.Store.GetBacklinkCount, ctx.Store.GetSynapticWeight)
 		if err != nil {
 			ftsErr = err
@@ -125,6 +152,10 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 				continue
 			}
 			if strings.HasPrefix(arquivo, "attachments/") {
+				continue
+			}
+			// Notas marcadas para exclusão não participam da fusão (paridade com a semântica).
+			if hasDeletarTag(hit.Doc.Tags) {
 				continue
 			}
 			if seen[arquivo] {
@@ -141,30 +172,21 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		}
 	}()
 
-	// 2. Semântica (KNN)
+	// 2. Semântica (KNN) — coleta os candidatos; threshold + consenso são
+	// aplicados depois do wg.Wait, porque o consenso depende dos ranks do FTS
+	// (que ainda estariam em escrita concorrente aqui).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		if !hasSemantic {
 			return
 		}
-		similar, err := ctx.Store.SearchSimilar(req.Embedding, limit*2)
+		similar, err := ctx.Store.SearchSimilarWithConsensus(rCtx, req.Embedding, limit*2, maxDist)
 		if err != nil {
 			semErr = err
 			return
 		}
-		rank := 1
-		for _, h := range similar {
-			if h.Distance > maxDist {
-				continue
-			}
-			if _, exists := semRanks[h.Filename]; exists {
-				continue
-			}
-			semRanks[h.Filename] = rank
-			semSim[h.Filename] = 1.0 - (h.Distance*h.Distance)/2.0 // cosseno
-			rank++
-		}
+		semCandidates = similar
 	}()
 	wg.Wait()
 
@@ -178,9 +200,66 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		slog.Error("hybrid search: sem", "error", semErr)
 	}
 
+	// ── Semântica: threshold + consenso de chunks ──
+	// O voto majoritário vale para candidatos SEM evidência de conteúdo no FTS
+	// (só-semânticos OU com match só por tag/hashtag): nota longa (≥3 chunks)
+	// precisa de match em ≥2 chunks, exceto similaridade excepcional (≥82%).
+	// Notas curtas (1-2 chunks) passam com match único — o chunk é a nota inteira.
+	// Docs com o termo no conteúdo já têm evidência e passam direto.
+	rank := 1
+	for _, h := range semCandidates {
+		if h.Distance > maxDist {
+			continue
+		}
+		if _, exists := semRanks[h.Filename]; exists {
+			continue
+		}
+		sim := 1.0 - (h.Distance*h.Distance)/2.0 // cosseno
+		anchored := false
+		if doc, ok := ftsDocs[h.Filename]; ok && search.HasContentEvidence(doc, req.Query) {
+			anchored = true
+		}
+		if !anchored && !semanticConsensusPass(h.TotalChunks, h.ChunkMatches, sim) {
+			continue
+		}
+		semRanks[h.Filename] = rank
+		semSim[h.Filename] = sim
+		rank++
+	}
+
+	// ── Gate de evidência ──
+	// Match no FTS só por tag/hashtag é evidência fraca: o doc só participa da
+	// fusão se a semântica também o aceitar — OU se a query pediu tag
+	// explicitamente (tags:/#). Não se aplica no modo degradado (sem IA), onde a
+	// fusão é FTS puro e o comportamento atual é mantido.
+	if hasSemantic && !search.HasExplicitTagFilter(req.Query) {
+		for arquivo := range ftsRanks {
+			if search.HasContentEvidence(ftsDocs[arquivo], req.Query) {
+				continue
+			}
+			if _, ok := semRanks[arquivo]; ok {
+				continue
+			}
+			delete(ftsRanks, arquivo)
+			delete(ftsDocs, arquivo)
+			delete(ftsHits, arquivo)
+		}
+	}
+
 	// 3. Fusão RRF (k configurável via Configurações > Semântica)
 	k := rrfK(ctx.Store)
 	fused := search.ReciprocalRankFusion(ftsRanks, semRanks, k, limit)
+
+	// Carrega em batch as tags (uma query) e o conteúdo das notas só-semânticas
+	// (uma query) — antes eram N chamadas individuais (GetFileTags/GetNote).
+	allTags, _ := ctx.Store.GetAllFileTags()
+	var needContent []string
+	for _, filename := range fused {
+		if _, ok := ftsHits[filename]; !ok {
+			needContent = append(needContent, filename)
+		}
+	}
+	contents, _ := ctx.Store.BatchGetNotesContent(needContent)
 
 	results := make([]hybridSearchResult, 0, len(fused))
 	for _, filename := range fused {
@@ -203,14 +282,13 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 			res.Snippet = buildSnippet(hit, req.Query)
 			res.HasHighlight = true
 		} else {
-			content, _ := ctx.Store.GetNote(filename)
-			res.Snippet = buildPlainSnippet(content, 200)
+			res.Snippet = buildPlainSnippet(contents[filename], 200)
 		}
 
 		// Tipo (determinístico — tags + caminho).
 		tags := db.TagsToSlice(ftsDocs[filename].Tags)
 		if len(tags) == 0 {
-			tags, _ = ctx.Store.GetFileTags(filename)
+			tags = allTags[filename]
 		}
 		res.Tipo = string(domain.DetectNoteType(tags, filename))
 
@@ -236,4 +314,17 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		"query":   req.Query,
 		"results": results,
 	})
+}
+
+// semanticConsensusPass aplica o voto majoritário aos candidatos só-semânticos:
+// nota longa (≥3 chunks) precisa de match em ≥2 chunks, exceto similaridade
+// excepcional (≥82%). Notas curtas (1-2 chunks) passam com match único.
+func semanticConsensusPass(totalChunks, chunkMatches int, similarity float64) bool {
+	if totalChunks <= 2 {
+		return true
+	}
+	if chunkMatches >= 2 {
+		return true
+	}
+	return chunkMatches >= 1 && similarity >= 0.82
 }

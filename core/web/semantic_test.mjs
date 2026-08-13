@@ -120,7 +120,7 @@ class SemanticIndex {
       .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/\s+/g, ' ').trim();
-    let rawChunks = chunkText(cleanContent, 1500, 200);
+    let rawChunks = chunkText(cleanContent, 700, 100);
     if (rawChunks.length === 0) rawChunks = [''];
     const chunksText = rawChunks.map(c => title + '\n\n' + c);
     const self = this;

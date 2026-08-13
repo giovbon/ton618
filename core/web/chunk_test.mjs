@@ -127,11 +127,11 @@ describe('chunkText', () => {
     assert.equal(chunkText('   \n\n   ', 1500, 200).length, 0);
   });
 
-  it('parametros reais (1500, 200) com conteudo realista', () => {
+  it('parametros reais (700, 100) com conteudo realista', () => {
     const content = '# Titulo\n\nPrimeiro paragrafo.\n\nSegundo paragrafo.\n\nTerceiro.\n'.repeat(50);
-    const r = chunkText(content, 1500, 200);
+    const r = chunkText(content, 700, 100);
     assert.ok(r.length > 1);
-    assert.ok(r[0].length <= 1500);
+    assert.ok(r[0].length <= 700);
   });
 
   it('nenhum chunk vazio', () => {

@@ -522,6 +522,77 @@ func TestSearch_NotaComTagVemPrimeiro(t *testing.T) {
 	}
 }
 
+// ── Helpers do gate de evidência (busca híbrida) ──
+
+func TestHasExplicitTagFilter(t *testing.T) {
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"tags:urgente", true},
+		{"tags:\"urgente\"", true},
+		{"urgente tags:prova", true},
+		{"#programacao", true},
+		{"linguagem de programação", false},
+		{"nginx config", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := HasExplicitTagFilter(c.query); got != c.want {
+			t.Errorf("HasExplicitTagFilter(%q) = %v, want %v", c.query, got, c.want)
+		}
+	}
+}
+
+func TestHasContentEvidence(t *testing.T) {
+	doc := db.Document{
+		Arquivo: "notes/aula-09-08.md",
+		Secao:   "Anotações",
+		Texto:   "Estudamos linguagem de programação e orientação a objetos.",
+	}
+
+	if !HasContentEvidence(doc, "linguagem") {
+		t.Error("esperava evidência: 'linguagem' está no texto")
+	}
+	if !HasContentEvidence(doc, "linguagem de programação") {
+		t.Error("esperava evidência: termos da frase no texto")
+	}
+	if !HasContentEvidence(doc, "aula") {
+		t.Error("esperava evidência: 'aula' está no arquivo")
+	}
+	if !HasContentEvidence(doc, "anotações") {
+		t.Error("esperava evidência: 'anotações' está na seção (com acento)")
+	}
+	if HasContentEvidence(doc, "prova") {
+		t.Error("não esperava evidência: 'prova' não aparece em lugar nenhum")
+	}
+
+	// Hashtag sozinha NÃO é evidência de conteúdo (rótulo, não menção).
+	tagOnly := db.Document{
+		Arquivo: "notes/admin.md",
+		Secao:   "Geral",
+		Texto:   "Avaliação de dados marcada para sexta. #programacao",
+	}
+	if HasContentEvidence(tagOnly, "programacao") {
+		t.Error("não esperava evidência: 'programacao' aparece só como hashtag")
+	}
+
+	// Hashtag + menção real = evidência.
+	misto := db.Document{
+		Arquivo: "notes/misto.md",
+		Secao:   "Geral",
+		Texto:   "Programacao é divertida #programacao",
+	}
+	if !HasContentEvidence(misto, "programacao") {
+		t.Error("esperava evidência: 'programacao' também aparece como palavra real")
+	}
+
+	// Query sem termos verificáveis (só stopwords) não deve filtrar.
+	if !HasContentEvidence(doc, "de") {
+		t.Error("query sem termos verificáveis não deve filtrar")
+	}
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 func contains(s, substr string) bool {
