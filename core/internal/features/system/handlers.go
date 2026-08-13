@@ -467,9 +467,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		// Injeta o status de embedding dinamicamente (garante dados em tempo real sem expirar o cache do arquivo)
 		row["embeded"] = embeddedFiles[n.Arquivo]
 
-		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global
+		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global.
+		// Campos internos prefixados com "_" (_icon, _url, _blank) são helpers usados apenas
+		// pelo formatter da coluna "abrir_link" — nunca devem virar colunas visíveis.
 		for k := range row {
-			if k != "tags" && k != "title" && k != "titulo" && k != "embeded" {
+			if k != "tags" && k != "title" && k != "titulo" && k != "embeded" && !strings.HasPrefix(k, "_") {
 				columnSet[k] = true
 			}
 		}
