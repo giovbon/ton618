@@ -303,12 +303,9 @@ func migrate(database *sql.DB) {
 	if !isApplied(4) {
 		database.Exec(`
 			DELETE FROM note_embeddings
-			WHERE filename LIKE '%mapa-%' 
-			   OR filename LIKE '%mapa.%' 
-			   OR filename LIKE '%.map'
-			   OR filename IN (
+			WHERE filename IN (
 			       SELECT arquivo FROM tags 
-			       WHERE tag IN ('desenho', 'drawing', 'mapa', 'map', 'planilha', 'spreadsheet', 'mermaid')
+			       WHERE tag IN ('desenho', 'drawing')
 			   )
 		`)
 		markApplied(4)

@@ -279,50 +279,23 @@ function chunkText(text, maxChars, overlapChars) {
 SemanticIndex.prototype.indexNote = function(filename, content) {
   if (!filename || !content) return Promise.resolve();
 
-  // 1. Detecta o tipo de nota pelo frontmatter
-  var isTypst = /^---[\s\S]*?\btype:\s*typst\b[\s\S]*?---/m.test(content);
-
-  // 2. Extrai o título: heading apropriado para o tipo, ou nome do arquivo
+  // 1. Extrai o título: heading markdown, ou nome do arquivo
   var title = "";
-  if (isTypst) {
-    var typstHeading = content.match(/^=\s+(.+)$/m);
-    if (typstHeading) title = typstHeading[1].trim();
-  }
-  if (!title) {
-    var mdHeading = content.match(/^#\s+(.+)$/m);
-    if (mdHeading) title = mdHeading[1].trim();
-  }
+  var mdHeading = content.match(/^#\s+(.+)$/m);
+  if (mdHeading) title = mdHeading[1].trim();
   if (!title) {
     title = filename.replace(/^notes\//, "").replace(/\.md$/, "").replace(/[_\-]/g, " ");
   }
 
-  // 3. Limpeza do conteúdo para economizar tokens — varia conforme o tipo
-  var cleanContent;
-  if (isTypst) {
-    cleanContent = content
-      .replace(/^---[\s\S]*?---\n*/m, "")       // remove frontmatter YAML
-      .replace(/```[\s\S]*?```/g, "")            // remove blocos de código
-      .replace(/#image\([^)]*\)/g, "")            // remove #image("url")
-      .replace(/#figure\([^)]*\)/g, " ")          // remove #figure(...)
-      .replace(/link\([^)]+\)\[([^\]]*)\]/g, "$1") // link(url)[text] → texto
-      .replace(/\$\$[\s\S]*?\$\$/g, "")           // remove display math $$...$$
-      .replace(/\$[^$]*\$/g, "")                  // remove inline math $...$
-      .replace(/^=+\s*/gm, "")                    // remove marcadores de heading (=
-      .replace(/`[^`]*`/g, "")                    // remove código inline
-      .replace(/\/\/[^\n]*/g, "")                 // remove comentários //
-      .replace(/[ \t]+/g, " ")                    // colapsa espaços/tabs (PRESERVA \n)
-      .replace(/\n{3,}/g, "\n\n")                 // parágrafos: no máx. uma linha em branco
-      .trim();
-  } else {
-    cleanContent = content
-      .replace(/^---[\s\S]*?---\n*/m, "")       // remove frontmatter YAML
-      .replace(/```[\s\S]*?```/g, "")            // remove blocos de código
-      .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")     // remove imagens ![alt](url)
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")    // links [text](url) → texto
-      .replace(/[ \t]+/g, " ")                    // colapsa espaços/tabs (PRESERVA \n)
-      .replace(/\n{3,}/g, "\n\n")                 // parágrafos: no máx. uma linha em branco
-      .trim();
-  }
+  // 2. Limpeza do conteúdo para economizar tokens
+  var cleanContent = content
+    .replace(/^---[\s\S]*?---\n*/m, "")       // remove frontmatter YAML
+    .replace(/```[\s\S]*?```/g, "")            // remove blocos de código
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")     // remove imagens ![alt](url)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")    // links [text](url) → texto
+    .replace(/[ \t]+/g, " ")                    // colapsa espaços/tabs (PRESERVA \n)
+    .replace(/\n{3,}/g, "\n\n")                 // parágrafos: no máx. uma linha em branco
+    .trim();
 
   // 3. Divide em chunks de ~700 caracteres (700/100 desde 10/08/2026 — ver
   //    EmbeddingModelVersion: a mudança do parâmetro invalida os embeddings no boot)
@@ -365,7 +338,7 @@ SemanticIndex.prototype.indexNote = function(filename, content) {
   }
 
   return embedNext(0).then(function() {
-    if (allChunks.length === 0) return;
+    if (allChunks.length === 0) return Promise.resolve();
 
     // POST único (transacional no backend) — libera allChunks após envio
     var payload = JSON.stringify({

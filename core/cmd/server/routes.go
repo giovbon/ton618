@@ -45,15 +45,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)
-	mux.Get("/spreadsheet", notesCtx.HandleSpreadsheet)
 	mux.Get("/drawing", notesCtx.HandleDrawing)
-	mux.Get("/typst", notesCtx.HandleTypst)
-	mux.Get("/mermaid", notesCtx.HandleMermaid)
 	mux.Get("/mindmap", notesCtx.HandleMindmap)
-	mux.Get("/map", notesCtx.HandleMap)
-
-	mux.Post("/api/notes/render-typst", notesCtx.HandleTypstRender)
-	mux.Get("/api/notes/download-typst-pdf", notesCtx.HandleTypstPDF)
 
 	mux.Get("/file", notesCtx.HandleFile)
 	mux.Get("/epub/reader", notesCtx.HandleEpubReader)

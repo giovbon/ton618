@@ -95,13 +95,12 @@ func main() {
 	notesService := notes.NewNoteService(store, store, store, store, store, store, cfg.DocsDir)
 
 	captureService := notes.NewCaptureService(store)
-	typstService := notes.NewTypstService()
 
 	// 7. Auto-Tag (Inatividade): não roda mais em background —
 	// o usuário dispara a aplicação manualmente via POST /api/settings/auto-tag/apply.
 
 	sysCtx := system.NewHandlerContext(cfg, store, backupService, notesService)
-	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService, typstService)
+	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService)
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)

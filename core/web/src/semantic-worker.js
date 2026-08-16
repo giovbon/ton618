@@ -20,7 +20,7 @@
  *
  * ── Entrada (main thread → worker) ──
  * @typedef {Object} WorkerInput
- * @property {"embed"|"ping"|"status"} type
+ * @property {"embed"|"ping"|"status"|"config"} type
  * @property {number} [id]       - ID para correlacionar resposta (embed)
  * @property {string} [text]     - Texto a ser vetorizado (embed)
  *
@@ -58,7 +58,7 @@ const MODEL_NAME = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
  * Device de execução: lido da query string (?device=wasm ou ?device=auto).
  * Padrão: "wasm" (CPU) — mais compatível e econômico em RAM.
  * "auto" tenta WebGPU (GPU) primeiro, cai para WASM se não disponível.
- * @type {string}
+ * @type {any}
  */
 const DEVICE = new URLSearchParams(self.location.search).get("device") || "wasm";
 

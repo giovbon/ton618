@@ -680,11 +680,8 @@ templ indexContent() {
     function editorRouteForTipo(tipo) {
         switch (tipo) {
             case "desenho":    return "/drawing";
-            case "planilha":   return "/spreadsheet";
-            case "typst":      return "/typst";
-            case "mermaid":    return "/mermaid";
             case "markmap":    return "/mindmap";
-            case "mapa":       return "/map";
+            case "mindmap":    return "/mindmap";
             default:           return "/editor";
         }
     }

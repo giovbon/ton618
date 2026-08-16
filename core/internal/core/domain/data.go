@@ -13,34 +13,25 @@ import (
 type NoteType string
 
 const (
-	NoteTypeMarkdown    NoteType = "nota"
-	NoteTypeDrawing     NoteType = "desenho"
-	NoteTypeSpreadsheet NoteType = "planilha"
-	NoteTypeTypst       NoteType = "typst"
-	NoteTypeMermaid     NoteType = "mermaid"
-	NoteTypeMindmap     NoteType = "markmap"
-	NoteTypeMap         NoteType = "mapa"
-	NoteTypeYoutube     NoteType = "youtube"
-	NoteTypeArticle     NoteType = "artigo"
-	NoteTypeCapture     NoteType = "captura"
-	NoteTypePDF         NoteType = "pdf"
-	NoteTypeAttachment  NoteType = "anexo"
-	NoteTypeArchive     NoteType = "arquivo"
-	NoteTypeEPUB        NoteType = "epub"
-	NoteTypeImage       NoteType = "imagem"
+	NoteTypeMarkdown   NoteType = "nota"
+	NoteTypeDrawing    NoteType = "desenho"
+	NoteTypeMindmap    NoteType = "markmap"
+	NoteTypeYoutube    NoteType = "youtube"
+	NoteTypeArticle    NoteType = "artigo"
+	NoteTypeCapture    NoteType = "captura"
+	NoteTypePDF        NoteType = "pdf"
+	NoteTypeAttachment NoteType = "anexo"
+	NoteTypeArchive    NoteType = "arquivo"
+	NoteTypeEPUB       NoteType = "epub"
+	NoteTypeImage      NoteType = "imagem"
 )
 
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
 // que NÃO devem ser exibidas ao usuário na interface.
 var InternalTypeTags = map[string]bool{
-	"typst":       true,
-	"drawing":     true,
-	"spreadsheet": true,
-	"mermaid":     true,
-	"mindmap":     true,
-	"markmap":     true,
-	"map":         true,
-	"mapa":        true,
+	"drawing": true,
+	"markmap": true,
+	"mindmap": true,
 }
 
 // EditorRoute retorna a rota de URL do editor correto para este tipo de nota.
@@ -48,16 +39,8 @@ func (t NoteType) EditorRoute() string {
 	switch t {
 	case NoteTypeDrawing:
 		return "/drawing"
-	case NoteTypeSpreadsheet:
-		return "/spreadsheet"
-	case NoteTypeTypst:
-		return "/typst"
-	case NoteTypeMermaid:
-		return "/mermaid"
 	case NoteTypeMindmap:
 		return "/mindmap"
-	case NoteTypeMap:
-		return "/map"
 	default:
 		return "/editor"
 	}
@@ -78,16 +61,8 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 		switch strings.ToLower(strings.TrimSpace(t)) {
 		case "drawing", "desenho":
 			return NoteTypeDrawing
-		case "spreadsheet", "planilha":
-			return NoteTypeSpreadsheet
-		case "typst":
-			return NoteTypeTypst
-		case "mermaid":
-			return NoteTypeMermaid
-		case "mindmap", "markmap":
+		case "markmap", "mindmap":
 			return NoteTypeMindmap
-		case "map", "mapa":
-			return NoteTypeMap
 		case "youtube":
 			return NoteTypeYoutube
 		case "artigo", "article":
@@ -124,18 +99,7 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 	if strings.Contains(lowerFile, "drawing") || strings.Contains(lowerFile, "desenho") {
 		return NoteTypeDrawing
 	}
-	if strings.Contains(lowerFile, "spreadsheet") || strings.Contains(lowerFile, "planilha") {
-		return NoteTypeSpreadsheet
-	}
-	if strings.Contains(lowerFile, "typst") {
-		return NoteTypeTypst
-	}
-	if strings.Contains(lowerFile, "mermaid") {
-		return NoteTypeMermaid
-	}
-	if strings.Contains(lowerFile, "mapa-") || strings.Contains(lowerFile, "mapa.") || strings.HasSuffix(lowerFile, "/map") || strings.Contains(lowerFile, "map-") {
-		return NoteTypeMap
-	}
+
 
 	return NoteTypeMarkdown
 }
@@ -158,26 +122,10 @@ func DetectNoteTypeFromContent(tags []string, content, arquivo string) NoteType 
 		if strings.Contains(lowerContent, "type: drawing") || strings.Contains(lowerContent, "type: desenho") {
 			return NoteTypeDrawing
 		}
-		if strings.Contains(lowerContent, "type: spreadsheet") || strings.Contains(lowerContent, "type: planilha") {
-			return NoteTypeSpreadsheet
-		}
-		if strings.Contains(lowerContent, "type: typst") {
-			return NoteTypeTypst
-		}
-		if strings.Contains(lowerContent, "type: mermaid") || strings.Contains(lowerContent, "```mermaid") {
-			return NoteTypeMermaid
-		}
-		if strings.Contains(lowerContent, "type: mindmap") || strings.Contains(lowerContent, "type: markmap") ||
-			strings.Contains(lowerContent, "```markmap") || strings.Contains(lowerContent, "--- markmap") ||
-			strings.Contains(lowerContent, "# markmap") || strings.Contains(lowerContent, "# mindmap") {
+		if strings.Contains(lowerContent, "type: markmap") || strings.Contains(lowerContent, "type: mindmap") ||
+			strings.Contains(lowerContent, "```markmap") || strings.Contains(lowerContent, "# markmap") ||
+			strings.Contains(lowerContent, "# mindmap") {
 			return NoteTypeMindmap
-		}
-		if strings.Contains(lowerContent, "type: map") || strings.Contains(lowerContent, "type: mapa") {
-			return NoteTypeMap
-		}
-
-		if isMermaidContent(lowerContent) {
-			return NoteTypeMermaid
 		}
 	}
 
@@ -191,16 +139,8 @@ func NoteTypeCanonicalTag(t NoteType) string {
 	switch t {
 	case NoteTypeDrawing:
 		return "drawing"
-	case NoteTypeSpreadsheet:
-		return "spreadsheet"
-	case NoteTypeTypst:
-		return "typst"
-	case NoteTypeMermaid:
-		return "mermaid"
 	case NoteTypeMindmap:
 		return "markmap"
-	case NoteTypeMap:
-		return "map"
 	case NoteTypeYoutube:
 		return "youtube"
 	case NoteTypeArticle:
@@ -230,29 +170,6 @@ func NoteOpenTarget(t NoteType, arquivo string) (url string, blank bool) {
 // barras (evita bloqueio de proxies reversos e mantém o caminho legível).
 func escapeFileQuery(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "%2F", "/")
-}
-
-func isMermaidContent(lowerContent string) bool {
-	text := strings.TrimSpace(lowerContent)
-	if strings.HasPrefix(text, "---") {
-		if idx := strings.Index(text[3:], "---"); idx != -1 {
-			text = strings.TrimSpace(text[idx+6:])
-		}
-	}
-	keywords := []string{
-		"gantt", "graph ", "graph\n", "graph\r", "flowchart",
-		"sequencediagram", "classdiagram", "statediagram",
-		"erdiagram", "pie", "gitgraph", "journey", "timeline",
-		"zenuml", "architecture-beta", "kanban", "block-beta",
-		"packet-beta", "c4diagram", "sankey-beta", "quadrantchart",
-		"requirementdiagram",
-	}
-	for _, kw := range keywords {
-		if strings.HasPrefix(text, kw) {
-			return true
-		}
-	}
-	return false
 }
 
 // FilterUserTags remove as tags internas de tipo de editor de uma lista de tags,

@@ -354,10 +354,7 @@ func TestNoteService_Delete_NormalizesAndCallsStore(t *testing.T) {
 		},
 	}
 
-	svc, docsDir := newMockService(t, fileOps)
-
-	// Cria o arquivo físico para que os.Remove não falhe
-	writeNoteFile(t, filepath.Join(docsDir, "notes/delete-me.md"), "# vai ser deletado")
+	svc, _ := newMockService(t, fileOps)
 
 	if err := svc.Delete("delete-me"); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -365,11 +362,6 @@ func TestNoteService_Delete_NormalizesAndCallsStore(t *testing.T) {
 
 	if deletedFilename != "notes/delete-me.md" {
 		t.Errorf("esperado notes/delete-me.md, got %q", deletedFilename)
-	}
-
-	// Verifica que o arquivo foi removido
-	if _, err := os.Stat(filepath.Join(docsDir, "notes/delete-me.md")); !os.IsNotExist(err) {
-		t.Error("arquivo deveria ter sido removido do disco")
 	}
 }
 
@@ -423,6 +415,9 @@ func TestNoteService_Rename_NormalizesAndRenames(t *testing.T) {
 			renamedNew = new
 			return nil
 		},
+		noteExistsFn: func(f string) bool {
+			return f == "notes/old-name.md"
+		},
 	}
 	links := &mockLinkStore{
 		getBacklinksFn: func(_ string) ([]string, error) { return nil, nil },
@@ -437,8 +432,7 @@ func TestNoteService_Rename_NormalizesAndRenames(t *testing.T) {
 		},
 	}
 
-	svc, docsDir := newMockService(t, fileOps, notes, links)
-	writeNoteFile(t, filepath.Join(docsDir, "notes/old-name.md"), "# Nota antiga")
+	svc, _ := newMockService(t, fileOps, notes, links)
 
 	if err := svc.Rename("old-name", "new-name"); err != nil {
 		t.Fatalf("Rename: %v", err)
@@ -458,6 +452,9 @@ func TestNoteService_Rename_NormalizesAndRenames(t *testing.T) {
 func TestNoteService_Rename_UpdatesBacklinks(t *testing.T) {
 	notes := &mockNoteStore{
 		renameNoteFn: func(old, new string) error { return nil },
+		noteExistsFn: func(f string) bool {
+			return f == "notes/old-name.md"
+		},
 		getNoteFn: func(filename string) (string, error) {
 			if filename == "notes/ref.md" {
 				return "# Referencia [[old-name]]", nil
@@ -477,21 +474,10 @@ func TestNoteService_Rename_UpdatesBacklinks(t *testing.T) {
 		},
 	}
 
-	svc, docsDir := newMockService(t, fileOps, notes, links)
-	writeNoteFile(t, filepath.Join(docsDir, "notes/old-name.md"), "# Nota antiga")
-	writeNoteFile(t, filepath.Join(docsDir, "notes/ref.md"), "# Referencia [[old-name]]")
-	writeNoteFile(t, filepath.Join(docsDir, "notes/new-name.md"), "# Nota nova")
+	svc, _ := newMockService(t, fileOps, notes, links)
 
 	if err := svc.Rename("old-name", "new-name"); err != nil {
 		t.Fatalf("Rename: %v", err)
-	}
-
-	// Verifica que o arquivo fisico foi renomeado
-	if _, err := os.Stat(filepath.Join(docsDir, "notes/old-name.md")); !os.IsNotExist(err) {
-		t.Error("old-name.md ainda existe no disco")
-	}
-	if _, err := os.Stat(filepath.Join(docsDir, "notes/new-name.md")); os.IsNotExist(err) {
-		t.Error("new-name.md deveria existir no disco")
 	}
 }
 
@@ -770,7 +756,7 @@ func TestNoteService_GetMany_DetectsNoteType(t *testing.T) {
 			return []db.FileModTag{
 				{Arquivo: "notes/drawing.md", Mtime: "", Tags: "drawing"},
 				{Arquivo: "pdfs/doc.pdf", Mtime: "", Tags: ""},
-				{Arquivo: "notes/typst.md", Mtime: "", Tags: "typst"},
+				{Arquivo: "notes/mindmap.md", Mtime: "", Tags: "mindmap"},
 			}, nil
 		},
 	}
@@ -788,7 +774,7 @@ func TestNoteService_GetMany_DetectsNoteType(t *testing.T) {
 	}{
 		{"notes/drawing.md", "desenho"},
 		{"pdfs/doc.pdf", "pdf"},
-		{"notes/typst.md", "typst"},
+		{"notes/mindmap.md", "markmap"},
 	}
 
 	for _, tt := range tests {

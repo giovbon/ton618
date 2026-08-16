@@ -117,14 +117,6 @@ func TestBackup_Conversions(t *testing.T) {
 	drawingContent := "---\ntype: drawing\n---\n{\"elements\": []}"
 	store.SaveNote("notes/meu-desenho.md", drawingContent, time.Now().Format(time.RFC3339))
 
-	// Nota de planilha
-	sheetContent := "---\ntype: spreadsheet\n---\n{\"data\": [[\"Header1\", \"Header2\"], [\"Value1\", \"Value2\"]]}"
-	store.SaveNote("notes/minha-planilha.md", sheetContent, time.Now().Format(time.RFC3339))
-
-	// Nota de diagrama Mermaid
-	mermaidContent := "---\ntype: mermaid\n---\ngraph TD\nA[Inicio] --> B(Fim)"
-	store.SaveNote("notes/meu-diagrama.md", mermaidContent, time.Now().Format(time.RFC3339))
-
 	// Nota normal
 	markdownContent := "---\ntitle: Minha Nota\n---\n# Ola"
 	store.SaveNote("notes/nota-normal.md", markdownContent, time.Now().Format(time.RFC3339))
@@ -141,8 +133,6 @@ func TestBackup_Conversions(t *testing.T) {
 	}
 
 	foundDrawing := false
-	foundSpreadsheet := false
-	foundMermaid := false
 	foundNormal := false
 
 	for _, f := range r.File {
@@ -161,16 +151,6 @@ func TestBackup_Conversions(t *testing.T) {
 			if !strings.Contains(fileContent, `{"elements": []}`) {
 				t.Errorf("conteudo de meu-desenho.excalidraw incorreto: %q", fileContent)
 			}
-		case "notes/minha-planilha.csv":
-			foundSpreadsheet = true
-			if !strings.Contains(fileContent, "Header1,Header2") {
-				t.Errorf("conteudo de minha-planilha.csv incorreto: %q", fileContent)
-			}
-		case "notes/meu-diagrama.mmd":
-			foundMermaid = true
-			if !strings.Contains(fileContent, "graph TD") || strings.Contains(fileContent, "type: mermaid") {
-				t.Errorf("conteudo de meu-diagrama.mmd incorreto (deveria conter apenas o corpo de codigo): %q", fileContent)
-			}
 		case "notes/nota-normal.md":
 			foundNormal = true
 			if !strings.Contains(fileContent, "# Ola") {
@@ -181,12 +161,6 @@ func TestBackup_Conversions(t *testing.T) {
 
 	if !foundDrawing {
 		t.Error("meu-desenho.excalidraw nao encontrado no zip")
-	}
-	if !foundSpreadsheet {
-		t.Error("minha-planilha.csv nao encontrado no zip")
-	}
-	if !foundMermaid {
-		t.Error("meu-diagrama.mmd nao encontrado no zip")
 	}
 	if !foundNormal {
 		t.Error("nota-normal.md nao encontrado no zip")

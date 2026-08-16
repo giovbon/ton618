@@ -168,7 +168,7 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		var userTags []string
 		for _, t := range tags {
 			lowerT := strings.ToLower(t)
-			if lowerT != "typst" && lowerT != "drawing" && lowerT != "spreadsheet" && lowerT != "mermaid" && lowerT != "mindmap" && lowerT != "markmap" && lowerT != "map" && lowerT != "mapa" {
+			if lowerT != "drawing" {
 				userTags = append(userTags, t)
 			}
 		}

@@ -29,16 +29,10 @@ SELECT COUNT(*) FROM notes WHERE filename = ?;
 SELECT n.filename
 FROM notes n
 WHERE (
-    n.content LIKE '%markmap%' OR n.content LIKE '%mindmap%'
-    OR n.content LIKE '%drawing%' OR n.content LIKE '%desenho%'
-    OR n.content LIKE '%spreadsheet%' OR n.content LIKE '%planilha%'
-    OR n.content LIKE '%typst%'
-    OR n.content LIKE '%mermaid%'
-    OR n.content LIKE '%mapa%' OR n.content LIKE '%/map%'
-    OR n.filename LIKE '%mindmap%' OR n.filename LIKE '%markmap%'
+    n.content LIKE '%drawing%' OR n.content LIKE '%desenho%'
 )
   AND n.filename NOT IN (
-      SELECT arquivo FROM tags WHERE tag IN ('markmap', 'mindmap', 'drawing', 'spreadsheet', 'typst', 'mermaid', 'map', 'mapa')
+      SELECT arquivo FROM tags WHERE tag IN ('drawing')
   );
 
 -- name: GetAllNotesContent :many
@@ -220,13 +214,10 @@ WHERE n.content != ''
   AND n.filename NOT LIKE '%.gif.md'
   AND n.filename NOT LIKE '%.webp.md'
   AND n.filename NOT LIKE '%.svg.md'
-  AND n.filename NOT LIKE '%mapa-%'
-  AND n.filename NOT LIKE '%mapa.%'
-  AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
+      AND t.tag IN ('drawing','desenho','deletar')
   );
 
 -- name: CountIndexedNotes :one
@@ -263,13 +254,10 @@ WHERE (
   AND n.filename NOT LIKE '%.gif.md'
   AND n.filename NOT LIKE '%.webp.md'
   AND n.filename NOT LIKE '%.svg.md'
-  AND n.filename NOT LIKE '%mapa-%'
-  AND n.filename NOT LIKE '%mapa.%'
-  AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
+      AND t.tag IN ('drawing','desenho','deletar')
   )
 ORDER BY n.mtime DESC
 LIMIT ?;

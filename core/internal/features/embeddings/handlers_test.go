@@ -240,8 +240,8 @@ func TestHandleEmbeddingPending_LimiteInvalido(t *testing.T) {
 // ── HandleEmbeddingSave – rejeição de notas não-embeddáveis ────────
 
 // TestHandleEmbeddingSave_NotaNaoEmbeddavel verifica que o handler rejeita (400)
-// notas cujo tipo não suporta indexação semântica (drawing, pdf, spreadsheet,
-// mermaid, archives), e aceita (200) as que são embeddáveis.
+// notas cujo tipo não suporta indexação semântica (drawing, pdf, archives), e
+// aceita (200) as que são embeddáveis.
 func TestHandleEmbeddingSave_NotaNaoEmbeddavel(t *testing.T) {
 	embJSON := embeddingJSON(db.EmbeddingDim)
 
@@ -257,24 +257,6 @@ func TestHandleEmbeddingSave_NotaNaoEmbeddavel(t *testing.T) {
 			name:     "drawing rejeitado",
 			filename: "notes/meu-desenho.md",
 			tags:     []string{"drawing"},
-			wantCode: http.StatusBadRequest,
-		},
-		{
-			name:     "spreadsheet rejeitado",
-			filename: "notes/minha-planilha.md",
-			tags:     []string{"spreadsheet"},
-			wantCode: http.StatusBadRequest,
-		},
-		{
-			name:     "mermaid rejeitado",
-			filename: "notes/fluxo.md",
-			tags:     []string{"mermaid"},
-			wantCode: http.StatusBadRequest,
-		},
-		{
-			name:     "mapa rejeitado por tag",
-			filename: "notes/minha-rota.md",
-			tags:     []string{"map"},
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -295,24 +277,11 @@ func TestHandleEmbeddingSave_NotaNaoEmbeddavel(t *testing.T) {
 			tags:     []string{},
 			wantCode: http.StatusBadRequest,
 		},
-		{
-			name:     "mapa rejeitado por nome de arquivo",
-			filename: "notes/mapa-da-cidade.md",
-			tags:     []string{},
-			wantCode: http.StatusBadRequest,
-		},
 		// ── Embeddáveis ──────────────────────────────────────────────
 		{
 			name:         "nota markdown aceita",
 			filename:     "notes/nota-normal.md",
 			tags:         []string{},
-			wantCode:     http.StatusOK,
-			wantEmbedded: true,
-		},
-		{
-			name:         "typst aceito",
-			filename:     "notes/documento.md",
-			tags:         []string{"typst"},
 			wantCode:     http.StatusOK,
 			wantEmbedded: true,
 		},
@@ -481,9 +450,6 @@ func TestHandleEmbeddingPending_FiltraNaoEmbedaveis(t *testing.T) {
 	ctx.Store.SaveNote("notes/desenho.md", "# Desenho", "2024-01-01T00:00:00Z")
 	ctx.Store.SetFileTags("notes/desenho.md", []string{"drawing"})
 
-	ctx.Store.SaveNote("notes/planilha.md", "# Planilha", "2024-01-01T00:00:00Z")
-	ctx.Store.SetFileTags("notes/planilha.md", []string{"spreadsheet"})
-
 	req := httptest.NewRequest("GET", "/api/embeddings/pending?limit=50", nil)
 	rr := httptest.NewRecorder()
 	ctx.HandleEmbeddingPending(rr, req)
@@ -519,9 +485,6 @@ func TestHandleEmbeddingPending_FiltraNaoEmbedaveis(t *testing.T) {
 	}
 	if pendingSet["notes/desenho.md"] {
 		t.Error("notes/desenho.md (drawing) NÃO deveria estar nos pendentes")
-	}
-	if pendingSet["notes/planilha.md"] {
-		t.Error("notes/planilha.md (spreadsheet) NÃO deveria estar nos pendentes")
 	}
 }
 

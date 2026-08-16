@@ -9,7 +9,7 @@ import (
 )
 
 // HandleEditor é o handler principal que renderiza o editor de markdown.
-// Para notas de tipos especiais (drawing, typst, etc.), redireciona para o editor correto.
+// Para notas de tipos especiais (drawing, mindmap), redireciona para o editor correto.
 func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("file")
 	if filename == "" {
@@ -41,26 +41,6 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 	data := buildEditorData("Editor - "+filename, filename, nd)
 	data.AllTags = nd.AllTags
 	Editor(data).Render(r.Context(), w)
-}
-
-// HandleSpreadsheet renderiza o editor de planilhas.
-func (ctx *HandlerContext) HandleSpreadsheet(w http.ResponseWriter, r *http.Request) {
-	filename, redirected := ensureNoteFilename(w, r, "/spreadsheet")
-	if redirected {
-		return
-	}
-
-	nd, _ := ctx.loadNoteData(filename)
-
-	if nd.Exists {
-		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
-		if redirectIfWrongEditor(w, r, noteType, "/spreadsheet", filename) {
-			return
-		}
-	}
-
-	data := buildEditorData("Planilha - "+filename, filename, nd)
-	Spreadsheet(data).Render(r.Context(), w)
 }
 
 // HandleDrawing renderiza o editor de desenhos (Excalidraw).

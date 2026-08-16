@@ -329,7 +329,7 @@ templ mindmapContent(data domain.EditorData) {
 </style>
 
 <!-- Carrega bundles compilados locais -->
-<script src={ staticver.URL("/static/mindmap.js") }></script>
+<script type="module" src={ staticver.URL("/static/mindmap.js") }></script>
 
 <script type="module">
     import { CodeJar } from '/static/codejar.js?v=8';

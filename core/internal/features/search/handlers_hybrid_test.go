@@ -402,7 +402,7 @@ func TestHybrid_ConsensoRejeitaChunkUnicoDeNotaLonga(t *testing.T) {
 
 	for _, r := range resp.Results {
 		if r.Filename == "notes/longa.md" {
-			t.Errorf("longa.md não deveria aparecer: 1 chunk de 3 com sim < 82% (sem aval do FTS)")
+			t.Errorf("longa.md não deveria aparecer: 1 chunk de 3 com sim < 82%% (sem aval do FTS)")
 			break
 		}
 	}

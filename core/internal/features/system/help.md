@@ -13,12 +13,8 @@ O sistema usa três modalidades complementares de pesquisa textual e semântica:
 ## 📁 Tipos de Notas Suportados
 No TON-618, suas notas podem ir muito além do texto tradicional. O sistema reconhece e adapta o editor automaticamente de acordo com as seguintes categorias:
 - **📄 Nota de Texto (Markdown):** O formato padrão para anotações em prosa, com suporte a links, subtópicos e formatação rica.
-- **📊 Planilha (Spreadsheet):** Uma planilha interativa para gerenciar dados em tabelas com suporte a fórmulas matemáticas.
 - **🎨 Desenho (Drawing):** Um quadro visual interativo para desenhar esboços, diagramas de blocos e ideias graficamente.
-- **📘 Documento Typst:** Um editor acadêmico avançado para compilar relatórios e artigos formatados diretamente em PDF.
-- **🧜 Diagrama Mermaid:** Criação de fluxogramas, gráficos e diagramas a partir de código textual declarativo simples.
-- **🔱 Mapa Mental (Markmap):** Transforma tópicos estruturados em marcadores de markdown em um mapa mental visual e expansível.
-- **🗺️ Mapa Geográfico:** Permite visualizar pontos geográficos, marcar rotas e interagir com localizações geográficas integradas a notas.
+- **🧠 Markmap (Mapa Mental):** Um editor de mapa mental interativo gerado a partir de Markdown, ideal para organizar ideias hierarquicamente.
 - **📒 E-book (EPUB):** Um leitor dedicado de livros digitais em formato `.epub` com visualização de sumário e paginação adaptiva.
 - **📕 Documento PDF:** Exibição e leitura direta de arquivos PDF.
 - **📦 Anexo ZIP:** Gerenciamento e download de arquivos compactados e anexos salvos na base.
@@ -81,8 +77,8 @@ Você pode filtrar colunas específicas digitando `nome_da_coluna:valor`. O Tabu
 
 * **Título:** `titulo:`, `título:`, `title:`
   * Exemplo: `titulo:Fundamentos` ou `titulo:"Código Limpo"`
-* **Tipo da Nota:** `tipo:`, `type:` (filtrando por markdown, mindmap, drawing, spreadsheet, etc.)
-  * Exemplo: `tipo:mindmap` ou `tipo:drawing`
+* **Tipo da Nota:** `tipo:`, `type:` (filtrando por markdown, drawing, etc.)
+  * Exemplo: `tipo:drawing`
 * **Data de Modificação:** `data:`, `date:`, `mtime:`, `modificação:`, `modificacao:`
   * Exemplo: `data:2026-07` (encontra notas modificadas em julho de 2026).
 * **Tags:** `tag:`, `tags:`
@@ -96,8 +92,6 @@ Se as suas notas possuem propriedades personalizadas no cabeçalho YAML (frontma
 * **Lógica OR para Tags:** Ao filtrar por tags, você pode listar várias separadas por vírgula. O sistema trará notas que tenham **qualquer uma** das tags listadas (lógica OR).
   * Exemplo: `tag:tecnologia,programacao` (encontra notas com a tag `#tecnologia` **ou** `#programacao`).
 * **Lógica AND entre Filtros:** Você pode combinar múltiplos filtros estruturados e termos livres na mesma busca. Todos os critérios devem ser satisfeitos simultaneamente.
-  * Exemplo: `tipo:mindmap tag:docker "configuração de rede"` 
-    *(Trará apenas mapas mentais que tenham a tag #docker e que contenham a frase "configuração de rede" em algum campo).*
 
 ### Peso Sináptico e Esquecimento
 

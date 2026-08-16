@@ -12,16 +12,14 @@ type HandlerContext struct {
 	Notes   *NoteService
 	Backup  *services.BackupService
 	Capture *CaptureService
-	Typst   *TypstService
 }
 
-func NewHandlerContext(cfg *config.AppConfig, store *db.Store, notes *NoteService, backup *services.BackupService, capture *CaptureService, typst *TypstService) *HandlerContext {
+func NewHandlerContext(cfg *config.AppConfig, store *db.Store, notes *NoteService, backup *services.BackupService, capture *CaptureService) *HandlerContext {
 	return &HandlerContext{
 		Cfg:     cfg,
 		Store:   store,
 		Notes:   notes,
 		Backup:  backup,
 		Capture: capture,
-		Typst:   typst,
 	}
 }

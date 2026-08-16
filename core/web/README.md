@@ -10,7 +10,7 @@ npm run build
 
 O que o build faz:
 1. **Tailwind CSS**: compila `src/input.css` → `static/app.css` (minificado)
-2. **esbuild (IIFE)**: `src/editor.js`, `src/spreadsheet.js`, `src/drawing.jsx`, `src/mindmap.js`, `src/map.js`, `src/semantic.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
+2. **esbuild (IIFE)**: `src/editor.js`, `src/drawing.jsx`, `src/database.js`, `src/semantic.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
 3. **esbuild (ESM)**: `src/semantic-worker.js` → `static/semantic-worker.js` (bundle + minify, ESM para Web Worker `type: "module"`)
 4. **Compressão**: Gera `.js.gz` (gzip) e `.js.br` (brotli) para cada `.js`/`.css`
 

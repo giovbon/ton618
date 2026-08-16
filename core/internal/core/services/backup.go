@@ -3,8 +3,6 @@ package services
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -27,12 +25,6 @@ type BackupService struct {
 // NewBackupService cria o serviço de backup.
 func NewBackupService(notes repository.NoteStore, fm repository.FileModStore, docsDir string) *BackupService {
 	return &BackupService{notes: notes, fileMod: fm, docsDir: docsDir}
-}
-
-// SpreadsheetPayload define o JSON interno de dados de uma planilha.
-type SpreadsheetPayload struct {
-	Data   [][]interface{} `json:"data"`
-	Widths []interface{}   `json:"widths"`
 }
 
 // parseFrontmatterBody separa o frontmatter (bloco YAML entre ---) e o corpo.
@@ -67,39 +59,6 @@ func detectNoteTypeFromFrontmatter(content string) string {
 		}
 	}
 	return ""
-}
-
-// jsonToCSV converte a estrutura JSON da planilha do jspreadsheet em um arquivo CSV.
-func jsonToCSV(jsonStr string) ([]byte, error) {
-	var payload SpreadsheetPayload
-	if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
-		// Fallback para tentar ler diretamente como matriz
-		var direct [][]interface{}
-		if err2 := json.Unmarshal([]byte(jsonStr), &direct); err2 == nil {
-			payload.Data = direct
-		} else {
-			return nil, err
-		}
-	}
-
-	var buf bytes.Buffer
-	w := csv.NewWriter(&buf)
-
-	for _, row := range payload.Data {
-		record := make([]string, len(row))
-		for i, cell := range row {
-			if cell == nil {
-				record[i] = ""
-			} else {
-				record[i] = fmt.Sprintf("%v", cell)
-			}
-		}
-		if err := w.Write(record); err != nil {
-			return nil, err
-		}
-	}
-	w.Flush()
-	return buf.Bytes(), nil
 }
 
 var binaryCompressedExts = map[string]bool{
@@ -195,18 +154,6 @@ func (s *BackupService) CreateStream(out io.Writer, full bool) error {
 		case "drawing":
 			// Desenho -> .excalidraw
 			zipFilename = strings.TrimSuffix(filename, ".md") + ".excalidraw"
-			zipData = []byte(body)
-		case "spreadsheet":
-			// Planilha -> .csv
-			zipFilename = strings.TrimSuffix(filename, ".md") + ".csv"
-			if csvData, csvErr := jsonToCSV(body); csvErr == nil {
-				zipData = csvData
-			} else {
-				zipData = []byte(body)
-			}
-		case "mermaid":
-			// Diagrama Mermaid -> .mmd (salva apenas o corpo)
-			zipFilename = strings.TrimSuffix(filename, ".md") + ".mmd"
 			zipData = []byte(body)
 		default:
 			// Markdown normal

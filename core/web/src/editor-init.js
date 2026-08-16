@@ -319,7 +319,6 @@
             var before = htmlEscape(name.substring(0, idx));
             var match = htmlEscape(name.substring(idx, idx + f.length));
             var after = htmlEscape(name.substring(idx + f.length));
-            var isSpreadsheet = (item.tags || []).indexOf("spreadsheet") !== -1;
             html +=
                 '<button class="wikilink-item' +
                 (i === 0 ? " active" : "") +
@@ -329,8 +328,6 @@
                 htmlEscape(name) +
                 '" data-wiki-path="' +
                 htmlEscape(item.fullPath) +
-                '" data-wiki-is-spreadsheet="' +
-                isSpreadsheet +
                 '">';
             html += '<span class="wiki-icon">[[]]</span>';
             html +=
@@ -387,7 +384,6 @@
         // Get full path from the closest .wikilink-item
         var btn = document.querySelector(".wikilink-item.active");
         var fullPath = btn ? btn.getAttribute("data-wiki-path") : "";
-        var isSpreadsheet = btn ? btn.getAttribute("data-wiki-is-spreadsheet") === "true" : false;
         if (!fullPath) {
             fullPath = "notes/" + name + ".md";
         }
@@ -404,8 +400,6 @@
                 encodeURIComponent("attachments/" + name);
         } else if (ext === "epub") {
             href = "/epub/reader?file=" + encodeURIComponent(fullPath || "epubs/" + name + ".epub");
-        } else if (isSpreadsheet) {
-            href = "/spreadsheet?file=notes/" + encodeURIComponent(name) + ".md";
         } else {
             href = "/editor?file=notes/" + encodeURIComponent(name) + ".md";
         }
@@ -669,7 +663,7 @@
                     // Ignora cliques com Ctrl/Meta (navegador ja abre em nova aba)
                     if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
                         // So navega se for link interno do editor
-                        if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/spreadsheet?file=") !== -1 || target.href.indexOf("/epub/reader") !== -1 || target.href.indexOf("/file/") !== -1) {
+                        if (target.href.indexOf("/editor?file=") !== -1 || target.href.indexOf("/epub/reader") !== -1 || target.href.indexOf("/file/") !== -1) {
                             event.preventDefault();
                             window.location.href = target.href;
                             return true;

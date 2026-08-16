@@ -16,11 +16,11 @@ func TestEnsureTypeTags_PersistsContentDerivedType(t *testing.T) {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// Nota legada: "type: mermaid" no frontmatter, mas SEM a tag "mermaid" persistida
-	// e SEM "mermaid" no nome do arquivo. É o caso que fazia o ícone mudar conforme
+	// Nota legada: "type: markmap" no frontmatter, mas SEM a tag "markmap" persistida
+	// e SEM "markmap" no nome do arquivo. É o caso que fazia o ícone mudar conforme
 	// o conteúdo era (ou não) passado.
 	legacy := "notes/legacy-nota.md"
-	legacyContent := "---\ntype: mermaid\n---\ngraph TD\nA --> B"
+	legacyContent := "---\ntype: markmap\n---\n# Meu Mapa\n- Tópico A\n- Tópico B"
 	if err := store.SaveNote(legacy, legacyContent, now); err != nil {
 		t.Fatalf("SaveNote: %v", err)
 	}
@@ -44,24 +44,24 @@ func TestEnsureTypeTags_PersistsContentDerivedType(t *testing.T) {
 		t.Fatalf("EnsureTypeTags: %v", err)
 	}
 
-	// A nota legada agora deve ter a tag "mermaid" persistida.
+	// A nota legada agora deve ter a tag "markmap" persistida.
 	tags, err := store.GetFileTags(legacy)
 	if err != nil {
 		t.Fatalf("GetFileTags: %v", err)
 	}
 	found := false
 	for _, tg := range tags {
-		if tg == "mermaid" {
+		if tg == "markmap" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("esperava tag 'mermaid' persistida em %s, got %v", legacy, tags)
+		t.Errorf("esperava tag 'markmap' persistida em %s, got %v", legacy, tags)
 	}
 
 	// E a detecção SEM conteúdo agora é estável (mesmo tipo em qualquer lugar).
-	if detected := domain.DetectNoteType(tags, legacy); detected != domain.NoteTypeMermaid {
-		t.Errorf("DetectNoteType() após backfill = %v, want mermaid", detected)
+	if detected := domain.DetectNoteType(tags, legacy); detected != domain.NoteTypeMindmap {
+		t.Errorf("DetectNoteType() após backfill = %v, want markmap", detected)
 	}
 
 	// A nota normal não deve ter ganho tag de tipo.

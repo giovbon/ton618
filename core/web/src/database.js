@@ -39,7 +39,7 @@
         tags.forEach(function (t) {
             var trimmed = t.trim();
             var lt = trimmed.toLowerCase();
-            if (trimmed && lt !== "typst" && lt !== "drawing" && lt !== "spreadsheet" && lt !== "mermaid" && lt !== "mindmap" && lt !== "markmap" && lt !== "map" && lt !== "mapa") {
+            if (trimmed && lt !== "drawing" && lt !== "mindmap" && lt !== "markmap") {
                 html += '<span class="tag-pill">#' + trimmed + "</span>";
             }
         });
@@ -137,7 +137,7 @@
                         c.formatter = function (cell) {
                             var rowData = cell.getRow().getData();
                             var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                            if (typeStr === "desenho" || typeStr === "planilha" || typeStr === "mapa" || typeStr === "mermaid" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub") {
+                            if (typeStr === "desenho" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub") {
                                 return "N/A";
                             }
                             return cell.getValue() ? "true" : "false";
@@ -181,7 +181,7 @@
                                 var val = cell.getValue();
                                 if (typeof val === "boolean") return "tickCross";
                                 if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val.trim())) return "date";
-                                if (typeof val === "number" || (typeof val === "string" && val.trim() !== "" && !isNaN(val.trim()))) return "number";
+                                if (typeof val === "number" || (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val.trim())))) return "number";
                                 return "input";
                             };
                             c.formatter = function (cell) {
@@ -225,7 +225,7 @@
 
                 // Restore last query
                 var lastQuery = localStorage.getItem("db_last_query") || "";
-                var searchInput = document.getElementById("db-search");
+                var searchInput = /** @type {HTMLInputElement} */ (document.getElementById("db-search"));
                 var clearBtn = document.getElementById("db-search-clear");
                 if (lastQuery && searchInput) {
                     searchInput.value = lastQuery;
@@ -295,7 +295,7 @@
         });
 
         document.addEventListener("click", function (e) {
-            if (!menu.contains(e.target) && e.target !== btn) {
+            if (!menu.contains(/** @type {Node} */ (e.target)) && e.target !== btn) {
                 menu.classList.add("hidden");
             }
         });
@@ -314,7 +314,7 @@
             var trimmed = newVal.trim();
             if (trimmed === "true") parsedVal = true;
             else if (trimmed === "false") parsedVal = false;
-            else if (trimmed !== "" && !isNaN(trimmed)) parsedVal = Number(trimmed);
+            else if (trimmed !== "" && !isNaN(Number(trimmed))) parsedVal = Number(trimmed);
         }
 
         var payload = { file: rowData.arquivo, key: field, value: parsedVal };
@@ -344,7 +344,7 @@
 
     // ── Search ──
     function setupSearch(table) {
-        var searchInput = document.getElementById("db-search");
+        var searchInput = /** @type {HTMLInputElement} */ (document.getElementById("db-search"));
         var clearBtn = document.getElementById("db-search-clear");
         if (!searchInput || !clearBtn) return;
 

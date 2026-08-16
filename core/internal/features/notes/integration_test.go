@@ -192,22 +192,18 @@ func TestSaveReindexSearch_DeleteRemovesFromIndex(t *testing.T) {
 }
 
 func TestSaveReindexSearch_Rename(t *testing.T) {
-	store, svc, docsDir := newStoreAndSvc(t)
-	os.MkdirAll(filepath.Join(docsDir, "notes"), 0755)
+	store, svc, _ := newStoreAndSvc(t)
 
 	// 1. Cria a nota antiga
 	oldContent := "---\ntitle: Nota Antiga\n---\n# Nota Antiga\nEsta é a nota que será renomeada."
 	saveNote(t, svc, "antiga.md", oldContent)
-	os.WriteFile(filepath.Join(docsDir, "notes", "antiga.md"), []byte(oldContent), 0644)
 
 	// 2. Cria notas que referenciam a nota antiga (usando wikilinks)
 	ref1 := "# Ref 1\nEu leio a [[antiga]] sempre."
 	saveNote(t, svc, "ref1.md", ref1)
-	os.WriteFile(filepath.Join(docsDir, "notes", "ref1.md"), []byte(ref1), 0644)
 
 	ref2 := "# Ref 2\nVeja tambem [[antiga|A nota velha]]."
 	saveNote(t, svc, "ref2.md", ref2)
-	os.WriteFile(filepath.Join(docsDir, "notes", "ref2.md"), []byte(ref2), 0644)
 
 	// Verifica se estão indexadas
 	r := searchNote(t, store, "velha")
@@ -220,15 +216,7 @@ func TestSaveReindexSearch_Rename(t *testing.T) {
 		t.Fatalf("Rename: %v", err)
 	}
 
-	// 4. Verifica arquivo fisico
-	if _, err := os.Stat(filepath.Join(docsDir, "notes/nova.md")); os.IsNotExist(err) {
-		t.Error("Arquivo físico notes/nova.md nao foi criado")
-	}
-	if _, err := os.Stat(filepath.Join(docsDir, "notes/antiga.md")); err == nil {
-		t.Error("Arquivo físico notes/antiga.md deveria ter sido removido")
-	}
-
-	// 5. Verifica indice (antiga nao existe, nova existe)
+	// 4. Verifica banco (antiga nao existe, nova existe)
 	rAntiga, _ := store.GetNote("notes/antiga.md")
 	if rAntiga != "" {
 		t.Error("Nota antiga.md ainda existe no banco")
@@ -239,7 +227,7 @@ func TestSaveReindexSearch_Rename(t *testing.T) {
 		t.Error("Nota nova.md nao existe no banco")
 	}
 
-	// 6. Verifica backlinks regravados no banco (ref1 e ref2 devem ter sido atualizadas)
+	// 5. Verifica backlinks regravados no banco (ref1 e ref2 devem ter sido atualizadas)
 	rRef1, _ := store.GetNote("notes/ref1.md")
 	if !strings.Contains(rRef1, "[[nova]]") {
 		t.Errorf("ref1 nao foi atualizada corretamente. Conteudo:\n%s", rRef1)

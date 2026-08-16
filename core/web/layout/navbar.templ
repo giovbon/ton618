@@ -75,29 +75,13 @@ templ Navbar() {
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota")) <span>+ Nota</span>
                         </a>
-                        <a href="/spreadsheet"
-                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("planilha"), "w-4 h-4 " + icons.GetColor("planilha")) <span>+ Planilha</span>
-                        </a>
                         <a href="/drawing"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho")) <span>+ Desenho</span>
                         </a>
-                        <a href="/typst"
-                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("typst"), "w-4 h-4 " + icons.GetColor("typst")) <span>+ Typst</span>
-                        </a>
-                        <a href="/mermaid"
-                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("mermaid"), "w-4 h-4 " + icons.GetColor("mermaid")) <span>+ Mermaid</span>
-                        </a>
                         <a href="/mindmap"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("mindmap"), "w-4 h-4 " + icons.GetColor("mindmap")) <span>+ Markmap</span>
-                        </a>
-                        <a href="/map"
-                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("mapa"), "w-4 h-4 " + icons.GetColor("mapa")) <span>+ Mapa</span>
+                            @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap")) <span>+ Markmap</span>
                         </a>
                     </div>
                 </div>
@@ -180,35 +164,15 @@ templ Navbar() {
                         @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota"))
                         <span class="text-[11px] font-semibold text-zinc-300">+ Nota</span>
                     </a>
-                    <a href="/spreadsheet"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-sky-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("planilha"), "w-4 h-4 " + icons.GetColor("planilha"))
-                        <span class="text-[11px] font-semibold text-sky-400/90">+ Planilha</span>
-                    </a>
                     <a href="/drawing"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-pink-400 transition-all active:scale-[0.98]">
                         @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho"))
                         <span class="text-[11px] font-semibold text-pink-400/90">+ Desenho</span>
                     </a>
-                    <a href="/typst"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-cyan-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("typst"), "w-4 h-4 " + icons.GetColor("typst"))
-                        <span class="text-[11px] font-semibold text-cyan-400/90">+ Typst</span>
-                    </a>
-                    <a href="/mermaid"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-purple-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("mermaid"), "w-4 h-4 " + icons.GetColor("mermaid"))
-                        <span class="text-[11px] font-semibold text-purple-400/90">+ Mermaid</span>
-                    </a>
                     <a href="/mindmap"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("mindmap"), "w-4 h-4 " + icons.GetColor("mindmap"))
+                        @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap"))
                         <span class="text-[11px] font-semibold text-emerald-400/90">+ Markmap</span>
-                    </a>
-                    <a href="/map"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-orange-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("mapa"), "w-4 h-4 " + icons.GetColor("mapa"))
-                        <span class="text-[11px] font-semibold text-orange-400/90">+ Mapa</span>
                     </a>
                 </div>
             </div>

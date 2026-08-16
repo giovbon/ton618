@@ -101,24 +101,12 @@ templ searchResultItem(res domain.SearchResultItem) {
 					<a href={ templ.SafeURL("/file?name=" + res.Arquivo) } target="_blank" class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-orange-400">
 						{ domain.DisplayName(res.Arquivo) }
 					</a>
-				} else if res.Tipo == "planilha" || res.Tipo == "spreadsheet" {
-					<a href={ templ.SafeURL("/spreadsheet?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
-						{ domain.DisplayName(res.Arquivo) }
-					</a>
 				} else if res.Tipo == "desenho" || res.Tipo == "drawing" {
 					<a href={ templ.SafeURL("/drawing?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
 						{ domain.DisplayName(res.Arquivo) }
 					</a>
-				} else if res.Tipo == "typst" {
-					<a href={ templ.SafeURL("/typst?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
-						{ domain.DisplayName(res.Arquivo) }
-					</a>
 				} else if res.Tipo == "markmap" || res.Tipo == "mindmap" {
-					<a href={ templ.SafeURL("/mindmap?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
-						{ domain.DisplayName(res.Arquivo) }
-					</a>
-				} else if res.Tipo == "mapa" || res.Tipo == "map" {
-					<a href={ templ.SafeURL("/map?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-sky-400">
+					<a href={ templ.SafeURL("/mindmap?file=" + res.Arquivo) } class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer text-emerald-400">
 						{ domain.DisplayName(res.Arquivo) }
 					</a>
 				} else {

@@ -862,7 +862,6 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		// Indexáveis
 		{"notes/normal.md", "# Nota normal", []string{}, true},
 		{"notes/com-tag-inutil.md", "# Nota", []string{"estudos"}, true},
-		{"notes/typst-nota.md", "# Typst", []string{"typst"}, true},
 		{"notes/mindmap-nota.md", "# Mindmap", []string{"mindmap"}, true},
 		{"notes/markmap-nota.md", "# Markmap", []string{"markmap"}, true},
 		{"notes/youtube-nota.md", "# YouTube", []string{"youtube"}, true},
@@ -877,11 +876,6 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		// Não indexáveis por tags
 		{"notes/desenho.md", "# Desenho", []string{"drawing"}, false},
 		{"notes/desenho-pt.md", "# Desenho PT", []string{"desenho"}, false},
-		{"notes/planilha.md", "# Planilha", []string{"spreadsheet"}, false},
-		{"notes/planilha-pt.md", "# Planilha PT", []string{"planilha"}, false},
-		{"notes/fluxo.md", "# Mermaid", []string{"mermaid"}, false},
-		{"notes/mapa-tag.md", "# Mapa", []string{"map"}, false},
-		{"notes/mapa-tag-pt.md", "# Mapa", []string{"mapa"}, false},
 		{"notes/deletar.md", "# Deletar", []string{"deletar"}, false},
 
 		// Nota: Casos com frontmatter (conteúdo) sem tags associadas são considerados
@@ -889,14 +883,10 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		// quanto no SQL (não faz busca no texto completo por performance).
 		// Na prática, a aplicação sincroniza as tags baseadas no frontmatter ao salvar a nota.
 		{"notes/fm-test1.md", "type: drawing\n# Desenho", []string{}, true},
-		{"notes/fm-test2.md", "type: spreadsheet\n# Planilha", []string{}, true},
-		{"notes/fm-test3.md", "type: mermaid\n# Mermaid", []string{}, true},
-		{"notes/fm-test4.md", "type: map\n# Mapa", []string{}, true},
-		{"notes/fm-mapa.md", "type: mapa\n# Mapa", []string{}, false},
+		{"notes/fm-markmap.md", "type: markmap\n# Mapa", []string{}, true},
+		{"notes/fm-mindmap.md", "type: mindmap\n# Mapa", []string{}, true},
 
 		// Não indexáveis por heurística de nome de arquivo
-		{"notes/mapa-exato.md", "# Mapa", []string{}, false},
-		{"notes/mapa.md", "# Mapa", []string{}, false},
 		{"notes/img_1786140118423_image.png.md", "---tags: [deletar]---", []string{"deletar"}, false},
 		{"notes/img_sample.png.md", "# Image note", []string{}, false},
 	}

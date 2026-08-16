@@ -33,11 +33,8 @@ await esbuild.build({
     { in: "src/app.js", out: "js/app" },
     "src/editor.js",
     "src/editor-init.js",
-    "src/spreadsheet.js",
     "src/drawing.jsx",
     "src/database.js",
-    "src/mindmap.js",
-    "src/map.js",
     "src/semantic.js"
   ],
   bundle: true,

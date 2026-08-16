@@ -159,7 +159,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		base := parts[len(parts)-1]
 		newTitle := strings.TrimSuffix(base, ".md")
 
-		// Preserva tags de tipo interno no frontmatter da nota (ex: mermaid, typst, drawing, spreadsheet, mindmap, map)
+		// Preserva tags de tipo interno no frontmatter da nota (ex: drawing, mindmap)
 		for _, tag := range oldTags {
 			if domain.InternalTypeTags[strings.ToLower(tag)] {
 				if newContent, err := UpdateFrontmatterProperty(content, "type", strings.ToLower(tag)); err == nil {
@@ -397,7 +397,7 @@ func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 
 // EnsureTypeTags garante que a tag canônica de tipo esteja persistida na tabela
 // tags para notas cujo tipo é derivável apenas do conteúdo (ex: frontmatter
-// "type: mermaid" sem a tag "mermaid"). Isso torna o tipo (e portanto o ícone)
+// "type: markmap" sem a tag "markmap"). Isso torna o tipo (e portanto o ícone)
 // determinístico em toda a aplicação, pois DetectNoteType só depende de tags +
 // caminho + nome — nunca do conteúdo.
 func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
@@ -444,8 +444,8 @@ func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
 // (ou seja, não depende do conteúdo para ser estável).
 func isTypeTaggedNoteType(t domain.NoteType) bool {
 	switch t {
-	case domain.NoteTypeDrawing, domain.NoteTypeSpreadsheet, domain.NoteTypeTypst,
-		domain.NoteTypeMermaid, domain.NoteTypeMindmap, domain.NoteTypeMap,
+	case domain.NoteTypeDrawing,
+		domain.NoteTypeMindmap,
 		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
 		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:
 		return true

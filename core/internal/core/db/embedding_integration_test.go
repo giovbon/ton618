@@ -71,11 +71,8 @@ func TestEmbeddingIntegration_NotaComTagNaoIndexavel(t *testing.T) {
 		desc     string
 	}{
 		{"notes/markdown.md", []string{}, true, "markdown puro é indexável"},
-		{"notes/typst.md", []string{"typst"}, true, "typst é indexável"},
 		{"notes/mindmap.md", []string{"markmap"}, true, "mindmap é indexável"},
 		{"notes/drawing.md", []string{"drawing"}, false, "drawing não é indexável"},
-		{"notes/spreadsheet.md", []string{"spreadsheet"}, false, "spreadsheet não é indexável"},
-		{"notes/mermaid.md", []string{"mermaid"}, false, "mermaid não é indexável"},
 		{"notes/artigo.md", []string{"artigo"}, true, "artigo é indexável"},
 		{"pdfs/doc.pdf", []string{}, false, "pdfs/ não é indexável"},
 		{"archives/backup.zip", []string{}, false, "archives/ não é indexável"},
@@ -349,9 +346,8 @@ func TestEmbeddingIntegration_GetEmbeddingStatusComNotasMistas(t *testing.T) {
 	}{
 		{"notes/md1.md", []string{}},
 		{"notes/md2.md", []string{}},
-		{"notes/typst.md", []string{"typst"}},
+		{"notes/md3.md", []string{"estudos"}},
 		{"notes/drawing.md", []string{"drawing"}},
-		{"notes/mermaid.md", []string{"mermaid"}},
 		{"notes/artigo.md", []string{"artigo"}},
 		{"pdfs/doc.pdf", []string{}},
 	}
@@ -370,7 +366,7 @@ func TestEmbeddingIntegration_GetEmbeddingStatusComNotasMistas(t *testing.T) {
 		t.Fatalf("GetEmbeddingStatus: %v", err)
 	}
 
-	// Total = 4 (md1, md2, typst, artigo) — drawing, mermaid, pdfs/ são excluídos
+	// Total = 4 (md1, md2, md3, artigo) — drawing e pdfs/ são excluídos
 	if status.TotalNotes != 4 {
 		t.Fatalf("TotalNotes esperado 4, got %d", status.TotalNotes)
 	}

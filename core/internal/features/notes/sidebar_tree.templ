@@ -163,7 +163,7 @@ func getVisibleTags(tags []string) []string {
     var visible []string
     for _, t := range tags {
         t = strings.ToLower(t)
-        if t != "typst" && t != "drawing" && t != "spreadsheet" && t != "mermaid" && t != "mindmap" && t != "markmap" && t != "map" && t != "mapa" {
+        if t != "drawing" {
             visible = append(visible, t)
         }
     }

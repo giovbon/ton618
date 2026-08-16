@@ -34,9 +34,8 @@ func newTestContext(t *testing.T) *HandlerContext {
 	notesSvc := NewNoteService(store, store, store, store, store, store, docsDir)
 	backupSvc := services.NewBackupService(store, store, docsDir)
 	captureSvc := NewCaptureService(store)
-	typstSvc := NewTypstService()
 
-	ctx := NewHandlerContext(cfg, store, notesSvc, backupSvc, captureSvc, typstSvc)
+	ctx := NewHandlerContext(cfg, store, notesSvc, backupSvc, captureSvc)
 
 	return ctx
 }

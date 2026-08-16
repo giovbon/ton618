@@ -92,13 +92,10 @@ WHERE n.content != ''
   AND n.filename NOT LIKE '%.gif.md'
   AND n.filename NOT LIKE '%.webp.md'
   AND n.filename NOT LIKE '%.svg.md'
-  AND n.filename NOT LIKE '%mapa-%'
-  AND n.filename NOT LIKE '%mapa.%'
-  AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
+      AND t.tag IN ('drawing','desenho','deletar')
   )
 `
 
@@ -1108,13 +1105,10 @@ WHERE (
   AND n.filename NOT LIKE '%.gif.md'
   AND n.filename NOT LIKE '%.webp.md'
   AND n.filename NOT LIKE '%.svg.md'
-  AND n.filename NOT LIKE '%mapa-%'
-  AND n.filename NOT LIKE '%mapa.%'
-  AND n.filename NOT LIKE '%/map'
   AND NOT EXISTS (
     SELECT 1 FROM tags t
     WHERE t.arquivo = n.filename
-      AND t.tag IN ('drawing','desenho','spreadsheet','planilha','mermaid','map','mapa','deletar')
+      AND t.tag IN ('drawing','desenho','deletar')
   )
 ORDER BY n.mtime DESC
 LIMIT ?

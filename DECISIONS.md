@@ -41,12 +41,8 @@ Serve como referência para manter consistência em contribuições futuras.
 | Tecnologia | Uso | Link |
 |------------|-----|------|
 | TipTap | Editor de markdown WYSIWYG | https://tiptap.dev/ |
-| jspreadsheet | Editor de planilhas | https://jspreadsheet.com/ |
 | Tabulator | Tabelas de dados interativas | https://tabulator.info/ |
 | Excalidraw | Editor de desenhos | https://excalidraw.com/ |
-| Mermaid | Diagramas e gráficos | https://mermaid.js.org/ |
-| Markmap | Mapas mentais | https://markmap.js.org/ |
-| Leaflet | Mapas interativos (OpenStreetMap) | https://leafletjs.com/ |
 | CodeJar | Editor de código leve | https://medv.io/codejar/ |
 | vis-timeline | Timeline para agenda | https://visjs.github.io/vis-timeline/ |
 | chrono | Parser de datas em linguagem natural | https://github.com/wanasit/chrono |
@@ -65,9 +61,6 @@ Serve como referência para manter consistência em contribuições futuras.
 | Ferramenta | Uso |
 |------------|-----|
 | Docker + Docker Compose | Containerização |
-| Typst | Compilador de documentos (texto para PDF via tipst) |
-| Nominatim (OSM) | Geocoding reverso para mapas |
-| OSRM | Cálculo de rotas para mapas |
 
 ---
 
@@ -85,7 +78,7 @@ Serve como referência para manter consistência em contribuições futuras.
 ### 2.2 Frontend (JavaScript)
 
 - **JSDoc apenas em APIs públicas**: O que é exposto via `window.*` ou exportado como módulo. Funções internas não recebem JSDoc — evita ruído e documentação mentirosa.
-- **`web/src/global.d.ts`**: Declarações de tipos para globais `window.*` (IIFE exports), bibliotecas sem types (Leaflet, jSuites, markmap) e módulos CSS. Mantenha sincronizado com as funções expostas.
+- **`web/src/global.d.ts`**: Declarações de tipos para globais `window.*` (IIFE exports) e módulos CSS. Mantenha sincronizado com as funções expostas.
 - **Arquivo fonte em `web/src/`, compilado para `web/static/`**: esbuild compila e minifica. `npm run build` gera os estáticos. **Nunca editar `static/` diretamente.**
 - **IIFE para scripts no browser**: O build do esbuild usa `format: "iife"` para gerar código que não polui o escopo global além do que é explicitamente exposto.
 - **Web Worker para tarefas pesadas**: `semantic-worker.js` (ESM module) executa inferência ONNX em thread separada — não bloqueia UI.
@@ -135,14 +128,14 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 - `GetPendingEmbeddingNotes()` compara com `notes.mtime` para detectar desatualizados.
 - **Invalidação por versão de modelo:** o backend deriva um **fingerprint** do pipeline de embeddings (modelo + chunking) — `EmbeddingModelVersion`. Quando qualquer parâmetro muda, o fingerprint muda automaticamente e `EnsureEmbeddingModelVersion` limpa os embeddings antigos na inicialização, forçando re-indexação no browser. **Sem bump manual.** Alterada em: 09/08/2026 (retorno ao MiniLM-L12 após teste do e5-small).
 - **⚠️ Cache do worker (bug real, 09/08/2026):** o `semantic.js` criava o Web Worker via `/static/semantic-worker.js` **sem hash** na URL — o navegador cacheia o worker antigo (MiniLM) e a reindexação gerava vetores do modelo errado. **Corrigido:** o servidor agora injeta `window.SEMANTIC_WORKER_URL` com hash via `staticver.URL()` no `layout.templ`, e o `semantic.js` usa essa URL. O hash muda automaticamente com o conteúdo — sem `WORKER_VERSION` manual.
-- Notas não-indexáveis (drawing, spreadsheet, mermaid, mapa) são excluídas via SQL.
+- Notas não-indexáveis (drawing) são excluídas via SQL.
 
 ### 3.5 Notas Indexáveis vs Não-Indexáveis (Regras de Paridade)
 
 - **Regra Geral:** Apenas notas de texto contínuo e leitura humana são indexáveis. Dados puramente estruturados, visuais ou códigos não são indexados.
-- **Tipos Indexáveis:** Markdown comuns (`NoteTypeMarkdown`), documentos Typst (`NoteTypeTypst`), mapas mentais/markmaps (`NoteTypeMindmap`), notas de transcrição do YouTube (`NoteTypeYoutube`), artigos da Web (`NoteTypeArticle`) e capturas rápidas (`NoteTypeCapture`).
-- **Tipos Não-Indexáveis:** Desenhos/Excalidraw (`NoteTypeDrawing`), planilhas (`NoteTypeSpreadsheet`), diagramas Mermaid (`NoteTypeMermaid`), mapas geográficos (`NoteTypeMap`), arquivos/PDFs na pasta `pdfs/` (`NoteTypePDF`), anexos na pasta `attachments/` (`NoteTypeAttachment`) e notas arquivadas na pasta `archives/` (`NoteTypeArchive`).
-- **Paridade Go/SQL:** O método Go `IsNoteEmbeddable` (que valida as gravações) e as queries SQL (`GetPendingEmbeddingNotes` e `CountEmbeddableNotes`) devem estar em perfeita paridade quanto a essa lógica de exclusão de notas. Para manter a performance, a detecção de tipo é baseada apenas no caminho do arquivo, tags e heurísticas de nome de arquivo (ex: conter `mapa.` ou `mapa-` no nome), sem abrir o conteúdo completo das notas.
+- **Tipos Indexáveis:** Markdown comuns (`NoteTypeMarkdown`), notas de transcrição do YouTube (`NoteTypeYoutube`), artigos da Web (`NoteTypeArticle`) e capturas rápidas (`NoteTypeCapture`).
+- **Tipos Não-Indexáveis:** Desenhos/Excalidraw (`NoteTypeDrawing`), arquivos/PDFs na pasta `pdfs/` (`NoteTypePDF`), anexos na pasta `attachments/` (`NoteTypeAttachment`) e notas arquivadas na pasta `archives/` (`NoteTypeArchive`).
+- **Paridade Go/SQL:** O método Go `IsNoteEmbeddable` (que valida as gravações) e as queries SQL (`GetPendingEmbeddingNotes` e `CountEmbeddableNotes`) devem estar em perfeita paridade quanto a essa lógica de exclusão de notas. Para manter a performance, a detecção de tipo é baseada apenas no caminho do arquivo, tags e heurísticas de nome de arquivo.
 - **Garantia via Teste:** O teste de integração `TestIsNoteEmbeddableMatchesSQL` garante que qualquer divergência futura entre Go e SQL na lógica de exclusão de notas quebrará os testes locais e o CI/CD. Adicionalmente, o teste `TestDeleteNoteCleansEmbeddingsAndOrphanStatus` garante que a remoção de notas limpa seus respectivos chunks e embeddings, e que o cálculo de status de indexação é resiliente a registros órfãos pré-existentes.
 - **Correção de paridade (09/08/2026):** o teste `TestIsNoteEmbeddableMatchesSQL` pegou uma divergência real — a tag `deletar` era excluída no SQL (`CountEmbeddableNotes`/`GetPendingEmbeddingNotes`) mas não no Go. Corrigido em `isNoteEmbeddable`, que agora também exclui notas com a tag `deletar`.
 
@@ -152,7 +145,7 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 
 O recurso **"Notas Semelhantes"** no editor usa os embeddings armazenados para recomendar notas relacionadas. A lógica implementa:
 
-- **Dois mapas**: `minDistMap` (menor distância L2 por candidato) e `matchCounts` (em quantos chunks diferentes o candidato apareceu).
+- **Dois campos**: `minDistMap` (menor distância L2 por candidato) e `matchCounts` (em quantos chunks diferentes o candidato apareceu).
 - **Threshold dinâmico**: Agora configurável pelo usuário na UI (padrão 72% de similaridade de cosseno, traduzido internamente para distância L2).
 - **Voto majoritário**: Se a nota atual tem ≥3 chunks (nota longa), o candidato precisa ter match em ≥2 chunks diferentes para ser recomendado — a menos que a distância seja excepcional (`< 0.60`, ~82%).
 - **Ordenação**: Primária por frequência de matches (decrescente), secundária por distância L2 (crescente). Top 5 resultados exibidos.
@@ -290,7 +283,7 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 - Quando o arquivo muda, o hash muda → URL muda → browser baixa o novo
 - **Não precisa mais incrementar `?v=N` manualmente** nos templates
 - Chamar `staticver.SetDefault(cache)` no `main.go` para registrar o cache global
-- Exceções (strings JS dentro de `<script>`): `codejar.js` e `mermaid.min.js` ainda usam `?v=N` manual
+- Exceções (strings JS dentro de `<script>`): `codejar.js` ainda usa `?v=N` manual
 
 ## 6.6 Download do Modelo de IA
 
@@ -317,7 +310,7 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 Se os arquivos do modelo **não estiverem disponíveis localmente** (ex: `download_model.js` não foi executado), o Transformers.js tenta baixá-los via `fetch()` do CDN do HuggingFace. Essa conexão é **bloqueada pelo CSP** em `internal/middleware/middleware.go`:
 
 ```
-connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org
+connect-src 'self'
 ```
 
 `huggingface.co` **não está listado** no `connect-src`, então o download remoto falha silenciosamente. **O modelo só funciona via arquivos locais servidos pelo próprio servidor Go** (`/static/models/`).

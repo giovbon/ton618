@@ -5,22 +5,15 @@ func SVGString(name string, class string) string {
 	switch name {
 	case "sticky-note", "file-text", "nota", "markdown":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg>`
-	case "table", "planilha", "spreadsheet":
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>`
+
 	case "pencil-ruler", "palette", "desenho", "drawing":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="m15 5 4 4"/><path d="M13 7 8.7 11.3a2 2 0 0 0-.57 1.21L8 16l3.49-.13a2 2 0 0 0 1.21-.57L17 11"/><path d="M2 22h20"/><path d="M4 18v-4h4"/><path d="M12 18v-2h4"/><path d="M18 18v-4h4"/></svg>`
-	case "book-down", "file-code", "typst":
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M12 13V7"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m9 10 3 3 3-3"/></svg>`
-	case "vector-square", "workflow", "mermaid":
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="4" height="4" x="3" y="3"/><rect width="4" height="4" x="17" y="3"/><rect width="4" height="4" x="3" y="17"/><rect width="4" height="4" x="17" y="17"/></svg>`
-	case "git-fork":
+
+	case "vector-square", "workflow":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"/><path d="M12 13v2"/></svg>`
 	case "chart-no-axes-gantt", "network", "markmap", "mindmap":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/></svg>`
-	case "map", "mapa":
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M14.106 5.553a2 2 0 0 0-1.788 0l-3.648 1.824a2 2 0 0 1-1.788 0L2.35 5.11a1 1 0 0 0-1.35 1.348l4.086 8.172a2 2 0 0 0 1.788 0l3.648-1.824a2 2 0 0 1 1.788 0l4.532 2.266a1 1 0 0 0 1.35-1.348l-4.086-8.172Z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>`
-	case "video", "youtube":
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>`
+
 	case "newspaper", "artigo", "article":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>`
 	case "pickaxe", "globe", "captura", "web":

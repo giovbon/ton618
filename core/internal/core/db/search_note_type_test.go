@@ -11,7 +11,7 @@ import (
 // Estes testes verificam que SearchSimilar popula o campo NoteType em cada
 // SimilarResult de acordo com as tags persistidas no banco, garantindo que
 // o frontend receba o tipo correto para gerar o link/rota certa para cada
-// tipo de nota (markmap → /mindmap, typst → /typst, etc.).
+// tipo de nota (markmap → /mindmap, drawing → /drawing, etc.).
 
 // setupSearchNote é um helper que salva uma nota, atribui tags e indexa
 // um único chunk com o valor val na posição [0] do embedding.
@@ -89,27 +89,6 @@ func TestSearchSimilar_NoteTypeMindmapAlias(t *testing.T) {
 	}
 	if results[0].NoteType != domain.NoteTypeMindmap {
 		t.Errorf("NoteType esperado %q (mindmap alias), got %q", domain.NoteTypeMindmap, results[0].NoteType)
-	}
-}
-
-// TestSearchSimilar_NoteTypeTypst verifica que uma nota com tag "typst"
-// retorna NoteType = "typst", viabilizando o link /typst.
-func TestSearchSimilar_NoteTypeTypst(t *testing.T) {
-	s := newTestStore(t)
-	setupSearchNote(s, t, "notes/relatorio.md", []string{"typst"}, 1.0)
-
-	query := make([]float32, EmbeddingDim)
-	query[0] = 1.0
-
-	results, err := s.SearchSimilar(query, 10)
-	if err != nil {
-		t.Fatalf("SearchSimilar: %v", err)
-	}
-	if len(results) != 1 {
-		t.Fatalf("esperado 1 resultado, got %d", len(results))
-	}
-	if results[0].NoteType != domain.NoteTypeTypst {
-		t.Errorf("NoteType esperado %q (typst), got %q", domain.NoteTypeTypst, results[0].NoteType)
 	}
 }
 
@@ -200,10 +179,9 @@ func TestSearchSimilar_MultiplostiposNoteType(t *testing.T) {
 		wantType domain.NoteType
 	}{
 		{"notes/md.md", []string{}, 0.1, domain.NoteTypeMarkdown},
-		{"notes/typst.md", []string{"typst"}, 0.2, domain.NoteTypeTypst},
-		{"notes/markmap.md", []string{"markmap"}, 0.3, domain.NoteTypeMindmap},
-		{"notes/youtube.md", []string{"youtube"}, 0.4, domain.NoteTypeYoutube},
-		{"notes/captura.md", []string{"captura"}, 0.5, domain.NoteTypeCapture},
+		{"notes/markmap.md", []string{"markmap"}, 0.2, domain.NoteTypeMindmap},
+		{"notes/youtube.md", []string{"youtube"}, 0.3, domain.NoteTypeYoutube},
+		{"notes/captura.md", []string{"captura"}, 0.4, domain.NoteTypeCapture},
 	}
 
 	for _, c := range casos {
@@ -211,7 +189,7 @@ func TestSearchSimilar_MultiplostiposNoteType(t *testing.T) {
 	}
 
 	query := make([]float32, EmbeddingDim)
-	query[0] = 0.3 // próximo de markmap (0.3)
+	query[0] = 0.2 // próximo de markmap (0.2)
 
 	results, err := s.SearchSimilar(query, 10)
 	if err != nil {
@@ -244,7 +222,7 @@ func TestSearchSimilar_NoteTypeNaoVazioParaIndexaveis(t *testing.T) {
 		tags     []string
 	}{
 		{"notes/a.md", []string{}},
-		{"notes/b.md", []string{"typst"}},
+		{"notes/b.md", []string{"markmap"}},
 		{"notes/c.md", []string{"markmap"}},
 		{"notes/d.md", []string{"artigo"}},
 	}
@@ -279,12 +257,8 @@ func TestEditorRouteForTipo(t *testing.T) {
 		wantRoute string
 	}{
 		{domain.NoteTypeMarkdown, "/editor"},
-		{domain.NoteTypeTypst, "/typst"},
 		{domain.NoteTypeMindmap, "/mindmap"},     // markmap → /mindmap
 		{domain.NoteTypeDrawing, "/drawing"},
-		{domain.NoteTypeSpreadsheet, "/spreadsheet"},
-		{domain.NoteTypeMermaid, "/mermaid"},
-		{domain.NoteTypeMap, "/map"},
 		{domain.NoteTypeYoutube, "/editor"},      // youtube abre no editor markdown
 		{domain.NoteTypeArticle, "/editor"},      // artigo abre no editor markdown
 		{domain.NoteTypeCapture, "/editor"},      // captura abre no editor markdown

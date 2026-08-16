@@ -35,16 +35,14 @@ const (
 )
 
 var (
-	headerRegex           = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-	typstHeaderRegex      = regexp.MustCompile(`(?m)^(=+)\s+(.*)`)
-	hashtagRegex          = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
-	WikilinkRegex         = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
-	mediaLinkRegex        = regexp.MustCompile(`(?i)(?:/file(?:/download)?|/api/file)\?name=([^)\s"&]+)`)
+	headerRegex     = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
+	hashtagRegex    = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
+	WikilinkRegex   = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	mediaLinkRegex  = regexp.MustCompile(`(?i)(?:/file(?:/download)?|/api/file)\?name=([^)\s"&]+)`)
 	markdownFileLinkRegex = regexp.MustCompile(`(?i)\]\(((?:attachments|archives|pdfs|epubs|notes)/[^)\s]+)\)`)
 
-	checkboxTodoRegex    = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
-	todoHeaderRegex      = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
-	todoTypstHeaderRegex = regexp.MustCompile(`^(=+)\s+(.+)$`)
+	checkboxTodoRegex = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
+	todoHeaderRegex   = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
 	
 	todoRegexMu      sync.RWMutex
 	todoRegexPattern string
@@ -104,29 +102,18 @@ func CalculateHash(secao, texto string, tags []string) string {
 }
 
 // applyFrontmatterType aplica comportamentos específicos de tipo baseado no campo "type:" do frontmatter.
-// Retorna as fileTags atualizadas e o flag isTypst.
-func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fileTags []string) ([]string, bool) {
-	isTypst := false
+// Retorna as fileTags atualizadas.
+func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fileTags []string) []string {
 	// Tag canônica a garantir; tipos binários também limpam o texto
 	var canonicalTag string
 	clearText := false
 
 	switch typeStr {
-	case "spreadsheet":
-		canonicalTag = "spreadsheet"
-		clearText = true
-	case "typst":
-		canonicalTag = "typst"
-		isTypst = true
-	case "mermaid":
-		canonicalTag = "mermaid"
 	case "drawing":
 		canonicalTag = "drawing"
 		clearText = true
-	case "markmap", "mindmap":
-		canonicalTag = "markmap"
 	default:
-		return fileTags, isTypst
+		return fileTags
 	}
 
 	if clearText {
@@ -137,11 +124,11 @@ func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fil
 	// Garante que a tag canônica esteja presente
 	for _, t := range fileTags {
 		if t == canonicalTag {
-			return fileTags, isTypst
+			return fileTags
 		}
 	}
 	fileTags = append(fileTags, canonicalTag)
-	return fileTags, isTypst
+	return fileTags
 }
 
 
@@ -165,7 +152,6 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	var docs []Document
 	var fileTags []string
 	var links []string
-	isTypst := false
 
 	// Parse frontmatter
 	var metaParts []string
@@ -215,7 +201,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				// Aplica comportamentos e tag canônica conforme o type: do frontmatter
 				if typeRaw, ok := fm["type"]; ok {
 					if typeStr, ok := typeRaw.(string); ok {
-						fileTags, isTypst = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
+						fileTags = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
 					}
 				}
 			}
@@ -234,21 +220,19 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract hashtags from body
-	if !isTypst && !strings.Contains(strings.Join(fileTags, ","), "mermaid") {
-		tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
-		for _, m := range tagMatches {
-			if len(m) > 1 {
-				tag := strings.ToLower(m[1])
-				exists := false
-				for _, existing := range fileTags {
-					if existing == tag {
-						exists = true
-						break
-					}
+	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
+	for _, m := range tagMatches {
+		if len(m) > 1 {
+			tag := strings.ToLower(m[1])
+			exists := false
+			for _, existing := range fileTags {
+				if existing == tag {
+					exists = true
+					break
 				}
-				if !exists && tag != "" {
-					fileTags = append(fileTags, tag)
-				}
+			}
+			if !exists && tag != "" {
+				fileTags = append(fileTags, tag)
 			}
 		}
 	}
@@ -305,9 +289,6 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 
 	// Split by headers
 	activeHeaderRegex := headerRegex
-	if isTypst {
-		activeHeaderRegex = typstHeaderRegex
-	}
 	matches := activeHeaderRegex.FindAllStringSubmatchIndex(text, -1)
 	ordem := 0
 	headerStack := make([]string, 7)
@@ -405,40 +386,14 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 // ExtractTitle extrai o título do primeiro heading markdown (linha iniciada com #).
 // Se não houver heading, retorna o nome do arquivo sem extensão.
 func ExtractTitle(content, filename string) string {
-	text := strings.TrimLeft(content, " \t\r\n\xef\xbb\xbf")
-	isTypst := false
-	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
-		endIdx := strings.Index(text[4:], "\n---")
-		if endIdx != -1 {
-			endIdx += 4
-			yamlContent := text[4:endIdx]
-			var fm map[string]interface{}
-			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
-				if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
-					isTypst = true
-				}
-			}
-		}
-	}
-
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if isTypst {
-			if strings.HasPrefix(trimmed, "=") {
-				// É um heading typst; remove os = e espaços iniciais
-				clean := strings.TrimSpace(strings.TrimLeft(trimmed, "="))
-				if clean != "" {
-					return clean
-				}
-			}
-		} else {
-			if strings.HasPrefix(trimmed, "#") {
-				// É um heading markdown; remove os # e espaços iniciais
-				clean := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
-				if clean != "" {
-					return clean
-				}
+		if strings.HasPrefix(trimmed, "#") {
+			// É um heading markdown; remove os # e espaços iniciais
+			clean := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if clean != "" {
+				return clean
 			}
 		}
 	}
@@ -474,29 +429,18 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 	currentSection := "Geral"
 	lineNum := 0
 	startIdx := 0
-	isTypst := false
 
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
 		for i := 1; i < len(lines); i++ {
 			if strings.TrimSpace(lines[i]) == "---" {
 				startIdx = i + 1
 				lineNum = i + 1
-				yamlContent := strings.Join(lines[1:i], "\n")
-				var fm map[string]interface{}
-				if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
-					if tRaw, ok := fm["type"]; ok && tRaw == "typst" {
-						isTypst = true
-					}
-				}
 				break
 			}
 		}
 	}
 
 	activeTodoHeaderRegex := todoHeaderRegex
-	if isTypst {
-		activeTodoHeaderRegex = todoTypstHeaderRegex
-	}
 
 	for i := startIdx; i < len(lines); i++ {
 		line := lines[i]
