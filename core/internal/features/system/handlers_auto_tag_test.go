@@ -101,3 +101,43 @@ func TestHandleApplyAutoTag_WithoutBodyUsesSavedRules(t *testing.T) {
 		t.Errorf("esperava tag 'stale' na nota, got %v", tags)
 	}
 }
+
+func TestHandleApplyAutoTag_UnknownContentLengthStillReadsBody(t *testing.T) {
+	ctx := newTestContext(t)
+
+	oldMtime := time.Now().Add(-45 * 24 * time.Hour).Format(time.RFC3339)
+	path := "notes/unknown-cl.md"
+	content := "---\ntitle: Unknown\n---\nConteudo"
+	if err := ctx.Store.SaveNote(path, content, oldMtime); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+	if err := ctx.Store.SetFileMod(path, oldMtime); err != nil {
+		t.Fatalf("SetFileMod: %v", err)
+	}
+
+	body := `[{"days":30,"tag":"stale"}]`
+	req := httptest.NewRequest("POST", "/api/settings/auto-tag/apply", strings.NewReader(body))
+	req.ContentLength = -1
+	rr := httptest.NewRecorder()
+	ctx.HandleApplyAutoTag(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: %d, body: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Status   string `json:"status"`
+		Modified int    `json:"modified"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Modified != 1 {
+		t.Fatalf("esperava 1 nota modificada com body mesmo com ContentLength=-1, got %+v", resp)
+	}
+
+	tags, _ := ctx.Store.GetFileTags(path)
+	if len(tags) != 1 || tags[0] != "stale" {
+		t.Fatalf("esperava tag 'stale' na nota, got %v", tags)
+	}
+}

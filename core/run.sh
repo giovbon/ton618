@@ -14,8 +14,35 @@ NC='\033[0m'
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 DATA_DIR="$BASE_DIR/data"
 
+# Resolve o binário do Go em ambientes em que o toolchain fica em local não padrão
+if ! command -v go >/dev/null 2>&1; then
+    for candidate in \
+        /usr/local/go/bin/go \
+        /usr/lib/go/bin/go \
+        "$HOME/go/bin/go" \
+        /snap/go/current/bin/go; do
+        if [ -x "$candidate" ]; then
+            export PATH="$(dirname "$candidate"):$PATH"
+            break
+        fi
+    done
+fi
+
+# Fallback para toolchains baixados pelo Go em $HOME/go/pkg/mod/.../bin/go
+if ! command -v go >/dev/null 2>&1; then
+    toolchain_go="$(find "$HOME/go/pkg/mod" -path '*/bin/go' 2>/dev/null | head -n 1 || true)"
+    if [ -n "$toolchain_go" ] && [ -x "$toolchain_go" ]; then
+        export PATH="$(dirname "$toolchain_go"):$PATH"
+    fi
+fi
+
 # Centraliza caminhos do Go para o sistema e ambiente do usuário
 export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin:$HOME/.local/bin"
+
+if ! command -v go >/dev/null 2>&1; then
+    echo -e "${RED}❌ Go não foi encontrado no PATH. Instale o Go ou ajuste o caminho do toolchain.${NC}"
+    exit 127
+fi
 
 # Carregar .env se existir
 if [ -f "$BASE_DIR/.env" ]; then

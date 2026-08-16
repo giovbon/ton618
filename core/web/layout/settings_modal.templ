@@ -72,17 +72,13 @@ templ SettingsModal() {
 
                     <form id="bulk-archive-form" hx-post="/api/bulk-delete" hx-target="#bulk-preview-area">
                         <input type="hidden" name="preview" value="true" />
-                        <!-- Filtro: Por Tag (múltiplas) -->
+                        <!-- Filtro: Por Tag -->
                         <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 mb-6">
-                            <label class="flex items-center gap-3 cursor-pointer mb-3">
-                                <input type="checkbox" name="by_tag" value="true" class="accent-sky-500 w-4 h-4 rounded" onchange="document.getElementById('filter-tag-names').disabled = !this.checked;" />
-                                <span class="text-sm font-semibold text-zinc-200">Filtrar por tag(s)</span>
-                            </label>
-                            <div class="ml-7">
-                                <label class="block text-xs text-zinc-500 mb-2">Notas que contenham estas tags (separadas por vírgula):</label>
-                                <input type="text" name="tag_name" id="filter-tag-names" placeholder="ex: temporario, rascunho, lixo" disabled
-                                    class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-50" />
-                            </div>
+                            <label class="block text-sm font-semibold text-zinc-200 mb-3">Filtrar por tag</label>
+                            <label class="block text-xs text-zinc-500 mb-2">Notas que contenham uma ou mais tags (separadas por vírgula):</label>
+                            <input type="text" name="tag_name" id="filter-tag-names" placeholder="ex: temporario, rascunho, lixo"
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 transition-colors" />
+                            <input type="hidden" name="by_tag" value="true" />
                         </div>
 
                         <button type="submit"

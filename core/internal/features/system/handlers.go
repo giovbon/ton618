@@ -3,6 +3,7 @@ package system
 import (
 	"compress/gzip"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -972,32 +973,41 @@ func (ctx *HandlerContext) HandlePostAutoTagSettings(w http.ResponseWriter, r *h
 // POST /api/settings/auto-tag/apply
 func (ctx *HandlerContext) HandleApplyAutoTag(w http.ResponseWriter, r *http.Request) {
 	// Se o corpo trouxer regras, salva-as antes de aplicar (mesma validação do POST de config).
-	if r.Body != nil && r.ContentLength > 0 {
-		var incomingRules []domain.AutoTagRule
-		if err := json.NewDecoder(r.Body).Decode(&incomingRules); err != nil {
-			http.Error(w, "json invalido", http.StatusBadRequest)
-			return
-		}
-		for i, rule := range incomingRules {
-			if rule.Days <= 0 {
-				http.Error(w, "os dias devem ser maiores que zero", http.StatusBadRequest)
-				return
-			}
-			incomingRules[i].Tag = strings.TrimSpace(rule.Tag)
-			incomingRules[i].Tag = strings.TrimPrefix(incomingRules[i].Tag, "#")
-			if incomingRules[i].Tag == "" {
-				http.Error(w, "a tag não pode ser vazia", http.StatusBadRequest)
-				return
-			}
-		}
-		configJSON, err := json.Marshal(incomingRules)
+	// A verificação por ContentLength > 0 falha em HTTP/2/streaming, onde o valor pode ser -1
+	// mesmo quando há body válido. Por isso lemos o payload quando houver qualquer conteúdo.
+	if r.Body != nil {
+		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, "erro ao processar dados", http.StatusInternalServerError)
+			http.Error(w, "erro ao ler corpo da requisição", http.StatusBadRequest)
 			return
 		}
-		if err := ctx.Store.SetSetting("auto_tag_decay_config", string(configJSON)); err != nil {
-			http.Error(w, "erro ao salvar", http.StatusInternalServerError)
-			return
+		if len(bodyBytes) > 0 {
+			var incomingRules []domain.AutoTagRule
+			if err := json.Unmarshal(bodyBytes, &incomingRules); err != nil {
+				http.Error(w, "json invalido", http.StatusBadRequest)
+				return
+			}
+			for i, rule := range incomingRules {
+				if rule.Days <= 0 {
+					http.Error(w, "os dias devem ser maiores que zero", http.StatusBadRequest)
+					return
+				}
+				incomingRules[i].Tag = strings.TrimSpace(rule.Tag)
+				incomingRules[i].Tag = strings.TrimPrefix(incomingRules[i].Tag, "#")
+				if incomingRules[i].Tag == "" {
+					http.Error(w, "a tag não pode ser vazia", http.StatusBadRequest)
+					return
+				}
+			}
+			configJSON, err := json.Marshal(incomingRules)
+			if err != nil {
+				http.Error(w, "erro ao processar dados", http.StatusInternalServerError)
+				return
+			}
+			if err := ctx.Store.SetSetting("auto_tag_decay_config", string(configJSON)); err != nil {
+				http.Error(w, "erro ao salvar", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
