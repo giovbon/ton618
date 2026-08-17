@@ -38,7 +38,7 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	data := buildEditorData("Editor - "+filename, filename, nd)
+	data := buildEditorData("Editor - "+domain.DisplayName(filename), filename, nd)
 	data.AllTags = nd.AllTags
 	Editor(data).Render(r.Context(), w)
 }
@@ -59,6 +59,6 @@ func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	data := buildEditorData("Desenho - "+filename, filename, nd)
+	data := buildEditorData("Desenho - "+domain.DisplayName(filename), filename, nd)
 	Drawing(data).Render(r.Context(), w)
 }

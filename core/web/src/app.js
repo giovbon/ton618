@@ -19,6 +19,26 @@ if (typeof document !== 'undefined') {
     }
 }
 
+// ── Auth Header helper (para XHR/XMLHttpRequest) ──
+// O restante do app injeta o header Authorization via fetch/HTMX,
+// mas uploads via XHR (PDF/anexo) não fazem isso automaticamente.
+// Sem esse header, quando o cookie ton_auth expira (24h) mas o
+// localStorage ainda tem o token, o servidor responde 401 e o
+// upload falha com "Erro ao criar anexo.".
+function getAuthHeader() {
+    var auth = localStorage.getItem("ton_auth");
+    if (!auth) {
+        var cookieMatch = document.cookie.match(/(?:^|;\s*)ton_auth=([^;]+)/);
+        if (cookieMatch) {
+            var cookieVal = decodeURIComponent(cookieMatch[1]);
+            auth = cookieVal.startsWith("Basic ")
+                ? cookieVal
+                : "Basic " + cookieVal;
+        }
+    }
+    return auth;
+}
+
 // ── PDF Upload ──
 /** @type {HTMLElement | null} */
 var activePdfUploadButton = null;
@@ -38,6 +58,10 @@ document.addEventListener("change", function (e) {
         
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "/upload", true);
+        var auth = getAuthHeader();
+        if (auth) {
+            xhr.setRequestHeader("Authorization", auth);
+        }
         
         xhr.upload.addEventListener("progress", function (evt) {
             if (evt.lengthComputable) {
@@ -84,6 +108,10 @@ if (zipInput) {
 
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/upload-attachment", true);
+        var auth = getAuthHeader();
+        if (auth) {
+            xhr.setRequestHeader("Authorization", auth);
+        }
         
         xhr.upload.addEventListener("progress", function (evt) {
             if (evt.lengthComputable) {

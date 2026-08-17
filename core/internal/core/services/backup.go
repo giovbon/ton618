@@ -3,11 +3,16 @@ package services
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
+	"context"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"ton618/core/internal/repository"
@@ -123,13 +128,32 @@ func selectCompressionMethod(filename string) uint16 {
 }
 
 // CreateStream gera o arquivo ZIP enviando o fluxo de dados diretamente para out (ex: http.ResponseWriter).
+// Usa context.Background (sem cancelamento). Prefira CreateStreamContext quando
+// houver um contexto HTTP disponível para abortar se o cliente desconectar.
 func (s *BackupService) CreateStream(out io.Writer, full bool) error {
+	return s.CreateStreamContext(context.Background(), out, full)
+}
+
+// CreateStreamContext gera o ZIP em fluxo direto para out, observando ctx.
+// Se o cliente desconectar (ctx cancelado) ou qualquer escrita falhar, aborta
+// imediatamente e retorna o erro — evita comprimir dados para uma conexão morta
+// e garante que o handler registre a falha (em vez de engolir o erro e entregar
+// um ZIP truncado/corrompido).
+func (s *BackupService) CreateStreamContext(ctx context.Context, out io.Writer, full bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	allNotes, _ := s.notes.GetAllNotes()
 
 	zw := zip.NewWriter(out)
 	seen := make(map[string]bool)
 
 	// 1. Notas do DB — conteúdo markdown
+	// Recolhe as notas e comprime em paralelo: o Deflate é CPU-bound e era o
+	// gargalo em máquinas fracas (ex: ARMv7). A escrita no ZIP permanece
+	// serializada, mas a compressão roda num pool limitado de workers.
+	var entries []noteEntry
 	for filename, mtimeStr := range allNotes {
 		if strings.HasPrefix(filename, "archives/") {
 			continue
@@ -160,17 +184,31 @@ func (s *BackupService) CreateStream(out io.Writer, full bool) error {
 			zipData = []byte(content)
 		}
 
-		addToZip(zw, zipFilename, zipData, repository.ParseMtime(mtimeStr))
+		entries = append(entries, noteEntry{
+			name:    zipFilename,
+			data:    zipData,
+			modTime: repository.ParseMtime(mtimeStr),
+		})
 		seen[filename] = true
 		seen[originalFilename] = true
 		seen[zipFilename] = true
 	}
 
+	if err := s.writeNotesParallel(ctx, zw, entries); err != nil {
+		return err
+	}
+
 	// 2. Arquivos do disco (PDFs, attachments, imagens, notas sem conteúdo no DB, etc.)
+	// I/O-bound (zip.Store / io.Copy) — mantém sequencial, mas observa o ctx e
+	// propaga erros (antes eram engolidos com `_ =`).
 	if full {
-		_ = filepath.WalkDir(s.docsDir, func(path string, d os.DirEntry, err error) error {
+		if err := filepath.WalkDir(s.docsDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
+			}
+
+			if err := ctx.Err(); err != nil {
+				return err
 			}
 
 			relPath, err := filepath.Rel(s.docsDir, path)
@@ -191,10 +229,14 @@ func (s *BackupService) CreateStream(out io.Writer, full bool) error {
 				modTime = repository.ParseMtime(mtimeStr)
 			}
 
-			_ = addFileToZip(zw, relPath, path, modTime)
+			if err := addFileToZip(zw, relPath, path, modTime); err != nil {
+				return err
+			}
 			seen[relPath] = true
 			return nil
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	if err := zw.Close(); err != nil {
@@ -212,19 +254,137 @@ func (s *BackupService) Create(full bool) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func addToZip(zw *zip.Writer, name string, data []byte, modTime time.Time) {
-	h := &zip.FileHeader{
-		Name:   name,
-		Method: selectCompressionMethod(name),
-	}
-	if !modTime.IsZero() {
-		h.SetModTime(modTime)
-	}
-	w, err := zw.CreateHeader(h)
+// ── Compressão paralela das notas ──
+
+// noteEntry é uma nota a ser gravada no ZIP (já com nome/transformação aplicados).
+type noteEntry struct {
+	name    string
+	data    []byte
+	modTime time.Time
+}
+
+// compressedEntry é o resultado da compressão de uma noteEntry, pronto para
+// ser gravado via zip.Writer.CreateRaw (que aceita dados já comprimidos).
+type compressedEntry struct {
+	name    string
+	method  uint16
+	crc32   uint32
+	uncomp  uint64
+	comp    uint64
+	data    []byte
+	modTime time.Time
+}
+
+// compressEntry comprime a entrada com DEFLATE e calcula CRC32/tamanhos.
+// É chamado concorrentemente pelos workers do pool.
+func compressEntry(e noteEntry) compressedEntry {
+	var buf bytes.Buffer
+	method := uint16(zip.Deflate)
+	fw, err := flate.NewWriter(&buf, flate.DefaultCompression)
 	if err != nil {
-		return
+		// Fallback defensivo: entra sem compressão (Store).
+		method = zip.Store
+		buf.Write(e.data)
+	} else {
+		fw.Write(e.data)
+		fw.Close()
 	}
-	w.Write(data)
+	return compressedEntry{
+		name:    e.name,
+		method:  method,
+		crc32:   crc32.ChecksumIEEE(e.data),
+		uncomp:  uint64(len(e.data)),
+		comp:    uint64(buf.Len()),
+		data:    buf.Bytes(),
+		modTime: e.modTime,
+	}
+}
+
+// writeNotesParallel comprime as notas em um pool limitado de workers
+// (compressão é CPU-bound) e grava no ZIP sequencialmente via CreateRaw.
+// O número de workers é limitado a GOMAXPROCS (máx. 4) para não sobrecarregar
+// máquinas fracas (ex: ARMv7 de 4 núcleos) nem estourar memória.
+func (s *BackupService) writeNotesParallel(ctx context.Context, zw *zip.Writer, entries []noteEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	workers := runtime.GOMAXPROCS(0)
+	if workers > 4 {
+		workers = 4
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	if len(entries) < 2 {
+		workers = 1
+	}
+
+	jobs := make(chan int)
+	results := make(chan compressedEntry, workers)
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				ent := compressEntry(entries[i])
+				select {
+				case results <- ent:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	// Alimenta o pool. Em cancelamento, para de alimentar e fecha o canal para
+	// que os workers terminem sem vazar goroutines.
+	go func() {
+		defer close(jobs)
+		for i := range entries {
+			select {
+			case jobs <- i:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Grava as entradas conforme chegam. O ZIP não exige ordem entre arquivos —
+	// o diretório central é gravado no Close() com os offsets corretos.
+	for res := range results {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		h := &zip.FileHeader{
+			Name:   res.name,
+			Method: res.method,
+		}
+		h.CRC32 = res.crc32
+		h.CompressedSize64 = res.comp
+		h.UncompressedSize64 = res.uncomp
+		if !res.modTime.IsZero() {
+			h.SetModTime(res.modTime)
+		}
+		w, err := zw.CreateRaw(h)
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(res.data); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func addFileToZip(zw *zip.Writer, zipName string, filePath string, modTime time.Time) error {

@@ -68,16 +68,17 @@ func TestNtfyService(t *testing.T) {
 	svc := NewNtfyService(store)
 
 	// Adiciona agendamentos
-	// Data de referência de teste: 2026-07-07T12:00:00 (Terça-feira)
-	refTime := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
+	// Data de referência de teste: 2026-07-07T15:00 (dentro da janela de lead
+	// de 24h do app1, que é 07-07T14:30 → 07-08T14:30)
+	refTime := time.Date(2026, 7, 7, 15, 0, 0, 0, time.UTC)
 
-	// Agendamento 1: Amanhã (2026-07-08) -> Deve disparar no diário
+	// Agendamento 1: 2026-07-08T14:30 -> Deve disparar (dentro da janela de 24h antes)
 	app1 := domain.Appointment{
 		ID:          "app_tomorrow",
 		Description: "Reunião de Alinhamento",
 		EventDate:   "2026-07-08T14:30:00",
 	}
-	// Agendamento 2: Depois de amanhã (2026-07-09) -> Não deve disparar no diário de hoje
+	// Agendamento 2: 2026-07-09T09:00 -> Não deve disparar (janela começa 07-08T09:00)
 	app2 := domain.Appointment{
 		ID:          "app_after_tomorrow",
 		Description: "Dentista",
@@ -87,8 +88,8 @@ func TestNtfyService(t *testing.T) {
 	store.CreateAppointment(app1)
 	store.CreateAppointment(app2)
 
-	// --- 1. Teste de Notificações Diárias (Véspera) ---
-	svc.checkAndSendDailyAppointmentsAt(refTime)
+	// --- 1. Teste de Lembrete por lead time (24h antes do evento) ---
+	svc.checkAndSendEventRemindersAt(refTime)
 
 	mu.Lock()
 	reqCount := len(receivedRequests)
@@ -110,14 +111,14 @@ func TestNtfyService(t *testing.T) {
 		t.Errorf("esperava header Authorization de Basic Auth")
 	}
 	if req.Headers.Get("Priority") != "default" {
-		t.Errorf("esperava prioridade default (média) para diários, obteve %s", req.Headers.Get("Priority"))
+		t.Errorf("esperava prioridade default (média) para lembretes, obteve %s", req.Headers.Get("Priority"))
 	}
 	if req.Headers.Get("Tags") != "calendar" {
 		t.Errorf("esperava tag calendar, obteve %s", req.Headers.Get("Tags"))
 	}
 
 	// Verifica se registrou no banco
-	sent, err := store.HasNotificationBeenSent("daily_app_tomorrow")
+	sent, err := store.HasNotificationBeenSent("lead_24h_app_tomorrow_20260708_1430")
 	if err != nil {
 		t.Fatalf("erro ao checar banco: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestNtfyService(t *testing.T) {
 	}
 
 	// Tenta rodar novamente para ver se bloqueia envio duplicado
-	svc.checkAndSendDailyAppointmentsAt(refTime)
+	svc.checkAndSendEventRemindersAt(refTime)
 	
 	mu.Lock()
 	reqCountAfter := len(receivedRequests)
@@ -185,4 +186,113 @@ func TestNtfyService(t *testing.T) {
 
 func contains(str, substr string) bool {
 	return len(str) >= len(substr) && (str == substr || (len(substr) > 0 && (str[:len(substr)] == substr || contains(str[1:], substr))))
+}
+
+// TestNtfy_LeadTimePrevisivel garante a previsibilidade dos lembretes:
+// o evento é notificado na janela [evento − lead, evento), nunca antes nem
+// depois, com dedup e lead configurável (agenda_notify_hours).
+func TestNtfy_LeadTimePrevisivel(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store.SetSetting("ntfy_url", server.URL)
+	store.SetSetting("ntfy_topic", "test_topic")
+
+	svc := NewNtfyService(store)
+
+	app := domain.Appointment{
+		ID:          "app_lead",
+		Description: "Consulta",
+		EventDate:   "2026-07-08T14:30:00",
+	}
+	store.CreateAppointment(app)
+
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests
+	}
+
+	// 1. Antes da janela (evento − 24h = 07-07T14:30) → NÃO dispara
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 7, 14, 0, 0, 0, time.UTC))
+	if c := count(); c != 0 {
+		t.Fatalf("antes da janela deveria ter 0 notificações, got %d", c)
+	}
+
+	// 2. No início da janela (07-07T14:30 = evento − 24h) → dispara
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 7, 14, 30, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("na janela deveria ter 1 notificação, got %d", c)
+	}
+
+	// 3. Dedup: chamadas seguintes dentro da janela não re-enviam
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 7, 15, 0, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("dedup falhou: got %d", c)
+	}
+
+	// 4. Depois do evento → NÃO dispara (sem lembrete atrasado)
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 8, 15, 0, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("depois do evento não deveria enviar, got %d", c)
+	}
+
+	// 5. Lead configurável (2h): evento 2026-07-09T10:00 → janela [08:00, 10:00)
+	store.SetSetting("agenda_notify_hours", "2")
+	app2 := domain.Appointment{ID: "app_2h", Description: "Reunião 2h", EventDate: "2026-07-09T10:00:00"}
+	store.CreateAppointment(app2)
+
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 9, 7, 59, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("2h: antes da janela deveria ter 1 (só o 1º evento), got %d", c)
+	}
+
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 9, 8, 30, 0, 0, time.UTC))
+	if c := count(); c != 2 {
+		t.Fatalf("2h: na janela deveria ter 2 notificações, got %d", c)
+	}
+
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 9, 9, 0, 0, 0, time.UTC))
+	if c := count(); c != 2 {
+		t.Fatalf("2h: dedup falhou, got %d", c)
+	}
+}
+
+// TestNtfy_LeadHours_PadraoEConfiguravel valida o leitor da configuração de lead.
+func TestNtfy_LeadHours_PadraoEConfiguravel(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	svc := NewNtfyService(store)
+
+	// Sem configuração → padrão 24
+	if got := svc.leadHours(); got != 24 {
+		t.Fatalf("padrão deveria ser 24, got %d", got)
+	}
+
+	store.SetSetting("agenda_notify_hours", "6")
+	if got := svc.leadHours(); got != 6 {
+		t.Fatalf("esperava 6, got %d", got)
+	}
+
+	store.SetSetting("agenda_notify_hours", "0")
+	if got := svc.leadHours(); got != 24 {
+		t.Fatalf("valor inválido (0) deveria cair para 24, got %d", got)
+	}
+
+	store.SetSetting("agenda_notify_hours", "abc")
+	if got := svc.leadHours(); got != 24 {
+		t.Fatalf("valor inválido deveria cair para 24, got %d", got)
+	}
 }

@@ -220,3 +220,47 @@ test('http wrappers em editor-common.js incluem auth headers', (t) => {
     );
   }
 });
+
+/**
+ * Uploads via XMLHttpRequest também precisam de autenticação.
+ *
+ * O app injeta o header Authorization em fetch() (monkey-patch) e HTMX
+ * (htmx:configRequest), mas uploads via XHR (PDF e anexo ZIP) NÃO herdam isso
+ * automaticamente. Sem setRequestHeader("Authorization", getAuthHeader()),
+ * quando o cookie ton_auth expira (24h) mas o localStorage ainda tem o token,
+ * o servidor responde 401 → "Erro ao criar anexo." / "Erro ao fazer upload
+ * do PDF.".
+ */
+test('uploads via XMLHttpRequest incluem header Authorization (getAuthHeader)', (t) => {
+  const filePath = path.join(SRC_DIR, 'app.js');
+  const code = fs.readFileSync(filePath, 'utf8');
+
+  // Endpoints POST protegidos enviados via XMLHttpRequest em src/app.js
+  const xhrEndpoints = ['/upload', '/api/upload-attachment'];
+
+  for (const ep of xhrEndpoints) {
+    let found = 0;
+    let idx = 0;
+    while (true) {
+      const openIdx = code.indexOf(`xhr.open("POST", "${ep}"`, idx);
+      if (openIdx === -1) break;
+      found++;
+
+      const snippet = code.substring(openIdx, openIdx + 300);
+      assert.ok(
+        snippet.includes('setRequestHeader("Authorization"') &&
+          snippet.includes('getAuthHeader()'),
+        `xhr.open("POST", "${ep}") deve setar o header Authorization via ` +
+          `getAuthHeader() (senão o upload falha com 401 após o cookie expirar).\n` +
+          `Código: ${snippet.trim()}`
+      );
+      idx = openIdx + 1;
+    }
+
+    assert.ok(
+      found > 0,
+      `Nenhum XMLHttpRequest para "${ep}" encontrado em ${path.relative(ROOT, filePath)}`
+    );
+  }
+});
+

@@ -26,6 +26,6 @@ func (ctx *HandlerContext) HandleMindmap(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	data := buildEditorData("Markmap - "+filename, filename, nd)
+	data := buildEditorData("Markmap - "+domain.DisplayName(filename), filename, nd)
 	Mindmap(data).Render(r.Context(), w)
 }

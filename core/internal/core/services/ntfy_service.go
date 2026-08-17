@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,30 +77,30 @@ func (s *NtfyService) SendNotification(title, message, priority, tags string) er
 	return nil
 }
 
-func (s *NtfyService) CheckAndSendDailyAppointments() {
-	s.checkAndSendDailyAppointmentsAt(time.Now())
+func (s *NtfyService) CheckAndSendEventReminders() {
+	s.checkAndSendEventRemindersAt(time.Now())
 }
 
-func (s *NtfyService) checkAndSendDailyAppointmentsAt(now time.Time) {
+// checkAndSendEventRemindersAt envia lembretes previsíveis para eventos da
+// agenda: cada evento recebe uma notificação LEAD horas antes do seu horário
+// (padrão 24h, configurável via setting "agenda_notify_hours").
+//
+// Janela de envio: evento − lead <= agora < evento. Assim o lembrete chega em
+// um intervalo previsível (limitado pelo intervalo do poll do ntfy — ver
+// NTFY_POLL_INTERVAL_SEC) e NUNCA após o evento ter começado.
+func (s *NtfyService) checkAndSendEventRemindersAt(now time.Time) {
 	apps, err := s.store.GetAppointments()
 	if err != nil || len(apps) == 0 {
 		return
 	}
 
-	// Usa o timezone configurado pelo usuário (mesmo do frontend da agenda)
-	// para que "amanhã" seja calculado no horário local correto.
-	loc := time.UTC
-	if tzName, err2 := s.store.GetSetting("agenda_timezone"); err2 == nil && tzName != "" {
-		if parsed, err3 := time.LoadLocation(tzName); err3 == nil {
-			loc = parsed
-		}
-	}
+	leadHours := s.leadHours()
+	lead := time.Duration(leadHours) * time.Hour
 
+	// Usa o timezone configurado pelo usuário (mesmo do frontend da agenda)
+	// para que "evento − lead" seja calculado no horário local correto.
+	loc := s.userLocation()
 	nowLocal := now.In(loc)
-	// "Amanhã" começa à meia-noite do próximo dia no fuso do usuário
-	tomorrowLocal := nowLocal.AddDate(0, 0, 1)
-	tomorrowStart := time.Date(tomorrowLocal.Year(), tomorrowLocal.Month(), tomorrowLocal.Day(), 0, 0, 0, 0, loc)
-	tomorrowEnd := tomorrowStart.Add(24 * time.Hour)
 
 	for _, a := range apps {
 		t, err := timeutil.ParseFloatingTime(a.EventDate)
@@ -109,22 +110,55 @@ func (s *NtfyService) checkAndSendDailyAppointmentsAt(now time.Time) {
 		// Interpreta o horário da nota no mesmo timezone do usuário
 		tLocal := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 
-		if tLocal.After(tomorrowStart) && tLocal.Before(tomorrowEnd) {
-			logID := "daily_" + a.ID
-			sent, _ := s.store.HasNotificationBeenSent(logID)
-			if !sent {
-				title := "Lembrete: Agendamento Amanhã"
-				msg := fmt.Sprintf("Você tem um agendamento amanhã às %s:\n%s", t.Format("15:04"), a.Description)
+		notifyAt := tLocal.Add(-lead)
+		if notifyAt.After(nowLocal) || !tLocal.After(nowLocal) {
+			// Ainda não chegou no ponto de notificação OU o evento já passou.
+			continue
+		}
 
-				err := s.SendNotification(title, msg, "default", "calendar")
-				if err != nil {
-					slog.Error("ntfy daily send failed", "error", err)
-				} else {
-					s.store.RecordNotificationSent(logID, "daily", now.Format(time.RFC3339))
-				}
+		// Dedup: uma notificação por lead + evento + horário. Incluir o horário
+		// faz com que mover o evento re-dispare o lembrete no novo horário.
+		logID := fmt.Sprintf("lead_%dh_%s_%s", leadHours, a.ID, tLocal.Format("20060102_1504"))
+		sent, _ := s.store.HasNotificationBeenSent(logID)
+		if sent {
+			continue
+		}
+
+		title := fmt.Sprintf("Lembrete: %s", a.Description)
+		msg := fmt.Sprintf("Faltam %d hora(s) para:\n%s\n%s", leadHours, a.Description, tLocal.Format("02/01 15:04"))
+
+		if err := s.SendNotification(title, msg, "default", "calendar"); err != nil {
+			slog.Error("ntfy lead send failed", "error", err)
+		} else {
+			s.store.RecordNotificationSent(logID, "lead", now.Format(time.RFC3339))
+		}
+	}
+}
+
+// leadHours retorna o lead time (horas antes do evento) configurado.
+// Padrão 24h. Valores inválidos ou <= 0 caem para o padrão.
+func (s *NtfyService) leadHours() int {
+	hours := 24
+	if v, err := s.store.GetSetting("agenda_notify_hours"); err == nil {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				hours = parsed
 			}
 		}
 	}
+	return hours
+}
+
+// userLocation retorna o timezone configurado pelo usuário (default UTC).
+func (s *NtfyService) userLocation() *time.Location {
+	loc := time.UTC
+	if tzName, err := s.store.GetSetting("agenda_timezone"); err == nil && tzName != "" {
+		if parsed, err := time.LoadLocation(tzName); err == nil {
+			loc = parsed
+		}
+	}
+	return loc
 }
 
 func (s *NtfyService) CheckAndSendWeeklySummary() {

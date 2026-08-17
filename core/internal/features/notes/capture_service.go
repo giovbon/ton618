@@ -131,13 +131,16 @@ tags: []
 }
 
 // uniqueFilename garante um nome único incrementando sufixo se necessário.
+// O prefixo "captura-" foi removido da geração: a exibição já o oculta em
+// todos os lugares (DisplayName/sidebar) e ele não é usado para detecção de
+// tipo — manter só poluiria os nomes de arquivo.
 func (s *CaptureService) uniqueFilename(slug string) string {
 	if slug == "" || slug == "-" {
-		slug = fmt.Sprintf("captura-%d", time.Now().Unix())
+		slug = fmt.Sprintf("nota-%d", time.Now().Unix())
 	}
-	filename := fmt.Sprintf("notes/captura-%s.md", slug)
+	filename := fmt.Sprintf("notes/%s.md", slug)
 	for counter := 2; s.store.NoteExists(filename); counter++ {
-		filename = fmt.Sprintf("notes/captura-%s-%d.md", slug, counter)
+		filename = fmt.Sprintf("notes/%s-%d.md", slug, counter)
 	}
 	return filename
 }

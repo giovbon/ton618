@@ -265,7 +265,7 @@
 
         // ── getDisplayName: extrai nome de exibição de um filename ──
         getDisplayName: function (filename) {
-            return filename.split("/").pop().replace(/\.md$/i, "");
+            return (filename.split("/").pop() || "").replace(/^captura-/i, "").replace(/\.md$/i, "");
         },
 
         // ── deleteCurrentNote: genérico para todos os tipos de nota ──

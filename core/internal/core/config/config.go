@@ -9,26 +9,30 @@ import (
 )
 
 type AppConfig struct {
-	DocsDir         string
-	DBPath          string
-	PollIntervalSec time.Duration
-	Port            string
-	WebDir          string
-	StateDir        string
-	AuthUser        string
-	AuthPass        string
+	DocsDir          string
+	DBPath           string
+	PollIntervalSec  time.Duration
+	ScanWorkers      int // workers da indexação inicial (0 = automático)
+	NtfyPollInterval time.Duration // intervalo do poll de notificações ntfy (precisão dos lembretes)
+	Port             string
+	WebDir           string
+	StateDir         string
+	AuthUser         string
+	AuthPass         string
 }
 
 func Load() *AppConfig {
 	cfg := &AppConfig{
-		DocsDir:         getEnv("DOCS_DIR", "./docs"),
-		DBPath:          getEnv("DB_PATH", "./data/ton618.db"),
-		PollIntervalSec: time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
-		Port:            getEnv("PORT", "6180"),
-		WebDir:          getEnv("WEB_DIR", "./web"),
-		StateDir:        getEnv("STATE_DIR", "./data"),
-		AuthUser:        getEnv("AUTH_USER", "admin"),
-		AuthPass:        getEnv("AUTH_PASS", "ton618"),
+		DocsDir:          getEnv("DOCS_DIR", "./docs"),
+		DBPath:           getEnv("DB_PATH", "./data/ton618.db"),
+		PollIntervalSec:  time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
+		ScanWorkers:      getEnvAsInt("SCAN_WORKERS", 0), // 0 = automático (GOMAXPROCS, máx 4)
+		NtfyPollInterval: time.Duration(getEnvAsInt("NTFY_POLL_INTERVAL_SEC", 60)) * time.Second,
+		Port:             getEnv("PORT", "6180"),
+		WebDir:           getEnv("WEB_DIR", "./web"),
+		StateDir:         getEnv("STATE_DIR", "./data"),
+		AuthUser:         getEnv("AUTH_USER", "admin"),
+		AuthPass:         getEnv("AUTH_PASS", "ton618"),
 	}
 
 	// Resolve caminhos relativos para absolutos (essencial no Windows)
@@ -48,6 +52,9 @@ func Load() *AppConfig {
 	// Validações
 	if cfg.PollIntervalSec <= 0 {
 		cfg.PollIntervalSec = 30 * time.Second
+	}
+	if cfg.NtfyPollInterval <= 0 {
+		cfg.NtfyPollInterval = 60 * time.Second
 	}
 	if cfg.Port == "" {
 		cfg.Port = "6180"

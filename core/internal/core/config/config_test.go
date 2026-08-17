@@ -94,7 +94,7 @@ func TestGetEnvAsBool_Fallback(t *testing.T) {
 func TestLoad_Defaults(t *testing.T) {
 	// Garante que nenhuma variavel polua o teste
 	for _, k := range []string{"DOCS_DIR", "DB_PATH", "PORT", "WEB_DIR", "STATE_DIR",
-		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL"} {
+		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL", "SCAN_WORKERS"} {
 		os.Unsetenv(k)
 	}
 
@@ -111,6 +111,53 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.PollIntervalSec != 30*time.Second {
 		t.Fatalf("esperado poll interval 30s, got %v", cfg.PollIntervalSec)
+	}
+	if cfg.ScanWorkers != 0 {
+		t.Fatalf("esperado ScanWorkers 0 (automático), got %d", cfg.ScanWorkers)
+	}
+}
+
+// TestLoad_ScanWorkers garante que SCAN_WORKERS é lido (0 = automático).
+func TestLoad_ScanWorkers(t *testing.T) {
+	os.Unsetenv("SCAN_WORKERS")
+	if cfg := Load(); cfg.ScanWorkers != 0 {
+		t.Fatalf("esperado ScanWorkers 0 por padrão, got %d", cfg.ScanWorkers)
+	}
+
+	os.Setenv("SCAN_WORKERS", "3")
+	defer os.Unsetenv("SCAN_WORKERS")
+	if cfg := Load(); cfg.ScanWorkers != 3 {
+		t.Fatalf("esperado ScanWorkers 3, got %d", cfg.ScanWorkers)
+	}
+
+	os.Setenv("SCAN_WORKERS", "invalido")
+	if cfg := Load(); cfg.ScanWorkers != 0 {
+		t.Fatalf("SCAN_WORKERS inválido deveria cair para 0, got %d", cfg.ScanWorkers)
+	}
+}
+
+// TestLoad_NtfyPollInterval garante o intervalo do poll de notificações
+// (precisão dos lembretes ntfy), com padrão 60s e validação de inválidos.
+func TestLoad_NtfyPollInterval(t *testing.T) {
+	os.Unsetenv("NTFY_POLL_INTERVAL_SEC")
+	if cfg := Load(); cfg.NtfyPollInterval != 60*time.Second {
+		t.Fatalf("esperado padrão 60s, got %v", cfg.NtfyPollInterval)
+	}
+
+	os.Setenv("NTFY_POLL_INTERVAL_SEC", "300")
+	defer os.Unsetenv("NTFY_POLL_INTERVAL_SEC")
+	if cfg := Load(); cfg.NtfyPollInterval != 5*time.Minute {
+		t.Fatalf("esperado 5m, got %v", cfg.NtfyPollInterval)
+	}
+
+	os.Setenv("NTFY_POLL_INTERVAL_SEC", "0")
+	if cfg := Load(); cfg.NtfyPollInterval != 60*time.Second {
+		t.Fatalf("valor inválido (0) deveria cair para 60s, got %v", cfg.NtfyPollInterval)
+	}
+
+	os.Setenv("NTFY_POLL_INTERVAL_SEC", "-5")
+	if cfg := Load(); cfg.NtfyPollInterval != 60*time.Second {
+		t.Fatalf("valor negativo deveria cair para 60s, got %v", cfg.NtfyPollInterval)
 	}
 }
 

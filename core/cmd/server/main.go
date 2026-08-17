@@ -73,19 +73,21 @@ func main() {
 
 	// 4. Indexação inicial
 	slog.Info("Indexação inicial...")
-	watcher.ScanAndIndexAll(store, cfg.DocsDir)
+	watcher.ScanAndIndexAllParallel(store, cfg.DocsDir, cfg.ScanWorkers)
 	slog.Info("Indexação inicial concluída")
 
 	// 5. Agendador de notificações (calendário)
+	// O intervalo (NTFY_POLL_INTERVAL_SEC, padrão 60s) define a precisão dos
+	// lembretes: um evento é notificado no primeiro poll após (evento − lead).
 	ntfySvc := services.NewNtfyService(store)
 	go func() {
-		ticker := time.NewTicker(30 * time.Minute)
+		ticker := time.NewTicker(cfg.NtfyPollInterval)
 		defer ticker.Stop()
 		// Executa uma vez na inicialização
-		ntfySvc.CheckAndSendDailyAppointments()
+		ntfySvc.CheckAndSendEventReminders()
 		ntfySvc.CheckAndSendWeeklySummary()
 		for range ticker.C {
-			ntfySvc.CheckAndSendDailyAppointments()
+			ntfySvc.CheckAndSendEventReminders()
 			ntfySvc.CheckAndSendWeeklySummary()
 		}
 	}()

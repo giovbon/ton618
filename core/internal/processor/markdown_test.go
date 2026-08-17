@@ -90,6 +90,30 @@ func TestProcessMarkdown_Hashtags(t *testing.T) {
 	}
 }
 
+// TestProcessMarkdown_TypeMarkmapGaranteTagCanonica garante que o frontmatter
+// "type: markmap" (ou "type: mindmap") adiciona a tag canônica "markmap" às
+// tags do arquivo. Sem ela, o ícone da nota cai para "nota comum" na sidebar
+// (DetectNoteType depende de tags + caminho, nunca do conteúdo).
+func TestProcessMarkdown_TypeMarkmapGaranteTagCanonica(t *testing.T) {
+	now := time.Now()
+
+	for _, typeStr := range []string{"markmap", "mindmap"} {
+		content := "---\ntype: " + typeStr + "\n---\n# Titulo\n- Topico 1\n- Topico 2"
+		_, _, tags := ProcessMarkdownContent([]byte(content), "notes/meu-mapa.md", now, now)
+
+		found := false
+		for _, tag := range tags {
+			if tag == "markmap" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("type: %s — esperado tag canônica \"markmap\" nas tags, got %v", typeStr, tags)
+		}
+	}
+}
+
 func TestProcessMarkdown_Wikilinks(t *testing.T) {
 	dir := t.TempDir()
 	fp := filepath.Join(dir, "wikilinks.md")

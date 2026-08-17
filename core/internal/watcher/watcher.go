@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -87,15 +88,64 @@ type FileEvent struct {
 // internal WAL checkpoints, significantly improving throughput during
 // bulk operations like initial indexing.
 func ProcessBatch(store *db.Store, events []FileEvent) error {
+	return ProcessBatchParallel(store, events, 1)
+}
+
+// ProcessBatchParallel processa os eventos com um pool limitado de workers,
+// segurando processMu por todo o lote (mesma garantia de exclusividade do
+// ProcessBatch). A fase de parse/extração (CPU-bound: markdown, PDF) roda em
+// paralelo; as escritas no SQLite continuam serializadas pelo WriteMu interno
+// do Store, então a ordem/atomicidade por arquivo é preservada.
+//
+// workers <= 0 usa automático (min(GOMAXPROCS, 4)); workers == 1 mantém o
+// comportamento sequencial. Nunca excede o número de eventos.
+func ProcessBatchParallel(store *db.Store, events []FileEvent, workers int) error {
+	if len(events) == 0 {
+		return nil
+	}
+	workers = normalizeWorkers(workers, len(events))
+
 	processMu.Lock()
 	defer processMu.Unlock()
 
+	eventsCh := make(chan FileEvent)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ev := range eventsCh {
+				if err := processFileLocked(store, ev); err != nil {
+					slog.Error("parallel process file", "file", ev.Filename, "error", err)
+				}
+			}
+		}()
+	}
 	for _, ev := range events {
-		if err := processFileLocked(store, ev); err != nil {
-			slog.Error("batch process file", "file", ev.Filename, "error", err)
+		eventsCh <- ev
+	}
+	close(eventsCh)
+	wg.Wait()
+	return nil
+}
+
+// normalizeWorkers resolve o número de workers do pool de processamento.
+// workers <= 0 → automático (GOMAXPROCS, no máximo 4 — adequado a ARMv7 de 4
+// núcleos sem estourar memória). Nunca retorna menos que 1 nem mais que n.
+func normalizeWorkers(workers, n int) int {
+	if workers <= 0 {
+		workers = runtime.GOMAXPROCS(0)
+		if workers > 4 {
+			workers = 4
 		}
 	}
-	return nil
+	if workers > n {
+		workers = n
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	return workers
 }
 
 // ProcessFile processes a single file event: reads, parses, and indexes the content.
@@ -250,8 +300,14 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 // ── Internal loops ──
 
 // ScanAndIndexAll varre os diretórios monitorados e indexa tudo que encontrar.
-// Chamado uma vez na inicialização do servidor.
+// Chamado uma vez na inicialização do servidor. Usa workers automáticos.
 func ScanAndIndexAll(store *db.Store, docsDir string) {
+	ScanAndIndexAllParallel(store, docsDir, 0)
+}
+
+// ScanAndIndexAllParallel é como ScanAndIndexAll, mas permite configurar o
+// número de workers do pool de indexação (workers <= 0 = automático).
+func ScanAndIndexAllParallel(store *db.Store, docsDir string, workers int) {
 	dbFiles, _ := store.GetAllFileMods()
 	var batchEvents []FileEvent
 
@@ -294,7 +350,7 @@ func ScanAndIndexAll(store *db.Store, docsDir string) {
 	}
 
 	if len(batchEvents) > 0 {
-		slog.Info("Indexando arquivos", "count", len(batchEvents))
-		ProcessBatch(store, batchEvents)
+		slog.Info("Indexando arquivos", "count", len(batchEvents), "workers", normalizeWorkers(workers, len(batchEvents)))
+		ProcessBatchParallel(store, batchEvents, workers)
 	}
 }

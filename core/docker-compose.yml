@@ -13,6 +13,12 @@ services:
       - WEB_DIR=/app/web
       - PORT=6180
       - POLL_INTERVAL_SEC=30
+      # Workers da indexação inicial (0 = automático: GOMAXPROCS, máx 4).
+      # Em ARMv7 (ex: Raspberry Pi 4 núcleos) 2–4 costuma ser o ideal; 1 = sequencial.
+      - SCAN_WORKERS=0
+      # Precisão dos lembretes ntfy da agenda (segundos entre polls; padrão 60).
+      # Menor = mais previsível ("X horas antes do evento"), maior = menos consultas ao banco.
+      - NTFY_POLL_INTERVAL_SEC=60
       - AUTH_USER=admin
       - AUTH_PASS=ton618_secret
       - TZ=America/Sao_Paulo

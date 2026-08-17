@@ -3,6 +3,11 @@ package services
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"hash/crc32"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,6 +169,106 @@ func TestBackup_Conversions(t *testing.T) {
 	}
 	if !foundNormal {
 		t.Error("nota-normal.md nao encontrado no zip")
+	}
+}
+
+// TestBackup_ParallelZipValido garante que o ZIP gerado pela compressão
+// paralela (flate + zip.Writer.CreateRaw) é um ZIP válido, com CRC correto e
+// conteúdo idêntico ao do banco. Sem isso, um erro no CRC/tamanho de qualquer
+// entrada corromperia o backup silenciosamente.
+func TestBackup_ParallelZipValido(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+
+	// Notas suficientes para o pool rodar com >1 worker
+	const n = 12
+	for i := 0; i < n; i++ {
+		content := fmt.Sprintf("# Nota %d\n\n%s\n", i, strings.Repeat("conteudo de teste para compressao repetida ", 20))
+		if err := store.SaveNote(fmt.Sprintf("notes/nota%d.md", i), content, time.Now().Format(time.RFC3339)); err != nil {
+			t.Fatalf("SaveNote: %v", err)
+		}
+	}
+
+	data, err := svc.Create(false)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("ZIP inválido após compressão paralela: %v", err)
+	}
+
+	found := 0
+	for _, f := range zr.File {
+		if f.Method != zip.Deflate {
+			t.Errorf("entrada %s deveria usar DEFLATE, got %d", f.Name, f.Method)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("abrir %s: %v", f.Name, err)
+		}
+		buf, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("ler %s: %v", f.Name, err)
+		}
+		if f.CRC32 != crc32.ChecksumIEEE(buf) {
+			t.Errorf("CRC inválido em %s", f.Name)
+		}
+		if strings.HasPrefix(f.Name, "notes/nota") {
+			found++
+			if !strings.Contains(string(buf), "conteudo de teste") {
+				t.Errorf("conteúdo de %s não bate com o banco", f.Name)
+			}
+		}
+	}
+	if found != n {
+		t.Errorf("esperava %d notas no ZIP, got %d", n, found)
+	}
+}
+
+// TestBackup_CreateStreamContext_Cancelled garante que um contexto cancelado
+// (ex: cliente desconectou) aborta o backup com context.Canceled em vez de
+// continuar comprimindo uma conexão morta.
+func TestBackup_CreateStreamContext_Cancelled(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+
+	for i := 0; i < 20; i++ {
+		if err := store.SaveNote(fmt.Sprintf("notes/nota%d.md", i), fmt.Sprintf("# Nota %d\n%s", i, strings.Repeat("x", 2000)), time.Now().Format(time.RFC3339)); err != nil {
+			t.Fatalf("SaveNote: %v", err)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // simula desconexão já ocorrida antes do início
+
+	var buf bytes.Buffer
+	err := svc.CreateStreamContext(ctx, &buf, false)
+	if err == nil {
+		t.Fatal("esperava erro de contexto cancelado")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("esperava context.Canceled, got %v", err)
+	}
+}
+
+// failingWriter falha em qualquer escrita (simula cliente desconectado / conexão quebrada).
+type failingWriter struct{}
+
+func (failingWriter) Write(p []byte) (int, error) { return 0, io.ErrClosedPipe }
+
+// TestBackup_CreateStreamContext_PropagaErroDeEscrita garante que um erro de
+// escrita não é engolido (antes, `_ = addToZip(...)` escondia falhas e entregava
+// um ZIP truncado sem nenhum log no servidor).
+func TestBackup_CreateStreamContext_PropagaErroDeEscrita(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+	if err := store.SaveNote("notes/uma.md", "# Uma\nconteudo para backup", time.Now().Format(time.RFC3339)); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+
+	err := svc.CreateStreamContext(context.Background(), failingWriter{}, false)
+	if err == nil {
+		t.Fatal("esperava erro de escrita propagado")
 	}
 }
 

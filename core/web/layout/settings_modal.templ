@@ -280,6 +280,16 @@ templ SettingsModal() {
                                 Define as coordenadas para calcular o nascer e pôr do sol no gráfico. O padrão é America/Sao_Paulo.
                             </p>
                         </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-300 mb-2">Notificação antes do evento (horas)</label>
+                            <input id="setting-agenda-notify-hours" type="number" min="1" max="720" value="24"
+                                onchange="saveAgendaNotifyHours(this.value)"
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-sky-500 transition-colors" />
+                            <p class="text-[10px] text-zinc-500 mt-2">
+                                Lembretes via ntfy são enviados N horas antes do evento (padrão 24h = "um dia antes"), de forma previsível.
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -456,6 +466,36 @@ templ SettingsModal() {
                     }
                 }
             }));
+        });
+
+        // Lead time de notificação da agenda (horas antes do evento)
+        window.saveAgendaNotifyHours = function (hours) {
+            var body = new URLSearchParams();
+            body.append('hours', hours);
+            fetch('/api/settings/agenda-notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            }).then(function (r) { return r.json(); })
+              .then(function (d) {
+                  if (!d.ok) alert('Erro ao salvar: ' + (d.error || 'desconhecido'));
+              })
+              .catch(function (e) { alert('Erro ao salvar lead time: ' + e.message); });
+        };
+
+        // Carrega o valor salvo. Roda no DOMContentLoaded para garantir que o
+        // fetch esteja patcheado com o header de autenticação (app.js, defer).
+        document.addEventListener('DOMContentLoaded', function () {
+            var input = document.getElementById('setting-agenda-notify-hours');
+            if (!input) return;
+            fetch('/api/settings/agenda-notify')
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) {
+                    if (d && d.hours && !isNaN(parseInt(d.hours, 10))) {
+                        input.value = parseInt(d.hours, 10);
+                    }
+                })
+                .catch(function (e) { console.error('Erro ao carregar lead time:', e); });
         });
     </script>
 }

@@ -110,7 +110,10 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	}
 	ctx.Store.InsertDocument(doc)
 	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
-	ctx.Store.SetFileMod(filename, time.Now().Format(time.RFC3339))
+	// Salva o mtime em UTC (mesmo formato usado pelo watcher em
+	// processFileLocked). Formato local (ex: -03:00) misturado com UTC (Z)
+	// quebra a ordenação por string da sidebar/database.
+	ctx.Store.SetFileMod(filename, time.Now().UTC().Format(time.RFC3339))
 
 	slog.Info("Anexo ZIP criado", "file", filename, "arquivos", len(files), "tamanho", filepath.Base(zipPath))
 

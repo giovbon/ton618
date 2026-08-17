@@ -72,6 +72,7 @@ Serve como referência para manter consistência em contribuições futuras.
 - **Store concreto, não interface**: `db.Store` é concreto. Repository interfaces existem só onde há benefício claro (testabilidade de serviços). Não criar interface só por "bom costume".
 - **sqlc para queries SQL**: Queries em `query.sql`, geradas para `internal/core/db/generated/`. Evitar SQL espalhado no código.
 - **Mutex para escrita**: `WriteMu sync.Mutex` no Store serializa escritas. Leituras concorrentes são livres (WAL).
+- **Mtimes sempre em UTC (RFC3339 com `Z`)**: `time.Now().UTC().Format(time.RFC3339)`. Gravar mtime em formato local (ex: `-03:00`) misturado com UTC quebra a ordenação por string da sidebar/database. A ordenação em `system/handlers.go` usa `mtimeNewer()`, que compara `time.Time` parseado (robusto a formatos mistos/legados). Corrigido em 17/08/2026 (`HandleUploadAttachment` gravava local) com testes de regressão em `system/handlers_mtime_test.go` e `notes/handlers_upload_mtime_test.go`.
 - **Testes com banco real**: `newTestStore(t)` cria SQLite em `t.TempDir()` — sem mocks, sem abstração.
 - **Testes de integração no mesmo package**: `embedding_integration_test.go` testa fluxos completos (salvar → indexar → buscar → deletar).
 

@@ -275,7 +275,7 @@ func (ctx *HandlerContext) HandleGetAllNotes(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	sort.Slice(noteList, func(i, j int) bool {
-		return noteList[i].Mtime > noteList[j].Mtime
+		return mtimeNewer(noteList[i].Mtime, noteList[j].Mtime)
 	})
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	httputil.WriteJSON(w, map[string]interface{}{
@@ -293,7 +293,7 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 	}
 
 	sort.Slice(noteList, func(i, j int) bool {
-		return noteList[i].Mtime > noteList[j].Mtime
+		return mtimeNewer(noteList[i].Mtime, noteList[j].Mtime)
 	})
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -349,6 +349,25 @@ func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {
 	}
 
 	return nameMatches
+}
+
+// mtimeNewer compara dois mtimes (RFC3339) e retorna true se a é estritamente
+// mais recente que b. Compara os timestamps parseados (não a string), para que
+// formatos mistos (UTC "Z" vs offset "-03:00") ordene corretamente pelo
+// instante real. Valores inválidos são tratados como os mais antigos (vão
+// para o fim da ordenação descendente).
+func mtimeNewer(a, b string) bool {
+	_, errA := time.Parse(time.RFC3339, a)
+	_, errB := time.Parse(time.RFC3339, b)
+	if errA != nil {
+		return false // a inválido → nunca fica antes de b
+	}
+	if errB != nil {
+		return true // b inválido → a (válido) fica antes
+	}
+	ta, _ := time.Parse(time.RFC3339, a)
+	tb, _ := time.Parse(time.RFC3339, b)
+	return ta.After(tb)
 }
 
 func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Request) {
@@ -463,9 +482,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 			}
 
-			// Title logic: o título é o nome da nota (o nome do arquivo com a extensão .md)
-			parts := strings.Split(n.Arquivo, "/")
-			row["titulo"] = parts[len(parts)-1]
+			// Title logic: o título é o nome da nota (nome do arquivo com .md),
+			// sem o prefixo interno "captura-" (uniforme com a sidebar/editor).
+			row["titulo"] = domain.DisplayName(n.Arquivo)
 
 			// Tags
 			if len(n.Tags) > 0 {
@@ -772,6 +791,29 @@ func (ctx *HandlerContext) HandlePostNtfySettings(w http.ResponseWriter, r *http
 	ctx.Store.SetSetting("ntfy_pass", pass)
 
 	NtfySettings(url, topic, user, pass, true).Render(r.Context(), w)
+}
+
+// HandleGetAgendaNotifyHours retorna o lead time de notificação da agenda
+// (horas antes do evento; padrão 24). GET /api/settings/agenda-notify
+func (ctx *HandlerContext) HandleGetAgendaNotifyHours(w http.ResponseWriter, r *http.Request) {
+	hours := "24"
+	if v, err := ctx.Store.GetSetting("agenda_notify_hours"); err == nil && v != "" {
+		hours = v
+	}
+	httputil.WriteJSON(w, map[string]interface{}{"hours": hours})
+}
+
+// HandlePostAgendaNotifyHours define o lead time de notificação da agenda.
+// POST /api/settings/agenda-notify  (form: hours)
+func (ctx *HandlerContext) HandlePostAgendaNotifyHours(w http.ResponseWriter, r *http.Request) {
+	raw := strings.TrimSpace(r.FormValue("hours"))
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 || n > 720 {
+		httputil.WriteJSON(w, map[string]interface{}{"ok": false, "error": "horas inválidas (1–720)"})
+		return
+	}
+	ctx.Store.SetSetting("agenda_notify_hours", strconv.Itoa(n))
+	httputil.WriteJSON(w, map[string]interface{}{"ok": true, "hours": n})
 }
 
 // HandleGetSemanticDevice retorna o device configurado para embeddings ("wasm" ou "auto").

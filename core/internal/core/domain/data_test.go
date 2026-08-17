@@ -4,6 +4,31 @@ import (
 	"testing"
 )
 
+// TestDisplayName_RemoveCapturaPrefix garante que o prefixo interno "captura-"
+// não aparece no nome exibido (editor, banco de dados, backlinks, busca),
+// mantendo uniformidade com a sidebar — que já o removia.
+func TestDisplayName_RemoveCapturaPrefix(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"captura com caminho", "notes/captura-terremoto-7-4.md", "terremoto-7-4.md"},
+		{"captura sem caminho", "captura-artigo-web.md", "artigo-web.md"},
+		{"nota normal mantém", "notes/nota-qualquer.md", "nota-qualquer.md"},
+		{"pdf mantém", "pdfs/doc.pdf", "doc.pdf"},
+		{"anexo mantém", "attachments/arquivo.zip", "arquivo.zip"},
+		{"captura em subcaminho", "notes/captura-a.md", "a.md"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DisplayName(tc.in); got != tc.want {
+				t.Errorf("DisplayName(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDetectNoteType(t *testing.T) {
 	tests := []struct {
 		name     string

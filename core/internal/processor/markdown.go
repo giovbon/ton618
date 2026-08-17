@@ -112,6 +112,8 @@ func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fil
 	case "drawing":
 		canonicalTag = "drawing"
 		clearText = true
+	case "markmap", "mindmap":
+		canonicalTag = "markmap"
 	default:
 		return fileTags
 	}

@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -285,6 +286,134 @@ func TestScanAndIndexAll(t *testing.T) {
 
 	if c := store.GetDocumentCount(); c != 2 {
 		t.Errorf("ScanAndIndexAll should index 2 files, got %d", c)
+	}
+}
+
+// ── ScanAndIndexAllParallel (worker pool) ──────────────────────
+
+// TestScanAndIndexAllParallel_IndexesAllFiles garante que o pool paralelo
+// indexa todos os arquivos encontrados (imagens → 1 doc cada).
+func TestScanAndIndexAllParallel_IndexesAllFiles(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	const n = 12
+	for i := 0; i < n; i++ {
+		fp := filepath.Join(cfg.DocsDir, "attachments", fmt.Sprintf("par-%02d.png", i))
+		os.MkdirAll(filepath.Dir(fp), 0755)
+		os.WriteFile(fp, []byte("fake png "+fmt.Sprint(i)), 0644)
+	}
+
+	ScanAndIndexAllParallel(store, cfg.DocsDir, 4)
+
+	if c := store.GetDocumentCount(); c != n {
+		t.Errorf("esperava %d documentos (imagens), got %d", n, c)
+	}
+}
+
+// TestScanAndIndexAllParallel_SingleWorker valida o caminho sequencial
+// (workers=1) — mesmo comportamento do ProcessBatch antigo.
+func TestScanAndIndexAllParallel_SingleWorker(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	const n = 8
+	for i := 0; i < n; i++ {
+		fp := filepath.Join(cfg.DocsDir, "attachments", fmt.Sprintf("seq-%02d.png", i))
+		os.MkdirAll(filepath.Dir(fp), 0755)
+		os.WriteFile(fp, []byte("fake png "+fmt.Sprint(i)), 0644)
+	}
+
+	ScanAndIndexAllParallel(store, cfg.DocsDir, 1)
+
+	if c := store.GetDocumentCount(); c != n {
+		t.Errorf("esperava %d documentos, got %d", n, c)
+	}
+}
+
+// TestScanAndIndexAllParallel_AutoWorkers valida workers=0 (automático).
+func TestScanAndIndexAllParallel_AutoWorkers(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	for i := 0; i < 6; i++ {
+		fp := filepath.Join(cfg.DocsDir, "attachments", fmt.Sprintf("auto-%02d.png", i))
+		os.MkdirAll(filepath.Dir(fp), 0755)
+		os.WriteFile(fp, []byte("fake png "+fmt.Sprint(i)), 0644)
+	}
+
+	ScanAndIndexAllParallel(store, cfg.DocsDir, 0)
+
+	if c := store.GetDocumentCount(); c != 6 {
+		t.Errorf("esperava 6 documentos, got %d", c)
+	}
+}
+
+// TestProcessBatchParallel_MisturaTipos garante que o pool paralelo processa
+// tipos diferentes corretamente: imagens (1 doc, sem file_mod) e zips
+// (0 docs, com file_mod).
+func TestProcessBatchParallel_MisturaTipos(t *testing.T) {
+	cfg := newTestConfig(t)
+	store := newTestStore(t)
+
+	img1 := filepath.Join(cfg.DocsDir, "attachments", "mix1.png")
+	img2 := filepath.Join(cfg.DocsDir, "attachments", "mix2.png")
+	zipF := filepath.Join(cfg.DocsDir, "attachments", "mix.zip")
+	os.MkdirAll(filepath.Dir(img1), 0755)
+	os.WriteFile(img1, []byte("png1"), 0644)
+	os.WriteFile(img2, []byte("png2"), 0644)
+	os.WriteFile(zipF, []byte("zip fake"), 0644)
+
+	now := time.Now()
+	events := []FileEvent{
+		{Path: img1, Filename: "attachments/mix1.png", ModTime: now, Type: "modify"},
+		{Path: img2, Filename: "attachments/mix2.png", ModTime: now, Type: "modify"},
+		{Path: zipF, Filename: "attachments/mix.zip", ModTime: now, Type: "modify"},
+	}
+	if err := ProcessBatchParallel(store, events, 3); err != nil {
+		t.Fatalf("ProcessBatchParallel: %v", err)
+	}
+
+	if c := store.GetDocumentCount(); c != 2 {
+		t.Errorf("esperava 2 docs (imagens), got %d", c)
+	}
+	mods, _ := store.GetAllFileMods()
+	if _, ok := mods["attachments/mix.zip"]; !ok {
+		t.Error("zip deveria ter file_mod")
+	}
+	if _, ok := mods["attachments/mix1.png"]; ok {
+		t.Error("imagem não deveria ter file_mod")
+	}
+}
+
+// TestProcessBatchParallel_EventosVazios garante que não trava nem erra com lote vazio.
+func TestProcessBatchParallel_EventosVazios(t *testing.T) {
+	store := newTestStore(t)
+	if err := ProcessBatchParallel(store, nil, 4); err != nil {
+		t.Fatalf("lote vazio deveria retornar nil, got %v", err)
+	}
+}
+
+// TestNormalizeWorkers cobre os casos determinísticos do cálculo de workers.
+func TestNormalizeWorkers(t *testing.T) {
+	cases := []struct {
+		name          string
+		workers, n    int
+		want          int
+	}{
+		{"explícito", 3, 10, 3},
+		{"explícito maior que eventos é limitado", 8, 5, 5},
+		{"sequencial", 1, 10, 1},
+		{"auto com um evento", 0, 1, 1},
+		{"auto com zero eventos", 0, 0, 1},
+		{"negativo vira mínimo", -3, 1, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeWorkers(tc.workers, tc.n); got != tc.want {
+				t.Errorf("normalizeWorkers(%d, %d) = %d, want %d", tc.workers, tc.n, got, tc.want)
+			}
+		})
 	}
 }
 

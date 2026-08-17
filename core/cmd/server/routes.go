@@ -35,6 +35,8 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/todos", sysCtx.HandleListTodos)
 	mux.Get("/api/settings/ntfy", sysCtx.HandleGetNtfySettings)
 	mux.Post("/api/settings/ntfy", sysCtx.HandlePostNtfySettings)
+	mux.Get("/api/settings/agenda-notify", sysCtx.HandleGetAgendaNotifyHours)
+	mux.Post("/api/settings/agenda-notify", sysCtx.HandlePostAgendaNotifyHours)
 	mux.Get("/api/settings/semantic-device", sysCtx.HandleGetSemanticDevice)
 	mux.Post("/api/settings/semantic-device", sysCtx.HandlePostSemanticDevice)
 	mux.Get("/api/settings/semantic-thresholds", sysCtx.HandleGetSemanticThresholds)

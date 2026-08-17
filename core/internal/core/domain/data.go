@@ -196,13 +196,17 @@ type EditorData struct {
 	Backlinks   *BacklinksResult
 }
 
-// DisplayName extrai o nome do arquivo da rota ou caminho
+// DisplayName extrai o nome do arquivo da rota ou caminho.
+// Remove o prefixo interno "captura-" (usado apenas na geração do nome da
+// captura) para que a exibição seja uniforme em todos os lugares — editor,
+// sidebar, banco de dados, backlinks e busca. O sufixo ".md" é mantido.
 func DisplayName(name string) string {
 	parts := strings.Split(name, "/")
+	base := name
 	if len(parts) > 0 {
-		return parts[len(parts)-1]
+		base = parts[len(parts)-1]
 	}
-	return name
+	return strings.TrimPrefix(base, "captura-")
 }
 
 // AllowedFilePrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.

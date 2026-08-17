@@ -210,3 +210,36 @@ func TestFormatCaptureTimestamp_Formato(t *testing.T) {
 		t.Errorf("esperado %q, got %q", expected, result)
 	}
 }
+
+// TestUniqueFilename_SemPrefixoCaptura garante que os nomes de captura novos
+// não usam o prefixo "captura-" (removido em 17/08/2026 para manter a
+// exibição uniforme). O fallback de slug vazio também não usa o prefixo.
+func TestUniqueFilename_SemPrefixoCaptura(t *testing.T) {
+	ctx := newTestContext(t)
+	svc := NewCaptureService(ctx.Store)
+
+	// Nome normal: sem o prefixo captura-
+	f := svc.uniqueFilename("terremoto-de-magnitude-7-4")
+	if f != "notes/terremoto-de-magnitude-7-4.md" {
+		t.Errorf("esperado sem prefixo captura-, got %q", f)
+	}
+
+	// Colisão: incrementa sufixo sem prefixo
+	now := time.Now().Format(time.RFC3339)
+	if err := ctx.Store.SaveNote("notes/terremoto-de-magnitude-7-4.md", "# x", now); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+	f2 := svc.uniqueFilename("terremoto-de-magnitude-7-4")
+	if f2 != "notes/terremoto-de-magnitude-7-4-2.md" {
+		t.Errorf("esperado sufixo -2, got %q", f2)
+	}
+
+	// Fallback slug vazio: usa nota-<timestamp>, sem captura-
+	f3 := svc.uniqueFilename("")
+	if strings.HasPrefix(f3, "notes/captura-") {
+		t.Errorf("fallback não deveria ter captura-, got %q", f3)
+	}
+	if !strings.HasPrefix(f3, "notes/nota-") {
+		t.Errorf("fallback deveria ser notes/nota-..., got %q", f3)
+	}
+}

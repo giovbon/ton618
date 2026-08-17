@@ -450,7 +450,7 @@ func (ctx *HandlerContext) HandleBackup(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
-	if err := ctx.Backup.CreateStream(w, full); err != nil {
+	if err := ctx.Backup.CreateStreamContext(r.Context(), w, full); err != nil {
 		// Neste ponto os headers já foram enviados, não é possível chamar http.Error.
 		// Loga o erro para diagnóstico.
 		slog.Error("HandleBackup: erro ao gerar backup", "err", err, "full", full)
