@@ -91,11 +91,30 @@ fi
 
 # 4. Geração de Templates e Compilação
 echo -e "${BLUE}🔨 Gerando componentes Templ...${NC}"
-# Se o templ já estiver instalado no PATH, usa local. Se não, usa o go run (mais lento).
-if command -v templ &> /dev/null; then
+# Usa o CLI templ local APENAS se a versão for >= à exigida no go.mod (rápido).
+# Se estiver ausente ou desatualizado, usa `go run` com a versão pinada (determinístico).
+# Motivo: um templ antigo no PATH (ex: v0.2.x) não parseia os .templ atuais e
+# quebra o build com "if/for/case: expected nodes, but none were found".
+TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
+TEMPL_USE_LOCAL=0
+if [ -n "$TEMPL_REQ" ] && command -v templ &> /dev/null; then
+    TEMPL_LOCAL="$(templ --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+    # local >= requerida ⇒ usa o binário local
+    if [ -n "$TEMPL_LOCAL" ] && [ "$(printf '%s\n%s\n' "$TEMPL_REQ" "$TEMPL_LOCAL" | sort -V | tail -n1)" = "$TEMPL_LOCAL" ]; then
+        TEMPL_USE_LOCAL=1
+    fi
+fi
+
+if [ "$TEMPL_USE_LOCAL" -eq 1 ]; then
     templ generate
 else
-    go run github.com/a-h/templ/cmd/templ@latest generate
+    if [ -n "$TEMPL_REQ" ]; then
+        echo -e "${YELLOW}⚠️  templ local ausente/desatualizado — usando go run templ@${TEMPL_REQ}${NC}"
+        go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
+    else
+        echo -e "${YELLOW}⚠️  templ não encontrado no go.mod — usando go run templ@latest${NC}"
+        go run github.com/a-h/templ/cmd/templ@latest generate
+    fi
 fi
 
 # go mod tidy roda DEPOIS do templ generate: os *_templ.go são gitignored e não

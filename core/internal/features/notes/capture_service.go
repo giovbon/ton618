@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript"
 	"github.com/horiagug/youtube-transcript-api-go/pkg/yt_transcript_formatters"
+	"golang.org/x/net/html"
 
 	"ton618/core/internal/core/db"
 )
@@ -106,7 +108,8 @@ func (s *CaptureService) captureArticle(rawURL string) (*CaptureResult, error) {
 		return nil, fmt.Errorf("conteudo insuficiente")
 	}
 
-	mdContent, err := htmltomarkdown.ConvertString(article.Content)
+	htmlContent := preprocessHTMLForCapture(article.Content, rawURL)
+	mdContent, err := htmltomarkdown.ConvertString(htmlContent)
 	if err != nil {
 		return nil, fmt.Errorf("falha ao converter HTML: %w", err)
 	}
@@ -234,9 +237,6 @@ func cleanupMarkdown(md string) string {
 			if strings.Contains(prev, "![") && strings.Contains(prev, trimmed) {
 				continue
 			}
-			if strings.HasPrefix(prev, "!") && len(trimmed) < 120 {
-				continue
-			}
 		}
 		if strings.Contains(trimmed, "youtube.com/embed") || strings.Contains(trimmed, "player.vimeo.com") {
 			continue
@@ -246,6 +246,97 @@ func cleanupMarkdown(md string) string {
 	md = strings.Join(cleaned, "\n")
 	md = multipleNewlineRe.ReplaceAllString(md, "\n\n")
 	return strings.TrimSpace(md)
+}
+
+func preprocessHTMLForCapture(htmlContent string, rawURL string) string {
+	baseURL, err := url.Parse(rawURL)
+	if err != nil {
+		baseURL = nil
+	}
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return htmlContent
+	}
+
+	var processNode func(*html.Node)
+	processNode = func(n *html.Node) {
+		if n.Type == html.ElementNode && strings.ToLower(n.Data) == "img" {
+			var srcVal string
+			var srcIdx = -1
+			var lazyVal string
+
+			for i, attr := range n.Attr {
+				key := strings.ToLower(attr.Key)
+				val := strings.TrimSpace(attr.Val)
+				if key == "src" {
+					srcVal = val
+					srcIdx = i
+				} else if key == "data-src" || key == "data-original" || key == "data-lazy-src" || key == "data-actualsrc" || key == "data-url" || key == "data-orig-file" || key == "data-full-url" || key == "data-hi-res-src" || key == "data-image-src" || key == "data-src-large" {
+					if lazyVal == "" && val != "" && !isPlaceholderSrc(val) {
+						lazyVal = val
+					}
+				} else if key == "srcset" && lazyVal == "" {
+					if candidate := parseFirstSrcsetURL(val); candidate != "" && !isPlaceholderSrc(candidate) {
+						lazyVal = candidate
+					}
+				}
+			}
+
+			finalSrc := srcVal
+			if (finalSrc == "" || isPlaceholderSrc(finalSrc)) && lazyVal != "" {
+				finalSrc = lazyVal
+			}
+
+			if finalSrc != "" && baseURL != nil {
+				if resolved, err := baseURL.Parse(finalSrc); err == nil {
+					finalSrc = resolved.String()
+				}
+			}
+
+			if finalSrc != "" {
+				if srcIdx >= 0 {
+					n.Attr[srcIdx].Val = finalSrc
+				} else {
+					n.Attr = append(n.Attr, html.Attribute{Key: "src", Val: finalSrc})
+				}
+			}
+		}
+
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			processNode(c)
+		}
+	}
+
+	processNode(doc)
+
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return htmlContent
+	}
+	return buf.String()
+}
+
+func isPlaceholderSrc(src string) bool {
+	s := strings.ToLower(strings.TrimSpace(src))
+	if s == "" || strings.HasPrefix(s, "data:image/svg") || strings.HasPrefix(s, "data:image/gif") {
+		return true
+	}
+	if strings.Contains(s, "1x1") || strings.Contains(s, "blank.gif") || strings.Contains(s, "placeholder") {
+		return true
+	}
+	return false
+}
+
+func parseFirstSrcsetURL(srcset string) string {
+	parts := strings.Split(srcset, ",")
+	for _, p := range parts {
+		fields := strings.Fields(strings.TrimSpace(p))
+		if len(fields) > 0 && fields[0] != "" {
+			return fields[0]
+		}
+	}
+	return ""
 }
 
 func withBrowserHeaders(req *http.Request) {

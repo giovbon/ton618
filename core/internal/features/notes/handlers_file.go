@@ -231,14 +231,24 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	basename := filepath.Base(cleaned)
 	ext := strings.ToLower(filepath.Ext(basename))
 
-	// PDFs: inline; outros: attachment (download)
-	if ext == ".pdf" {
+	// `download=1` força o navegador a baixar o arquivo (Content-Disposition: attachment),
+	// mesmo para PDFs/EPUBs que por padrão são servidos inline (ex: botão "Baixar" do leitor EPUB).
+	forceDownload := r.URL.Query().Get("download") == "1"
+
+	// PDFs/EPUBs: inline por padrão; outros: attachment (download)
+	disposition := "attachment"
+	switch ext {
+	case ".pdf":
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
-	} else if ext == ".epub" {
+		if !forceDownload {
+			disposition = "inline"
+		}
+	case ".epub":
 		w.Header().Set("Content-Type", "application/epub+zip")
-		w.Header().Set("Content-Disposition", "inline; filename=\""+basename+"\"")
-	} else {
+		if !forceDownload {
+			disposition = "inline"
+		}
+	default:
 		// Detecta content-type pelo nome
 		ct := "application/octet-stream"
 		switch ext {
@@ -251,9 +261,9 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 		case ".mp4", ".webm":
 			ct = "video/" + strings.TrimPrefix(ext, ".")
 		}
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+basename+"\"")
 		w.Header().Set("Content-Type", ct)
 	}
+	w.Header().Set("Content-Disposition", disposition+"; filename=\""+basename+"\"")
 
 	http.ServeFile(w, r, fullPath)
 }

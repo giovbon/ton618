@@ -120,6 +120,71 @@ func TestHandleFileDownload_PDFInline(t *testing.T) {
 	}
 }
 
+func TestHandleFileDownload_EPUBInline(t *testing.T) {
+	ctx := newTestContext(t)
+	createMinimalEPUB(t, filepath.Join(ctx.Cfg.DocsDir, "epubs/livro.epub"))
+	ctx.Store.SetFileMod("epubs/livro.epub", "2025-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/file/download?name=epubs%2Flivro.epub", nil)
+
+	ctx.HandleFileDownload(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200, got %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/epub+zip" {
+		t.Errorf("esperado Content-Type application/epub+zip, got %q", ct)
+	}
+	disp := rec.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(disp, "inline") {
+		t.Errorf("esperado inline disposition, got %q", disp)
+	}
+}
+
+func TestHandleFileDownload_EPUBForceDownload(t *testing.T) {
+	ctx := newTestContext(t)
+	createMinimalEPUB(t, filepath.Join(ctx.Cfg.DocsDir, "epubs/livro.epub"))
+	ctx.Store.SetFileMod("epubs/livro.epub", "2025-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/file/download?name=epubs%2Flivro.epub&download=1", nil)
+
+	ctx.HandleFileDownload(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200, got %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/epub+zip" {
+		t.Errorf("esperado Content-Type application/epub+zip, got %q", ct)
+	}
+	disp := rec.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(disp, "attachment") {
+		t.Errorf("esperado attachment disposition, got %q", disp)
+	}
+}
+
+func TestHandleFileDownload_PDFForceDownload(t *testing.T) {
+	ctx := newTestContext(t)
+	createMinimalPDF(t, filepath.Join(ctx.Cfg.DocsDir, "pdfs/doc.pdf"), "Test PDF")
+	ctx.Store.SetFileMod("pdfs/doc.pdf", "2025-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/file/download?name=pdfs%2Fdoc.pdf&download=1", nil)
+
+	ctx.HandleFileDownload(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200, got %d", rec.Code)
+	}
+	disp := rec.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(disp, "attachment") {
+		t.Errorf("esperado attachment disposition, got %q", disp)
+	}
+}
+
 // ── HandleFileDelete ────────────────────────────────────────────
 
 func TestHandleFileDelete_NoFilename(t *testing.T) {

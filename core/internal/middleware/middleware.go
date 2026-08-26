@@ -118,7 +118,7 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 				"script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "+
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "+
 				"font-src 'self' https://fonts.gstatic.com; "+
-				"img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
+				"img-src 'self' data: blob: http: https: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
 				// worker-src necessário para Web Workers (Transformers.js/ONNX) no HTTPS
 				"worker-src 'self' blob:; "+
 				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa

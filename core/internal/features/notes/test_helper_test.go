@@ -102,6 +102,43 @@ func createMinimalPDF(t *testing.T, path, text string) {
 	}
 }
 
+// createMinimalEPUB cria um arquivo .epub válido (zip com mimetype) para testes.
+func createMinimalEPUB(t *testing.T, path string) {
+	t.Helper()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("criar epub: %v", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+
+	// mimetype deve ser o primeiro arquivo e sem compressão (spec EPUB)
+	mt, err := zw.CreateHeader(&zip.FileHeader{
+		Name:   "mimetype",
+		Method: zip.Store,
+	})
+	if err != nil {
+		t.Fatalf("zip criar mimetype: %v", err)
+	}
+	if _, err := mt.Write([]byte("application/epub+zip")); err != nil {
+		t.Fatalf("zip escrever mimetype: %v", err)
+	}
+
+	cw, err := zw.Create("META-INF/container.xml")
+	if err != nil {
+		t.Fatalf("zip criar container: %v", err)
+	}
+	if _, err := cw.Write([]byte(`<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`)); err != nil {
+		t.Fatalf("zip escrever container: %v", err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip fechar: %v", err)
+	}
+}
+
 // Wrapper local para manter compatibilidade com testes legados
 func isNoteOrPdf(path string) bool {
 	return IsNoteOrPdf(path)

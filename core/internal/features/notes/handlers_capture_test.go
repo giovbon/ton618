@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 )
 
 // ── isYouTubeURL ────────────────────────────────────────────────
@@ -196,6 +198,67 @@ func TestCleanupMarkdown_DuplicateImageDescription(t *testing.T) {
 	lines := strings.Split(result, "\n")
 	if len(lines) > 1 {
 		t.Errorf("linha duplicada de descricao de imagem nao foi removida, resultado: %q", result)
+	}
+}
+
+func TestCleanupMarkdown_MultipleImages(t *testing.T) {
+	md := "![img1](https://site.com/1.jpg)\n![img2](https://site.com/2.jpg)\nLegenda curta"
+	result := cleanupMarkdown(md)
+	if !strings.Contains(result, "1.jpg") {
+		t.Errorf("deve conter imagem 1, got %q", result)
+	}
+	if !strings.Contains(result, "2.jpg") {
+		t.Errorf("deve conter imagem 2, got %q", result)
+	}
+	if !strings.Contains(result, "Legenda curta") {
+		t.Errorf("deve conter legenda curta, got %q", result)
+	}
+}
+
+func TestPreprocessHTMLForCapture_RelativeURLAndLazyLoading(t *testing.T) {
+	rawURL := "https://example.com/blog/article-1"
+	html := `<div>
+		<img src="/img/relative.png" alt="Relativa" />
+		<img src="data:image/svg+xml;base64,AAA" data-src="https://cdn.example.com/real.jpg" alt="Lazy" />
+		<img src="" srcset="https://cdn.example.com/pic-800.jpg 800w, https://cdn.example.com/pic-400.jpg 400w" alt="Srcset" />
+	</div>`
+
+	processed := preprocessHTMLForCapture(html, rawURL)
+
+	if !strings.Contains(processed, "https://example.com/img/relative.png") {
+		t.Errorf("esperado URL relativa resolvida para https://example.com/img/relative.png, got: %s", processed)
+	}
+	if !strings.Contains(processed, "https://cdn.example.com/real.jpg") {
+		t.Errorf("esperado data-src promovido a src, got: %s", processed)
+	}
+	if !strings.Contains(processed, "https://cdn.example.com/pic-800.jpg") {
+		t.Errorf("esperado srcset promovido a src, got: %s", processed)
+	}
+}
+
+func TestHTMLToMarkdown_Images(t *testing.T) {
+	htmlStr := `<div>
+		<p>Texto do artigo</p>
+		<img src="https://example.com/foto.jpg" alt="Minha Foto" />
+		<figure>
+			<img src="https://example.com/figura.jpg" alt="Figura" />
+			<figcaption>Legenda da figura</figcaption>
+		</figure>
+	</div>`
+
+	processed := preprocessHTMLForCapture(htmlStr, "https://example.com/article")
+	mdContent, err := htmltomarkdown.ConvertString(processed)
+	if err != nil {
+		t.Fatalf("erro ao converter: %v", err)
+	}
+	cleaned := cleanupMarkdown(mdContent)
+
+	t.Logf("Markdown gerado:\n%s", cleaned)
+	if !strings.Contains(cleaned, "https://example.com/foto.jpg") {
+		t.Errorf("markdown deve conter foto.jpg, got:\n%s", cleaned)
+	}
+	if !strings.Contains(cleaned, "https://example.com/figura.jpg") {
+		t.Errorf("markdown deve conter figura.jpg, got:\n%s", cleaned)
 	}
 }
 
