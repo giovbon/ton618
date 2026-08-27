@@ -3,6 +3,7 @@ package system
 import (
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -596,8 +597,21 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 
 	// Se for renomeação de título (nome do arquivo)
 	if req.Key == "titulo" {
-		newValStr, ok := req.Value.(string)
-		if !ok || newValStr == "" {
+		var newValStr string
+		switch v := req.Value.(type) {
+		case string:
+			newValStr = v
+		case float64:
+			newValStr = fmt.Sprintf("%.0f", v)
+		case int:
+			newValStr = strconv.Itoa(v)
+		default:
+			if req.Value != nil {
+				newValStr = fmt.Sprintf("%v", req.Value)
+			}
+		}
+		newValStr = strings.TrimSpace(newValStr)
+		if newValStr == "" {
 			http.Error(w, "invalid title value", http.StatusBadRequest)
 			return
 		}
@@ -606,82 +620,65 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		rawNew := newValStr
 
 		ext := strings.ToLower(filepath.Ext(rawOld))
-		isPdf := ext == ".pdf"
-		isZip := ext == ".zip"
+		isNote := ext == ".md" || strings.HasPrefix(rawOld, "notes/") || (!strings.HasPrefix(rawOld, "pdfs/") && !strings.HasPrefix(rawOld, "attachments/") && !strings.HasPrefix(rawOld, "archives/") && !strings.HasPrefix(rawOld, "epubs/"))
 
 		var oldName, newName string
 
-		if isPdf {
+		if !isNote {
+			// Arquivos físicos (PDF, ZIP, EPUB, anexos, archives): renomeia arquivo no disco
 			basename := filepath.Base(rawOld)
 			newBasename := filepath.Base(rawNew)
-			if !strings.HasSuffix(strings.ToLower(newBasename), ".pdf") {
-				newBasename += ".pdf"
+			if ext != "" && !strings.HasSuffix(strings.ToLower(newBasename), ext) {
+				newBasename += ext
 			}
 
-			subdirs := []string{"pdfs", "notes"}
-			found := false
-			for _, sd := range subdirs {
-				testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-				if _, err := os.Stat(testPath); err == nil {
-					oldName = sd + "/" + basename
-					newName = sd + "/" + newBasename
-					oldPath := testPath
-					newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-					if err := os.Rename(oldPath, newPath); err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-					found = true
-					break
+			dir := filepath.Dir(rawOld)
+			if dir == "." || dir == "" {
+				if ext == ".pdf" {
+					dir = "pdfs"
+				} else if ext == ".epub" {
+					dir = "epubs"
+				} else if ext == ".zip" || ext == ".rar" {
+					dir = "attachments"
+				} else {
+					dir = "notes"
 				}
 			}
-			if !found {
-				http.Error(w, "file not found", http.StatusNotFound)
-				return
-			}
-		} else if isZip {
-			basename := filepath.Base(rawOld)
-			newBasename := filepath.Base(rawNew)
-			if !strings.HasSuffix(strings.ToLower(newBasename), ".zip") {
-				newBasename += ".zip"
-			}
-			sd := "attachments"
-			if strings.HasPrefix(rawOld, "archives/") {
-				sd = "archives"
-			} else if strings.HasPrefix(rawOld, "attachments/") {
-				sd = "attachments"
-			} else {
-				if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "archives", basename)); err == nil {
-					sd = "archives"
-				}
-			}
-			oldName = sd + "/" + basename
-			newName = sd + "/" + newBasename
+
+			oldName = dir + "/" + basename
+			newName = dir + "/" + newBasename
 			oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
 			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+
+			if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+				found := false
+				for _, sd := range []string{"pdfs", "epubs", "attachments", "archives", "notes"} {
+					testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+					if _, err := os.Stat(testPath); err == nil {
+						oldName = sd + "/" + basename
+						newName = sd + "/" + newBasename
+						oldPath = testPath
+						newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
+						found = true
+						break
+					}
+				}
+				if !found {
+					http.Error(w, "arquivo não encontrado", http.StatusNotFound)
+					return
+				}
+			}
+
 			if err := os.Rename(oldPath, newPath); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-		} else {
-			// Note: delega para o NoteService
-			if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			newName = notes.NoteFilename(rawNew)
-			oldName = notes.NoteFilename(rawOld)
-		}
 
-		// Update DB: delete old indexes for PDF/ZIP
-		if isPdf || isZip {
-			ctx.Store.DeleteDocumentsByFile(oldName)
-			ctx.Store.DeleteFTSByFile(oldName)
-			ctx.Store.DeleteFileMod(oldName)
-			ctx.Store.ResetPopularity(oldName)
-			ctx.Store.SetFileTags(oldName, nil)
-			ctx.Store.ClearLinks(oldName)
-			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+			// Limpa índices antigos no banco
+			if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
+				slog.Error("delete old file records on rename", "file", oldName, "error", err)
+			}
+
 			info, err := os.Stat(newPath)
 			if err == nil {
 				watcher.ProcessFile(ctx.Store, watcher.FileEvent{
@@ -693,11 +690,25 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 					slog.Error("update backlinks on non-note property rename", "old", oldName, "new", newName, "error", err)
 				}
 			}
+		} else {
+			// Nota Markdown: delega para o NoteService
+			if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
+				msg := err.Error()
+				if strings.Contains(msg, "já existe uma nota") || strings.Contains(msg, "nota não encontrada") || strings.Contains(msg, "UNIQUE constraint failed") {
+					http.Error(w, msg, http.StatusBadRequest)
+				} else {
+					http.Error(w, msg, http.StatusInternalServerError)
+				}
+				return
+			}
+			newName = notes.NoteFilename(rawNew)
+			oldName = notes.NoteFilename(rawOld)
 		}
 
 		// Invalidate cache
 		ctx.dbCacheMu.Lock()
 		delete(ctx.dbCache, req.File)
+		delete(ctx.dbCache, oldName)
 		if newName != "" {
 			delete(ctx.dbCache, newName)
 		}

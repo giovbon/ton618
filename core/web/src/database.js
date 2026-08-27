@@ -310,7 +310,9 @@
         if (newVal === oldVal) return;
 
         var parsedVal = newVal;
-        if (typeof newVal === "string") {
+        if (field === "titulo" || field === "tags") {
+            parsedVal = String(newVal == null ? "" : newVal);
+        } else if (typeof newVal === "string") {
             var trimmed = newVal.trim();
             if (trimmed === "true") parsedVal = true;
             else if (trimmed === "false") parsedVal = false;
@@ -325,15 +327,21 @@
             body: JSON.stringify(payload)
         }).then(function (res) {
             if (!res.ok) {
-                alert("Erro ao salvar propriedade no arquivo.");
+                res.text().then(function (errMsg) {
+                    alert("Erro ao salvar propriedade no arquivo: " + (errMsg || "Erro no servidor."));
+                }).catch(function () {
+                    alert("Erro ao salvar propriedade no arquivo.");
+                });
                 cell.restoreOldValue();
                 return;
             }
             if (field === "titulo") {
-                var newFileName = newVal.trim();
+                var rawVal = String(newVal || "").trim();
+                var newFileName = rawVal;
                 if (!newFileName.endsWith(".md")) newFileName += ".md";
                 if (!newFileName.startsWith("notes/")) newFileName = "notes/" + newFileName;
-                cell.getRow().update({ arquivo: newFileName });
+                var newUrl = "/editor?file=" + encodeURIComponent(newFileName);
+                cell.getRow().update({ arquivo: newFileName, _url: newUrl });
                 cell.getRow().reformat();
             }
         }).catch(function () {

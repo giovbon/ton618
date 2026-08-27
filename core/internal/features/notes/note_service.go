@@ -168,9 +168,29 @@ func (s *NoteService) Rename(oldName, newName string) error {
 			}
 		}
 
-		// Atualiza a propriedade 'title' no frontmatter da nota no banco
-		if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
-			content = newContent
+		// Atualiza as propriedades 'title' e 'titulo' no frontmatter da nota no banco
+		if fm, _, err := ParseFrontmatter(content); err == nil && fm != nil {
+			if _, hasTitle := fm["title"]; hasTitle {
+				if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+					content = newContent
+				}
+			}
+			if _, hasTitulo := fm["titulo"]; hasTitulo {
+				if newContent, err := UpdateFrontmatterProperty(content, "titulo", newTitle); err == nil {
+					content = newContent
+				}
+			}
+			if _, hasTitle := fm["title"]; !hasTitle {
+				if _, hasTitulo := fm["titulo"]; !hasTitulo {
+					if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+						content = newContent
+					}
+				}
+			}
+		} else {
+			if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+				content = newContent
+			}
 		}
 
 		if err := s.processAndSave(context.Background(), newName, content, time.Now().UTC()); err != nil {

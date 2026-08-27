@@ -174,3 +174,53 @@ tags: [old]
 		t.Error("leading '#' was not stripped from tags")
 	}
 }
+
+func TestHandleUpdateNoteProperty_RenameTitle_NumericAndString(t *testing.T) {
+	ctx := newTestContext(t)
+
+	content := "# Original Note Content"
+	saveTestNote(t, ctx, "notes/old_title.md", content, "")
+
+	// 1. Test renaming title to numeric value (e.g. 2026 as float64/int/string)
+	updatePayloadNumeric := map[string]interface{}{
+		"file":  "notes/old_title.md",
+		"key":   "titulo",
+		"value": 2026,
+	}
+	bodyBytes, _ := json.Marshal(updatePayloadNumeric)
+	req := httptest.NewRequest("POST", "/api/notes/update-property", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+	ctx.HandleUpdateNoteProperty(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for numeric title rename, got status: %d, body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify old note no longer exists and new note notes/2026.md exists
+	if ctx.Store.NoteExists("notes/old_title.md") {
+		t.Error("old note notes/old_title.md still exists after rename")
+	}
+	if !ctx.Store.NoteExists("notes/2026.md") {
+		t.Error("new note notes/2026.md was not created")
+	}
+
+	// 2. Test renaming title to another text title
+	updatePayloadString := map[string]interface{}{
+		"file":  "notes/2026.md",
+		"key":   "titulo",
+		"value": "Nova Nota Renomeada",
+	}
+	bodyBytes2, _ := json.Marshal(updatePayloadString)
+	req2 := httptest.NewRequest("POST", "/api/notes/update-property", bytes.NewReader(bodyBytes2))
+	rr2 := httptest.NewRecorder()
+	ctx.HandleUpdateNoteProperty(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for string title rename, got status: %d, body: %s", rr2.Code, rr2.Body.String())
+	}
+
+	if !ctx.Store.NoteExists("notes/Nova Nota Renomeada.md") {
+		t.Error("new note notes/Nova Nota Renomeada.md was not created")
+	}
+}
+
