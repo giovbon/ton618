@@ -574,3 +574,216 @@ func TestHybrid_ThresholdFallbackParaSemanticaPura(t *testing.T) {
 	}
 	t.Errorf("curta.md deveria aparecer: fallback para semantic_search_threshold=30")
 }
+
+// ── Limiar "excepcional" segue o threshold configurado ──
+
+// Com hybrid_semantic_threshold=84, o limiar excepcional sobe para ~89%: nota
+// longa com 1 chunk a ~85% (que o piso fixo antigo de 82% aceitaria) passa a ser
+// rejeitada; com 2 chunks dentro do corte, continua aprovada.
+func TestHybrid_ConsensoExcepcionalSegueThreshold(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// a≈0.4523 → dist≈0.5477 → sim≈85%. Conteúdo sem o termo (só-semântica).
+	emb85 := makeEmbedding(0.4523)
+
+	// Nota longa, 1 chunk a 85%: rejeitada quando threshold=84 (excepcional 89%).
+	indexNoteFTS(t, ctx, "notes/longa-single.md", "# Arquitetura\nConteudo sobre clean architecture.")
+	indexNoteSemanticMulti(t, ctx, "notes/longa-single.md", emb85, makeEmbedding(-1.0), makeEmbedding(-1.0))
+
+	// Nota longa com 2 chunks a 85%: aprovada (match duplo dispensa o excepcional).
+	indexNoteFTS(t, ctx, "notes/longa-dupla.md", "# Arquitetura\nConteudo sobre microsservicos.")
+	indexNoteSemanticMulti(t, ctx, "notes/longa-dupla.md", emb85, emb85, makeEmbedding(-1.0))
+
+	ctx.Store.SetSetting("hybrid_semantic_threshold", "84")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"query":     "programacao",
+		"embedding": makeEmbedding(1.0),
+		"limit":     10,
+	})
+	req := httptest.NewRequest("POST", "/api/search/hybrid", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	ctx.HandleHybridSearch(rr, req)
+
+	var resp struct {
+		Results []hybridSearchResult `json:"results"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, r := range resp.Results {
+		if r.Filename == "notes/longa-single.md" {
+			t.Errorf("longa-single.md não deveria aparecer: 1 chunk a 85%% < excepcional ~89%% (threshold 84)")
+			break
+		}
+	}
+	foundDupla := false
+	for _, r := range resp.Results {
+		if r.Filename == "notes/longa-dupla.md" {
+			foundDupla = true
+			break
+		}
+	}
+	if !foundDupla {
+		t.Errorf("longa-dupla.md deveria aparecer: 2 chunks dentro do corte aprovam mesmo com threshold 84")
+	}
+}
+
+// ── Paginação (from/offset), total e has_more ──
+
+func TestHybrid_PaginacaoFromTotalHasMore(t *testing.T) {
+	ctx := newTestContext(t)
+
+	for i := 1; i <= 6; i++ {
+		name := "notes/alg" + string(rune('0'+i)) + ".md"
+		indexNoteFTS(t, ctx, name, "# T"+string(rune('0'+i))+"\nAlgoritmo numero "+string(rune('0'+i))+" explicado.")
+	}
+
+	type pageResp struct {
+		Results []hybridSearchResult `json:"results"`
+		Total   int                  `json:"total"`
+		HasMore bool                 `json:"has_more"`
+	}
+
+	query := func(from, limit int) pageResp {
+		body, _ := json.Marshal(map[string]interface{}{
+			"query":     "algoritmo",
+			"embedding": makeEmbedding(), // degrada para FTS puro (sem semântica)
+			"limit":     limit,
+			"from":      from,
+		})
+		req := httptest.NewRequest("POST", "/api/search/hybrid", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+		ctx.HandleHybridSearch(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d from=%d: %s", rr.Code, from, rr.Body.String())
+		}
+		var p pageResp
+		if err := json.NewDecoder(rr.Body).Decode(&p); err != nil {
+			t.Fatalf("decode from=%d: %v", from, err)
+		}
+		return p
+	}
+
+	p1 := query(0, 2)
+	if len(p1.Results) != 2 {
+		t.Fatalf("página 1 deveria ter 2 resultados, got %d", len(p1.Results))
+	}
+	if !p1.HasMore {
+		t.Errorf("com 6 docs e page de 2, has_more deveria ser true na 1ª página")
+	}
+	if p1.Total < 2 {
+		t.Errorf("total aproximado deveria cobrir a página (>= 2), got %d", p1.Total)
+	}
+
+	p2 := query(2, 2)
+	if len(p2.Results) != 2 {
+		t.Fatalf("página 2 deveria ter 2 resultados, got %d", len(p2.Results))
+	}
+	if !p2.HasMore {
+		t.Errorf("has_more deveria ser true na 2ª página (6 docs, offset 4 restantes)")
+	}
+
+	// Páginas não podem se sobrepor.
+	seen := map[string]bool{}
+	for _, r := range append(append([]hybridSearchResult{}, p1.Results...), p2.Results...) {
+		if seen[r.Filename] {
+			t.Errorf("duplicata entre páginas: %s", r.Filename)
+		}
+		seen[r.Filename] = true
+	}
+
+	p3 := query(4, 2)
+	if len(p3.Results) != 2 {
+		t.Fatalf("página 3 (from=4) deveria ter 2 resultados, got %d", len(p3.Results))
+	}
+	if p3.HasMore {
+		t.Errorf("has_more deveria ser false na última página, got true")
+	}
+	// Com offset alto o bastante, o endpoint já buscou todos os candidatos.
+	if p3.Total < 6 {
+		t.Errorf("total na última página deveria cobrir os 6 docs, got %d", p3.Total)
+	}
+	for _, r := range p3.Results {
+		if seen[r.Filename] {
+			t.Errorf("duplicata entre páginas: %s", r.Filename)
+		}
+		seen[r.Filename] = true
+	}
+	if len(seen) < 6 {
+		t.Errorf("paginação deveria alcançar os 6 docs ao todo, got %d distintos", len(seen))
+	}
+
+	pfim := query(6, 2)
+	if len(pfim.Results) != 0 || pfim.HasMore {
+		t.Errorf("from=6 deveria estar no fim (0 resultados), got %d has_more=%v", len(pfim.Results), pfim.HasMore)
+	}
+}
+
+// ── Paridade do gate de evidência com o que o FTS realmente destacou ──
+
+// Casos "pegajosos" (acento, prefixo/plural) que o FTS casa de verdade não podem
+// ser removidos pelo gate de evidência mesmo quando a semântica rejeita a nota.
+func TestHybrid_ParityGateMantemEvidenciaReal(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// Acento: query sem acento casa no FTS (unicode61 dobra diacríticos).
+	indexNoteFTS(t, ctx, "notes/reuniao.md", "# Reunião\nReunião de equipe semanal sobre o roadmap.")
+	indexNoteSemantic(t, ctx, "notes/reuniao.md", makeEmbedding(-1.0)) // semântica rejeita
+
+	// Prefixo: "python" casa "pythonica" via prefixo no FTS.
+	indexNoteFTS(t, ctx, "notes/pythonica.md", "# Python\nProgramacao pythonica e boas praticas.")
+	indexNoteSemantic(t, ctx, "notes/pythonica.md", makeEmbedding(-1.0))
+
+	// Controle: match apenas como hashtag deve continuar sendo filtrado.
+	indexNoteFTS(t, ctx, "notes/somente-tag.md", "# Prova\nAvaliacao de dados marcada para sexta. #programacao")
+	indexNoteSemantic(t, ctx, "notes/somente-tag.md", makeEmbedding(-1.0))
+
+	doQuery := func(q string) []string {
+		body, _ := json.Marshal(map[string]interface{}{
+			"query":     q,
+			"embedding": makeEmbedding(1.0),
+			"limit":     20,
+		})
+		req := httptest.NewRequest("POST", "/api/search/hybrid", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+		ctx.HandleHybridSearch(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("query %q: status %d: %s", q, rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			Results []hybridSearchResult `json:"results"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("query %q decode: %v", q, err)
+		}
+		names := make([]string, 0, len(resp.Results))
+		for _, r := range resp.Results {
+			names = append(names, r.Filename)
+		}
+		return names
+	}
+
+	// "reuniao" (sem acento) → FTS casa com "Reunião" via folding de diacríticos.
+	if names := doQuery("reuniao"); !containsStr(names, "notes/reuniao.md") {
+		t.Errorf("reuniao.md deveria aparecer para 'reuniao' (diacrítico dobrado = evidência real), got %v", names)
+	}
+	// "python" → casa "pythonica" por prefixo no FTS.
+	if names := doQuery("python"); !containsStr(names, "notes/pythonica.md") {
+		t.Errorf("pythonica.md deveria aparecer para 'python' (prefixo python* = evidência real), got %v", names)
+	}
+	// "programacao" → match só como hashtag na somente-tag.md deve ser filtrado.
+	if names := doQuery("programacao"); containsStr(names, "notes/somente-tag.md") {
+		t.Errorf("somente-tag.md não deveria aparecer para 'programacao' (só hashtag, semântica rejeitou), got %v", names)
+	}
+}
+
+func containsStr(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}

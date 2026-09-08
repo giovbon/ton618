@@ -22,6 +22,7 @@ type hybridSearchRequest struct {
 	Query     string    `json:"query"`
 	Embedding []float32 `json:"embedding"`
 	Limit     int       `json:"limit"`
+	From      int       `json:"from"`
 }
 
 type hybridSearchResult struct {
@@ -37,6 +38,11 @@ type hybridSearchResult struct {
 	Snippet       string   `json:"snippet"`
 	HasHighlight  bool     `json:"has_highlight"`
 }
+
+// hybridMaxEngineCandidates limita quantos candidatos cada motor entrega para a
+// fusão (offset + página cobertos até esse teto). Acima dele, a paginação
+// simplesmente termina — evita KNN caro em corpora gigantes.
+const hybridMaxEngineCandidates = 200
 
 // isZeroEmbedding indica se o embedding veio zerado (inválido) — usado para
 // degradar graciosamente para FTS5 puro quando a IA não está pronta.
@@ -109,6 +115,19 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 	if limit <= 0 || limit > 50 {
 		limit = 15
 	}
+	from := req.From
+	if from < 0 {
+		from = 0
+	}
+	if from > 500 {
+		from = 500 // trava contra paginação profunda/abusiva
+	}
+	// Cada motor entrega candidatos suficientes para cobrir offset + página,
+	// com teto para não explodir o custo do KNN em corpora enormes.
+	engineN := (from + limit) * 2
+	if engineN > hybridMaxEngineCandidates {
+		engineN = hybridMaxEngineCandidates
+	}
 
 	// Timeout no mesmo padrão da busca global (HandleSearch): evita request
 	// pendurado em lock/DB lento. Vale para as duas goroutines abaixo (o FTS5 e
@@ -117,11 +136,16 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 	defer cancel()
 
 	// A parte semântica só participa se houver um embedding válido.
+	pct := 55
+	exceptionalSim := 0.82
 	hasSemantic := len(req.Embedding) == db.EmbeddingDim && !isZeroEmbedding(req.Embedding)
 	maxDist := math.MaxFloat64
 	if hasSemantic {
-		pct := hybridThresholdPct(ctx.Store)
+		pct = hybridThresholdPct(ctx.Store)
 		maxDist = math.Sqrt(2.0 * (1.0 - float64(pct)/100.0))
+		// O "excepcional" do voto majoritário acompanha o threshold configurado
+		// (com piso histórico de 82%), em vez de ser um valor fixo.
+		exceptionalSim = semanticExceptionalSimilarity(pct)
 	}
 
 	ftsRanks := make(map[string]int)
@@ -138,7 +162,7 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		results, err := search.Search(rCtx, ctx.Store, req.Query, 0, limit*2,
+		results, err := search.Search(rCtx, ctx.Store, req.Query, 0, engineN,
 			ctx.Store.GetBacklinkCount, ctx.Store.GetSynapticWeight)
 		if err != nil {
 			ftsErr = err
@@ -166,7 +190,7 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 			ftsDocs[arquivo] = hit.Doc
 			ftsHits[arquivo] = hit
 			rank++
-			if rank > limit*2 {
+			if rank > engineN {
 				break
 			}
 		}
@@ -181,7 +205,7 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		if !hasSemantic {
 			return
 		}
-		similar, err := ctx.Store.SearchSimilarWithConsensus(rCtx, req.Embedding, limit*2, maxDist)
+		similar, err := ctx.Store.SearchSimilarWithConsensus(rCtx, req.Embedding, engineN, maxDist)
 		if err != nil {
 			semErr = err
 			return
@@ -203,7 +227,8 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 	// ── Semântica: threshold + consenso de chunks ──
 	// O voto majoritário vale para candidatos SEM evidência de conteúdo no FTS
 	// (só-semânticos OU com match só por tag/hashtag): nota longa (≥3 chunks)
-	// precisa de match em ≥2 chunks, exceto similaridade excepcional (≥82%).
+	// precisa de match em ≥2 chunks, exceto similaridade excepcional (que segue
+	// o threshold configurado — ver semanticExceptionalSimilarity).
 	// Notas curtas (1-2 chunks) passam com match único — o chunk é a nota inteira.
 	// Docs com o termo no conteúdo já têm evidência e passam direto.
 	rank := 1
@@ -219,7 +244,7 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		if doc, ok := ftsDocs[h.Filename]; ok && search.HasContentEvidence(doc, req.Query) {
 			anchored = true
 		}
-		if !anchored && !semanticConsensusPass(h.TotalChunks, h.ChunkMatches, sim) {
+		if !anchored && !semanticConsensusPass(h.TotalChunks, h.ChunkMatches, sim, exceptionalSim) {
 			continue
 		}
 		semRanks[h.Filename] = rank
@@ -246,9 +271,48 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// 3. Fusão RRF (k configurável via Configurações > Semântica)
+	// 3. Fusão RRF ponderada pela qualidade de cada motor (k configurável via
+	// Configurações > Semântica). Normaliza o FinalScore do FTS (0..1) para o
+	// peso — como o score é monotônico com o rank, a ordem interna de cada
+	// motor é preservada; a ponderação apenas equilibra a força da evidência
+	// entre os dois motores (item: fusão ponderada).
 	k := rrfK(ctx.Store)
-	fused := search.ReciprocalRankFusion(ftsRanks, semRanks, k, limit)
+
+	ftsScore := make(map[string]float64, len(ftsHits))
+	maxFinal := 0.0
+	for _, hit := range ftsHits {
+		if hit.FinalScore > maxFinal {
+			maxFinal = hit.FinalScore
+		}
+	}
+	if maxFinal > 0 {
+		for arquivo, hit := range ftsHits {
+			if s := hit.FinalScore / maxFinal; s > 0 {
+				ftsScore[arquivo] = s
+			}
+		}
+	} else {
+		for arquivo := range ftsHits {
+			ftsScore[arquivo] = 1.0
+		}
+	}
+	// semScore já é a similaridade (cosseno) em [0,1] → semSim.
+
+	// Fusão sobre a união completa dos candidatos para permitir paginação real
+	// (from/offset) com total aproximado e estável.
+	unionCap := len(ftsRanks) + len(semRanks)
+	fusedAll := search.ReciprocalRankFusionWeighted(ftsRanks, semRanks, ftsScore, semSim, k, unionCap)
+	total := len(fusedAll)
+	start := from
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	fused := fusedAll[start:end]
+	hasMore := end < total
 
 	// Carrega em batch as tags (uma query) e o conteúdo das notas só-semânticas
 	// (uma query) — antes eram N chamadas individuais (GetFileTags/GetNote).
@@ -267,12 +331,12 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		if rank, ok := ftsRanks[filename]; ok {
 			rp := rank
 			res.RankFTS = &rp
-			res.RRFScore += search.FusionScore(rank, k)
+			res.RRFScore += search.WeightedFusionScore(rank, k, ftsScore[filename])
 		}
 		if rank, ok := semRanks[filename]; ok {
 			rp := rank
 			res.RankSem = &rp
-			res.RRFScore += search.FusionScore(rank, k)
+			res.RRFScore += search.WeightedFusionScore(rank, k, semSim[filename])
 			sim := semSim[filename] * 100
 			res.SemSimilarity = &sim
 		}
@@ -311,20 +375,41 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 	}
 
 	httputil.WriteJSON(w, map[string]interface{}{
-		"query":   req.Query,
-		"results": results,
+		"query":    req.Query,
+		"results":  results,
+		"total":    total,
+		"has_more": hasMore,
 	})
+}
+
+// semanticExceptionalSimilarity retorna o limiar "excepcional" do voto
+// majoritário para nota longa com 1 chunk: segue o threshold configurado com
+// uma margem de 5 p.p., com piso histórico de 82% (comportamento antigo
+// preservado para thresholds baixos/padrão). Para thresholds altos (ex.: 90%)
+// o "excepcional" sobe junto, evitando que uma nota longa passe com 1 chunk
+// apenas por estar no limiar.
+func semanticExceptionalSimilarity(pct int) float64 {
+	const floor = 0.82
+	fromThreshold := float64(pct)/100.0 + 0.05
+	if fromThreshold <= floor {
+		return floor
+	}
+	if fromThreshold > 1 {
+		return 1
+	}
+	return fromThreshold
 }
 
 // semanticConsensusPass aplica o voto majoritário aos candidatos só-semânticos:
 // nota longa (≥3 chunks) precisa de match em ≥2 chunks, exceto similaridade
-// excepcional (≥82%). Notas curtas (1-2 chunks) passam com match único.
-func semanticConsensusPass(totalChunks, chunkMatches int, similarity float64) bool {
+// excepcional (exceptionalSim, derivado do threshold configurável).
+// Notas curtas (1-2 chunks) passam com match único.
+func semanticConsensusPass(totalChunks, chunkMatches int, similarity, exceptionalSim float64) bool {
 	if totalChunks <= 2 {
 		return true
 	}
 	if chunkMatches >= 2 {
 		return true
 	}
-	return chunkMatches >= 1 && similarity >= 0.82
+	return chunkMatches >= 1 && similarity >= exceptionalSim
 }

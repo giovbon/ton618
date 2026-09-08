@@ -497,12 +497,21 @@ templ indexContent() {
 
     // ── Busca Híbrida (FTS5 + Semântica via RRF) ──
     var hybridSearchTimeout = null;
+    // Metadados de paginação retornados pelo endpoint (/api/search/hybrid).
+    var hybridHasMore = false;
+    var hybridTotal = 0;
+    // Embedding da query atual (cacheado para não re-embutir a cada "load more").
+    var hybridEmbeddingForQuery = null;
+    var hybridEmbeddingQuery = "";
+
     document.getElementById("search-hybrid").addEventListener("input", function(e) {
         var query = e.target.value.trim();
         currentSearchQuery = query;
         clearTimeout(hybridSearchTimeout);
         searchLimits.hybrid = 15;
         searchLoadMoreBusy.hybrid = false;
+        hybridHasMore = false;
+        hybridTotal = 0;
 
         if (!query) {
             document.getElementById("hybrid-results").innerHTML = "";
@@ -514,40 +523,43 @@ templ indexContent() {
             resultsEl.innerHTML = '<p class="text-xs text-zinc-500 text-center py-4 animate-pulse">Buscando...</p>';
 
             var idx = window.semanticIndex;
+            function finish(results) {
+                if (query === currentSearchQuery) renderHybridResults(results, query);
+            }
+            function fail(err) {
+                if (query === currentSearchQuery) {
+                    resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
+                }
+            }
             if (idx && idx.isReady) {
                 // Modelo pronto: embute a query e envia FTS5 + semântica para fusão RRF.
                 idx.embed(query).then(function(embedding) {
-                    return hybridSearch(query, embedding);
-                }).then(function(results) {
-                    if (query === currentSearchQuery) renderHybridResults(results, query);
-                }).catch(function(err) {
-                    if (query === currentSearchQuery) {
-                        resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
-                    }
-                });
+                    hybridEmbeddingForQuery = embedding;
+                    hybridEmbeddingQuery = query;
+                    return hybridSearch(query, embedding, 15, 0);
+                }).then(finish).catch(fail);
             } else {
                 // Sem IA pronta: o backend degrada para FTS5 puro (embedding vazio).
-                hybridSearch(query, []).then(function(results) {
-                    if (query === currentSearchQuery) renderHybridResults(results, query);
-                }).catch(function(err) {
-                    if (query === currentSearchQuery) {
-                        resultsEl.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Erro: ' + err.message + '</p>';
-                    }
-                });
+                hybridEmbeddingForQuery = [];
+                hybridEmbeddingQuery = query;
+                hybridSearch(query, [], 15, 0).then(finish).catch(fail);
             }
         }, 400);
     });
 
-    function hybridSearch(query, embedding, limit) {
+    function hybridSearch(query, embedding, limit, from) {
         limit = limit || 15;
+        from = from || 0;
         return fetch("/api/search/hybrid", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: query, embedding: embedding || [], limit: limit })
+            body: JSON.stringify({ query: query, embedding: embedding || [], limit: limit, from: from })
         }).then(function(r) {
             if (!r.ok) throw new Error("Erro na busca híbrida: " + r.statusText);
             return r.json();
         }).then(function(data) {
+            hybridTotal = data.total || (data.results || []).length;
+            hybridHasMore = !!data.has_more;
             return data.results || [];
         });
     }
@@ -568,7 +580,14 @@ templ indexContent() {
         if (old) old.remove();
 
         var limit = searchLimits[mode];
-        var finished = limit >= 50 || resultCount < limit;
+        var finished;
+        if (mode === "hybrid") {
+            // Usa has_more/total reais do endpoint — funciona também no modo
+            // degradado (sem IA), que antes travava em "Carregando mais...".
+            finished = !hybridHasMore || resultCount >= hybridTotal || limit >= 50;
+        } else {
+            finished = resultCount < limit; // semântica: endpoint sem total → heurística
+        }
         if (finished) {
             container.insertAdjacentHTML("beforeend",
                 '<div id="load-more-' + mode + '" class="text-center text-[10px] text-zinc-600 py-3">— fim dos resultados —</div>');
@@ -589,24 +608,36 @@ templ indexContent() {
             searchLimits[mode] = Math.min(limit + 15, 50);
 
             var idx = window.semanticIndex;
+            var nextLimit = searchLimits[mode];
+            if (mode === "hybrid") {
+                // Reaproveita o embedding cacheado da query atual; se o modelo
+                // carregar após a primeira busca (que degradou para FTS puro),
+                // re-embute para a próxima página ganhar a fusão semântica.
+                var embedding = (hybridEmbeddingQuery === query) ? (hybridEmbeddingForQuery || []) : [];
+                var doSearch;
+                if (!embedding.length && idx && idx.isReady) {
+                    doSearch = idx.embed(query).then(function(e) {
+                        hybridEmbeddingForQuery = e;
+                        hybridEmbeddingQuery = query;
+                        return hybridSearch(query, e, nextLimit, 0);
+                    });
+                } else {
+                    doSearch = Promise.resolve(hybridSearch(query, embedding, nextLimit, 0));
+                }
+                doSearch.then(function(results) {
+                    searchLoadMoreBusy[mode] = false;
+                    if (query === currentSearchQuery) renderHybridResults(results, query);
+                }).catch(function() { searchLoadMoreBusy[mode] = false; });
+                return;
+            }
             if (!idx || !idx.isReady) {
                 searchLoadMoreBusy[mode] = false;
                 return;
             }
-            var nextLimit = searchLimits[mode];
-            if (mode === "hybrid") {
-                idx.embed(query).then(function(embedding) {
-                    return hybridSearch(query, embedding, nextLimit);
-                }).then(function(results) {
-                    searchLoadMoreBusy[mode] = false;
-                    if (query === currentSearchQuery) renderHybridResults(results, query);
-                }).catch(function() { searchLoadMoreBusy[mode] = false; });
-            } else {
-                idx.search(query, nextLimit).then(function(results) {
-                    searchLoadMoreBusy[mode] = false;
-                    if (query === currentSearchQuery) renderSemanticResults(results, query);
-                }).catch(function() { searchLoadMoreBusy[mode] = false; });
-            }
+            idx.search(query, nextLimit).then(function(results) {
+                searchLoadMoreBusy[mode] = false;
+                if (query === currentSearchQuery) renderSemanticResults(results, query);
+            }).catch(function() { searchLoadMoreBusy[mode] = false; });
         }, { rootMargin: "300px 0px" });
         obs.observe(sentinel);
         searchLoadMoreObs[mode] = obs;
