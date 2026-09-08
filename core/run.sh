@@ -79,10 +79,11 @@ cd "$BASE_DIR"
 # Otimização do Build Web (TipTap)
 if [ -f "$BASE_DIR/web/package.json" ]; then
     cd "$BASE_DIR/web"
-    # Só roda npm install se a pasta node_modules não existir (Ganho imenso de velocidade)
+    # Só roda npm ci se a pasta node_modules não existir (Ganho imenso de velocidade)
+    # npm ci garante instalação determinística a partir do lockfile
     if [ ! -d "node_modules" ]; then
-        echo -e "${BLUE}🌐 Instalando dependências do módulo Web...${NC}"
-        npm install --silent
+        echo -e "${GREEN}🌐 Instalando dependências do módulo Web...${NC}"
+        npm ci --legacy-peer-deps --silent
     fi
     echo -e "${BLUE}🌐 Compilando bundle web (TipTap)...${NC}"
     node build.js --dev

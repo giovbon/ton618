@@ -1,11 +1,11 @@
 # ─── Estágio 1: Build do bundle web ────────────────
-FROM --platform=$BUILDPLATFORM node:20-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
 
 WORKDIR /web
 
-# 1. Instala dependências de forma isolada
+# 1. Instala dependências de forma isolada (npm ci: instalação determinística a partir do lockfile)
 COPY web/package.json web/package-lock.json ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # 2. Copia todo o fonte (web + backend .templ para o Tailwind escanear)
 COPY web/ .

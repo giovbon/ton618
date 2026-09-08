@@ -14,7 +14,7 @@ on:
         required: false
         default: "latest"
       mode:
-        description: "Modo de build: 1 = ARM64, 2 = Multi-Arch"
+        description: "Modo de build: 1 = ARM64, 2 = AMD64 + ARM64"
         required: false
         default: "2"
 
@@ -22,8 +22,50 @@ env:
   IMAGE_NAME: giovbon/ton618_core
 
 jobs:
+  test:
+    name: Test (Go + Web)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: core/go.sum
+
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            core/package-lock.json
+            core/web/package-lock.json
+
+      - name: 📦 Instalar deps do core (chrono-node p/ teste de agenda)
+        working-directory: ./core
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: 🔨 Gerar templates Templ
+        working-directory: ./core
+        run: |
+          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1)"
+          if [ -n "$TEMPL_REQ" ]; then
+            go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
+          else
+            go run github.com/a-h/templ/cmd/templ@latest generate
+          fi
+
+      - name: 🧪 Testes Go
+        working-directory: ./core
+        run: go test ./...
+
   deploy:
     name: Build & Push
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -33,14 +75,14 @@ jobs:
       - name: � Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: core/web/package-lock.json
 
       - name: 🧪 Rodar testes unitários JS (auth headers, editor-common)
         working-directory: ./core/web
         run: |
-          npm install --legacy-peer-deps
+          npm ci --legacy-peer-deps
           npm test
 
       - name: �🔧 Setup QEMU (binfmt)
@@ -73,8 +115,8 @@ jobs:
             echo "platforms=linux/arm64" >> $GITHUB_OUTPUT
             echo "mode=Apenas ARM64" >> $GITHUB_OUTPUT
           else
-            echo "platforms=linux/amd64,linux/arm64,linux/arm/v7" >> $GITHUB_OUTPUT
-            echo "mode=Multi-Arch (AMD64 + ARM64 + ARMv7)" >> $GITHUB_OUTPUT
+            echo "platforms=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
+            echo "mode=Multi-Arch (AMD64 + ARM64)" >> $GITHUB_OUTPUT
           fi
 
       - name: 🔨 Build e Push
