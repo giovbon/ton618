@@ -33,7 +33,7 @@
     "chrono-node": "^2.9.1",
     "fast-glob": "^3.3.3",
     "lowlight": "^3.3.0",
-    "marked": "^15.0.0",
+    "marked": "^18.0.11",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
     "prismjs": "^1.30.0",
