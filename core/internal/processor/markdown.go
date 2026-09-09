@@ -35,15 +35,15 @@ const (
 )
 
 var (
-	headerRegex     = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-	hashtagRegex    = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
-	WikilinkRegex   = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
-	mediaLinkRegex  = regexp.MustCompile(`(?i)(?:/file(?:/download)?|/api/file)\?name=([^)\s"&]+)`)
+	headerRegex           = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
+	hashtagRegex          = regexp.MustCompile(`(?m)(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)`)
+	WikilinkRegex         = regexp.MustCompile(`\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]`)
+	mediaLinkRegex        = regexp.MustCompile(`(?i)(?:/file(?:/download)?|/api/file)\?name=([^)\s"&]+)`)
 	markdownFileLinkRegex = regexp.MustCompile(`(?i)\]\(((?:attachments|archives|pdfs|epubs|notes)/[^)\s]+)\)`)
 
 	checkboxTodoRegex = regexp.MustCompile(`(?i)^\s*[-*]\s*\[([ xX])\]\s*(.+)$`)
 	todoHeaderRegex   = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
-	
+
 	todoRegexMu      sync.RWMutex
 	todoRegexPattern string
 	cachedTodoRegex  *regexp.Regexp
@@ -69,7 +69,7 @@ func getTodoRegex(markers []string) *regexp.Regexp {
 		}
 	}
 	pattern := strings.Join(markers, "|")
-	
+
 	todoRegexMu.RLock()
 	if todoRegexPattern == pattern && cachedTodoRegex != nil {
 		defer todoRegexMu.RUnlock()
@@ -82,7 +82,7 @@ func getTodoRegex(markers []string) *regexp.Regexp {
 	if todoRegexPattern == pattern && cachedTodoRegex != nil {
 		return cachedTodoRegex
 	}
-	
+
 	cachedTodoRegex = regexp.MustCompile(`(?i)^\s*(` + pattern + `):\s*(.+)$`)
 	todoRegexPattern = pattern
 	return cachedTodoRegex
@@ -132,7 +132,6 @@ func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fil
 	fileTags = append(fileTags, canonicalTag)
 	return fileTags
 }
-
 
 // ProcessMarkdown analisa um arquivo markdown e retorna fragmentos de documento.
 // Lê o conteúdo do disco e delega para ProcessMarkdownContent.
@@ -404,8 +403,6 @@ func ExtractTitle(content, filename string) string {
 	return strings.TrimSuffix(parts[len(parts)-1], ".md")
 }
 
-
-
 // TodoItem representa um TODO, DOING, DONE ou checkbox encontrado em uma nota.
 type TodoItem struct {
 	ID      string
@@ -495,5 +492,3 @@ func ExtractTodos(content string, filename string, modTime time.Time, markers []
 
 	return todos
 }
-
-

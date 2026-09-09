@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"time"
-	"ton618/core/internal/core/domain"
 	"ton618/core/internal/core/db/generated"
+	"ton618/core/internal/core/domain"
 )
 
 // CreateAppointment inserts a new appointment into the database.

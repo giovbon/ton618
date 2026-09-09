@@ -188,8 +188,6 @@ func TestExtractTags_NoTags(t *testing.T) {
 	}
 }
 
-
-
 // ── scoreTitle ─────────────────────────────────────────────────
 
 func TestScoreTitle_ExactMatch(t *testing.T) {
@@ -702,8 +700,6 @@ func TestExtractTerms_EmptyQuote_Ignored(t *testing.T) {
 		t.Errorf("'golang' deveria estar nos termos, got %v", terms)
 	}
 }
-
-
 
 // ── buildFTSQuery edge cases ──────────────────────────────────
 

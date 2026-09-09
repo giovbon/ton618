@@ -309,9 +309,6 @@ func TestHandleAgendaPage(t *testing.T) {
 	}
 }
 
-
-
-
 func TestHandleGetAgendaTreeIntensive(t *testing.T) {
 	ctx := newTestContext(t)
 
@@ -575,4 +572,3 @@ func TestFrontendDateParser(t *testing.T) {
 		t.Fatalf("Frontend date parser tests failed: %v\nOutput:\n%s", err, string(output))
 	}
 }
-

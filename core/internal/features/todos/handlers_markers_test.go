@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
-	"path/filepath"
 
 	"ton618/core/internal/core/config"
 	"ton618/core/internal/core/db"
@@ -34,7 +34,7 @@ func TestHandleGetTodoMarkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
-	
+
 	ctx.HandleGetTodoMarkers(rr, req)
 
 	if status := rr.Code; status != http.StatusOK {

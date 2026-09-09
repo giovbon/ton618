@@ -223,4 +223,3 @@ func TestHandleUpdateNoteProperty_RenameTitle_NumericAndString(t *testing.T) {
 		t.Error("new note notes/Nova Nota Renomeada.md was not created")
 	}
 }
-

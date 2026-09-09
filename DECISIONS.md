@@ -306,19 +306,14 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 | `tokenizer_config.json` | ~500B |
 | `onnx/model_quantized.onnx` | ~120MB |
 
-### ⚠️ Dependência do CSP para fallback remoto
+### ⚠️ CSP e download do modelo (atualizado em 09/09/2026)
 
-Se os arquivos do modelo **não estiverem disponíveis localmente** (ex: `download_model.js` não foi executado), o Transformers.js tenta baixá-los via `fetch()` do CDN do HuggingFace. Essa conexão é **bloqueada pelo CSP** em `internal/middleware/middleware.go`:
+O `semantic-worker.js` prefere os arquivos **locais** (`env.allowLocalModels = true` + `env.localModelPath = "/static/models/"`, gerados pelo `download_model.js`) e usa o CDN como fallback:
 
-```
-connect-src 'self'
-```
-
-`huggingface.co` **não está listado** no `connect-src`, então o download remoto falha silenciosamente. **O modelo só funciona via arquivos locais servidos pelo próprio servidor Go** (`/static/models/`).
-
-Caso no futuro seja necessário suportar fallback remoto, é preciso:
-1. Adicionar `https://huggingface.co` (e possivelmente `https://cdn-lfs.huggingface.co`) ao `connect-src` do CSP.
-2. Testar manualmente, pois o bloqueio do CSP não gera erro no servidor — aparece apenas no console do navegador.
+- O `connect-src` do CSP em `internal/middleware/middleware.go` **já libera os CDNs do HuggingFace** (`https://huggingface.co`, `https://*.xethub.hf.co`, `https://*.hf.co`, `https://*.cdn.hf.co`, `https://cdn-lfs.huggingface.co`).
+- Portanto o **fallback remoto funciona** quando os arquivos locais não existem (ex.: imagem Docker, que **não** roda `download_model.js`) — o navegador baixa o modelo (~120MB) do CDN e o cacheia (CacheStorage/IndexedDB).
+- ⚠️ Documento corrigido em 09/09/2026: uma versão anterior afirmava que o `connect-src` era apenas `'self'` e que o modelo só funcionava via arquivos locais — isso ficou desatualizado quando o CSP foi ampliado para liberar o HuggingFace.
+- Se um dia o fallback remoto precisar ser desativado, basta restringir o `connect-src` de volta e garantir o modelo sempre em `web/static/models/`.
 
 ### 6.7 Variantes do ONNX Runtime WASM (redução de imagem)
 
@@ -365,6 +360,35 @@ O Auto-Tag (Notas Inativas) adiciona/remove tags em notas baseado na inatividade
 - **Campos internos nunca são colunas**: `_blank`, `_icon`, `_url` (prefixo `_`) são helpers exclusivos do formatter `abrir_link` e **não entram no `columnSet`** — o `HandleGetDatabaseData` ignora qualquer chave que comece com `_` ao montar as colunas dinâmicas do Tabulator. Os campos continuam presentes nos dados das linhas. Garantido pelo teste `TestHandleGetDatabaseData_InternalFieldsNotColumns`.
 - **Paridade**: o ícone da sidebar (server-side) e o da página do Banco de Dados agora vêm da MESMA fonte (SVG do `icons.SVGString`).
 
+## 6.10 Web Capture — tag canônica `captura` (09/09/2026)
+
+📍 `core/internal/features/notes/capture_service.go` | `handlers_capture_test.go`
+
+Toda nota criada pelo **Web Capture** (artigo ou transcrição de YouTube) agora nasce com a tag `captura` no frontmatter:
+
+```yaml
+---
+tags: [captura]
+---
+```
+
+- **Motivação:** identificar visualmente na listagem (sidebar/Tabulator/busca) que a nota veio de uma captura. A tag faz o tipo virar `NoteTypeCapture` (via `DetectNoteType`), que renderiza o **mesmo ícone do Web Capture** (`Config["captura"]` → ícone `link`), em vez do ícone padrão de nota.
+- **Implementação:** a montagem do markdown foi extraída para funções puras (`buildYouTubeMarkdown`/`buildArticleMarkdown`) usando a constante única `captureTag = "captura"` — evita divergência entre os dois fluxos e permite teste determinístico sem rede.
+- **Escopo:** vale para capturas **novas**. Capturas antigas salvas sem tag não foram retroativamente marcadas (não há como identificá-las com segurança — sem tag nem prefixo de nome).
+
+## 6.11 Qualidade no CI — gofmt, go vet e typecheck do frontend (09/09/2026)
+
+📍 `.github/workflows/deploy_core.yml` | `internal/core/db/db.go`
+
+O job de **teste** do CI passou a exigir, além do `go test ./...`:
+- **`gofmt -l`** — a árvore Go inteira (cmd/internal/web) ficou 100% formatada (normalização única em 09/09/2026);
+- **`go vet ./...`** — antes não era executado em lugar nenhum do pipeline;
+- **typecheck do frontend** (`npm run typecheck` → `tsc --noEmit`) — antes existia só como script local (`npm run check`), nunca no CI.
+
+**Motivação:** gaps encontrados numa revisão de maturidade (09/09/2026). O `go vet` apontava 2 problemas reais em `db.go`:
+1. `WithRequestContext` copiava `sync.Mutex` por valor (vet: *literal copies lock value*) — era **código morto** (construía uma cópia e a descartava). Removido junto com os símbolos sem uso `StoreKey`/`requestCtxKeyType`.
+2. `queryCtx()` descartava o `cancel` de `context.WithTimeout` (vet: *lostcancel*). O `cancel` agora é registrado (`queryPending`) e invocado no `Store.Close()`, com poda para não crescer sem limite.
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
@@ -379,7 +403,7 @@ O sistema consagra três modalidades complementares de pesquisa textual e semân
 
 
 ## Como Funciona a Busca Semântica
-Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~1500 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
+Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~700 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
 Pesquisa KNN: Quando você digita uma busca semântica, o navegador gera o vetor da sua pergunta e o envia ao banco de dados SQLite. O banco usa a extensão vetorial sqlite-vec para rodar um cálculo KNN (Vizinhos Mais Próximos) e encontrar quais chunks de notas no banco têm a direção vetorial mais parecida (similaridade de cosseno).
 
 ## Como Funcionam as Notas Relacionadas (Critérios)

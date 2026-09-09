@@ -10,7 +10,7 @@ import (
 // Retorna o mapa de propriedades, o corpo e qualquer erro de parser.
 func ParseFrontmatter(content string) (map[string]interface{}, string, error) {
 	text := strings.TrimLeft(content, " \t\r\n\xef\xbb\xbf")
-	
+
 	// Verifica se começa com frontmatter
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		return nil, text, nil

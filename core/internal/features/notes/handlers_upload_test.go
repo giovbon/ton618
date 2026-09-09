@@ -14,7 +14,7 @@ func TestHandleUpload_InvalidExtension(t *testing.T) {
 	cfg := &config.AppConfig{
 		DocsDir: t.TempDir(),
 	}
-	
+
 	ctx := &HandlerContext{
 		Cfg:   cfg,
 		Store: &db.Store{},

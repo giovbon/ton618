@@ -68,7 +68,7 @@ func scoreFragment(hit *SearchHit, queryTerms []string, cleanedQuery string, syn
 
 	// Transclusão: Cada backlink que aponta para esta nota dá +0.5 no multiplicador (capado em +3.0)
 	structuralBonus := math.Min(3.0, float64(backlinkCount)*0.5)
-	
+
 	// Peso Combinado = Peso Dinâmico + Bônus do Grafo
 	finalWeight := synapticWeight + structuralBonus
 

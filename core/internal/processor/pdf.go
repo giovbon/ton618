@@ -15,15 +15,15 @@ func ProcessPDF(path, filename string, modTime time.Time) ([]Document, []string,
 	baseName := strings.TrimSuffix(filepath.Base(filename), ".pdf")
 
 	doc := Document{
-		ID:         HashFunc("pdf-" + filename),
-		Tipo:       "pdf",
-		Arquivo:    filename,
-		Secao:      "\U0001f4d5 " + baseName,
-		Texto:      "", // Sem extração de texto — apenas pesquisável por título/nome
-		Timestamp:  modTime.UTC().Format(time.RFC3339),
-		Created:    modTime.UTC().Format(time.RFC3339),
-		Hash:       CalculateHash("pdf", baseName, nil),
-		Tags:       nil,
+		ID:        HashFunc("pdf-" + filename),
+		Tipo:      "pdf",
+		Arquivo:   filename,
+		Secao:     "\U0001f4d5 " + baseName,
+		Texto:     "", // Sem extração de texto — apenas pesquisável por título/nome
+		Timestamp: modTime.UTC().Format(time.RFC3339),
+		Created:   modTime.UTC().Format(time.RFC3339),
+		Hash:      CalculateHash("pdf", baseName, nil),
+		Tags:      nil,
 	}
 
 	return []Document{doc}, nil, nil

@@ -66,7 +66,7 @@ func (ctx *HandlerContext) HandleUpdateTodoMarker(w http.ResponseWriter, r *http
 	}
 
 	markers, _ := ctx.Store.GetTodoMarkers()
-	
+
 	color := r.FormValue("color")
 	activeStr := r.URL.Query().Get("active")
 	sortOrderStr := r.FormValue("sort_order")

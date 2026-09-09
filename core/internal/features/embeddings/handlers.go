@@ -140,7 +140,7 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 			}
 		}
 	}
-	
+
 	// Converter % para distância L2
 	// cosSim = 1.0 - (dist^2 / 2) => dist = sqrt(2 * (1 - cosSim))
 	cosSimLimit := float64(searchThresholdPct) / 100.0

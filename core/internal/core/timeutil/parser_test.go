@@ -17,57 +17,57 @@ func TestParseFloatingTime(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "Floating local (no tz) - canonical format",
-			input:     "2026-06-29T15:30:00",
-			wantYear:  2026, wantMonth: time.June, wantDay: 29,
+			name:     "Floating local (no tz) - canonical format",
+			input:    "2026-06-29T15:30:00",
+			wantYear: 2026, wantMonth: time.June, wantDay: 29,
 			wantHour: 15, wantMin: 30,
 		},
 		{
-			name:      "UTC Z suffix - strips Z correctly",
-			input:     "2026-06-29T15:30:00Z",
-			wantYear:  2026, wantMonth: time.June, wantDay: 29,
+			name:     "UTC Z suffix - strips Z correctly",
+			input:    "2026-06-29T15:30:00Z",
+			wantYear: 2026, wantMonth: time.June, wantDay: 29,
 			wantHour: 15, wantMin: 30,
 		},
 		{
-			name:      "RFC3339 with positive offset - strips offset correctly",
-			input:     "2026-06-29T15:30:00+03:00",
-			wantYear:  2026, wantMonth: time.June, wantDay: 29,
+			name:     "RFC3339 with positive offset - strips offset correctly",
+			input:    "2026-06-29T15:30:00+03:00",
+			wantYear: 2026, wantMonth: time.June, wantDay: 29,
 			wantHour: 15, wantMin: 30,
 		},
 		{
-			name:      "RFC3339 with negative offset -03:00",
-			input:     "2026-06-29T15:30:00-03:00",
-			wantYear:  2026, wantMonth: time.June, wantDay: 29,
+			name:     "RFC3339 with negative offset -03:00",
+			input:    "2026-06-29T15:30:00-03:00",
+			wantYear: 2026, wantMonth: time.June, wantDay: 29,
 			wantHour: 15, wantMin: 30,
 		},
 		{
-			name:      "Milliseconds with Z suffix",
-			input:     "2026-06-26T15:52:20.533Z",
-			wantYear:  2026, wantMonth: time.June, wantDay: 26,
+			name:     "Milliseconds with Z suffix",
+			input:    "2026-06-26T15:52:20.533Z",
+			wantYear: 2026, wantMonth: time.June, wantDay: 26,
 			wantHour: 15, wantMin: 52,
 		},
 		{
-			name:      "Milliseconds without tz (JS-style)",
-			input:     "2026-07-05T12:00:00.000",
-			wantYear:  2026, wantMonth: time.July, wantDay: 5,
+			name:     "Milliseconds without tz (JS-style)",
+			input:    "2026-07-05T12:00:00.000",
+			wantYear: 2026, wantMonth: time.July, wantDay: 5,
 			wantHour: 12, wantMin: 0,
 		},
 		{
-			name:      "Year boundary - December 31",
-			input:     "2026-12-31T23:59:59",
-			wantYear:  2026, wantMonth: time.December, wantDay: 31,
+			name:     "Year boundary - December 31",
+			input:    "2026-12-31T23:59:59",
+			wantYear: 2026, wantMonth: time.December, wantDay: 31,
 			wantHour: 23, wantMin: 59,
 		},
 		{
-			name:      "Year boundary - January 1",
-			input:     "2027-01-01T00:00:00",
-			wantYear:  2027, wantMonth: time.January, wantDay: 1,
+			name:     "Year boundary - January 1",
+			input:    "2027-01-01T00:00:00",
+			wantYear: 2027, wantMonth: time.January, wantDay: 1,
 			wantHour: 0, wantMin: 0,
 		},
 		{
-			name:      "Midnight",
-			input:     "2026-03-15T00:00:00",
-			wantYear:  2026, wantMonth: time.March, wantDay: 15,
+			name:     "Midnight",
+			input:    "2026-03-15T00:00:00",
+			wantYear: 2026, wantMonth: time.March, wantDay: 15,
 			wantHour: 0, wantMin: 0,
 		},
 		{
@@ -132,7 +132,7 @@ func TestParseFloatingTimeNeverShiftsTimezone(t *testing.T) {
 	defer func() { time.Local = origLocal }()
 
 	inputs := []struct {
-		date string
+		date     string
 		wantHour int
 	}{
 		{"2026-06-29T15:30:00", 15},

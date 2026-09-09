@@ -21,12 +21,17 @@ import (
 )
 
 var (
-	youtubeTitleRe      = regexp.MustCompile(`<title>([^<]+)</title>`)
-	slugifyRe           = regexp.MustCompile(`[^a-z0-9À-ÿ]+`)
-	dashRe              = regexp.MustCompile(`-{2,}`)
-	htmlTagRe           = regexp.MustCompile(`</?[a-zA-Z][^>]*>`)
-	multipleNewlineRe   = regexp.MustCompile(`\n{3,}`)
+	youtubeTitleRe    = regexp.MustCompile(`<title>([^<]+)</title>`)
+	slugifyRe         = regexp.MustCompile(`[^a-z0-9À-ÿ]+`)
+	dashRe            = regexp.MustCompile(`-{2,}`)
+	htmlTagRe         = regexp.MustCompile(`</?[a-zA-Z][^>]*>`)
+	multipleNewlineRe = regexp.MustCompile(`\n{3,}`)
 )
+
+// captureTag é a tag aplicada a toda nota criada pelo Web Capture. Ela marca a
+// origem da nota (→ NoteTypeCapture) e faz a listagem exibir o mesmo ícone do
+// Web Capture em vez do ícone padrão de nota.
+const captureTag = "captura"
 
 // CaptureService lida com a captura de URLs (artigos web e YouTube).
 type CaptureService struct {
@@ -68,8 +73,17 @@ func (s *CaptureService) captureYouTube(rawURL string) (*CaptureResult, error) {
 		transcript = "*Transcricao nao disponivel para este video.*"
 	}
 
-	markdown := fmt.Sprintf(`---
-tags: []
+	markdown := buildYouTubeMarkdown(title, rawURL, transcript)
+
+	filename := s.uniqueFilename(slugifyFilename(title))
+	return &CaptureResult{Title: title, Filename: filename, Markdown: markdown}, nil
+}
+
+// buildYouTubeMarkdown monta o markdown final de uma transcrição de YouTube com
+// a tag canônica de captura no frontmatter.
+func buildYouTubeMarkdown(title, rawURL, transcript string) string {
+	return fmt.Sprintf(`---
+tags: [%s]
 ---
 
 # %s
@@ -82,10 +96,7 @@ tags: []
 
 ---
 
-*Capturado em %s*`, title, rawURL, transcript, formatCaptureTimestamp(time.Now()))
-
-	filename := s.uniqueFilename(slugifyFilename(title))
-	return &CaptureResult{Title: title, Filename: filename, Markdown: markdown}, nil
+*Capturado em %s*`, captureTag, title, rawURL, transcript, formatCaptureTimestamp(time.Now()))
 }
 
 func (s *CaptureService) captureArticle(rawURL string) (*CaptureResult, error) {
@@ -115,8 +126,17 @@ func (s *CaptureService) captureArticle(rawURL string) (*CaptureResult, error) {
 	}
 	mdContent = cleanupMarkdown(mdContent)
 
-	markdown := fmt.Sprintf(`---
-tags: []
+	markdown := buildArticleMarkdown(article.Title, rawURL, mdContent)
+
+	filename := s.uniqueFilename(slugifyFilename(article.Title))
+	return &CaptureResult{Title: article.Title, Filename: filename, Markdown: markdown}, nil
+}
+
+// buildArticleMarkdown monta o markdown final de um artigo capturado com a tag
+// canônica de captura no frontmatter.
+func buildArticleMarkdown(title, rawURL, mdContent string) string {
+	return fmt.Sprintf(`---
+tags: [%s]
 ---
 
 # %s
@@ -127,10 +147,7 @@ tags: []
 
 ---
 
-*Capturado em %s*`, article.Title, rawURL, rawURL, mdContent, formatCaptureTimestamp(time.Now()))
-
-	filename := s.uniqueFilename(slugifyFilename(article.Title))
-	return &CaptureResult{Title: article.Title, Filename: filename, Markdown: markdown}, nil
+*Capturado em %s*`, captureTag, title, rawURL, rawURL, mdContent, formatCaptureTimestamp(time.Now()))
 }
 
 // uniqueFilename garante um nome único incrementando sufixo se necessário.

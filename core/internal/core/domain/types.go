@@ -1,11 +1,10 @@
 package domain
 
-
 // NoteItem represents a note in lists
 type NoteItem struct {
 	Arquivo string   `json:"arquivo"`
 	Tags    []string `json:"tags"`
-	Type      string   `json:"type,omitempty"`
+	Type    string   `json:"type,omitempty"`
 	Mtime   string   `json:"mtime"`
 }
 

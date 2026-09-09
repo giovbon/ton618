@@ -52,7 +52,6 @@ func (ctx *HandlerContext) HandleCreateAppointment(w http.ResponseWriter, r *htt
 		a.ID = processor.GenerateCUID2()
 	}
 
-
 	if err := ctx.Store.CreateAppointment(a); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -142,7 +141,7 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 
 	// Parse pagination params
 	offsetStr := r.URL.Query().Get("offset")
-	limitStr  := r.URL.Query().Get("limit")
+	limitStr := r.URL.Query().Get("limit")
 	offset, limit := 0, 8
 	if v, err2 := parseInt(offsetStr); err2 == nil && v >= 0 {
 		offset = v
@@ -160,7 +159,7 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	var keys []groupKey
 
 	for _, a := range apps {
-		dt   := parseEventDate(a.EventDate)
+		dt := parseEventDate(a.EventDate)
 		year := dt.Year()
 		week := GetISOWeek(dt)
 
@@ -188,11 +187,11 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 		})
 
 		repMonth := 1
-		repYear  := k.year
+		repYear := k.year
 		if len(appsInGroup) > 0 {
-			dtRep    := parseEventDate(appsInGroup[0].EventDate)
-			repMonth  = int(dtRep.Month())
-			repYear   = dtRep.Year()
+			dtRep := parseEventDate(appsInGroup[0].EventDate)
+			repMonth = int(dtRep.Month())
+			repYear = dtRep.Year()
 		}
 
 		mName := "Desconhecido"
@@ -210,8 +209,8 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	}
 
 	// Paginate
-	total    := len(allGroups)
-	end      := offset + limit
+	total := len(allGroups)
+	end := offset + limit
 	if end > total {
 		end = total
 	}
@@ -219,7 +218,7 @@ func (ctx *HandlerContext) HandleGetAgendaTree(w http.ResponseWriter, r *http.Re
 	if offset < total {
 		page = allGroups[offset:end]
 	}
-	hasMore  := end < total
+	hasMore := end < total
 	nextOffset := end
 
 	AgendaTree(page, hasMore, nextOffset, limit).Render(r.Context(), w)
@@ -234,4 +233,3 @@ func parseInt(s string) (int, error) {
 	_, err := fmt.Sscanf(s, "%d", &v)
 	return v, err
 }
-

@@ -156,9 +156,9 @@ func TestHandleGetAllNotes_OrdersNewestFirst(t *testing.T) {
 
 	got := []string{resp.Notes[0].Arquivo, resp.Notes[1].Arquivo, resp.Notes[2].Arquivo}
 	want := []string{
-		"notes/nota-recente.md",   // 20:00Z — mais novo
+		"notes/nota-recente.md",      // 20:00Z — mais novo
 		"attachments/novo-anexo.zip", // 18:55Z real (15:55-03:00) — segundo
-		"pdfs/meu-pdf.pdf",        // 18:50Z — mais antigo
+		"pdfs/meu-pdf.pdf",           // 18:50Z — mais antigo
 	}
 	for i := range want {
 		if got[i] != want[i] {

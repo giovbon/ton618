@@ -8,17 +8,17 @@ import (
 
 // Document represents a single document/chunk stored in the database.
 type Document struct {
-	ID         string
-	Tipo       string
-	Arquivo    string
-	Secao      string
-	Texto      string
-	Tags       string
-	Pagina     int
-	Ordem      int
-	Timestamp  string
-	CreatedAt  string
-	Hash       string
+	ID        string
+	Tipo      string
+	Arquivo   string
+	Secao     string
+	Texto     string
+	Tags      string
+	Pagina    int
+	Ordem     int
+	Timestamp string
+	CreatedAt string
+	Hash      string
 }
 
 // TagsToSlice converts a comma-separated tag string to a slice.

@@ -217,4 +217,3 @@ func (s *NtfyService) checkAndSendWeeklySummaryAt(now time.Time) {
 		s.store.RecordNotificationSent(logID, "weekly", now.Format(time.RFC3339))
 	}
 }
-

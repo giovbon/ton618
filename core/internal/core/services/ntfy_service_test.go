@@ -128,7 +128,7 @@ func TestNtfyService(t *testing.T) {
 
 	// Tenta rodar novamente para ver se bloqueia envio duplicado
 	svc.checkAndSendEventRemindersAt(refTime)
-	
+
 	mu.Lock()
 	reqCountAfter := len(receivedRequests)
 	mu.Unlock()

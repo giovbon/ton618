@@ -257,11 +257,11 @@ func TestEditorRouteForTipo(t *testing.T) {
 		wantRoute string
 	}{
 		{domain.NoteTypeMarkdown, "/editor"},
-		{domain.NoteTypeMindmap, "/mindmap"},     // markmap → /mindmap
+		{domain.NoteTypeMindmap, "/mindmap"}, // markmap → /mindmap
 		{domain.NoteTypeDrawing, "/drawing"},
-		{domain.NoteTypeYoutube, "/editor"},      // youtube abre no editor markdown
-		{domain.NoteTypeArticle, "/editor"},      // artigo abre no editor markdown
-		{domain.NoteTypeCapture, "/editor"},      // captura abre no editor markdown
+		{domain.NoteTypeYoutube, "/editor"}, // youtube abre no editor markdown
+		{domain.NoteTypeArticle, "/editor"}, // artigo abre no editor markdown
+		{domain.NoteTypeCapture, "/editor"}, // captura abre no editor markdown
 	}
 
 	for _, c := range casos {

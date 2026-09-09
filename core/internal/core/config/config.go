@@ -12,7 +12,7 @@ type AppConfig struct {
 	DocsDir          string
 	DBPath           string
 	PollIntervalSec  time.Duration
-	ScanWorkers      int // workers da indexação inicial (0 = automático)
+	ScanWorkers      int           // workers da indexação inicial (0 = automático)
 	NtfyPollInterval time.Duration // intervalo do poll de notificações ntfy (precisão dos lembretes)
 	Port             string
 	WebDir           string

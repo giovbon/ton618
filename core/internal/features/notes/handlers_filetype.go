@@ -29,11 +29,11 @@ func safeJoin(baseDir, target string) (string, error) {
 type fileType int
 
 const (
-	fileTypeNote fileType = iota // Nota markdown em notes/
-	fileTypePDF                  // PDF em pdfs/ ou notes/
-	fileTypeEPUB                 // EPUB em epubs/
-	fileTypeZip                  // ZIP/attachment em attachments/ (ou archives/)
-	fileTypeImage                // Imagem em notes/ ou attachments/
+	fileTypeNote  fileType = iota // Nota markdown em notes/
+	fileTypePDF                   // PDF em pdfs/ ou notes/
+	fileTypeEPUB                  // EPUB em epubs/
+	fileTypeZip                   // ZIP/attachment em attachments/ (ou archives/)
+	fileTypeImage                 // Imagem em notes/ ou attachments/
 )
 
 // resolveFileInfo determina o tipo, nome lógico e caminho completo de um arquivo.

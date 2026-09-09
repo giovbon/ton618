@@ -63,6 +63,28 @@ jobs:
         working-directory: ./core
         run: go test ./...
 
+      - name: 🎨 Verificar formatação (gofmt)
+        working-directory: ./core
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+          if [ -n "$UNFORMATTED" ]; then
+            echo "❌ Arquivos fora do gofmt:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: 🩺 go vet
+        working-directory: ./core
+        run: go vet ./...
+
+      - name: 🟢 Instalar deps do web
+        working-directory: ./core/web
+        run: npm ci --legacy-peer-deps
+
+      - name: 🧪 Typecheck do frontend (tsc --noEmit)
+        working-directory: ./core/web
+        run: npm run typecheck
+
   deploy:
     name: Build & Push
     needs: test

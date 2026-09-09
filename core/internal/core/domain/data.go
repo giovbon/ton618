@@ -100,7 +100,6 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 		return NoteTypeDrawing
 	}
 
-
 	return NoteTypeMarkdown
 }
 

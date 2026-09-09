@@ -6,6 +6,8 @@ import (
 	"time"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+
+	"ton618/core/internal/core/domain"
 )
 
 // ── isYouTubeURL ────────────────────────────────────────────────
@@ -304,5 +306,66 @@ func TestUniqueFilename_SemPrefixoCaptura(t *testing.T) {
 	}
 	if !strings.HasPrefix(f3, "notes/nota-") {
 		t.Errorf("fallback deveria ser notes/nota-..., got %q", f3)
+	}
+}
+
+// ── Tag de captura ─────────────────────────────────────────────
+
+// TestBuildYouTubeMarkdown_TemTagCaptura garante que toda transcrição de YouTube
+// capturada pelo Web Capture nasça com a tag "captura" no frontmatter.
+func TestBuildYouTubeMarkdown_TemTagCaptura(t *testing.T) {
+	md := buildYouTubeMarkdown("Titulo", "https://youtu.be/abc123", "Transcricao exemplo.")
+
+	if !strings.Contains(md, "tags: [captura]") {
+		t.Errorf("markdown de captura YouTube deve conter 'tags: [captura]', got:\n%s", md)
+	}
+	if !strings.HasPrefix(md, "---\ntags: [captura]\n---\n") {
+		t.Errorf("frontmatter deve abrir com a tag captura, got:\n%s", md)
+	}
+}
+
+// TestBuildArticleMarkdown_TemTagCaptura garante que todo artigo capturado pelo
+// Web Capture nasça com a tag "captura" no frontmatter.
+func TestBuildArticleMarkdown_TemTagCaptura(t *testing.T) {
+	md := buildArticleMarkdown("Titulo do Artigo", "https://example.com/artigo", "Corpo do artigo.")
+
+	if !strings.Contains(md, "tags: [captura]") {
+		t.Errorf("markdown de captura de artigo deve conter 'tags: [captura]', got:\n%s", md)
+	}
+	if !strings.HasPrefix(md, "---\ntags: [captura]\n---\n") {
+		t.Errorf("frontmatter deve abrir com a tag captura, got:\n%s", md)
+	}
+}
+
+// TestCapturaTagPersistidaEAtribuiTipo salva o markdown gerado por uma captura e
+// verifica que a tag "captura" é persistida e o tipo da nota vira NoteTypeCapture
+// — o que faz a listagem exibir o mesmo ícone do Web Capture.
+func TestCapturaTagPersistidaEAtribuiTipo(t *testing.T) {
+	ctx := newTestContext(t)
+	md := buildArticleMarkdown("Exemplo Capturado", "https://example.com/exemplo", "Corpo do artigo capturado.")
+
+	if err := ctx.Notes.Save("exemplo-capturado", md, nil); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	tags, err := ctx.Store.GetFileTags("notes/exemplo-capturado.md")
+	if err != nil {
+		t.Fatalf("GetFileTags: %v", err)
+	}
+
+	found := false
+	for _, tag := range tags {
+		if strings.ToLower(tag) == "captura" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("esperava a tag 'captura' persistida, got %v", tags)
+	}
+
+	nt := domain.DetectNoteType(tags, "notes/exemplo-capturado.md")
+	if nt != domain.NoteTypeCapture {
+		t.Errorf("esperava NoteTypeCapture, got %s", nt)
 	}
 }

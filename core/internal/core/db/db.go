@@ -18,36 +18,59 @@ import (
 // Previne que operações no SQLite travaram indefinidamente.
 const defaultQueryTimeout = 30 * time.Second
 
-// requestCtxKey is the context key for storing a context in the Store.
-type requestCtxKeyType struct{}
-
-// StoreKey is the context key for retrieving the Store from an HTTP request context.
-var StoreKey requestCtxKeyType
-
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
 	DB      *sql.DB
 	Q       *dbgen.Queries
 	WriteMu sync.Mutex
+
+	// cancelMu + queryPending registram os cancel() dos contextos criados por
+	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;
+	// o registro permite cancelar tudo no Close sem alterar os ~80 pontos de
+	// chamada que usam s.queryCtx() inline.
+	cancelMu     sync.Mutex
+	queryPending []pendingCancel
 }
 
-// WithRequestContext retorna uma cópia superficial do Store que usará o
-// contexto fornecido (ex: contexto HTTP da request) em vez de Background().
-// Como Store é compartilhado entre requisições, cada middleware cria uma cópia
-// com o contexto da request atual. O WriteMu é compartilhado (ponteiro), então
-// a serialização de escritas continua funcionando.
-func (s *Store) WithRequestContext(ctx context.Context) *Store {
-	cp := &Store{DB: s.DB, Q: s.Q, WriteMu: s.WriteMu}
-	// Armazena o contexto da request para que queryCtx() o encontre
-	_ = cp // Na prática, a Store é passada via context.WithValue no middleware
-	return cp
+// pendingCancel guarda o par ctx/cancel de um timeout de query individual.
+type pendingCancel struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // queryCtx retorna um contexto com timeout padrão para queries individuais.
-// O cancel é ignorado intencionalmente — o timeout auto-cancela.
+// O timeout de 30s auto-cancela o contexto; o cancel() fica registrado apenas
+// para liberação antecipada de timer no Close e para satisfazer o go vet.
 func (s *Store) queryCtx() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+
+	s.cancelMu.Lock()
+	// Poda o registro para acompanhar a concorrência real: remove entradas cujo
+	// contexto já finalizou (timeout disparado ou cancelado).
+	if len(s.queryPending) >= 256 {
+		kept := s.queryPending[:0]
+		for _, p := range s.queryPending {
+			if p.ctx.Err() == nil {
+				kept = append(kept, p)
+			}
+		}
+		s.queryPending = kept
+	}
+	s.queryPending = append(s.queryPending, pendingCancel{ctx: ctx, cancel: cancel})
+	s.cancelMu.Unlock()
+
 	return ctx
+}
+
+// cancelPendingQueries invoca todos os cancels registrados por queryCtx.
+// Chamado no Close para liberar timers ainda pendentes.
+func (s *Store) cancelPendingQueries() {
+	s.cancelMu.Lock()
+	defer s.cancelMu.Unlock()
+	for _, p := range s.queryPending {
+		p.cancel()
+	}
+	s.queryPending = s.queryPending[:0]
 }
 
 // QueryWithCtx retorna um contexto com timeout, preferindo o contexto da request
@@ -595,5 +618,7 @@ func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
 
 // Close fecha a conexão com o banco.
 func (s *Store) Close() error {
+	// Libera timers de timeout ainda pendentes antes de fechar o pool.
+	s.cancelPendingQueries()
 	return s.DB.Close()
 }

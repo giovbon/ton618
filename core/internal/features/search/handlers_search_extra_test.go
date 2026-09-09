@@ -335,11 +335,11 @@ func TestHandleRestoreArchive_Success(t *testing.T) {
 
 func TestHandleSearch_IntegrationSpecialCharacters(t *testing.T) {
 	ctx := newTestContext(t)
-	
+
 	// 1. Create and save note
 	noteContent := "Let's learn and code in C++ today. It is a powerful language."
 	saveTestNote(t, ctx, "notes/test-cpp.md", noteContent, "estudos")
-	
+
 	// Index in FTS manually for the search subsystem to find it
 	now := time.Now().Format(time.RFC3339)
 	ctx.Store.InsertDocument(db.Document{
@@ -352,24 +352,24 @@ func TestHandleSearch_IntegrationSpecialCharacters(t *testing.T) {
 		Timestamp: now,
 	})
 	ctx.Store.IndexFTS("doc-cpp", "markdown", "notes/test-cpp.md", "Geral", noteContent, "estudos")
-	
+
 	// 2. Perform HTTP search request
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/search?q=C%2B%2B", nil) // Q is "C++" encoded
-	
+
 	ctx.HandleSearch(rec, req)
-	
+
 	if rec.Code != 200 {
 		t.Errorf("esperado status 200, got %d", rec.Code)
 	}
-	
+
 	bodyStr := rec.Body.String()
-	
+
 	// 3. Verify snippet and file name are in the HTML output
 	if !strings.Contains(bodyStr, "test-cpp.md") {
 		t.Errorf("esperado encontrar o arquivo 'test-cpp.md' no output HTML, got %q", bodyStr)
 	}
-	
+
 	// The snippet must contain the context containing "C++"
 	// Como o backend agora embute as tags de highlight, limpamos o HTML para a verificação do teste
 	cleanBody := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(bodyStr, "")

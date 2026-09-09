@@ -149,8 +149,6 @@ func (s *Store) NoteExists(filename string) bool {
 	return count > 0
 }
 
-
-
 // GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
 func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
 	return s.Q.GetNotesNeedingMarkmapTag(s.queryCtx())

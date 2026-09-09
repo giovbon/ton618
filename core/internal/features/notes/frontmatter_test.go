@@ -665,4 +665,3 @@ func TestNoteService_SyncDatabase(t *testing.T) {
 		}
 	}
 }
-

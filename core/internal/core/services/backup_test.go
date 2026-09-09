@@ -271,5 +271,3 @@ func TestBackup_CreateStreamContext_PropagaErroDeEscrita(t *testing.T) {
 		t.Fatal("esperava erro de escrita propagado")
 	}
 }
-
-

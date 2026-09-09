@@ -397,9 +397,9 @@ func TestProcessBatchParallel_EventosVazios(t *testing.T) {
 // TestNormalizeWorkers cobre os casos determinísticos do cálculo de workers.
 func TestNormalizeWorkers(t *testing.T) {
 	cases := []struct {
-		name          string
-		workers, n    int
-		want          int
+		name       string
+		workers, n int
+		want       int
 	}{
 		{"explícito", 3, 10, 3},
 		{"explícito maior que eventos é limitado", 8, 5, 5},

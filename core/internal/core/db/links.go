@@ -74,12 +74,12 @@ func (s *Store) GetLinksByFiles(fromFiles []string, exclude map[string]bool) ([]
 	if len(fromFiles) == 0 {
 		return nil, nil
 	}
-	
+
 	rows, err := s.Q.GetLinksByFiles(s.queryCtx(), fromFiles)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	normExclude := make(map[string]bool, len(exclude))
 	for k, v := range exclude {
 		normExclude[strings.ToLower(k)] = v
