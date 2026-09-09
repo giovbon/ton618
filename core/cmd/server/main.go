@@ -43,6 +43,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 1.1. Modelo de embeddings local — baixado do HuggingFace no 1º boot para o
+	// volume persistente (STATE_DIR/models) e servido em /models/*. Enquanto o
+	// download não termina, o browser usa o CDN como fallback (allowRemoteModels).
+	modelStore := embeddings.NewLocalModel(cfg.ModelDir)
+	go func() {
+		if err := modelStore.Ensure(context.Background()); err != nil {
+			slog.Warn("modelo de embeddings: download incompleto — browser usará o CDN como fallback", "error", err)
+			return
+		}
+		slog.Info("Modelo de embeddings disponível localmente", "dir", cfg.ModelDir)
+	}()
+
 	// 2. Database
 	store, err := db.NewStore(cfg.DBPath)
 	if err != nil {
@@ -131,6 +143,10 @@ func main() {
 	// Monta o handler com ETags automáticos
 	r.Handle("/static/*", http.StripPrefix("/static/", staticCache.Handler(staticDir)))
 	staticver.SetDefault(staticCache) // disponibiliza URL() para os templates
+
+	// Arquivos do modelo de embeddings (baixados no boot) — públicos, sem auth,
+	// pois o Web Worker busca /models/... sem credenciais.
+	r.Handle("/models/*", http.StripPrefix("/models/", modelStore))
 
 	// Protege as rotas dinâmicas com BasicAuth
 	r.Group(func(r chi.Router) {

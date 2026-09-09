@@ -40,12 +40,13 @@
 import { pipeline, env } from "@huggingface/transformers";
 
 // Configuração do Transformers.js
-// O modelo está disponível localmente em /static/models/ (servido pelo servidor Go).
-// O worker carrega de lá, sem depender de CDN externo. Se o cache local falhar,
-// tenta como fallback o HuggingFace CDN + IndexedDB.
+// O servidor Go baixa o modelo do HuggingFace no 1º boot (STATE_DIR/models) e o
+// serve em /models/ — o worker carrega de lá, sem depender de CDN externo.
+// Se o arquivo local ainda não estiver disponível (download em andamento/falhou),
+// tenta como fallback o HuggingFace CDN + CacheStorage.
 env.allowLocalModels = true;
-env.localModelPath = "/static/models/";
-env.allowRemoteModels = true; // fallback: CDN do HuggingFace se local falhar
+env.localModelPath = "/models/";
+env.allowRemoteModels = true; // fallback: CDN do HuggingFace se o local não estiver pronto
 // O CacheStorage API (self.caches) só é disponível em contextos seguros (HTTPS ou localhost).
 // Em contextos HTTP não seguros (ex: acessando via IP http://192.168.15.6:6180), self.caches é undefined.
 env.useBrowserCache = typeof self !== "undefined" && typeof self.caches !== "undefined";

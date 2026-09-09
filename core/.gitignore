@@ -1,6 +1,6 @@
 # --- Go Build ---
 ton618
-server
+/server
 *.exe
 *.test
 *.out

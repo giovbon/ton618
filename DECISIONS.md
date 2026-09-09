@@ -286,15 +286,36 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 - Chamar `staticver.SetDefault(cache)` no `main.go` para registrar o cache global
 - Exceções (strings JS dentro de `<script>`): `codejar.js` ainda usa `?v=N` manual
 
-## 6.6 Download do Modelo de IA
+## 6.6 Download e Distribuição do Modelo de IA (atualizado em 09/09/2026)
 
-📍 `web/download_model.js`
+### Modelo baixado no boot e servido pelo backend (Opção B — navegador offline do CDN)
 
-- O modelo `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX q8, ~120MB) é baixado do **HuggingFace** usando `wget`.
-- **`wget` é obrigatório** — lidou melhor com o XetHub/CAS Bridge do que `fetch()` ou `http.get()` do Node. Não substituir.
-- O script gera automaticamente versões comprimidas (`.gz` e `.br`) ao lado do arquivo original.
-- O Dockerfile **não** executa este script. O modelo é baixado pelo navegador via Transformers.js (CDN do HuggingFace + IndexedDB).
-- **Esta decisão não deve ser alterada sem validação manual.** Já houve regressão por mexer neste arquivo.
+📍 `internal/features/embeddings/model_files.go` | `web/src/semantic-worker.js` | `cmd/server/main.go`
+
+- O **backend Go baixa o modelo uma única vez, no 1º boot**, para o volume persistente
+  `STATE_DIR/models` (padrão; configurável via `MODEL_DIR`) e o **serve ao navegador em
+  `GET /models/*`** (rota pública, sem auth — o Web Worker do Transformers.js busca sem credenciais).
+- O `semantic-worker.js` aponta `env.localModelPath = "/models/"` (antes `/static/models/`).
+  Com o modelo local pronto, o navegador carrega do **próprio servidor** — sem depender do CDN.
+- Download **assíncrono** no boot (`go modelStore.Ensure(...)`): o servidor sobe normalmente;
+  enquanto o modelo não está pronto (ou se o HF estiver fora), o worker usa o CDN como fallback
+  (`allowRemoteModels = true` — mantido de propósito, ver CSP abaixo).
+- Escrita **atômica** (`.part` → rename) e **retomável**: arquivos já presentes (não vazios)
+  não são re-baixados — um download interrompido continua de onde parou no próximo boot.
+- Persistência: como o modelo fica sob `STATE_DIR` (volume `./data` no compose), o download ocorre
+  **1x por instalação** e sobrevive a restarts/recreates.
+- **Trade-off (decisão consciente):** a **imagem Docker não engorda** (segue ~36MB); o custo
+  (~135MB) vai para o volume persistente. Caso um dia se queira **offline total sem o boot**
+  (modelo embutido na imagem), seria a "Opção A": guardar só os `.br` em `web/static/models/`
+  (imagem ~+71–74MB) — o `staticver` já serve `Content-Encoding: br` transparentemente.
+
+### `web/download_model.js` (dev / benchmark / bundle offline)
+
+- `download_model.js` continua existindo para **uso local de desenvolvimento e benchmark**
+  (`semantic_benchmark.js` lê os arquivos crus de `web/static/models/`) e para gerar um
+  **bundle offline** manual (copiar a pasta para o volume/`MODEL_DIR` em redes sem internet).
+- ⚠️ **`wget` é obrigatório** — lidou melhor com o XetHub/CAS Bridge do que `fetch()` ou
+  `http.get()` do Node. **Não substituir.** Já houve regressão por mexer neste script.
 
 ### Arquivos baixados
 
@@ -308,12 +329,13 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 
 ### ⚠️ CSP e download do modelo (atualizado em 09/09/2026)
 
-O `semantic-worker.js` prefere os arquivos **locais** (`env.allowLocalModels = true` + `env.localModelPath = "/static/models/"`, gerados pelo `download_model.js`) e usa o CDN como fallback:
-
-- O `connect-src` do CSP em `internal/middleware/middleware.go` **já libera os CDNs do HuggingFace** (`https://huggingface.co`, `https://*.xethub.hf.co`, `https://*.hf.co`, `https://*.cdn.hf.co`, `https://cdn-lfs.huggingface.co`).
-- Portanto o **fallback remoto funciona** quando os arquivos locais não existem (ex.: imagem Docker, que **não** roda `download_model.js`) — o navegador baixa o modelo (~120MB) do CDN e o cacheia (CacheStorage/IndexedDB).
-- ⚠️ Documento corrigido em 09/09/2026: uma versão anterior afirmava que o `connect-src` era apenas `'self'` e que o modelo só funcionava via arquivos locais — isso ficou desatualizado quando o CSP foi ampliado para liberar o HuggingFace.
-- Se um dia o fallback remoto precisar ser desativado, basta restringir o `connect-src` de volta e garantir o modelo sempre em `web/static/models/`.
+- O modelo local agora é servido na **mesma origem** (`/models/*`), e o `connect-src` do CSP em
+  `internal/middleware/middleware.go` **já libera os CDNs do HuggingFace** (`https://huggingface.co`,
+  `https://*.xethub.hf.co`, `https://*.hf.co`, `https://*.cdn.hf.co`, `https://cdn-lfs.huggingface.co`).
+- Portanto o **fallback remoto continua funcionando** enquanto o download local não terminou/falhou:
+  o navegador baixa do CDN e cacheia (CacheStorage/IndexedDB).
+- Para um dia desativar o fallback remoto (offline estrito): restringir o `connect-src` e garantir o
+  modelo sempre presente localmente (boot concluído ou pasta embutida na imagem).
 
 ### 6.7 Variantes do ONNX Runtime WASM (redução de imagem)
 

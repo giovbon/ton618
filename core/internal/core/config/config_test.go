@@ -94,7 +94,7 @@ func TestGetEnvAsBool_Fallback(t *testing.T) {
 func TestLoad_Defaults(t *testing.T) {
 	// Garante que nenhuma variavel polua o teste
 	for _, k := range []string{"DOCS_DIR", "DB_PATH", "PORT", "WEB_DIR", "STATE_DIR",
-		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL", "SCAN_WORKERS"} {
+		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL", "SCAN_WORKERS", "MODEL_DIR"} {
 		os.Unsetenv(k)
 	}
 
@@ -187,6 +187,36 @@ func TestLoad_ResolveCaminhosAbsolutos(t *testing.T) {
 	}
 	if !filepath.IsAbs(cfg.StateDir) {
 		t.Fatalf("StateDir deveria ser absoluto, got %q", cfg.StateDir)
+	}
+	if !filepath.IsAbs(cfg.ModelDir) {
+		t.Fatalf("ModelDir deveria ser absoluto, got %q", cfg.ModelDir)
+	}
+}
+
+// TestLoad_ModelDir_DefaultSegueStateDir garante que MODEL_DIR, quando não
+// informado, deriva de STATE_DIR (volume persistente do modelo de embeddings).
+func TestLoad_ModelDir_DefaultSegueStateDir(t *testing.T) {
+	os.Setenv("STATE_DIR", "./test_state_dir")
+	defer os.Unsetenv("STATE_DIR")
+	os.Unsetenv("MODEL_DIR")
+
+	cfg := Load()
+
+	want := filepath.Join(cfg.StateDir, "models")
+	if cfg.ModelDir != want {
+		t.Fatalf("esperado ModelDir %q derivado de STATE_DIR, got %q", want, cfg.ModelDir)
+	}
+}
+
+// TestLoad_ModelDir_RespeitaVariavel garante que MODEL_DIR explícito é respeitado.
+func TestLoad_ModelDir_RespeitaVariavel(t *testing.T) {
+	os.Setenv("MODEL_DIR", "/var/custom/models")
+	defer os.Unsetenv("MODEL_DIR")
+
+	cfg := Load()
+
+	if cfg.ModelDir != "/var/custom/models" {
+		t.Fatalf("esperado MODEL_DIR explícito /var/custom/models, got %q", cfg.ModelDir)
 	}
 }
 

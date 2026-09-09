@@ -17,6 +17,7 @@ type AppConfig struct {
 	Port             string
 	WebDir           string
 	StateDir         string
+	ModelDir         string // dir persistente do modelo de embeddings (baixado no 1º boot)
 	AuthUser         string
 	AuthPass         string
 }
@@ -31,6 +32,7 @@ func Load() *AppConfig {
 		Port:             getEnv("PORT", "6180"),
 		WebDir:           getEnv("WEB_DIR", "./web"),
 		StateDir:         getEnv("STATE_DIR", "./data"),
+		ModelDir:         getEnv("MODEL_DIR", ""),
 		AuthUser:         getEnv("AUTH_USER", "admin"),
 		AuthPass:         getEnv("AUTH_PASS", "ton618"),
 	}
@@ -47,6 +49,15 @@ func Load() *AppConfig {
 	}
 	if absState, err := filepath.Abs(cfg.StateDir); err == nil {
 		cfg.StateDir = absState
+	}
+
+	// Diretório do modelo de embeddings: padrão <STATE_DIR>/models (volume persistente).
+	// Ex.: MODEL_DIR=/app/data/models no Docker — o modelo é baixado uma única vez no boot.
+	if cfg.ModelDir == "" {
+		cfg.ModelDir = filepath.Join(cfg.StateDir, "models")
+	}
+	if absModel, err := filepath.Abs(cfg.ModelDir); err == nil {
+		cfg.ModelDir = absModel
 	}
 
 	// Validações
@@ -99,7 +110,10 @@ func getEnvAsBool(key string, fallback bool) bool {
 }
 
 func (c *AppConfig) EnsureDirs() error {
-	for _, dir := range []string{c.DocsDir, c.StateDir} {
+	for _, dir := range []string{c.DocsDir, c.StateDir, c.ModelDir} {
+		if dir == "" {
+			continue
+		}
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}

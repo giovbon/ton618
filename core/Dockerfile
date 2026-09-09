@@ -12,7 +12,8 @@ COPY web/ .
 COPY internal/ ./internal/
 
 # 3. Copia os binários ONNX Runtime WebAssembly (ort-wasm*) de node_modules
-# O modelo de ML em si é baixado pelo navegador via CDN (Transformers.js)
+# Obs.: o modelo de ML (ONNX q8, ~120MB) NÃO entra na imagem — o backend o baixa
+# no 1º boot para STATE_DIR/models (volume) e serve em /models/* ao navegador.
 RUN node static/models/download-ort.js
 
 # 4. Compila os assets estáticos (app.css, editor.js, etc.)

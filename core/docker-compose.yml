@@ -10,6 +10,9 @@ services:
       - DOCS_DIR=/app/docs
       - DB_PATH=/app/data/ton618.db
       - STATE_DIR=/app/data
+      # Diretório persistente do modelo de embeddings (baixado do HuggingFace no 1º boot
+      # e servido em /models/* ao navegador). Fica no volume ./data → baixa 1x por instalação.
+      - MODEL_DIR=/app/data/models
       - WEB_DIR=/app/web
       - PORT=6180
       - POLL_INTERVAL_SEC=30
