@@ -87,7 +87,7 @@ func FormatDescription(desc string) string {
 		tag := submatches[2]
 
 		baseColor, alphaColor := GetTagColor(tag)
-		return fmt.Sprintf(`%s<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">%s</span>`, space, alphaColor, baseColor, alphaColor, tag)
+		return fmt.Sprintf(`%s<span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">%s</span>`, space, alphaColor, baseColor, alphaColor, tag)
 	})
 
 	return h

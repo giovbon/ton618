@@ -6,7 +6,7 @@ import { execSync } from "child_process";
 
 console.log("Compilando Tailwind CSS...");
 try {
-  execSync("npx tailwindcss -c tailwind.config.cjs -i src/input.css -o static/app.css --minify", { stdio: "inherit" });
+  execSync("npx tailwindcss -i src/input.css -o static/app.css --minify", { stdio: "inherit" });
 } catch (error) {
   console.error("Erro ao compilar Tailwind CSS:", error.message);
   process.exit(1);

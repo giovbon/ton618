@@ -102,7 +102,7 @@ func TestFormatDescription(t *testing.T) {
 		{
 			name:     "Simple Tag matching",
 			input:    "Fix this tomorrow #todo",
-			expected: `Fix this tomorrow <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2)">#todo</span>`,
+			expected: `Fix this tomorrow <span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2)">#todo</span>`,
 		},
 		{
 			name:     "XSS attempt in description text",
@@ -116,7 +116,7 @@ func TestFormatDescription(t *testing.T) {
 				b1, a1 := GetTagColor("#urgente")
 				b2, a2 := GetTagColor("#trabalho")
 				return fmt.Sprintf(
-					`Reunião importante <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#urgente</span> <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#trabalho</span>`,
+					`Reunião importante <span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#urgente</span> <span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#trabalho</span>`,
 					a1, b1, a1, a2, b2, a2,
 				)
 			}(),
@@ -127,7 +127,7 @@ func TestFormatDescription(t *testing.T) {
 			expected: func() string {
 				b, a := GetTagColor("#urgente")
 				return fmt.Sprintf(
-					`<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#urgente</span> meeting tomorrow`,
+					`<span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style="background-color: %s; color: %s; border: 1px solid %s">#urgente</span> meeting tomorrow`,
 					a, b, a,
 				)
 			}(),

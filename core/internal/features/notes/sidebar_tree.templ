@@ -88,7 +88,7 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
         if len(visibleTags) > 0 {
             <div class="hidden sm:flex gap-1 shrink-0">
                 for _, t := range visibleTags {
-                    <span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded">#{ t }</span>
+                    <span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded-sm">#{ t }</span>
                 }
             </div>
         }
@@ -190,7 +190,7 @@ func highlightText(text, query string) templ.Component {
     match := templ.EscapeString(text[idx : idx+len(queryClean)])
     after := templ.EscapeString(text[idx+len(queryClean):])
 
-    highlighted := before + `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">` + match + `</span>` + after
+    highlighted := before + `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">` + match + `</span>` + after
     return templ.Raw(highlighted)
 }
 

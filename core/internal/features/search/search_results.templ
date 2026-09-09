@@ -94,7 +94,7 @@ templ searchResultItem(res domain.SearchResultItem) {
 					iconName := icons.GetIcon(res.Tipo)
 					iconColor := icons.GetColor(res.Tipo)
 				}}
-				<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
+				<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded-sm shrink-0 flex items-center gap-1">
 					@icons.Icon(iconName, "w-3 h-3 " + iconColor) { res.Tipo }
 				</span>
 				if res.Tipo == "pdf" {
@@ -127,7 +127,7 @@ templ searchResultItem(res domain.SearchResultItem) {
 				<div class="mt-3 flex items-center justify-between gap-3">
 					<div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
 						for _, tag := range res.Tags {
-							<span class="px-2 py-0.5 rounded bg-zinc-800/60 text-[10px] font-semibold text-zinc-400 search-tag-item">#{ tag }</span>
+							<span class="px-2 py-0.5 rounded-sm bg-zinc-800/60 text-[10px] font-semibold text-zinc-400 search-tag-item">#{ tag }</span>
 						}
 					</div>
 				</div>

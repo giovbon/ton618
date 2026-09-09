@@ -1599,7 +1599,7 @@ function updateToc() {
                 tags.forEach(function (t) {
                     var btn = document.createElement("button");
                     btn.className =
-                        "text-[10px] font-bold text-zinc-500 bg-zinc-800/40 hover:bg-zinc-700/60 hover:text-zinc-300 px-2 py-0.5 rounded transition-colors";
+                        "text-[10px] font-bold text-zinc-500 bg-zinc-800/40 hover:bg-zinc-700/60 hover:text-zinc-300 px-2 py-0.5 rounded-sm transition-colors";
                     btn.textContent = "#" + t;
                     btn.onclick = function () {
                         addTagToFrontmatter(t);
