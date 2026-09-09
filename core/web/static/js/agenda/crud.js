@@ -178,7 +178,7 @@ export function startEdit(id, currentDesc, reload) {
     const editInput = document.createElement('input');
     editInput.type      = 'text';
     editInput.value     = currentDesc;
-    editInput.className = 'bg-transparent border-b border-sky-500 text-sm font-semibold text-zinc-100 outline-none flex-1 w-full';
+    editInput.className = 'bg-transparent border-b border-sky-500 text-sm font-semibold text-zinc-100 outline-hidden flex-1 w-full';
     span.replaceWith(editInput);
 
     // @ts-ignore

@@ -93,7 +93,7 @@ templ AgendaItem(app domain.Appointment) {
 						cleanTag := strings.TrimSpace(tag)
 						baseColor, alphaColor := GetTagColor(cleanTag)
 					}}
-					<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mx-0.5 transition-all select-none" style={ fmt.Sprintf("background-color: %s; color: %s; border: 1px solid %s", alphaColor, baseColor, alphaColor) }>
+					<span class="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold mx-0.5 transition-all select-none" style={ fmt.Sprintf("background-color: %s; color: %s; border: 1px solid %s", alphaColor, baseColor, alphaColor) }>
 						{ cleanTag }
 					</span>
 				}
@@ -109,10 +109,10 @@ templ AgendaItem(app domain.Appointment) {
 
 		<!-- Ações -->
 		<div class="flex items-center gap-1 shrink-0 order-4 ml-auto md:ml-0">
-			<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors" title="Editar" data-id={ app.ID } data-desc={ app.Description }>
+			<button class="edit-btn text-zinc-500 hover:text-sky-400 p-1.5 md:p-1 rounded-sm hover:bg-zinc-900 transition-colors" title="Editar" data-id={ app.ID } data-desc={ app.Description }>
 				@icons.Icon("edit-3", "w-3.5 h-3.5")
 			</button>
-			<button class="del-btn text-zinc-500 hover:text-red-400 p-1.5 md:p-1 rounded hover:bg-zinc-900 transition-colors" title="Excluir" data-id={ app.ID }>
+			<button class="del-btn text-zinc-500 hover:text-red-400 p-1.5 md:p-1 rounded-sm hover:bg-zinc-900 transition-colors" title="Excluir" data-id={ app.ID }>
 				@icons.Icon("x", "w-3.5 h-3.5")
 			</button>
 		</div>

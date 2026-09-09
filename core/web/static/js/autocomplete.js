@@ -77,7 +77,7 @@
         autocompleteContainer.innerHTML = '';
         filteredNotes.forEach((name, idx) => {
             const btn = document.createElement('button');
-            btn.className = `w-full text-left px-3 py-2 text-[13px] text-zinc-300 hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors ${idx === selectedIndex ? 'bg-zinc-800 text-white font-medium' : ''}`;
+            btn.className = `w-full text-left px-3 py-2 text-[13px] text-zinc-300 hover:bg-zinc-800 rounded-sm flex items-center gap-2 transition-colors ${idx === selectedIndex ? 'bg-zinc-800 text-white font-medium' : ''}`;
             btn.innerHTML = `<span class="text-sky-400 text-[11px] font-bold shrink-0">[[]]</span><span class="truncate">${escapeHtml(name)}</span>`;
             
             btn.addEventListener('mousedown', (e) => {

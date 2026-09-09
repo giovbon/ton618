@@ -1,3 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+/*
+ * Fontes de conteúdo explícitas (Tailwind v4 não lê mais tailwind.config.js).
+ * Cobrem os DOIS layouts em que o build roda:
+ *  - Local:  core/web/src/input.css  → interno em core/internal/features
+ *  - Docker: /web/src/input.css      → interno copiado para /web/internal
+ * O layout e o JS também são declarados para não depender da detecção
+ * automática (que é relativa ao CWD e respeita .gitignore).
+ */
+@source "../../internal/features/**/*.{templ,go}"; /* layout local: core/internal/features */
+@source "../internal/features/**/*.{templ,go}";    /* layout docker: /web/internal/features */
+@source "../layout/**/*.templ";                    /* core/web/layout (ambos os layouts) */
+@source "./**/*.{js,jsx}";                         /* web/src JS/JSX (ambos os layouts) */
+@source "../static/js/**/*.js";                    /* web/static/js commitado (ambos) */
+
+@theme {
+  --font-sans: "Inter", "system-ui", "sans-serif";
+
+  --animate-fast-spin: fast-spin 0.4s linear infinite;
+
+  @keyframes fast-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}

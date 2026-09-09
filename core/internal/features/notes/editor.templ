@@ -17,7 +17,7 @@ templ editorContent(data domain.EditorData) {
             type="text"
             value={ data.DisplayName }
             data-filename={ data.Filename }
-            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            class="flex-1 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-hidden focus:text-sky-400 truncate"
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
@@ -65,7 +65,7 @@ templ editorContent(data domain.EditorData) {
         </button>
         <textarea
             id="frontmatter-area"
-            class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]"
+            class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-hidden focus:border-zinc-600 transition-all resize-y min-h-[60px]"
             placeholder="title: Titulo da Nota&#10;tags: [tag1, tag2]"
             spellcheck="false"
         ></textarea>
@@ -86,7 +86,7 @@ templ editorContent(data domain.EditorData) {
             </svg>
             TOC
         </button>
-        <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-none focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(navegue e edite a indentacao dos titulos)" spellcheck="false"></textarea>
+        <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-hidden focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(navegue e edite a indentacao dos titulos)" spellcheck="false"></textarea>
     </div>
 
 

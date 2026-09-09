@@ -265,7 +265,7 @@
             var input = document.createElement("input");
             input.type = "checkbox";
             input.checked = isVisible;
-            input.className = "w-3.5 h-3.5 rounded border-zinc-800 text-sky-500 bg-zinc-900 focus:ring-sky-500 focus:ring-offset-zinc-950 transition-colors";
+            input.className = "w-3.5 h-3.5 rounded-sm border-zinc-800 text-sky-500 bg-zinc-900 focus:ring-sky-500 focus:ring-offset-zinc-950 transition-colors";
 
             input.addEventListener("change", function () {
                 var checked = input.checked;

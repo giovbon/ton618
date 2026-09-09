@@ -70,7 +70,7 @@ templ indexContent() {
                 hx-get="/api/sidebar"
                 hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
                 hx-target="#contentArea"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
             />
             <input
                 id="search-global"
@@ -81,7 +81,7 @@ templ indexContent() {
                 hx-post="/search"
                 hx-trigger="input changed delay:300ms, search"
                 hx-target="#global-container"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-emerald-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-emerald-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition-all hidden"
             />
             <input
                 id="search-semantic"
@@ -89,7 +89,7 @@ templ indexContent() {
                 placeholder="Busca semântica por similaridade (IA)..."
                 name="q"
                 autocomplete="off"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-violet-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-violet-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all hidden"
             />
             <input
                 id="search-hybrid"
@@ -97,7 +97,7 @@ templ indexContent() {
                 placeholder="Busca híbrida: texto + IA (RRF)..."
                 name="q"
                 autocomplete="off"
-                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-teal-500/40 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/40 transition-all hidden"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-teal-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-teal-500 focus:ring-1 focus:ring-teal-500/40 transition-all hidden"
             />
             <div
                 id="spinner"
@@ -120,7 +120,7 @@ templ indexContent() {
     <div id="semantic-panel" class="hidden mb-2.5 transition-all duration-300">
         <div class="flex items-center gap-2 py-1 text-[11px] text-zinc-400">
             <!-- Indicador visual pulsante de status -->
-            <div class="relative flex h-2 w-2 flex-shrink-0">
+            <div class="relative flex h-2 w-2 shrink-0">
                 <span id="model-indicator-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
                 <span id="model-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-zinc-500"></span>
             </div>
@@ -130,21 +130,21 @@ templ indexContent() {
                 <span id="index-status-text" class="text-zinc-500">Calculando status do índice...</span>
             </div>
             <!-- Barra de download do modelo IA -->
-            <div id="model-download-progress" class="hidden flex items-center gap-1.5 ml-2 flex-shrink-0">
+            <div id="model-download-progress" class="hidden flex items-center gap-1.5 ml-2 shrink-0">
                 <span id="model-download-text" class="text-[9px] font-mono text-zinc-500 whitespace-nowrap">0%</span>
                 <div class="w-16 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
                     <div id="model-download-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%"></div>
                 </div>
             </div>
             <!-- Barra de progresso integrada -->
-            <div id="reindex-progress" class="hidden flex items-center gap-1.5 ml-2 flex-shrink-0">
+            <div id="reindex-progress" class="hidden flex items-center gap-1.5 ml-2 shrink-0">
                 <span id="reindex-progress-text" class="text-[9px] font-mono text-zinc-500 whitespace-nowrap">0 / 0</span>
                 <div class="w-10 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
                     <div id="reindex-progress-bar" class="h-full bg-violet-500 transition-all duration-300" style="width: 0%"></div>
                 </div>
             </div>
             <!-- Botão de Recuperação de Erro (Limpar Cache) -->
-            <button id="model-reset-cache-btn" onclick="clearTransformersCache()" class="hidden ml-2 px-2 py-0.5 text-[9px] font-bold tracking-wide uppercase rounded bg-red-950/40 text-red-400 border border-red-900/50 hover:bg-red-900/20 transition-all">
+            <button id="model-reset-cache-btn" onclick="clearTransformersCache()" class="hidden ml-2 px-2 py-0.5 text-[9px] font-bold tracking-wide uppercase rounded-sm bg-red-950/40 text-red-400 border border-red-900/50 hover:bg-red-900/20 transition-all">
                 Limpar Cache e Recarregar
             </button>
         </div>
@@ -668,7 +668,7 @@ templ indexContent() {
             if (r.sem_similarity) {
                 var sim = Math.round(r.sem_similarity);
                 var simColor = sim > 75 ? "text-teal-400" : sim > 50 ? "text-yellow-400" : "text-zinc-400";
-                simBadge = '<span class="ml-auto shrink-0 px-1.5 py-0.5 rounded bg-teal-950/40 border border-teal-500/20 text-[9px] font-black tracking-widest uppercase ' + simColor + '">' + sim + '% IA</span>';
+                simBadge = '<span class="ml-auto shrink-0 px-1.5 py-0.5 rounded-sm bg-teal-950/40 border border-teal-500/20 text-[9px] font-black tracking-widest uppercase ' + simColor + '">' + sim + '% IA</span>';
             }
 
             // Seção (só quando veio do FTS)
@@ -681,7 +681,7 @@ templ indexContent() {
             if (r.tags && r.tags.length) {
                 tagsHtml = '<div class="mt-3 flex flex-wrap gap-1.5">';
                 r.tags.forEach(function(t) {
-                    tagsHtml += '<span class="px-2 py-0.5 rounded bg-zinc-800/60 text-[10px] font-semibold text-zinc-400 search-tag-item">#' + escapeHtml(t) + '</span>';
+                    tagsHtml += '<span class="px-2 py-0.5 rounded-sm bg-zinc-800/60 text-[10px] font-semibold text-zinc-400 search-tag-item">#' + escapeHtml(t) + '</span>';
                 });
                 tagsHtml += '</div>';
             }
@@ -689,7 +689,7 @@ templ indexContent() {
             html += '<li class="relative bg-zinc-900/30 border border-zinc-800/50 hover:border-emerald-500/30 hover:bg-emerald-950/10 rounded-xl transition-all duration-300 group p-4">' +
                 '<div class="relative z-10">' +
                 '<div class="flex items-center gap-2 min-w-0 mb-2">' +
-                '<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">' +
+                '<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded-sm shrink-0 flex items-center gap-1">' +
                 (r._icon || "") + ' ' + escapeHtml(tipo || "nota") +
                 '</span>' +
                 '<a href="' + route + '?file=' + encodeURIComponent(r.filename || "") + '" class="text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer ' + titleColor + ' min-w-0">' +
@@ -737,12 +737,12 @@ templ indexContent() {
             html += '<a href="' + route + '?file=' + encodeURIComponent(r.filename) + '"' +
                 ' class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-violet-500/30 hover:bg-violet-950/10 transition-all duration-300 group">' +
                 '<div class="flex items-center gap-2 min-w-0">' +
-                '<svg class="w-3.5 h-3.5 text-zinc-600 group-hover:text-violet-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<svg class="w-3.5 h-3.5 text-zinc-600 group-hover:text-violet-400 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
                 '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>' +
                 '</svg>' +
                 '<span class="text-[13px] text-zinc-200 truncate">' + escapeHtml(name) + '</span>' +
                 '</div>' +
-                '<span class="text-[10px] font-mono ' + similarityColor + ' flex-shrink-0">' + similarity + '%</span>' +
+                '<span class="text-[10px] font-mono ' + similarityColor + ' shrink-0">' + similarity + '%</span>' +
                 '</a>';
         });
         html += "</div>";
@@ -849,7 +849,7 @@ templ indexContent() {
             terms.forEach(function (w) {
                 var pat = makeAccentInsensitivePattern(w);
                 var re = new RegExp("(" + pat + ")(?![^<]*>|[^<>]*<\/)", "gi");
-                html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">$1</span>');
+                html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">$1</span>');
             });
             stems.forEach(function (stem) {
                 var cleanedStem = cleanJSOperators(stem);
@@ -868,7 +868,7 @@ templ indexContent() {
                             }
                         }
                     }
-                    return '<span class="stem-highlight text-violet-400 font-bold bg-violet-500/15 rounded px-0.5">' + match + '</span>';
+                    return '<span class="stem-highlight text-violet-400 font-bold bg-violet-500/15 rounded-sm px-0.5">' + match + '</span>';
                 });
             });
             el.innerHTML = html;

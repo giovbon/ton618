@@ -18,7 +18,7 @@ templ mindmapContent(data domain.EditorData) {
             type="text"
             value={ data.DisplayName }
             data-filename={ data.Filename }
-            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-none focus:text-sky-400 truncate"
+            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-hidden focus:text-sky-400 truncate"
             spellcheck="false"
         />
         <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
@@ -49,7 +49,7 @@ templ mindmapContent(data domain.EditorData) {
             <div class="flex-1 w-full relative min-h-0">
                 <div
                     id="mindmap-editor"
-                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-none"
+                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-hidden"
                     spellcheck="false"
                 >{ data.Content }</div>
             </div>
@@ -379,7 +379,7 @@ templ mindmapContent(data domain.EditorData) {
 
             // 2. Inline code `code`
             html = html.replace(/`[^`\n]+`/g, function(match) {
-                return addToken(match, "text-pink-400 font-mono bg-zinc-900/60 px-1 rounded");
+                return addToken(match, "text-pink-400 font-mono bg-zinc-900/60 px-1 rounded-sm");
             });
 
             // 3. Images ![alt](url)

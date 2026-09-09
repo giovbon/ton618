@@ -251,7 +251,7 @@ func buildSnippet(hit search.SearchHit, query string) string {
 
 	// Segurança: Escapa HTML do snippet original para evitar XSS, mas preserva as tags de highlight
 	safeSnippet := html.EscapeString(snippet)
-	safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded px-0.5">`)
+	safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">`)
 	safeSnippet = strings.ReplaceAll(safeSnippet, "__HL_END__", "</span>")
 	return safeSnippet
 }

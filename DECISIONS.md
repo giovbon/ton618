@@ -455,6 +455,23 @@ $$RRF(d) = \frac{1}{k + rank_{fts}(d)} + \frac{1}{k + rank_{sem}(d)}, \quad k = 
 - **UI**: novo botão/input/container "🔀 Híbrido" em `index.templ`, com badge de similaridade e render unificado. Ícone novo `busca-hybrid` (sparkles, teal) em `icons/config.go`.
 - **Motivação**: a busca semântica sozinha "às vezes é imprecisa"; a fusão RRF é técnica clássica de IR, barata e sem modelo novo.
 
+## 9. Frontend — Migração Tailwind v4 e marked v18 (09/09/2026)
+
+📍 `core/web/src/input.css` | `core/web/build.js` | `core/web/package.json`
+
+Migração dos updates major do dependabot (PRs #5 e #7) com o app validado de ponta a ponta:
+
+- **tailwindcss 3.4.19 → 4.3.3**: build migrado de `tailwind.config.cjs` para **CSS-first** (`input.css`). `tailwind.config.cjs` foi **removido**.
+  - `@import "tailwindcss";` + `@theme` (mantém `--font-sans: Inter` e `--animate-fast-spin`) + `@plugin "@tailwindcss/typography";`.
+  - **Fonte de conteúdo via `@source`** (relativo ao CSS em `src/`), cobrindo os DOIS layouts de build (local `core/internal/features` e Docker `/web/internal`):
+    `../../internal/features` (local), `../internal/features` (Docker), `../layout`, `./**/*.{js,jsx}`, `../static/js`.
+  - CLI agora é o binário de `@tailwindcss/cli` (o pacote `tailwindcss` v4 não embute CLI). `build.js` roda `npx tailwindcss -i src/input.css -o static/app.css --minify`.
+  - Renomes de classe aplicados (preservam o visual, valores idênticos): `rounded`→`rounded-sm`, `outline-none`→`outline-hidden`, `flex-shrink`→`shrink`, `flex-shrink-0`→`shrink-0`, `placeholder-{cor}`→`placeholder:text-{cor}`, `backdrop-blur-sm`→`backdrop-blur-xs`. ⚠️ `flex-shrink` também é **propriedade CSS** — cuidado para não renomear `flex-shrink:` dentro de `style="..."`/`<style>` (já corrigido).
+  - `@tailwindcss/typography` 0.5.10 → 0.5.20 (suporte v4 via `@plugin`).
+- **marked 15.0.12 → 18.0.11**: uso é só `marked.parse()` (API estável, síncrona, GFM/breaks intactos) — nenhuma mudança de código além do bump. `docs.templ` usa marked via CDN (fora do escopo do npm).
+- **Validação**: `go test ./...`, `go vet`, `gofmt`, `npm run typecheck`, `npm test`, `node build.js` (com checagem de sanidade `green-500`/`prose`) — todos OK; cobertura de classes conferida entre o CSS v3 e o v4 (nenhuma classe em uso foi perdida; só os renomes acima).
+- Nota: o `semantic-worker.js`/`drawing.js` estáticos commitados podem divergir de um rebuild local (staleness pré-existente); reverter com `git checkout -- core/web/static` após build.
+
 [HELP do sistema](core/internal/features/system/help.md)
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 
