@@ -70,8 +70,8 @@ func extractSearchTerms(query string) []string {
 		if len(t) <= 1 {
 			continue
 		}
-		// Ignora termos de exclusão (-termo), tags do FTS (+tags:nome) e hashtags nativas (#tag)
-		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+tags:") || strings.HasPrefix(t, "#") {
+		// Ignora termos de exclusão (-termo) e tags do FTS (+tags:nome)
+		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+tags:") {
 			continue
 		}
 
@@ -147,14 +147,6 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 	weightCache := make(map[string]float64) // cache para GetSynapticWeight
 	var items []domain.SearchResultItem
 	for _, hit := range results.Hits {
-		// Pula PDFs e anexos na busca global (não fazem sentido como resultado textual)
-		if strings.HasPrefix(hit.Doc.Arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(hit.Doc.Arquivo), ".pdf") {
-			continue
-		}
-		if strings.HasPrefix(hit.Doc.Arquivo, "attachments/") {
-			continue
-		}
-
 		// Deduplica por arquivo de nota
 		if seenFiles[hit.Doc.Arquivo] {
 			continue
@@ -481,7 +473,7 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 	if len(explicitFiles) > 0 {
 		for _, f := range explicitFiles {
 			f = strings.TrimSpace(f)
-			if f != "" {
+			if f != "" && !strings.Contains(f, "..") {
 				filesToDelete[f] = true
 			}
 		}
@@ -624,7 +616,7 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 
 	for _, arquivo := range files {
 		arquivo = strings.TrimSpace(arquivo)
-		if arquivo == "" {
+		if arquivo == "" || strings.Contains(arquivo, "..") {
 			continue
 		}
 

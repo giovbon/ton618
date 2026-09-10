@@ -172,16 +172,6 @@ func (ctx *HandlerContext) HandleHybridSearch(w http.ResponseWriter, r *http.Req
 		rank := 1
 		for _, hit := range results.Hits {
 			arquivo := hit.Doc.Arquivo
-			if strings.HasPrefix(arquivo, "pdfs/") || strings.HasSuffix(strings.ToLower(arquivo), ".pdf") {
-				continue
-			}
-			if strings.HasPrefix(arquivo, "attachments/") {
-				continue
-			}
-			// Notas marcadas para exclusão não participam da fusão (paridade com a semântica).
-			if hasDeletarTag(hit.Doc.Tags) {
-				continue
-			}
 			if seen[arquivo] {
 				continue
 			}

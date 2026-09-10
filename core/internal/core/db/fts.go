@@ -80,12 +80,12 @@ func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, si
 	var countErr error
 	if query == "" {
 		countErr = s.DB.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE tags NOT LIKE '%drawing%' LIMIT ?)",
+			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%' LIMIT ?)",
 			ftsCountCap,
 		).Scan(&total)
 	} else {
 		countErr = s.DB.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' LIMIT ?)",
+			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%' LIMIT ?)",
 			query, ftsCountCap,
 		).Scan(&total)
 	}
@@ -99,14 +99,14 @@ func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, si
 		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 			FROM docs_fts
-			WHERE tags NOT LIKE '%drawing%'
+			WHERE tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
 			ORDER BY rowid DESC
 			LIMIT ? OFFSET ?`, size, from)
 	} else {
 		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, 4, '__HL_START__', '__HL_END__', '...', 64) as snippet_text
 			FROM docs_fts
-			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'
+			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
 			ORDER BY rank
 			LIMIT ? OFFSET ?`, query, size, from)
 	}
@@ -141,7 +141,7 @@ func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from,
 	s.DB.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM (
 			SELECT 1 FROM documents
-			WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'
+			WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
 			LIMIT ?
 		)`,
 		pattern, pattern, pattern, ftsCountCap,
@@ -150,7 +150,7 @@ func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from,
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 		FROM documents
-		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'
+		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
 		LIMIT ? OFFSET ?`,
 		pattern, pattern, pattern, size, from)
 	if err != nil {
