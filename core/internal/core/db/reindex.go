@@ -21,6 +21,7 @@ func (s *Store) ReplaceFileIndexes(
 ) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 
 	if ctx == nil {
 		ctx = s.queryCtx()
@@ -115,10 +116,10 @@ func (s *Store) ReplaceFileIndexes(
 
 	// 3.5. Clean up chunks and embeddings if it became non-embeddable
 	if !s.isNoteEmbeddable(filename, tags) {
-		if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
+		if err := deleteEmbeddingsForFile(tx, filename); err != nil {
 			return err
 		}
-		if _, err := tx.Exec("DELETE FROM note_embeddings WHERE chunk_id LIKE ?", filename+`#%`); err != nil {
+		if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
 			return err
 		}
 	}
@@ -154,6 +155,7 @@ func (s *Store) ReplaceFileIndexes(
 func (s *Store) DeleteAllFileRecords(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -185,10 +187,10 @@ func (s *Store) DeleteAllFileRecords(filename string) error {
 	if _, err := tx.Exec("DELETE FROM notes WHERE filename = ?", filename); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
+	if err := deleteEmbeddingsForFile(tx, filename); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("DELETE FROM note_embeddings WHERE chunk_id LIKE ?", filename+`#%`); err != nil {
+	if _, err := tx.Exec("DELETE FROM note_chunks WHERE filename = ?", filename); err != nil {
 		return err
 	}
 

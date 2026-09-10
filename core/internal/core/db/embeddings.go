@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	dbgen "ton618/core/internal/core/db/generated"
 	"ton618/core/internal/core/domain"
@@ -100,6 +101,7 @@ func (s *Store) SaveEmbedding(chunkID string, embedding []float32) error {
 		`INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)`,
 		chunkID, blob,
 	)
+	s.invalidateEmbeddingStatus()
 	return err
 }
 
@@ -118,6 +120,7 @@ type ChunkInfo struct {
 func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -138,14 +141,14 @@ func (s *Store) SaveNoteChunks(filename string, chunks []ChunkInfo) error {
 		return nil
 	}
 
-	// 1. Remove chunks antigos do filename
-	if err := qtx.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
-		return fmt.Errorf("delete old chunks: %w", err)
+	// 1. Remove embeddings antigos (por id, via índice da vec0) ANTES de apagar os chunks
+	if err := deleteEmbeddingsForFile(tx, filename); err != nil {
+		return fmt.Errorf("delete old embeddings: %w", err)
 	}
 
-	// 2. Remove embeddings antigos (chunk_ids do filename)
-	if _, err := tx.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`); err != nil {
-		return fmt.Errorf("delete old embeddings: %w", err)
+	// 2. Remove chunks antigos do filename
+	if err := qtx.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
+		return fmt.Errorf("delete old chunks: %w", err)
 	}
 
 	// 3. Insere novos chunks e embeddings
@@ -203,6 +206,7 @@ func (s *Store) EnsureEmbeddingModelVersion(version string) (bool, error) {
 func (s *Store) ResetAllEmbeddings() error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 
 	if _, err := s.DB.Exec("DELETE FROM note_chunks"); err != nil {
 		return fmt.Errorf("delete note_chunks: %w", err)
@@ -213,16 +217,71 @@ func (s *Store) ResetAllEmbeddings() error {
 	return nil
 }
 
+// execQuerier agrupa o subconjunto de métodos comum a *sql.DB e *sql.Tx,
+// permitindo executar a mesma limpeza dentro ou fora de transação.
+type execQuerier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	Prepare(query string) (*sql.Stmt, error)
+}
+
+// deleteEmbeddingsForFile remove os embeddings de todos os chunks de um arquivo.
+//
+// A tabela note_embeddings é virtual (vec0) e NÃO usa índice para
+// `chunk_id LIKE 'arquivo#%'` — isso força um full scan (medido: ~19ms para
+// 1.000 notas × 10 chunks). Já `chunk_id = ?` usa o índice da vec0 (~52µs).
+// Então resolvemos os chunk_ids pelo índice idx_note_chunks_filename e
+// apagamos por igualdade.
+//
+// IMPORTANTE: deve ser chamado ANTES de apagar as linhas de note_chunks do
+// arquivo, pois a lista de chunk_ids vem de lá.
+func deleteEmbeddingsForFile(q execQuerier, filename string) error {
+	rows, err := q.Query(`SELECT chunk_id FROM note_chunks WHERE filename = ?`, filename)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, 8)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	if len(ids) == 0 {
+		return nil
+	}
+
+	stmt, err := q.Prepare(`DELETE FROM note_embeddings WHERE chunk_id = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, id := range ids {
+		if _, err := stmt.Exec(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteEmbedding remove todos os embeddings e chunks de uma nota.
 func (s *Store) DeleteEmbedding(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 
-	if err := s.Q.DeleteNoteChunks(s.queryCtx(), filename); err != nil {
+	if err := deleteEmbeddingsForFile(s.DB, filename); err != nil {
 		return err
 	}
-	_, err := s.DB.Exec(`DELETE FROM note_embeddings WHERE chunk_id LIKE ?`, filename+`#%`)
-	return err
+	return s.Q.DeleteNoteChunks(s.queryCtx(), filename)
 }
 
 // HasEmbedding verifica se uma nota ja possui embedding indexado (qualquer chunk).
@@ -419,8 +478,40 @@ func (s *Store) IsNoteEmbeddable(filename string, tags []string) bool {
 }
 
 // GetEmbeddingStatus retorna quantas notas tem embedding vs. total de notas no banco.
-// Usa SQL para contagem eficiente em vez de carregar todas as notas em memória.
+// O resultado é memoizado porque a rota /api/embeddings/status é pollada pelo
+// browser e as 3 contagens agregadas custam ~400ms num vault de 3.000 notas.
 func (s *Store) GetEmbeddingStatus() (EmbeddingStatus, error) {
+	s.statusMu.Lock()
+	if s.statusValid && time.Since(s.statusAt) < embeddingStatusCacheTTL {
+		v := s.statusVal
+		s.statusMu.Unlock()
+		return v, nil
+	}
+	s.statusMu.Unlock()
+
+	status, err := s.computeEmbeddingStatus()
+	if err != nil {
+		return status, err
+	}
+
+	s.statusMu.Lock()
+	s.statusVal = status
+	s.statusAt = time.Now()
+	s.statusValid = true
+	s.statusMu.Unlock()
+	return status, nil
+}
+
+// invalidateEmbeddingStatus invalida o cache de GetEmbeddingStatus.
+// Deve ser chamado por toda escrita que altere notes/note_chunks/note_embeddings/tags.
+func (s *Store) invalidateEmbeddingStatus() {
+	s.statusMu.Lock()
+	s.statusValid = false
+	s.statusMu.Unlock()
+}
+
+// computeEmbeddingStatus executa as contagens agregadas (sem cache).
+func (s *Store) computeEmbeddingStatus() (EmbeddingStatus, error) {
 	var status EmbeddingStatus
 	status.EmbeddingDim = EmbeddingDim
 

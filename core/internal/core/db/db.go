@@ -18,11 +18,24 @@ import (
 // Previne que operações no SQLite travaram indefinidamente.
 const defaultQueryTimeout = 30 * time.Second
 
+// embeddingStatusCacheTTL é a validade máxima do cache de GetEmbeddingStatus.
+// É uma rede de segurança: o cache é invalidado explicitamente nas escritas;
+// o TTL só evita que um caminho de escrita esquecido deixe o status obsoleto.
+const embeddingStatusCacheTTL = 10 * time.Second
+
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
 	DB      *sql.DB
 	Q       *dbgen.Queries
 	WriteMu sync.Mutex
+
+	// statusCache memoiza GetEmbeddingStatus (rota /api/embeddings/status é
+	// pollada). As 3 contagens agregadas custam ~400ms num vault de 3k notas.
+	// Invalidado por invalidateEmbeddingStatus() nas escritas.
+	statusMu    sync.Mutex
+	statusVal   EmbeddingStatus
+	statusAt    time.Time
+	statusValid bool
 
 	// cancelMu + queryPending registram os cancel() dos contextos criados por
 	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;

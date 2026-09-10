@@ -472,6 +472,22 @@ Migração dos updates major do dependabot (PRs #5 e #7) com o app validado de p
 - **Validação**: `go test ./...`, `go vet`, `gofmt`, `npm run typecheck`, `npm test`, `node build.js` (com checagem de sanidade `green-500`/`prose`) — todos OK; cobertura de classes conferida entre o CSS v3 e o v4 (nenhuma classe em uso foi perdida; só os renomes acima).
 - Nota: o `semantic-worker.js`/`drawing.js` estáticos commitados podem divergir de um rebuild local (staleness pré-existente); reverter com `git checkout -- core/web/static` após build.
 
+## 10. Performance — correções de gargalos (10/09/2026)
+
+📍 `internal/search/search.go` | `internal/core/db/*.go` | `internal/features/notes/note_service.go` | `web/src/database.js` | `web/static/editor-common.js` | `web/static/js/agenda/timeline.js`
+
+Correções guiadas por benchmarks (`perf_bench_test.go` em `internal/search` e `internal/core/db`). Números medidos num vault sintético de 3.000 notas (~21k docs) / 2 vCPU:
+
+- **Busca "só por tag"** (`#tag`): o `LIMIT` era `99999` e materializava o corpus inteiro. Agora é limitado (máx. `maxTagOnlyCandidates = 500`); o `total` continua exato (vem do COUNT). **290ms → ~39ms e 182MB → ~8MB**.
+- **Limpeza de embeddings (tabela virtual `vec0`)**: `chunk_id LIKE 'arquivo#%'` não usa índice (full scan). Agora resolve-se os `chunk_id` pelo índice `idx_note_chunks_filename` e apaga-se por igualdade (`chunk_id = ?`), que usa o índice da vec0. Helper único `deleteEmbeddingsForFile` usado em `SaveNoteChunks`, `DeleteEmbedding`, `DeleteNote`, `RenameNote`, `ReplaceFileIndexes` e `DeleteAllFileRecords`. **~18,5ms → ~1,1ms (~16×)**. ⚠️ Deve rodar **antes** de apagar as linhas de `note_chunks`.
+- **Rename de backlinks (`UpdateBacklinksOnRename`)**: era N+1 (`GetNote` por candidato). Agora usa `GetAllNotesContent()` em uma query (método adicionado ao `NoteStore`). **~171ms → ~2ms (~86×)**.
+- **`GetEmbeddingStatus`** (rota pollada): as 3 contagens agregadas custavam ~410ms em 3k notas. Resultado passou a ser **memoizado** no `Store` (`embeddingStatusCacheTTL = 10s`), **invalidado em toda escrita** que altere notes/chunks/embeddings/tags (SaveNote, DeleteNote, RenameNote, SaveNoteChunks, SaveEmbedding, DeleteEmbedding, ResetAllEmbeddings, ReplaceFileIndexes, DeleteAllFileRecords, Set/Add/RemoveTag). HTTP `Cache-Control: private, max-age=10` (antes `no-cache` forçava ida ao servidor). **~410ms → ~62ns no hit**.
+- **`extractTerms`**: o regexp era recompilado a cada chamada (roda em loop no gate da híbrida). Agora é `var` de pacote.
+- **`HandleManualSync`**: removido o dead code (N+1 `GetNote` + `time.Parse` descartado + `if false`); agora conta notas com conteúdo em uma query. Comportamento observável inalterado.
+- **Frontend**: `database.js` parseia a query de busca **uma vez** (antes rodava por linha a cada tecla); `timeline.js` guarda o `redLineInterval` em escopo de **módulo** (corrige leak de timer/canvas a cada re-render) e coalesce o redraw do `wheel` via `requestAnimationFrame`; `editor-common.js` coalesce `updateHighlight` (click/keyup/scroll/selectionchange/resize) via rAF (evita layout thrashing).
+
+> Não alterados (avaliados, menor prioridade/risco de contrato): o `COUNT(*)` do FTS5 por busca, o filtro `tags NOT LIKE '%drawing%'` dentro da query FTS e a queda para `SearchFTSLike` (full scan `LOWER(texto) LIKE`) em buscas sem resultado.
+
 [HELP do sistema](core/internal/features/system/help.md)
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 

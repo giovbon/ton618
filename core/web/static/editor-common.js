@@ -174,7 +174,20 @@
                 editorEl.parentNode.appendChild(highlight);
             }
 
+            var highlightRaf = 0;
+            // Coalesce múltiplos eventos (click/keyup/scroll/selectionchange/
+            // resize) em um único update por frame. Antes cada evento lia
+            // getClientRects/getBoundingClientRect e escrevia style.top/height
+            // sem throttle → layout thrashing durante seleção/scroll.
             function updateHighlight() {
+                if (highlightRaf) return;
+                highlightRaf = requestAnimationFrame(function () {
+                    highlightRaf = 0;
+                    updateHighlightNow();
+                });
+            }
+
+            function updateHighlightNow() {
                 if (document.activeElement !== editorEl) {
                     highlight.style.opacity = "0";
                     return;

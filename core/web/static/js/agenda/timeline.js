@@ -28,6 +28,13 @@ const MONTHS_PT_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago',
 let lat = -23.5505;
 let lng = -46.6333;
 
+// Timer da linha vermelha (horário atual). Precisa ser de escopo de MÓDULO:
+// se fosse local de renderTimeline, cada re-render teria uma variável nova
+// (undefined), o clearInterval anterior nunca rodaria e o setInterval antigo
+// continuaria vivo, segurando o canvas removido (leak a cada re-render).
+/** @type {number | null} */
+let redLineInterval = null;
+
 /**
  * @param {number} newLat 
  * @param {number} newLng 
@@ -68,9 +75,6 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
 
     // Default: 1 day = 140 px
     let msPerPixel = (24 * 60 * 60 * 1000) / 140;
-
-    /** @type {number | undefined} */
-    let redLineInterval;
 
     function draw() {
         canvas.innerHTML = '';
@@ -273,6 +277,11 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
     setTimeout(() => { container.scrollLeft = xYesterday; }, 50);
 
     // ── Zoom ────────────────────────────────────────────────────────────────
+    // O wheel dispara dezenas de eventos por gesto; draw() recria todo o DOM
+    // (e no modo "days" chama ~700 SunCalc.getTimes). Coalescemos o redraw em
+    // um por frame (rAF) para não reconstruir a timeline a cada evento.
+    let zoomRaf = 0;
+    let pendingZoom = null;
     container.addEventListener('wheel', (e) => {
         e.preventDefault();
         const mouseX      = e.pageX - container.getBoundingClientRect().left;
@@ -285,8 +294,18 @@ export function renderTimeline(timelineContainer, appointments, holidaysList) {
 
         if (Math.abs(newMpp - msPerPixel) > 1000) {
             msPerPixel = newMpp;
-            draw();
-            container.scrollLeft = (timeAtMouse - startDate.getTime()) / msPerPixel - mouseX;
+            pendingZoom = { timeAtMouse, mouseX };
+        }
+
+        if (!zoomRaf) {
+            zoomRaf = requestAnimationFrame(() => {
+                zoomRaf = 0;
+                if (!pendingZoom) return;
+                const pz = pendingZoom;
+                pendingZoom = null;
+                draw();
+                container.scrollLeft = (pz.timeAtMouse - startDate.getTime()) / msPerPixel - pz.mouseX;
+            });
         }
     }, { passive: false });
 

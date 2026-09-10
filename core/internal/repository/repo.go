@@ -13,6 +13,7 @@ type NoteStore interface {
 	DeleteNote(filename string) error
 	RenameNote(old, new string) error
 	GetAllNotes() (map[string]string, error)
+	GetAllNotesContent() (map[string]string, error)
 	GetNoteMtime(filename string) (string, error)
 	NoteExists(filename string) bool
 }

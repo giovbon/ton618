@@ -34,7 +34,17 @@ var (
 	spacesRe         = regexp.MustCompile(`\s+`)
 	nativeHashtag    = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
 	ftsUnsafeRe      = regexp.MustCompile(`[\^~()]`) // chars que interferem com sintaxe FTS5
+	// quotedTermsRegex é compilado uma vez (antes era recompilado a cada
+	// chamada de extractTerms, que roda em loop no gate da busca híbrida).
+	quotedTermsRegex = regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
 )
+
+// maxTagOnlyCandidates limita o pool de candidatos de uma busca "só por tag".
+// O FTS5 já restringe o match pela tag, então não é preciso materializar o
+// corpus inteiro: antes o LIMIT era 99999 e chegava a alocar ~180MB por busca
+// em vaults grandes. O `total` continua exato (vem do COUNT), só reduzimos
+// quantos documentos são carregados para re-ranking.
+const maxTagOnlyCandidates = 500
 
 // sanitizeFTS5Term removes characters that interfere with FTS5 query syntax.
 func sanitizeFTS5Term(term string) string {
@@ -64,10 +74,15 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 
 	// 1. Try FTS5 first
 	ftsQuery := buildFTSQuery(rawQuery)
-	// Se a busca textual é vazia mas temos tags, buscamos mais resultados para filtrar em Go
+	// Se a busca textual é vazia mas temos tags, o FTS já filtra pela tag;
+	// ampliamos o pool de candidatos para re-ranking, mas de forma limitada
+	// (evita materializar o corpus inteiro — ver maxTagOnlyCandidates).
 	limitSize := size * 3
 	if remainingQuery == "" && len(queryTags) > 0 {
-		limitSize = 99999
+		limitSize = size * 10
+		if limitSize > maxTagOnlyCandidates {
+			limitSize = maxTagOnlyCandidates
+		}
 	}
 	results, total, err := store.SearchFTSWithContext(ctx, ftsQuery, from, limitSize)
 	if err != nil {
@@ -348,9 +363,8 @@ func extractTerms(raw string) []string {
 	var terms []string
 	remaining := raw
 
-	quotedRe := regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
 	for {
-		m := quotedRe.FindStringSubmatch(remaining)
+		m := quotedTermsRegex.FindStringSubmatch(remaining)
 		if m == nil {
 			break
 		}

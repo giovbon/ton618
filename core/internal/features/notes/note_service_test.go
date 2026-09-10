@@ -55,13 +55,14 @@ func (m *mockFileOps) ReplaceFileIndexes(ctx context.Context, filename string, d
 }
 
 type mockNoteStore struct {
-	getNoteFn      func(filename string) (string, error)
-	saveNoteFn     func(filename, content, mtime string) error
-	deleteNoteFn   func(filename string) error
-	renameNoteFn   func(old, new string) error
-	getAllNotesFn  func() (map[string]string, error)
-	getNoteMtimeFn func(filename string) (string, error)
-	noteExistsFn   func(filename string) bool
+	getNoteFn            func(filename string) (string, error)
+	saveNoteFn           func(filename, content, mtime string) error
+	deleteNoteFn         func(filename string) error
+	renameNoteFn         func(old, new string) error
+	getAllNotesFn        func() (map[string]string, error)
+	getAllNotesContentFn func() (map[string]string, error)
+	getNoteMtimeFn       func(filename string) (string, error)
+	noteExistsFn         func(filename string) bool
 }
 
 func (m *mockNoteStore) GetNote(filename string) (string, error) {
@@ -93,6 +94,31 @@ func (m *mockNoteStore) GetAllNotes() (map[string]string, error) {
 		return m.getAllNotesFn()
 	}
 	return nil, nil
+}
+
+// GetAllNotesContent compõe o resultado a partir dos FNs existentes
+// (getAllNotesFn + getNoteFn) para manter os testes que já configuram apenas
+// esses callbacks funcionando sem alterações.
+func (m *mockNoteStore) GetAllNotesContent() (map[string]string, error) {
+	if m.getAllNotesContentFn != nil {
+		return m.getAllNotesContentFn()
+	}
+	if m.getAllNotesFn == nil || m.getNoteFn == nil {
+		return nil, nil
+	}
+	all, err := m.getAllNotesFn()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(all))
+	for name := range all {
+		content, err := m.getNoteFn(name)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = content
+	}
+	return out, nil
 }
 func (m *mockNoteStore) GetNoteMtime(filename string) (string, error) {
 	if m.getNoteMtimeFn != nil {

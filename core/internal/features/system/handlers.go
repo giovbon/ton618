@@ -372,29 +372,22 @@ func mtimeNewer(a, b string) bool {
 }
 
 func (ctx *HandlerContext) HandleManualSync(w http.ResponseWriter, r *http.Request) {
-	// Process all notes from the notes table in DB
-	allNotes, err := ctx.Store.GetAllNotes()
+	// Conta as notas com conteúdo em uma única query. Antes este handler
+	// carregava o conteúdo de cada nota individualmente (N+1), fazia um
+	// time.Parse com resultado descartado e um bloco `if false` morto.
+	// Ele não reindexa nada (comportamento inalterado) — só reporta a contagem.
+	contents, err := ctx.Store.GetAllNotesContent()
 	if err != nil {
-		slog.Error("manual sync: get all notes", "error", err)
+		slog.Error("manual sync: get all notes content", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	count := 0
-	for filename, mtimeStr := range allNotes {
-		content, err := ctx.Store.GetNote(filename)
-		if err != nil || content == "" {
-			continue
+	for _, content := range contents {
+		if content != "" {
+			count++
 		}
-		_, err = time.Parse(time.RFC3339, mtimeStr)
-		if err != nil {
-
-		}
-		if false {
-			slog.Error("manual sync: reindex note", "file", filename)
-			continue
-		}
-		count++
 	}
 
 	slog.Info("Manual sync completed", "notes_processed", count)

@@ -171,7 +171,9 @@ func (ctx *HandlerContext) HandleEmbeddingStatus(w http.ResponseWriter, r *http.
 		return
 	}
 
-	w.Header().Set("Cache-Control", "no-cache, max-age=10")
+	// Sem `no-cache`: o browser pode reutilizar por 10s (a rota é pollada).
+	// O backend também memoiza o cálculo (embeddingStatusCacheTTL).
+	w.Header().Set("Cache-Control", "private, max-age=10")
 	httputil.WriteJSON(w, status)
 }
 

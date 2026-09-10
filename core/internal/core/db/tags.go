@@ -7,6 +7,7 @@ import (
 
 // SetFileTags replaces the entire set of tags for a file atomically.
 func (s *Store) SetFileTags(arquivo string, tags []string) error {
+	s.invalidateEmbeddingStatus()
 	return s.RunInTx(func(tx *sql.Tx) error {
 		qtx := s.Q.WithTx(tx)
 		if err := qtx.DeleteFileTags(s.queryCtx(), arquivo); err != nil {
@@ -56,6 +57,7 @@ func (s *Store) GetFilesByTag(tag string) ([]string, error) {
 func (s *Store) AddTagToFile(arquivo, tag string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 	return s.Q.AddTagToFile(s.queryCtx(), dbgen.AddTagToFileParams{
 		Arquivo: arquivo,
 		Tag:     tag,
@@ -66,6 +68,7 @@ func (s *Store) AddTagToFile(arquivo, tag string) error {
 func (s *Store) RemoveTagFromFile(arquivo, tag string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+	s.invalidateEmbeddingStatus()
 	return s.Q.RemoveTagFromFile(s.queryCtx(), dbgen.RemoveTagFromFileParams{
 		Arquivo: arquivo,
 		Tag:     tag,

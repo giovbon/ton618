@@ -384,31 +384,48 @@
             return;
         }
 
-        table.setFilter(function (data) {
-            var parsed = parseSearchQuery(val);
-            if (parsed.filters.length === 0 && parsed.generalTerms.length === 0) return true;
+        // Parseia a query UMA vez. Antes ficava dentro do callback do
+        // setFilter, então rodava uma vez por linha a cada tecla
+        // (com 5.000 notas = 5.000 parses por caractere digitado).
+        var parsed = parseSearchQuery(val);
+        if (parsed.filters.length === 0 && parsed.generalTerms.length === 0) {
+            table.clearFilter();
+            return;
+        }
 
-            for (var i = 0; i < parsed.filters.length; i++) {
-                var f = parsed.filters[i];
+        // Pré-normaliza os filtros (evita toLowerCase/split repetidos por linha).
+        var filters = parsed.filters.map(function (f) {
+            var filterVal = String(f.value).toLowerCase();
+            return {
+                key: f.key,
+                value: filterVal,
+                searchTags: f.key === "tags"
+                    ? filterVal.split(",").map(function (t) { return t.trim(); }).filter(Boolean)
+                    : null
+            };
+        });
+        var generalTerms = parsed.generalTerms;
+
+        table.setFilter(function (data) {
+            for (var i = 0; i < filters.length; i++) {
+                var f = filters[i];
                 var cellVal = data[f.key];
                 if (cellVal === undefined || cellVal === null) return false;
                 var cellStr = String(cellVal).toLowerCase();
-                var filterVal = f.value.toLowerCase();
 
                 if (f.key === "tags") {
-                    var searchTags = filterVal.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
                     var noteTags = cellStr.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
-                    var anyTagMatched = searchTags.some(function (sTag) {
+                    var anyTagMatched = f.searchTags.some(function (sTag) {
                         return noteTags.some(function (nTag) { return nTag.indexOf(sTag) !== -1; });
                     });
                     if (!anyTagMatched) return false;
                 } else {
-                    if (cellStr.indexOf(filterVal) === -1) return false;
+                    if (cellStr.indexOf(f.value) === -1) return false;
                 }
             }
 
-            for (var j = 0; j < parsed.generalTerms.length; j++) {
-                var term = parsed.generalTerms[j];
+            for (var j = 0; j < generalTerms.length; j++) {
+                var term = generalTerms[j];
                 var termFound = false;
                 for (var key in data) {
                     if (data[key] && String(data[key]).toLowerCase().indexOf(term) !== -1) {
