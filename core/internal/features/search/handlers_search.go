@@ -70,8 +70,8 @@ func extractSearchTerms(query string) []string {
 		if len(t) <= 1 {
 			continue
 		}
-		// Ignora termos de exclusão (-termo) e tags do FTS (+tags:nome)
-		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+tags:") {
+		// Ignora termos de exclusão (-termo), hashtags (#tag) e tags do FTS (+tags:nome, tags:nome)
+		if strings.HasPrefix(t, "-") || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "+tags:") || strings.HasPrefix(t, "tags:") {
 			continue
 		}
 
