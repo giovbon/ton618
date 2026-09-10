@@ -19,6 +19,15 @@ type FTSResult struct {
 	Snippet string
 }
 
+// ftsCountCap limita o COUNT(*) de resultados de busca.
+//
+// Sem teto, o FTS5 precisa visitar TODOS os matches só para contá-los (mesmo
+// custo da página com ORDER BY rank) — medido: ~28ms por busca num termo que
+// casa 50% de 21k docs. Com o teto, a contagem é exata para bases pequenas e
+// para cedo em bases grandes. A UI exibe "~total" e o sentinela de paginação
+// (from+size < total) segue correto até o teto.
+const ftsCountCap = 1000
+
 // IndexFTS inserts or updates a document in the FTS5 index.
 // It first deletes any existing entry for the same doc_id to avoid duplicates.
 //
@@ -66,15 +75,18 @@ func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, si
 		query = ""
 	}
 
-	// Count total
+	// Count total (limitado por ftsCountCap — ver constante)
 	var total int
 	var countErr error
 	if query == "" {
-		countErr = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM docs_fts WHERE tags NOT LIKE '%drawing%'").Scan(&total)
+		countErr = s.DB.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE tags NOT LIKE '%drawing%' LIMIT ?)",
+			ftsCountCap,
+		).Scan(&total)
 	} else {
 		countErr = s.DB.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%'",
-			query,
+			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' LIMIT ?)",
+			query, ftsCountCap,
 		).Scan(&total)
 	}
 	if countErr != nil {
@@ -127,9 +139,12 @@ func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from,
 
 	var total int
 	s.DB.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM documents
-		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'`,
-		pattern, pattern, pattern,
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM documents
+			WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%'
+			LIMIT ?
+		)`,
+		pattern, pattern, pattern, ftsCountCap,
 	).Scan(&total)
 
 	rows, err := s.DB.QueryContext(ctx, `

@@ -169,8 +169,13 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 
 // GetDocumentsPaginated returns a page of documents, along with the total count.
 func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
-	total, err := s.Q.CountDocumentsWithoutDrawing(s.queryCtx())
-	if err != nil {
+	// Teto no count (ver ftsCountCap): evita varrer todos os documents só para
+	// exibir "~total" ao abrir a página de busca.
+	var total int64
+	if err := s.DB.QueryRowContext(s.queryCtx(),
+		`SELECT COUNT(*) FROM (SELECT 1 FROM documents WHERE tags NOT LIKE '%drawing%' LIMIT ?)`,
+		ftsCountCap,
+	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := s.Q.GetDocumentsPaginated(s.queryCtx(), dbgen.GetDocumentsPaginatedParams{
