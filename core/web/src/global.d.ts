@@ -41,7 +41,6 @@ interface Window {
 // ── Semantic Index (tipos complementares ao JSDoc em semantic.js) ──
 interface Window {
   semanticIndex: any;
-  _semanticIndexNote: (filename: string, content: string) => void;
   _semanticDesktopOnly: boolean;
   markmap: any;
   hljs: any;

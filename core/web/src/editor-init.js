@@ -1729,9 +1729,6 @@ function updateToc() {
             if (resp.ok || resp.status === 303) {
                 setStatus("saved");
                 lastSavedHash = currentHash;
-                if (window._semanticIndexNote) {
-                    window._semanticIndexNote(filenameInput.value, finalContent);
-                }
             } else {
                 var errText = await resp.text().catch(function () {
                     return "";

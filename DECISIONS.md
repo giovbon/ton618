@@ -167,7 +167,14 @@ Para dar controle sobre a precisão da IA, adicionou-se sliders de configuraçã
 
 > ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
 
-### 3.8 Mapa Semântico (Galáxia de Notas) — PCA 2D
+### 3.8 Momento da Indexação Semântica
+
+- A indexação de embeddings é **lazy** e ocorre somente quando o usuário abre a aba de busca híbrida.
+- Salvar ou editar uma nota não deve iniciar geração de embeddings nem requisições para `/api/embeddings/save`.
+- Ao abrir a busca híbrida, `indexPending` identifica notas pendentes ou desatualizadas e indexa o conteúdo mais recente antes da busca.
+- **Decidido em**: 10/09/2026 — evita consumo de CPU e travamentos durante a edição; o salvamento da nota permanece independente da indexação semântica.
+
+### 3.9 Mapa Semântico (Galáxia de Notas) — PCA 2D
 
 📍 `internal/core/db/semantic_map.go` | `internal/features/embeddings/semantic_map_handler.go` | `web/src/semantic-map.js`
 

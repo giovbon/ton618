@@ -17,7 +17,6 @@
  *  1. Gerenciar o ciclo de vida do Web Worker (instância única)
  *  2. Indexação de notas (embed da nota inteira, truncada a 2000 chars)
  *  3. Indexação lazy: processa pendentes ao abrir a busca (via index.templ)
- *  4. Hook global window._semanticIndexNote para editor após save
  *
  * O worker semantic-worker.js é criado UMA única vez e compartilhado
  * entre todos os consumidores, evitando download duplicado do modelo (~120MB).
@@ -543,12 +542,6 @@ SemanticIndex.prototype.dispose = function() {
 
 // ── Singleton exposto no window para acesso global ──
 window.semanticIndex = new SemanticIndex();
-
-// ── Bridge: hook global para o editor (usa indexNote com chunking) ──
-window._semanticIndexNote = function(filename, content) {
-  if (!filename || !content) return;
-  window.semanticIndex.indexNote(filename, content).catch(function() {});
-};
 
 // ── Mobile detection ──
 (function() {
