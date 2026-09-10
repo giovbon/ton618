@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ton618/core/internal/core/db"
@@ -391,18 +392,22 @@ func extractSnippetAroundMatch(text, query string, windowSize int) string {
 	return snippet
 }
 
+// accentCharMap mapeia cada caractere base para a classe de acentos
+// equivalentes. É de pacote: antes era alocado a cada chamada (uma por termo
+// por hit no highlight).
+var accentCharMap = map[rune]string{
+	'a': "[aáàâãäAÁÀÂÃÄ]", 'á': "[aáàâãäAÁÀÂÃÄ]", 'à': "[aáàâãäAÁÀÂÃÄ]", 'â': "[aáàâãäAÁÀÂÃÄ]", 'ã': "[aáàâãäAÁÀÂÃÄ]", 'ä': "[aáàâãäAÁÀÂÃÄ]",
+	'e': "[eéèêëEÉÈÊË]", 'é': "[eéèêëEÉÈÊË]", 'è': "[eéèêëEÉÈÊË]", 'ê': "[eéèêëEÉÈÊË]", 'ë': "[eéèêëEÉÈÊË]",
+	'i': "[iíìîïIÍÌÎÏ]", 'í': "[iíìîïIÍÌÎÏ]", 'ì': "[iíìîïIÍÌÎÏ]", 'î': "[iíìîïIÍÌÎÏ]", 'ï': "[iíìîïIÍÌÎÏ]",
+	'o': "[oóòôõöOÓÒÔÕÖ]", 'ó': "[oóòôõöOÓÒÔÕÖ]", 'ò': "[oóòôõöOÓÒÔÕÖ]", 'ô': "[oóòôõöOÓÒÔÕÖ]", 'õ': "[oóòôõöOÓÒÔÕÖ]", 'ö': "[oóòôõöOÓÒÔÕÖ]",
+	'u': "[uúùûüUÚÙÛÜ]", 'ú': "[uúùûüUÚÙÛÜ]", 'ù': "[uúùûüUÚÙÛÜ]", 'û': "[uúùûüUÚÙÛÜ]", 'ü': "[uúùûüUÚÙÛÜ]",
+	'c': "[cçCÇ]", 'ç': "[cçCÇ]",
+}
+
 func makeAccentInsensitivePatternGo(str string) string {
-	charMap := map[rune]string{
-		'a': "[aáàâãäAÁÀÂÃÄ]", 'á': "[aáàâãäAÁÀÂÃÄ]", 'à': "[aáàâãäAÁÀÂÃÄ]", 'â': "[aáàâãäAÁÀÂÃÄ]", 'ã': "[aáàâãäAÁÀÂÃÄ]", 'ä': "[aáàâãäAÁÀÂÃÄ]",
-		'e': "[eéèêëEÉÈÊË]", 'é': "[eéèêëEÉÈÊË]", 'è': "[eéèêëEÉÈÊË]", 'ê': "[eéèêëEÉÈÊË]", 'ë': "[eéèêëEÉÈÊË]",
-		'i': "[iíìîïIÍÌÎÏ]", 'í': "[iíìîïIÍÌÎÏ]", 'ì': "[iíìîïIÍÌÎÏ]", 'î': "[iíìîïIÍÌÎÏ]", 'ï': "[iíìîïIÍÌÎÏ]",
-		'o': "[oóòôõöOÓÒÔÕÖ]", 'ó': "[oóòôõöOÓÒÔÕÖ]", 'ò': "[oóòôõöOÓÒÔÕÖ]", 'ô': "[oóòôõöOÓÒÔÕÖ]", 'õ': "[oóòôõöOÓÒÔÕÖ]", 'ö': "[oóòôõöOÓÒÔÕÖ]",
-		'u': "[uúùûüUÚÙÛÜ]", 'ú': "[uúùûüUÚÙÛÜ]", 'ù': "[uúùûüUÚÙÛÜ]", 'û': "[uúùûüUÚÙÛÜ]", 'ü': "[uúùûüUÚÙÛÜ]",
-		'c': "[cçCÇ]", 'ç': "[cçCÇ]",
-	}
 	var pattern strings.Builder
 	for _, ch := range strings.ToLower(str) {
-		if val, ok := charMap[ch]; ok {
+		if val, ok := accentCharMap[ch]; ok {
 			pattern.WriteString(val)
 		} else {
 			pattern.WriteString(regexp.QuoteMeta(string(ch)))
@@ -411,7 +416,22 @@ func makeAccentInsensitivePatternGo(str string) string {
 	return pattern.String()
 }
 
-func highlightSnippetManual(snippet, query string) string {
+// accentHighlightCache memoiza o regex de highlight por query. Antes o regex
+// era recompilado a cada resultado (buildSnippet → highlightSnippetManual),
+// ou seja, até 1 compilação por hit. O cache é pequeno e com teto.
+var (
+	accentHighlightMu    sync.Mutex
+	accentHighlightCache = map[string]*regexp.Regexp{}
+)
+
+func accentHighlightRegex(query string) *regexp.Regexp {
+	accentHighlightMu.Lock()
+	if re, ok := accentHighlightCache[query]; ok {
+		accentHighlightMu.Unlock()
+		return re
+	}
+	accentHighlightMu.Unlock()
+
 	terms := extractSearchTerms(query)
 	var pats []string
 	for _, term := range terms {
@@ -419,17 +439,29 @@ func highlightSnippetManual(snippet, query string) string {
 			pats = append(pats, makeAccentInsensitivePatternGo(term))
 		}
 	}
-	if len(pats) == 0 {
+	var compiled *regexp.Regexp
+	if len(pats) > 0 {
+		sort.Slice(pats, func(i, j int) bool { return len(pats[i]) > len(pats[j]) })
+		if re, err := regexp.Compile("(?i)(" + strings.Join(pats, "|") + ")"); err == nil {
+			compiled = re
+		}
+	}
+
+	accentHighlightMu.Lock()
+	if len(accentHighlightCache) > 256 {
+		accentHighlightCache = map[string]*regexp.Regexp{}
+	}
+	accentHighlightCache[query] = compiled
+	accentHighlightMu.Unlock()
+	return compiled
+}
+
+func highlightSnippetManual(snippet, query string) string {
+	re := accentHighlightRegex(query)
+	if re == nil {
 		return snippet
 	}
-	sort.Slice(pats, func(i, j int) bool { return len(pats[i]) > len(pats[j]) })
-
-	reStr := "(?i)(" + strings.Join(pats, "|") + ")"
-	re, err := regexp.Compile(reStr)
-	if err == nil {
-		snippet = re.ReplaceAllString(snippet, "__HL_START__${1}__HL_END__")
-	}
-	return snippet
+	return re.ReplaceAllString(snippet, "__HL_START__${1}__HL_END__")
 }
 
 // ── Bulk Delete (Config → Exclusão) ──

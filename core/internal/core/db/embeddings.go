@@ -299,6 +299,13 @@ func (s *Store) HasEmbedding(filename string) bool {
 // em Go varrendo TODOS os candidatos, cada nota contribui com 1 resultado.
 const knnCandidateMultiplier = 50
 
+// maxVecKNN é o teto do parâmetro `k` do KNN do sqlite-vec. O vec0 devolve
+// "k value in knn query too large" acima de 4096. Sem o teto, a busca híbrida
+// (que chama com limit=engineN até 200 → limit*50 = 10000) falhava
+// silenciosamente e degradava para FTS puro nas páginas mais profundas
+// (limit ≥ 41). Também limita o custo do KNN em corpora grandes.
+const maxVecKNN = 4096
+
 // SearchSimilar realiza busca KNN nos chunks via sqlite-vec e agrega por filename.
 // Retorna os `limit` documentos mais proximos, deduplicando por filename
 // (a menor distância entre chunks de um mesmo filename é a distância da nota).
@@ -336,6 +343,9 @@ func (s *Store) SearchSimilarWithConsensus(ctx context.Context, queryEmbedding [
 	// ordenada por distância) — varrendo todos os candidatos, uma nota gigante
 	// não monopoliza o resultado.
 	k := limit * knnCandidateMultiplier
+	if k > maxVecKNN {
+		k = maxVecKNN
+	}
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT nc.filename, ne.distance
 		FROM note_embeddings ne

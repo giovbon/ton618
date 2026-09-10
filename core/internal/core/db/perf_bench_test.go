@@ -1,7 +1,9 @@
 package db
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"path/filepath"
 	"strings"
@@ -103,6 +105,27 @@ func BenchmarkGetPendingEmbeddingNotes(b *testing.B) {
 		if _, err := s.GetPendingEmbeddingNotes(10); err != nil {
 			b.Fatalf("GetPendingEmbeddingNotes: %v", err)
 		}
+	}
+}
+
+// BenchmarkSearchSimilarWithConsensus mede o KNN (usado pela semântica pura e
+// pela híbrida) para diferentes `limit` — a híbrida chama com limit=engineN.
+func BenchmarkSearchSimilarWithConsensus(b *testing.B) {
+	s := seedDBPerf(b, 1000, 10, true)
+	emb := make([]float32, EmbeddingDim)
+	for i := range emb {
+		emb[i] = 0.1
+	}
+	for _, limit := range []int{15, 30, 200} {
+		b.Run(fmt.Sprintf("limit=%d", limit), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := s.SearchSimilarWithConsensus(context.Background(), emb, limit, math.MaxFloat64); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

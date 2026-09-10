@@ -21,6 +21,36 @@ func makeChunk(filename string, index int, content string, val float32) ChunkInf
 	}
 }
 
+// Regressão: a busca híbrida chama SearchSimilarWithConsensus com limit até
+// engineN (200) e o sqlite-vec rejeita k > 4096 ("k value in knn query too
+// large"). Sem o teto, a parte semântica da híbrida falhava em silêncio
+// (degradava para FTS puro) nas páginas mais profundas.
+func TestSearchSimilarWithConsensus_LimitAltoNaoExcedeKNNTeto(t *testing.T) {
+	s := newTestStore(t)
+	filename := "notes/knn_teto.md"
+	if err := s.SaveNote(filename, "# nota", "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+	if err := s.SetFileTags(filename, nil); err != nil {
+		t.Fatalf("SetFileTags: %v", err)
+	}
+	if err := s.SaveNoteChunks(filename, []ChunkInfo{makeChunk(filename, 0, "conteudo", 0.5)}); err != nil {
+		t.Fatalf("SaveNoteChunks: %v", err)
+	}
+
+	query := make([]float32, EmbeddingDim)
+	query[0] = 0.5
+
+	// limit=200 → k seria 10.000 sem o teto.
+	results, err := s.SearchSimilarWithConsensus(context.Background(), query, 200, math.MaxFloat64)
+	if err != nil {
+		t.Fatalf("limit alto não deve exceder o k do vec0: %v", err)
+	}
+	if len(results) == 0 || results[0].Filename != filename {
+		t.Fatalf("esperado a nota indexada, got %+v", results)
+	}
+}
+
 // ── serializeEmbedding ──────────────────────────────────────────
 
 func TestSerializeEmbedding_DimensaoValida(t *testing.T) {

@@ -85,27 +85,21 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		}
 	}
 	results, total, err := store.SearchFTSWithContext(ctx, ftsQuery, from, limitSize)
+	ftsFailed := false
 	if err != nil {
 		log.Printf("[Search] FTS5 error: %v, falling back to LIKE\n", err)
+		ftsFailed = true
 		results, total, _ = store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, limitSize)
 	}
 
-	// 2. If few results, expand with LIKE (fuzzy fallback)
-	if total < 3 && remainingQuery != "" {
+	// 2. Fallback fuzzy (LIKE) SOMENTE quando o FTS não achou nada. Antes
+	// disparava com `total < 3`, forçando um full scan de `documents` (~80ms)
+	// mesmo quando o FTS já tinha 1-2 resultados legítimos.
+	if total == 0 && remainingQuery != "" && !ftsFailed {
 		likeResults, likeTotal, _ := store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, size*3)
-		// Merge, deduplicating
-		seen := make(map[string]bool)
-		for _, r := range results {
-			seen[r.DocID] = true
-		}
-		for _, r := range likeResults {
-			if !seen[r.DocID] {
-				results = append(results, r)
-				total += 1
-				seen[r.DocID] = true
-			}
-		}
-		_ = likeTotal
+		// total==0 ⇒ a página do FTS está vazia; o conjunto é todo do LIKE.
+		results = likeResults
+		total = likeTotal
 	}
 
 	// 3. Convert to SearchHits and re-rank
