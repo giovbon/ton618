@@ -117,6 +117,13 @@ func (ctx *HandlerContext) HandleListTodos(w http.ResponseWriter, r *http.Reques
 
 	var filteredTodos []processor.TodoItem
 	for _, t := range todoList {
+		// Checkboxes comuns de markdown (`- [ ]` / `- [x]`) são extraídos como tipo
+		// "TASK" e NÃO devem aparecer na listagem de tasks — a página trabalha apenas
+		// com os marcadores configurados (TODO/DOING/DONE/custom). O mesmo critério
+		// vale para o badge do cabeçalho (db.CountTodosByMarkers).
+		if strings.EqualFold(t.Type, "TASK") {
+			continue
+		}
 		if searchQuery != "" {
 			if !strings.Contains(strings.ToLower(t.Text), searchQuery) &&
 				!strings.Contains(strings.ToLower(t.File), searchQuery) &&

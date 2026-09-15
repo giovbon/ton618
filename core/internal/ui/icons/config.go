@@ -31,6 +31,9 @@ var Config = map[string]IconSpec{
 	"youtube":    {Icon: "video", Color: "text-red-500"},
 	"artigo":     {Icon: "newspaper", Color: "text-blue-400"},
 	"article":    {Icon: "newspaper", Color: "text-blue-400"},
+	"semanal":    {Icon: "calendar-days", Color: "#14B8A6"},
+	"semana":     {Icon: "calendar-days", Color: "#14B8A6"},
+	"weekly":     {Icon: "calendar-days", Color: "#14B8A6"},
 
 	// ── NAVEGAÇÃO & HEADER ──
 	"agenda":         {Icon: "calendar", Color: "text-sky-400"},

@@ -479,6 +479,7 @@ func (s *Store) isNoteEmbeddable(filename string, tags []string) bool {
 		noteType == domain.NoteTypeMindmap ||
 		noteType == domain.NoteTypeYoutube ||
 		noteType == domain.NoteTypeArticle ||
+		noteType == domain.NoteTypeSemanal ||
 		noteType == domain.NoteTypeCapture
 }
 

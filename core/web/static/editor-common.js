@@ -377,8 +377,14 @@
                 if (opts.onSaved) opts.onSaved(content, fullNewName);
 
                 // 3. Update + redirect
-                filenameInput.dataset.filename = fullNewName;
-                window.location.href = (redirectBase || "/editor") + "?file=" + encodeURIComponent(fullNewName);
+                var base = redirectBase || "/editor";
+                if (this.renameChangesEditor(fullNewName, base)) {
+                    filenameInput.dataset.filename = fullNewName;
+                    window.location.href = base + "?file=" + encodeURIComponent(fullNewName);
+                    return;
+                }
+                // Mesmo editor: atualiza a página sem recarregar.
+                this.applyRenameToUI({ newName: fullNewName, filenameInput: filenameInput, base: base });
             } catch (e) {
                 console.error(e);
                 alert("Erro ao renomear: " + (e.message || "desconhecido"));
@@ -387,6 +393,61 @@
             } finally {
                 filenameInput._isRenaming = false;
             }
+        },
+
+        // ── renameChangesEditor: o novo nome troca o EDITOR da nota? ──
+        //
+        // O backend escolhe a rota pelo NOME do arquivo (domain.DetectNoteType):
+        // nomes com "mindmap"/"markmap" abrem em /mindmap e com "drawing"/"desenho"
+        // em /drawing. Se o novo nome cai em OUTRO editor, quem tem que decidir é o
+        // servidor — mantemos o redirect. Em todos os outros casos o rename é
+        // aplicado na própria página, sem recarregar (ver applyRenameToUI).
+        renameChangesEditor: function (newName, currentBase) {
+            var base = String(newName || "").replace(/^notes\//i, "").toLowerCase();
+            var atual = String(currentBase || "/editor");
+            if (/(mindmap|markmap)/.test(base) && atual !== "/mindmap") return true;
+            if (/(drawing|desenho)/.test(base) && atual !== "/drawing") return true;
+            return false;
+        },
+
+        // ── applyRenameToUI: sincroniza a página depois de renomear, SEM reload ──
+        //
+        // O reload existia para "reidratar" a página depois do rename, mas custa a
+        // rolagem/posição do cursor e o estado do editor. O que realmente precisa
+        // acompanhar o novo nome:
+        //   1. a URL (replaceState: mantém o histórico limpo e o F5 no lugar certo);
+        //   2. o input do nome — `value` + `data-filename`, que é a fonte usada por
+        //      salvar/excluir/duplicar (EditorCommon.getCurrentFilename);
+        //   3. o título da aba;
+        //   4. a lista da sidebar, que é renderizada pelo HTMX (evento reload-sidebar).
+        applyRenameToUI: function (opts) {
+            opts = opts || {};
+            var filename = this.normalizeFilename(opts.newName);
+            var input = opts.filenameInput || document.getElementById("file-name");
+            var display = filename.split("/").pop() || filename;
+
+            if (input) {
+                input.value = display;
+                if (input.dataset) input.dataset.filename = filename;
+            }
+
+            var base = opts.base || (window.location && window.location.pathname) || "/editor";
+            try {
+                window.history.replaceState(null, "", base + "?file=" + encodeURIComponent(filename));
+            } catch (e) { /* ambiente sem history (testes em node) */ }
+
+            // Preserva o prefixo que já está no título ("Editor - ", "Desenho - ", ...).
+            var prefix = opts.titlePrefix || String(document.title || "").split(" - ")[0] || "Editor";
+            try {
+                document.title = prefix + " - " + display;
+            } catch (e) { /* ambientes sem document */ }
+
+            // A sidebar vive em outro elemento HTMX: pede para ela recarregar.
+            try {
+                document.body.dispatchEvent(new Event("reload-sidebar"));
+            } catch (e) { /* ambiente sem body/Event */ }
+
+            return filename;
         },
 
         // ── setupRenameListeners: liga eventos de rename num filenameInput ──
@@ -412,7 +473,120 @@
                     if (typeof saveFn === "function") saveFn();
                 }
             });
-        }
+        },
+
+        // ── Paste: decide se o conteúdo colado deve ser interpretado como markdown ──
+        //
+        // Contexto: muitos programas (editores de código, leitores de PDF, terminais,
+        // painéis de IA) colocam no clipboard um `text/html` que é apenas o MESMO
+        // texto embrulhado em <div>/<p>, sem nenhuma formatação real. Se o HTML for
+        // usado, as marcações cruas do markdown ("**negrito**", "*itálico*") entram
+        // no editor como texto sujo. Nesse caso preferimos o texto puro e o deixamos
+        // ser convertido (negrito vira negrito de verdade, sem os asteriscos).
+        //
+        // Quando o HTML tem formatação REAL (strong/b/em/h1/ul/table/link...), o HTML
+        // ganha: ele é a fonte mais fiel e descartá-lo perderia a formatação.
+        shouldPasteAsMarkdown: function (text, html) {
+            if (!text) return false;
+            if (html && this.htmlHasRealFormatting(html)) return false;
+            return this.textHasMarkdownSyntax(text);
+        },
+
+        // Detecta formatação REAL dentro do HTML colado (tags que carregam semântica
+        // visual). Tags puramente estruturais (div, p, br, span) NÃO contam: são as
+        // que aparecem nos "HTML de fachada" descritos acima.
+        htmlHasRealFormatting: function (html) {
+            return /<(strong|b|em|i|u|s|strike|del|ins|mark|sub|sup|h[1-6]|ul|ol|li|dl|blockquote|pre|code|table|thead|tbody|tr|td|th|img|hr|a)\b/i
+                .test(html);
+        },
+
+        // Detecta sintaxe markdown no texto puro: títulos, listas, ênfase, código,
+        // riscado e links [texto](url).
+        textHasMarkdownSyntax: function (text) {
+            return /(?:^(?:#+\s+|\d+\.\s+|[-*+]\s+))|[*_`~]|\[.+\]\(.+\)/m.test(text);
+        },
+
+        // ── normalizePastedHtml: tira o "espaço morto" do conteúdo colado ──
+        //
+        // Por que: o CSS do editor é enxuto (p{margin:.3em}, p{line-height:1.7}),
+        // então "grandes espaços entre parágrafos" ao colar NÃO vêm da margem — vêm
+        // de lixo ESTRUTURAL do clipboard, e cada um vira uma LINHA EM BRANCO
+        // inteira no editor. Casos reais já vistos:
+        //   <p><br></p>            <div></div>          <div>&nbsp;</div>
+        //   <p><span> </span></p>  <p><span>&nbsp;</span></p>
+        //   <br><br>               <p>texto<br></p>     <p><br>texto</p>
+        //   <p>a</p><br><p>b</p>   (br solto entre blocos)
+        //   <li><p>único</p></li>  (lista "loose")
+        //
+        // A função roda em laço até estabilizar (remover o de dentro pode esvaziar o
+        // de fora) e só REMOVE espaço vazio / desembrulha wrappers: nunca descarta
+        // texto com conteúdo. Blocos com whitespace SIGNIFICATIVO (pre/code) e
+        // células de tabela (td/th/tr) ficam de fora de propósito.
+        normalizePastedHtml: function (html) {
+            if (!html) return "";
+
+            var out = String(html);
+
+            // Nunca deixar script/style/meta/link entrarem na nota.
+            out = out.replace(/<(script|style|meta|link)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, "");
+
+            for (var pass = 0; pass < 6; pass++) {
+                var antes = out;
+
+                // 1. Inline VAZIO: <span></span>, <span> </span>, <span>&nbsp;</span>.
+                out = out.replace(
+                    /<(?:span|font|b|i|u|em|strong|a|small|sub|sup|mark|label)\b[^>]*>(?:\s|&nbsp;|&#160;|\u00a0)*<\/(?:span|font|b|i|u|em|strong|a|small|sub|sup|mark|label)\s*>/gi,
+                    "",
+                );
+
+                // 2. Bloco VAZIO: <p></p>, <p><br></p>, <div>&nbsp;</div>.
+                out = out.replace(
+                    /<(?:p|div|h[1-6]|li|blockquote|section|article|header|footer|figure)\b[^>]*>(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?>)*<\/(?:p|div|h[1-6]|li|blockquote|section|article|header|footer|figure)\s*>/gi,
+                    "",
+                );
+
+                // 3. Quebras consecutivas (com recheio) viram UMA quebra.
+                out = out.replace(/(?:<br\s*\/?>\s*(?:&nbsp;|&#160;|\u00a0)?\s*){2,}/gi, "<br>");
+
+                // 4. Quebra/espaço ÓRFÃO antes de abrir um bloco.
+                out = out.replace(
+                    /(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?>)+(?=<(?:p|div|h[1-6]|ul|ol|li|blockquote|table|section|article|header|footer|figure)\b)/gi,
+                    "",
+                );
+
+                // 5. Quebra/espaço ÓRFÃO logo depois de fechar um bloco.
+                out = out.replace(
+                    /(<\/(?:p|div|h[1-6]|ul|ol|li|blockquote|table|section|article|header|footer|figure)\s*>)(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?>)+/gi,
+                    "$1",
+                );
+
+                // 6. Quebra/espaço ÓRFÃO nas bordas do bloco (<p><br>texto</p> ou
+                //    <p>texto<br></p>). Quebras NO MEIO do parágrafo são preservadas.
+                out = out.replace(
+                    /(<(?:p|div|h[1-6]|li|blockquote)\b[^>]*>)(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?>)+/gi,
+                    "$1",
+                );
+                out = out.replace(
+                    /(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?>)+(<\/(?:p|div|h[1-6]|li|blockquote)\s*>)/gi,
+                    "$1",
+                );
+
+                if (out === antes) break;
+            }
+
+            // 7. Listas "loose": <li><p>único parágrafo</p></li> → <li>…</li>.
+            //    O lookahead impede capturar através de um </p> (itens com 2+
+            //    parágrafos são preservados).
+            out = out.replace(
+                /<li\b[^>]*>\s*<p\b[^>]*>((?:(?!<\/?p\b)[\s\S])*?)<\/p>\s*<\/li\s*>/gi,
+                function (_m, conteudo) { return "<li>" + conteudo + "</li>"; },
+            );
+
+            // 8. Sobrou item de lista vazio → some.
+            out = out.replace(/<li\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/li\s*>/gi, "");
+
+            return out;
+        },
     };
 
     window.deleteCurrentNote = function (filenameInput, confirmMsg) {

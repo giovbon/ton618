@@ -1,0 +1,32 @@
+package todos
+
+import "strconv"
+
+// TodoBadge renderiza o CONTEÚDO da contagem de tarefas do ícone Task do cabeçalho.
+//
+// É carregado pelo próprio HTMX (`hx-get="/api/todos/count"` com `hx-trigger=
+// "load, todos-updated from:body"`) e trocado com swap **innerHTML** de propósito:
+// assim o elemento que dispara a busca (e seus atributos hx-*) sobrevive à troca e
+// continua escutando `todos-updated` — com outerHTML o badge atualizaria só uma vez.
+//
+// Qualquer ação que mude as tarefas (salvar nota, mexer nos marcadores) atualiza o
+// número sem reload. Contagem zero não renderiza nada (o container fica vazio).
+templ TodoBadge(count int) {
+	if count > 0 {
+		<span class="ml-0.5 px-1.5 py-0.5 rounded-sm bg-amber-500/20 text-amber-400 text-[9px] font-black leading-none tabular-nums"
+			title={ strconv.Itoa(count) + " tarefa(s)" }>{ strconv.Itoa(count) }</span>
+	}
+}
+
+// TodoBadgeOOB renderiza o badge como **swap out-of-band** (hx-swap-oob).
+//
+// Por que existe: quando o usuário mexe nos marcadores (ex: desmarca "Contar" do
+// DONE), a contagem muda mas o alvo da requisição é só o #markers-container. Em vez
+// de depender de um evento (`HX-Trigger` + `hx-trigger="... from:body"`), a própria
+// resposta da requisição carrega o badge novo e o HTMX troca as DUAS regiões
+// (o container dos marcadores e os badges desktop/mobile). Sem evento, sem corrida,
+// sem depender do cache de um GET extra.
+templ TodoBadgeOOB(count int) {
+	<div hx-swap-oob="innerHTML:#todos-badge">@TodoBadge(count)</div>
+	<div hx-swap-oob="innerHTML:#mobile-todos-badge">@TodoBadge(count)</div>
+}

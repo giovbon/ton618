@@ -35,8 +35,6 @@ templ Navbar() {
                                 fill="white" opacity="0.5" transform="rotate(240 50 50)" />
                         </svg>
                     </div>
-                    <span
-                        class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
                 </a>
                 <!-- Progress Bar -->
                 <div id="upload-progress-container" x-data="{ uploading: false, progress: 0 }"
@@ -59,6 +57,12 @@ templ Navbar() {
             <input id="zip-file-input" type="file" name="files" multiple class="hidden" />
 
             <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
+
+                <!-- 🗓️ NOTA DA SEMANA (acesso direto, só o ícone) -->
+                <a id="nav-semana" href="/semana" title="Nota da semana"
+                    class="flex items-center justify-center p-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all">
+                    @icons.Icon(icons.GetIcon("semanal"), "w-3.5 h-3.5 " + icons.GetColor("semanal"))
+                </a>
 
                 <!-- ＋ CRIAR dropdown -->
                 <div class="relative" id="criar-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
@@ -124,6 +128,11 @@ templ Navbar() {
                 <a id="nav-todos" href="/todos"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
                     @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task")) Task
+                    <!-- Contagem de tarefas: carregada pelo HTMX (swap innerHTML para
+                         o container sobreviver à troca). O `?r=` é cache-buster e o
+                         timeout de 5s evita que um servidor travado deixe o número
+                         velho na tela sem avisar (mostra "?" vermelho). -->
+                    <span id="todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::send-error="todosBadgeOffline(this)"></span>
                 </a>
                 <a id="nav-database" href="/database"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Tabulator">
@@ -174,6 +183,11 @@ templ Navbar() {
                         @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap"))
                         <span class="text-[11px] font-semibold text-emerald-400/90">+ Markmap</span>
                     </a>
+                    <a href="/semana" id="mobile-criar-semana-link" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-teal-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("semanal"), "w-4 h-4 " + icons.GetColor("semanal"))
+                        <span class="text-[11px] font-semibold text-teal-400">+ Semana</span>
+                    </a>
                 </div>
             </div>
 
@@ -218,6 +232,7 @@ templ Navbar() {
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
                         @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task"))
                         <span class="text-[11px] font-bold tracking-wider">TASK</span>
+                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::send-error="todosBadgeOffline(this)"></span>
                     </a>
                     
                     <a id="mobile-nav-database" href="/database" @click="mobileMenuOpen = false"
@@ -250,6 +265,15 @@ templ Navbar() {
         </div>
     </nav>
     <script>
+        // Badge de tarefas: se o servidor não responder (app suspenso/parado), o número
+        // ficaria velho em silêncio — o pior tipo de bug, porque parece problema de
+        // contagem. Com o timeout do hx-request, aqui ele passa a AVISAR.
+        // (Um swap bem-sucedido depois sobrescreve este conteúdo.)
+        window.todosBadgeOffline = function (el) {
+            if (!el) return;
+            el.innerHTML = '<span class="ml-0.5 px-1.5 py-0.5 rounded-sm bg-red-500/20 text-red-400 text-[9px] font-black leading-none" title="Servidor não respondeu — a contagem pode estar desatualizada">?</span>';
+        };
+
         (function() {
             const path = window.location.pathname;
             if (path === '/agenda') {

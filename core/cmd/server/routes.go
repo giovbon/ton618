@@ -49,6 +49,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/editor", notesCtx.HandleEditor)
 	mux.Get("/drawing", notesCtx.HandleDrawing)
 	mux.Get("/mindmap", notesCtx.HandleMindmap)
+	mux.Get("/semana", notesCtx.HandleWeekly)
 
 	mux.Get("/file", notesCtx.HandleFile)
 	mux.Get("/epub/reader", notesCtx.HandleEpubReader)
@@ -86,6 +87,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/todo-markers/update", todosCtx.HandleUpdateTodoMarker)
 	mux.Delete("/api/todo-markers/remove", todosCtx.HandleRemoveTodoMarker)
 	mux.Post("/api/todo-markers/reset", todosCtx.HandleResetTodoMarkers)
+	mux.Get("/api/todos/count", todosCtx.HandleTodoCount)
 
 	// SEARCH (Global Search e Stopwords)
 	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)

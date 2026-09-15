@@ -48,6 +48,32 @@ func (s *Store) SaveFileTodos(filename string, todos []processor.TodoItem) error
 	})
 }
 
+// CountTodosByMarkers conta as tarefas cujo TIPO é um dos marcadores informados.
+// Usada pelo badge do ícone Task no cabeçalho: os marcadores passados já vêm
+// filtrados por "ativo + contar no badge" (ver todos.HandlerContext).
+// Itens do tipo "TASK" (checkboxes `- [ ]` de markdown) NÃO entram: não são
+// marcadores e por isso nunca aparecem na listagem de tasks.
+func (s *Store) CountTodosByMarkers(markers []string) (int, error) {
+	if len(markers) == 0 {
+		return 0, nil
+	}
+
+	placeholders := make([]string, 0, len(markers))
+	args := make([]interface{}, 0, len(markers))
+	for _, m := range markers {
+		placeholders = append(placeholders, "?")
+		args = append(args, strings.ToUpper(strings.TrimSpace(m)))
+	}
+
+	query := "SELECT COUNT(*) FROM todos WHERE type IN (" + strings.Join(placeholders, ",") + ")"
+
+	var count int
+	if err := s.DB.QueryRow(query, args...).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // GetTodosFiltered retorna os TODOs baseados nos filtros fornecidos.
 func (s *Store) GetTodosFiltered(typeFilter map[string]bool, statusFilter string) ([]processor.TodoItem, error) {
 	query := "SELECT id, file, section, type, status, text, line, created_at FROM todos WHERE 1=1"

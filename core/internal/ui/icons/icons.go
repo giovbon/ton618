@@ -16,6 +16,8 @@ func SVGString(name string, class string) string {
 
 	case "newspaper", "artigo", "article":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>`
+	case "calendar-days", "calendar-week", "semanal", "semana", "weekly":
+		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>`
 	case "pickaxe", "globe", "captura", "web":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M14.531 12.469 6.619 20.38a1 1 0 1 1-1.414-1.414l7.912-7.912"/><path d="M15.686 4.314A12.5 12.5 0 0 0 5.467 2.155a1 1 0 0 0-.583 1.402l2.366 4.26a1 1 0 0 0 1.474.285 11.5 11.5 0 0 1 6.862-2.188"/><path d="M19.686 8.314a11.5 11.5 0 0 1-2.188 6.862 1 1 0 0 0 .285 1.474l4.26 2.366a1 1 0 0 0 1.402-.583 12.5 12.5 0 0 0-2.159-10.219Z"/></svg>`
 	case "package-plus", "package", "anexo", "attachment":

@@ -203,7 +203,8 @@ func initSchema(database *sql.DB) error {
 		marker     TEXT PRIMARY KEY,
 		color      TEXT DEFAULT '#3b82f6',
 		active     INTEGER DEFAULT 1,
-		sort_order INTEGER DEFAULT 0
+		sort_order INTEGER DEFAULT 0,
+		count_in_badge INTEGER DEFAULT 1
 	);
 
 	CREATE TABLE IF NOT EXISTS todos (
@@ -453,6 +454,15 @@ func migrate(database *sql.DB) {
 		database.Exec("DELETE FROM file_mods")
 		markApplied(11)
 	}
+
+	// v12: adiciona coluna count_in_badge aos marcadores de TODO.
+	// Define se as tarefas DESTE marcador entram na contagem exibida no ícone
+	// Task do cabeçalho (ex: DONE normalmente fica fora da contagem).
+	// Default 1 = mantém o comportamento anterior (tudo conta).
+	if !isApplied(12) {
+		database.Exec("ALTER TABLE todo_markers ADD COLUMN count_in_badge INTEGER DEFAULT 1")
+		markApplied(12)
+	}
 }
 
 // seedDefaultMarkers insere marcadores padrão se a tabela estiver vazia.
@@ -481,29 +491,39 @@ type TodoMarker struct {
 	Color     string `json:"color"`
 	Active    bool   `json:"active"`
 	SortOrder int    `json:"sort_order"` // 0 = sem ordem definida (padrão)
+	// CountInBadge define se as tarefas deste marcador entram na contagem do
+	// ícone Task no cabeçalho. Default true (marcadores antigos contam).
+	CountInBadge bool `json:"count_in_badge"`
 }
 
 // GetTodoMarkers retorna todos os marcadores configurados.
 // Ordenação: marcadores com sort_order > 0 primeiro (por sort_order ASC),
 // depois os sem ordem definida (sort_order = 0) em ordem alfabética.
 func (s *Store) GetTodoMarkers() ([]TodoMarker, error) {
-	// Verifica se a coluna sort_order existe (pode não existir antes de reiniciar após migração v10)
-	hasSortOrder := s.hasSortOrderColumn()
+	// Colunas opcionais podem não existir antes de reiniciar após a migração
+	// (v10 = sort_order, v12 = count_in_badge).
+	hasSortOrder := s.hasMarkerColumn("sort_order")
+	hasCountColumn := s.hasMarkerColumn("count_in_badge")
 
-	var rows *sql.Rows
-	var err error
+	query := "SELECT marker, color, active"
 	if hasSortOrder {
-		rows, err = s.DB.Query(`
-			SELECT marker, color, active, COALESCE(sort_order, 0)
-			FROM todo_markers
+		query += ", COALESCE(sort_order, 0)"
+	}
+	if hasCountColumn {
+		query += ", COALESCE(count_in_badge, 1)"
+	}
+	query += " FROM todo_markers"
+	if hasSortOrder {
+		query += `
 			ORDER BY
 				CASE WHEN COALESCE(sort_order, 0) = 0 THEN 1 ELSE 0 END,
 				COALESCE(sort_order, 0) ASC,
-				marker ASC
-		`)
+				marker ASC`
 	} else {
-		rows, err = s.DB.Query("SELECT marker, color, active FROM todo_markers ORDER BY marker")
+		query += " ORDER BY marker"
 	}
+
+	rows, err := s.DB.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -511,18 +531,10 @@ func (s *Store) GetTodoMarkers() ([]TodoMarker, error) {
 
 	var markers []TodoMarker
 	for rows.Next() {
-		var m TodoMarker
-		var active int
-		if hasSortOrder {
-			if err := rows.Scan(&m.Marker, &m.Color, &active, &m.SortOrder); err != nil {
-				continue
-			}
-		} else {
-			if err := rows.Scan(&m.Marker, &m.Color, &active); err != nil {
-				continue
-			}
+		m, err := scanTodoMarker(rows, hasSortOrder, hasCountColumn)
+		if err != nil {
+			continue
 		}
-		m.Active = active == 1
 		markers = append(markers, m)
 	}
 	return markers, rows.Err()
@@ -530,23 +542,28 @@ func (s *Store) GetTodoMarkers() ([]TodoMarker, error) {
 
 // GetActiveTodoMarkers retorna apenas os marcadores ativos, respeitando sort_order.
 func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
-	hasSortOrder := s.hasSortOrderColumn()
+	hasSortOrder := s.hasMarkerColumn("sort_order")
+	hasCountColumn := s.hasMarkerColumn("count_in_badge")
 
-	var rows *sql.Rows
-	var err error
+	query := "SELECT marker, color, active"
 	if hasSortOrder {
-		rows, err = s.DB.Query(`
-			SELECT marker, color, active, COALESCE(sort_order, 0)
-			FROM todo_markers
-			WHERE active = 1
+		query += ", COALESCE(sort_order, 0)"
+	}
+	if hasCountColumn {
+		query += ", COALESCE(count_in_badge, 1)"
+	}
+	query += " FROM todo_markers WHERE active = 1"
+	if hasSortOrder {
+		query += `
 			ORDER BY
 				CASE WHEN COALESCE(sort_order, 0) = 0 THEN 1 ELSE 0 END,
 				COALESCE(sort_order, 0) ASC,
-				marker ASC
-		`)
+				marker ASC`
 	} else {
-		rows, err = s.DB.Query("SELECT marker, color, active FROM todo_markers WHERE active = 1 ORDER BY marker")
+		query += " ORDER BY marker"
 	}
+
+	rows, err := s.DB.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -554,16 +571,9 @@ func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
 
 	var markers []TodoMarker
 	for rows.Next() {
-		var m TodoMarker
-		var active int
-		if hasSortOrder {
-			if err := rows.Scan(&m.Marker, &m.Color, &active, &m.SortOrder); err != nil {
-				continue
-			}
-		} else {
-			if err := rows.Scan(&m.Marker, &m.Color, &active); err != nil {
-				continue
-			}
+		m, err := scanTodoMarker(rows, hasSortOrder, hasCountColumn)
+		if err != nil {
+			continue
 		}
 		m.Active = true
 		markers = append(markers, m)
@@ -571,9 +581,28 @@ func (s *Store) GetActiveTodoMarkers() ([]TodoMarker, error) {
 	return markers, rows.Err()
 }
 
-// hasSortOrderColumn verifica via PRAGMA se a coluna sort_order existe na tabela todo_markers.
-// Necessário para retrocompatibilidade com bancos antes da migração v10.
-func (s *Store) hasSortOrderColumn() bool {
+// scanTodoMarker lê uma linha de todo_markers respeitando as colunas opcionais.
+func scanTodoMarker(rows *sql.Rows, hasSortOrder, hasCountColumn bool) (TodoMarker, error) {
+	var m TodoMarker
+	var active int
+	dest := []any{&m.Marker, &m.Color, &active}
+	if hasSortOrder {
+		dest = append(dest, &m.SortOrder)
+	}
+	if hasCountColumn {
+		dest = append(dest, &m.CountInBadge)
+	}
+	if err := rows.Scan(dest...); err != nil {
+		return m, err
+	}
+	m.Active = active == 1
+	return m, nil
+}
+
+// hasMarkerColumn verifica via PRAGMA se uma coluna existe na tabela todo_markers.
+// Necessário para retrocompatibilidade com bancos criados antes das migrações
+// que adicionaram colunas (v10 = sort_order, v12 = count_in_badge).
+func (s *Store) hasMarkerColumn(name string) bool {
 	rows, err := s.DB.Query("PRAGMA table_info(todo_markers)")
 	if err != nil {
 		return false
@@ -581,12 +610,12 @@ func (s *Store) hasSortOrderColumn() bool {
 	defer rows.Close()
 	for rows.Next() {
 		var cid int
-		var name, colType string
+		var colName, colType string
 		var notNull int
 		var dfltValue sql.NullString
 		var pk int
-		if rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk) == nil {
-			if name == "sort_order" {
+		if rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk) == nil {
+			if colName == name {
 				return true
 			}
 		}
@@ -596,7 +625,19 @@ func (s *Store) hasSortOrderColumn() bool {
 
 // SaveTodoMarkers substitui todos os marcadores pelos fornecidos.
 func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
-	hasSortOrder := s.hasSortOrderColumn()
+	hasSortOrder := s.hasMarkerColumn("sort_order")
+	hasCountColumn := s.hasMarkerColumn("count_in_badge")
+
+	cols := "marker, color, active"
+	placeholders := "?, ?, ?"
+	if hasSortOrder {
+		cols += ", sort_order"
+		placeholders += ", ?"
+	}
+	if hasCountColumn {
+		cols += ", count_in_badge"
+		placeholders += ", ?"
+	}
 
 	return s.RunInTx(func(tx *sql.Tx) error {
 		if _, err := tx.Exec("DELETE FROM todo_markers"); err != nil {
@@ -608,20 +649,24 @@ func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
 			if m.Active {
 				active = 1
 			}
+			countInBadge := 0
+			if m.CountInBadge {
+				countInBadge = 1
+			}
+
+			args := []any{m.Marker, m.Color, active}
 			if hasSortOrder {
-				if _, err := tx.Exec(
-					"INSERT OR REPLACE INTO todo_markers (marker, color, active, sort_order) VALUES (?, ?, ?, ?)",
-					m.Marker, m.Color, active, m.SortOrder,
-				); err != nil {
-					return err
-				}
-			} else {
-				if _, err := tx.Exec(
-					"INSERT OR REPLACE INTO todo_markers (marker, color, active) VALUES (?, ?, ?)",
-					m.Marker, m.Color, active,
-				); err != nil {
-					return err
-				}
+				args = append(args, m.SortOrder)
+			}
+			if hasCountColumn {
+				args = append(args, countInBadge)
+			}
+
+			if _, err := tx.Exec(
+				"INSERT OR REPLACE INTO todo_markers ("+cols+") VALUES ("+placeholders+")",
+				args...,
+			); err != nil {
+				return err
 			}
 		}
 

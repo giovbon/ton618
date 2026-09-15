@@ -36,13 +36,6 @@ templ todosContent(markers []db.TodoMarker) {
                     }
                 }
                 
-                <label class="cursor-pointer">
-                    <input type="checkbox" name="type" value="TASK" class="peer hidden" onchange="if(this.checked) document.querySelector('#todo-filters input[value=all]').checked = false;" />
-                    <div class="filter-btn px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all border text-green-400 border-green-500/30 peer-checked:bg-green-500/10 peer-checked:border-green-500/60 hover:bg-green-500/10 hover:border-green-500/50">
-                        TASK
-                    </div>
-                </label>
-                
                 <div class="flex-1"></div>
                 
                 <label class="cursor-pointer">

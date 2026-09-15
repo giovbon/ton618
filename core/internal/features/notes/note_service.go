@@ -484,6 +484,7 @@ func isTypeTaggedNoteType(t domain.NoteType) bool {
 	case domain.NoteTypeDrawing,
 		domain.NoteTypeMindmap,
 		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
+		domain.NoteTypeSemanal,
 		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:
 		return true
 	}

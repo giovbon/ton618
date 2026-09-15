@@ -245,6 +245,9 @@ templ SettingsModal() {
                         Configure quais palavras-chave aparecem como TODOs na página
                         <a href="/todos" class="text-amber-400 hover:underline">🎯 TODOs</a>.
                         Apenas marcadores <strong>ativos</strong> são detectados nas notas.
+                        A caixa <strong class="text-zinc-300">Contar</strong> define se as tarefas
+                        desse marcador entram no número exibido no ícone Task do cabeçalho
+                        (ex: deixe <strong class="text-zinc-300">DONE</strong> fora da contagem).
                     </p>
 
                     <div hx-get="/api/todo-markers" hx-trigger="intersect once">

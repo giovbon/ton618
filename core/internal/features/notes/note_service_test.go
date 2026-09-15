@@ -424,8 +424,14 @@ func TestNoteService_Rename_SameName(t *testing.T) {
 
 func TestNoteService_Rename_UnsavedDraft(t *testing.T) {
 	svc, _ := newMockService(t)
-	// Renomear uma nota rascunho que ainda não foi salva no banco nem no disco
-	err := svc.Rename("notes/impar-lareira-99.md", "notes/minha-nova-nota.md")
+	// Renomear uma nota rascunho que ainda não foi salva no banco nem no disco.
+	// O nome é gerado pelo próprio gerador (não hardcoded): assim o teste não
+	// quebra quando a lista de palavras do diceware muda.
+	draft := "notes/" + processor.GenerateCUID2() + ".md"
+	if !processor.IsDraftName(draft) {
+		t.Fatalf("nome gerado deveria ser reconhecido como rascunho: %s", draft)
+	}
+	err := svc.Rename(draft, "notes/minha-nova-nota.md")
 	if err != nil {
 		t.Errorf("renomear rascunho não salvo não deve falhar, got %v", err)
 	}

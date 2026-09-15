@@ -134,7 +134,7 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 ### 3.5 Notas Indexáveis vs Não-Indexáveis (Regras de Paridade)
 
 - **Regra Geral:** Apenas notas de texto contínuo e leitura humana são indexáveis. Dados puramente estruturados, visuais ou códigos não são indexados.
-- **Tipos Indexáveis:** Markdown comuns (`NoteTypeMarkdown`), notas de transcrição do YouTube (`NoteTypeYoutube`), artigos da Web (`NoteTypeArticle`) e capturas rápidas (`NoteTypeCapture`).
+- **Tipos Indexáveis:** Markdown comuns (`NoteTypeMarkdown`), notas de transcrição do YouTube (`NoteTypeYoutube`), artigos da Web (`NoteTypeArticle`), capturas rápidas (`NoteTypeCapture`) e notas semanais (`NoteTypeSemanal`, ver 6.12).
 - **Tipos Não-Indexáveis:** Desenhos/Excalidraw (`NoteTypeDrawing`), arquivos/PDFs na pasta `pdfs/` (`NoteTypePDF`), anexos na pasta `attachments/` (`NoteTypeAttachment`) e notas arquivadas na pasta `archives/` (`NoteTypeArchive`).
 - **Paridade Go/SQL:** O método Go `IsNoteEmbeddable` (que valida as gravações) e as queries SQL (`GetPendingEmbeddingNotes` e `CountEmbeddableNotes`) devem estar em perfeita paridade quanto a essa lógica de exclusão de notas. Para manter a performance, a detecção de tipo é baseada apenas no caminho do arquivo, tags e heurísticas de nome de arquivo.
 - **Garantia via Teste:** O teste de integração `TestIsNoteEmbeddableMatchesSQL` garante que qualquer divergência futura entre Go e SQL na lógica de exclusão de notas quebrará os testes locais e o CI/CD. Adicionalmente, o teste `TestDeleteNoteCleansEmbeddingsAndOrphanStatus` garante que a remoção de notas limpa seus respectivos chunks e embeddings, e que o cálculo de status de indexação é resiliente a registros órfãos pré-existentes.
@@ -417,6 +417,138 @@ O job de **teste** do CI passou a exigir, além do `go test ./...`:
 **Motivação:** gaps encontrados numa revisão de maturidade (09/09/2026). O `go vet` apontava 2 problemas reais em `db.go`:
 1. `WithRequestContext` copiava `sync.Mutex` por valor (vet: *literal copies lock value*) — era **código morto** (construía uma cópia e a descartava). Removido junto com os símbolos sem uso `StoreKey`/`requestCtxKeyType`.
 2. `queryCtx()` descartava o `cancel` de `context.WithTimeout` (vet: *lostcancel*). O `cancel` agora é registrado (`queryPending`) e invocado no `Store.Close()`, com poda para não crescer sem limite.
+
+## 6.12 Nota Semanal — tipo próprio e nome determinístico (15/09/2026)
+
+📍 `core/internal/core/domain/data.go` | `core/internal/features/notes/handlers_weekly.go` | `core/internal/features/notes/handlers_weekly_test.go` | `core/internal/ui/icons/config.go` | `core/web/layout/navbar.templ`
+
+O menu **Criar** da navbar ganhou o item **`+ Semana`** (`GET /semana`), que abre a nota da semana corrente.
+
+- **Nome determinístico (não aleatório):** `notes/<ano>-S<semana>.md`, usando o **ano-semana ISO-8601** (`time.Time.ISOWeek()`), ex: `notes/2026-S38.md`. O sufixo numérico usa **2 dígitos** (`S01`..`S53`) para manter a ordenação lexicográfica da sidebar/database.
+  - Por que ISO-8601: é o único esquema com 1..53 semanas consistentes (a semana começa na segunda-feira) e com **ano-semana explícito** — em 29/12/2025 o nome correto é `2026-S01`, não `2025-S53`. Testado em `TestWeeklyNoteFilename`.
+- **Idempotência por semana:** como o nome é estável, clicar no botão N vezes na mesma semana sempre reusa a MESMA nota — nunca duplica nem sobrescreve o conteúdo já editado (`TestHandleWeekly_IdempotenteNaMesmaSemana`).
+- **Criação sob demanda e nota EM BRANCO:** `HandleWeekly` cria a nota na primeira abertura da semana (depois só redireciona para `/editor?file=...`). O conteúdo inicial é **só uma quebra de linha** (`domain.WeeklyNoteEmptyContent`), ou seja: **sem título, sem frontmatter e sem tag**.
+  - Por que não é `""`: `NoteService.processAndSave` recusa conteúdo vazio ("conteúdo vazio"). Essa proteção impede sobrescrever notas com branco e **não deve ser afrouxada** só para a nota semanal.
+  - Por que sem título: a nota é uma página em branco de propósito — o nome exibido vem do próprio nome do arquivo (`domain.DisplayName`).
+  - Por que sem tag: o tipo já é derivado do **nome do arquivo**, então persistir a tag seria redundante (e poluiria a sidebar com um chip `#semanal`).
+- **Novo tipo `NoteTypeSemanal = "semanal"`**, detectado de forma **100% determinística** por dois caminhos (tags têm prioridade):
+  1. tags `semanal`/`semana`/`weekly`;
+  2. **nome do arquivo** (`IsWeeklyNoteFilename`, regex ancorada `^\d{4}-S\d{2}$` com semana 1..53).
+  O caminho 2 é o **único** caminho ativo na prática: é ele que faz a nota já nascer com o tipo/ícone corretos antes de existir conteúdo salvo.
+- **Ícone próprio:** `Config["semanal"]` → Lucide `calendar-days`, cor `#14B8A6` (teal-500, distinta de `agenda` sky/sky-400 e de `markmap` verde). O SVG foi adicionado nos **dois** renderizadores (`icons.templ` para `@icons.Icon` e `icons.go` para `icons.IconSVG`) — esquecer um deles faz o resultado da busca cair no ícone de fallback.
+- **Editor:** `NoteTypeSemanal.EditorRoute()` é `/editor` (é uma nota markdown comum) e `NoteTypeCanonicalTag` retorna `semanal`. `NoteTypeSemanal` está em `isTypeTaggedNoteType`, então `EnsureTypeTags` **não** injeta a tag automaticamente.
+- **Paridade de embeddings:** `isNoteEmbeddable` (Go) e as queries `CountEmbeddableNotes`/`GetPendingEmbeddingNotes` (SQL) **não excluem** notas semanais — elas devem participar da busca semântica assim que tiverem conteúdo. O caso foi adicionado a `TestIsNoteEmbeddableMatchesSQL`.
+  - Nota: enquanto a nota está em branco o cliente envia **um chunk vazio** (`semantic.js`: `if (rawChunks.length === 0) rawChunks = [""]`), então ela é marcada como indexada e **não fica pendente para sempre**.
+- **`IsDraftName` não reconhece o nome semanal** como rascunho: `2026-S38` não segue o padrão diceware — o nome é estável e nunca deve ser tratado como descartável.
+
+## 6.13 Colar no editor — evitar markdown "sujo" (15/09/2026)
+
+📍 `core/web/static/editor-common.js` | `core/web/src/editor-init.js` | `core/web/tests/editor-common.unit.cjs`
+
+**Problema:** ao colar conteúdo copiado de outros programas, as marcações cruas (`**negrito**`, `*itálico*`) apareciam no editor como texto sujo.
+
+**Causa:** muitos programas (VS Code, leitores de PDF, terminais, painéis de IA) colocam no clipboard um `text/html` que é apenas o **mesmo texto embrulhado em `<div>`/`<p>`, sem formatação real** ("HTML de fachada"). O handler antigo só interpretava o markdown quando o clipboard **não tinha HTML** (`text && !html`); existindo HTML de fachada, o ProseMirror inseria o texto literal, asteriscos incluídos.
+
+**Regra adotada** (`EditorCommon.shouldPasteAsMarkdown(text, html)`), usada pelo `handlePaste`:
+
+| Clipboard | Comportamento |
+|---|---|
+| Texto puro com sintaxe markdown | Converte via `marked` → formatação real (comportamento anterior mantido) |
+| Texto puro sem markdown | Cola como texto |
+| HTML **com** formatação real (`strong`, `em`, `h1-6`, `ul/ol/li`, `table`, `pre/code`, `img`, `a`, `del`, ...) | **HTML ganha** — preserva a formatação original |
+| HTML **sem** formatação real ("de fachada") + texto com markdown | Converte o **texto puro** (é o que evita os asteriscos crus) |
+
+- Tags puramente estruturais (`div`, `p`, `br`, `span`) **não** contam como formatação — são exatamente as que aparecem no HTML de fachada.
+- **`Shift`+colar = texto puro** (convenção do navegador): o handler retorna `false` e o ProseMirror insere o texto cru, sem interpretar nada. É a saída manual para quem quer garantidamente sem formatação.
+- A decisão é uma **função pura** em `editor-common.js` (arquivo mantido à mão em `static/`, **não** é output de build) justamente para ser testável em Node (`web/tests/editor-common.unit.cjs`).
+- ⚠️ `editor-common.js` **não** é gerado pelo `build.js` (não é entrypoint do esbuild) — edite o arquivo em `static/`. Já `editor-init.js` é gerado de `src/` e exige rebuild do bundle.
+
+### 6.13.1 "Espaço morto" entre parágrafos ao colar (15/09/2026)
+
+📍 `EditorCommon.normalizePastedHtml` | `handlePaste` em `src/editor-init.js`
+
+**Problema:** ao colar texto, apareciam **grandes espaços entre os parágrafos**, obrigando a reformatar na mão.
+
+**Causa (não é CSS):** o CSS do editor é enxuto (`p { margin: 0.3em }`, `li p { margin: 0.2em }`), então a margem não explica o vão. O que aparece são **linhas em branco inteiras** (line-height 1.7) criadas por lixo de estrutura vindo do clipboard:
+
+| Lixo no clipboard | O que vira no editor |
+|---|---|
+| `<p></p>`, `<div></div>`, `<p><br></p>`, `<p>&nbsp;</p>`, `<div>&nbsp;</div>` | uma **linha vazia** por bloco |
+| `<p><span>&nbsp;</span></p>`, `<p><span style="…"></span></p>`, `<div><font> </font></div>` | uma **linha vazia** por bloco (bloco "vazio" com wrapper inline dentro) |
+| `<br><br>` (ou mais, com/sem `&nbsp;` no meio) | uma linha vazia |
+| `<br>` solto entre blocos: `<p>a</p><br><p>b</p>` | uma linha vazia |
+| `<br>` nas bordas do parágrafo: `<p>a<br></p>`, `<p><br>a</p>` | linha extra no parágrafo |
+| Lista "loose": `<li><p>único parágrafo</p></li>` | parágrafo extra dentro do item |
+| `<script>`/`<style>` colados junto | conteúdo indesejado na nota |
+
+**Correção:** `normalizePastedHtml(html)` roda **antes** do `insertContent` e, em **laço até estabilizar** (remover o de dentro pode esvaziar o de fora):
+1. remove `<script>`/`<style>`/`<meta>`/`<link>`;
+2. remove **inline vazio** (`<span></span>`, `<span> </span>`, `<span>&nbsp;</span>`, `<font></font>`, …);
+3. remove **bloco vazio** (`p`/`div`/`h1-6`/`li`/`blockquote`/`section`/`article`/`header`/`footer`/`figure` só com espaço, `&nbsp;` ou `<br>`);
+4. colapsa `<br><br>+` em um único `<br>`;
+5. remove `<br>`/espaço **órfão** antes de abrir e logo depois de fechar um bloco;
+6. remove `<br>`/espaço **nas bordas** de um bloco (quebras NO MEIO do parágrafo são preservadas);
+7. desembrulha `<li><p>x</p></li>` → `<li>x</li>` (com lookahead, para **preservar** itens com 2+ parágrafos);
+8. remove `<li>` que ficou vazio.
+
+**Fora de propósito (whitespace significativo):** `pre`, `code` e células de tabela (`td`/`th`/`tr`) **nunca** entram nas listas de remoção — um `<td></td>` vazio é estrutura, não espaço morto.
+
+Regras de segurança: a função **só remove espaço vazio e desembrulha wrappers — nunca descarta texto com conteúdo**, e se nada mudar o `handlePaste` devolve `false` (o fluxo normal do ProseMirror segue intacto, sem mudança de comportamento).
+
+- Testes em `web/tests/editor-common.unit.cjs` (blocos vazios, inline vazio, quebras órfãs, listas loose, preservação de `<pre>`/`<td>`/conteúdo, e um cenário real completo de colagem de painel de IA).
+- Se algum caso específico de colagem ainda gerar vão, o ajuste é **acrescentar uma regra na função** (e um teste), não mexer no CSS do editor.
+
+> ⚠️ **Ao testar mudanças em `web/static/`:** o `staticver` calcula os hashes/ETags **no boot** e serve com `Cache-Control: immutable`. Se o servidor continuar rodando, o browser **não** pega o arquivo novo (ETag velho → `304`). **Reinicie o servidor** e recarregue a página. No Docker os estáticos vêm da **imagem** (os volumes montam só `docs/` e `data/`) — exige rebuild da imagem.
+
+## 6.14 Renomear a nota aberta sem recarregar a página (15/09/2026)
+
+📍 `core/web/src/editor-init.js` | `core/web/static/editor-common.js` | `core/web/tests/editor-common.unit.cjs`
+
+**Problema:** renomear o título da nota com ela aberta (`#file-name`) disparava `window.location.href = "/editor?file=…"`, ou seja, um **reload completo** do navegador — perdia a posição de rolagem/cursor e o estado do editor.
+
+**Correção:** o rename passa a ser aplicado **na própria página** por `EditorCommon.applyRenameToUI`, que sincroniza apenas o que depende do nome:
+
+| O que | Como |
+|---|---|
+| URL | `history.replaceState` (mantém o histórico limpo e o F5 no lugar certo) |
+| Input do nome | `value` + **`data-filename`** — é a fonte usada por salvar/excluir/duplicar (`getCurrentFilename`) |
+| Título da aba | mantém o prefixo atual (`Editor - `, `Desenho - `, …) lido do próprio `document.title` |
+| Sidebar (HTMX) | dispara o evento **`reload-sidebar`** já existente (mesmo usado pelo modal de configurações) |
+
+**Quando o reload é mantido:** só quando o novo nome joga a nota para **outro editor**. O backend escolhe a rota pelo nome (`domain.DetectNoteType`: `mindmap`/`markmap` → `/mindmap`, `drawing`/`desenho` → `/drawing`), então `EditorCommon.renameChangesEditor(newName, currentBase)` retorna `true` nesses casos e o caller redireciona. A checagem é **conservadora de propósito** e considera a rota atual: renomear para `meu-desenho` a partir de `/editor` recarrega; a partir de `/drawing` não.
+
+- Vale para o editor markdown (`editor-init.js`) **e** para desenho/markmap (`EditorCommon.doRenameContent`).
+- Nada de conteúdo é regravado de forma diferente: a ordem continua `POST /file/rename` → `POST /file/save` → atualização da UI (antes: reload).
+- ⚠️ Não duplicar as regras de tipo do Go no JS: `renameChangesEditor` é só um **guarda de rota** (na dúvida, recarrega). A fonte da verdade continua sendo `domain.DetectNoteType`.
+- Testes: `renameChangesEditor` (nome normal/especial, rota atual, case-insensitive) e `applyRenameToUI` (URL via replaceState, input/`data-filename`, título preservando prefixo, evento da sidebar e ambiente sem DOM).
+
+## 6.15 Contagem de tarefas no cabeçalho + marcador fora da contagem (15/09/2026)
+
+📍 `core/internal/features/todos/badge.templ` | `handlers_markers.go` | `core/internal/core/db/db.go` | `core/internal/core/db/todos.go` | `core/web/layout/navbar.templ`
+
+**Contagem no ícone Task:** o badge é carregado pelo próprio HTMX (`GET /api/todos/count`), não pelo handler da página — assim o cabeçalho continua sendo um componente sem parâmetros (`layout.Navbar()`) e o número pode ser atualizado de qualquer lugar.
+
+| Peça | Detalhe |
+|---|---|
+| Container | `<span id="todos-badge" hx-get="/api/todos/count?r=<token>" hx-trigger="load, todos-updated from:body" hx-swap="innerHTML">` (desktop e mobile, com ids distintos) |
+| Fragmento | `todos.TodoBadge(count)` — **só o conteúdo** (a pílula). Contagem 0 não renderiza nada |
+| Ao mexer nos marcadores | **swap out-of-band**: a resposta do `/api/todo-markers/*` traz `MarkersList` (alvo) **+** `TodoBadgeOOB(count)` com `hx-swap-oob="innerHTML:#todos-badge"` / `#mobile-todos-badge` — o HTMX atualiza os dois badges na MESMA resposta |
+| Ao salvar nota | evento **`todos-updated`** (`document.body.dispatchEvent` no save do editor) — aqui não existe requisição HTMX de onde pendurar o OOB |
+| GET `/api/todos/count` | responde com `Cache-Control: no-store` + a URL carrega `?r=<token>` gerado por `badgeCacheBuster()` em cada render da página (contagem dinâmica **nunca** pode vir do cache do browser) |
+
+> ⚠️ **Já foram bugs reais (15/09/2026):** (1) o badge era atualizado só por `HX-Trigger: todos-updated` + `hx-trigger="... from:body"` e podia ficar no valor antigo; (2) mesmo com a contagem certa no banco, a página exibia número velho por cache. Hoje o caminho dos marcadores é **dirigido pela própria resposta** (OOB) e a URL da contagem tem **cache-buster** — não depende de evento, de ordem de processamento nem de cache.
+
+> ⚠️ **Ao investigar “continua contando”:** confira se o servidor está vivo antes de olhar a tela. O `run.sh` roda o binário em **primeiro plano** (`./ton618 | tee`), então **Ctrl+Z suspende o app** (saída 148 = 128+SIGTSTP) e a página continua mostrando dados velhos. Cheque com `ps aux | grep '[t]on618'`: `Z`/`<defunct>` = morto, `T` = suspenso. `./run.sh` de novo resolve (ele já faz `fuser -k "$PORT"/tcp`) — ou `nohup ./run.sh > /dev/null 2>&1 &` para não prender o terminal.
+
+⚠️ O swap é **`innerHTML`** de propósito: com `outerHTML` o elemento que dispara a busca seria substituído e perderia os atributos `hx-get`/`hx-trigger` — o badge atualizaria **uma única vez**. O container precisa sobreviver à troca.
+
+**Quem conta:** `todo_markers.count_in_badge` (coluna nova, migração **v12**, default **1** = comportamento anterior preservado). A contagem usa `db.CountTodosByMarkers(markers)` com os marcadores que estão **ativos E com `count_in_badge`**:
+- desmarcar **Contar** nas configurações tira o marcador do número (ex: `DONE` fora da contagem) **sem afetar a listagem**;
+- checkboxes comuns de markdown (tipo `TASK`) **nunca** entram, pois não são marcadores.
+
+**Fora da listagem:** a página 🎯 TODOs passou a **ignorar itens do tipo `TASK`** (`- [ ]` / `- [x]` de markdown) em `HandleListTodos`, e o botão de filtro `TASK` foi removido da UI. A extração continua gravando esses itens na tabela `todos` (nada foi perdido), apenas a listagem e a contagem os ignoram.
+
+**Upgrade de banco existente (validado):** um banco sem a coluna e sem o registro da v12 sobe normalmente, a migração adiciona `count_in_badge` com default 1 (marcadores antigos continuam contando) e não há erro no boot. `db.CountInBadge` é lido com as colunas opcionais resolvidas via `PRAGMA table_info` (`hasMarkerColumn`), então o app também funciona se a coluna ainda não existir.
 
 ## 7. Arquitetura de Busca
 

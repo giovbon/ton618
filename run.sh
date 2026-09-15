@@ -13,3 +13,5 @@ elif [ "$command1" == "push" ]; then
   git push origin main
 
 fi
+
+# ./run.sh --detach

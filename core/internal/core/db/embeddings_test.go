@@ -897,6 +897,7 @@ func TestIsNoteEmbeddableMatchesSQL(t *testing.T) {
 		{"notes/youtube-nota.md", "# YouTube", []string{"youtube"}, true},
 		{"notes/article-nota.md", "# Artigo", []string{"artigo"}, true},
 		{"notes/capture-nota.md", "# Captura", []string{"capture"}, true},
+		{"notes/2026-S38.md", "# Semana 38", []string{"semanal"}, true},
 
 		// Não indexáveis por prefixo de caminho
 		{"pdfs/livro.pdf", "# PDF content", []string{}, false},

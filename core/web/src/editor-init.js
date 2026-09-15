@@ -687,16 +687,30 @@
                 }
                 var text = event.clipboardData.getData("text/plain");
                 var html = event.clipboardData.getData("text/html");
-                if (text && !html && editor && !editor.isActive("codeBlock")) {
-                    var hasMarkdown = /(?:^(?:#+\s+|\d+\.\s+|[-*+]\s+))|[*_`~]|\[.+\]\(.+\)/m.test(text);
-                    if (hasMarkdown) {
-                        event.preventDefault();
-                        var parsedHtml = T.marked.parse(text);
-                        editor.chain().focus().insertContent(parsedHtml).run();
-                        return true;
-                    }
-                }
-                return false;
+                // Shift+colar = texto puro (convenção do navegador): deixa o
+                // ProseMirror inserir o texto cru, sem interpretar nada.
+                if (event.shiftKey) return false;
+                if (!editor || editor.isActive("codeBlock")) return false;
+
+                // A decisão fica no EditorCommon (testável em node): só converte o
+                // texto puro quando ele tem markdown E o HTML não tem formatação
+                // real (evita "HTML de fachada" com **asteriscos** crus).
+                var isMarkdown = EditorCommon.shouldPasteAsMarkdown(text, html);
+                var source = isMarkdown ? T.marked.parse(text) : html;
+
+                if (!source) return false;
+
+                // Remove espaço vazio vindo do clipboard (blocos vazios, <br><br>,
+                // listas loose) — era o que criava linhas em branco entre parágrafos.
+                var clean = EditorCommon.normalizePastedHtml(source);
+
+                // HTML que já está limpo segue o fluxo normal do ProseMirror
+                // (nenhuma mudança de comportamento quando não há nada a limpar).
+                if (!isMarkdown && clean === source) return false;
+
+                event.preventDefault();
+                editor.chain().focus().insertContent(clean).run();
+                return true;
             },
             handleKeyDown: function (view, event) {
                 // Tab dentro de code block: insere indentação
@@ -1729,6 +1743,11 @@ function updateToc() {
             if (resp.ok || resp.status === 303) {
                 setStatus("saved");
                 lastSavedHash = currentHash;
+                // A nota pode ter criado/removido tarefas: avisa o badge do
+                // cabeçalho (hx-trigger="todos-updated") para recontar.
+                try {
+                    document.body.dispatchEvent(new Event("todos-updated"));
+                } catch (e) { /* ambiente sem body/Event */ }
             } else {
                 var errText = await resp.text().catch(function () {
                     return "";
@@ -1813,8 +1832,21 @@ function updateToc() {
 
             originalFilename = "notes/" + newName;
             originalDisplayName = newName.replace(/\.md$/, "");
-            window.location.href =
-                "/editor?file=" + encodeURIComponent("notes/" + newName);
+
+            // Sem reload: o rename é aplicado na própria página (URL, título da aba,
+            // input/data-filename e sidebar). Só mantém o redirect quando o novo nome
+            // cai em OUTRO editor (ex: renomear para algo com "desenho" → /drawing),
+            // pois aí a rota é decidida pelo servidor.
+            if (EditorCommon.renameChangesEditor(newName, "/editor")) {
+                window.location.href =
+                    "/editor?file=" + encodeURIComponent("notes/" + newName);
+                return;
+            }
+            EditorCommon.applyRenameToUI({
+                newName: newName,
+                filenameInput: filenameInput,
+                base: "/editor",
+            });
         } catch (err) {
             setStatus("dirty");
             console.error("Rename failed:", err);
