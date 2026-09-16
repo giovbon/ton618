@@ -531,7 +531,11 @@ func (s *NoteService) processAndSave(ctx context.Context, filename, content stri
 	var todos []processor.TodoItem
 	activeMarkers, err := s.store.GetActiveTodoMarkers()
 	if err == nil {
-		var markers []string
+		// make(..., 0) em vez de `var markers []string`: com TODOS os marcadores
+		// desativados a slice precisa chegar vazia (e não nil) em ExtractTodos —
+		// nil significa "não informado" e faria o extrator voltar aos marcadores
+		// padrão, continuando a criar tarefas de TODO/DOING/DONE desativados.
+		markers := make([]string, 0, len(activeMarkers))
 		for _, m := range activeMarkers {
 			markers = append(markers, m.Marker)
 		}

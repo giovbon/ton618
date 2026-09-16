@@ -12,10 +12,16 @@ import (
 
 // ── Todo Markers (HTMX) ──
 
+// defaultMarkerColor é a cor usada quando a enviada não é um `#rrggbb` válido
+// (o valor vai para um `style` inline nos templates).
+const defaultMarkerColor = "#3b82f6"
+
 func (ctx *HandlerContext) HandleGetTodoMarkers(w http.ResponseWriter, r *http.Request) {
 	markers, err := ctx.Store.GetTodoMarkers()
 	if err != nil {
 		slog.Error("get markers", "error", err)
+		http.Error(w, "erro ao carregar marcadores", http.StatusInternalServerError)
+		return
 	}
 	if markers == nil {
 		markers = []db.TodoMarker{}
@@ -25,103 +31,120 @@ func (ctx *HandlerContext) HandleGetTodoMarkers(w http.ResponseWriter, r *http.R
 
 func (ctx *HandlerContext) HandleAddTodoMarker(w http.ResponseWriter, r *http.Request) {
 	markerName := strings.ToUpper(strings.TrimSpace(r.FormValue("marker")))
-	color := r.FormValue("color")
 
-	if markerName == "" {
-		http.Error(w, "marker cannot be empty", http.StatusBadRequest)
+	// O nome vira regex de extração (processor.getTodoRegex) e parâmetro de URL
+	// nas ações do painel: validar aqui evita marcador que quebra o extrator.
+	if !processor.IsValidTodoMarkerName(markerName) {
+		http.Error(w, "nome de marcador inválido (use letras, números, espaço, _ - .; máx. 32)", http.StatusBadRequest)
 		return
 	}
 
-	markers, _ := ctx.Store.GetTodoMarkers()
-	if markers == nil {
-		markers = []db.TodoMarker{}
+	color := strings.TrimSpace(r.FormValue("color"))
+	if !processor.IsValidTodoMarkerColor(color) {
+		color = defaultMarkerColor
 	}
 
-	// Verifica se já existe para não duplicar
-	exists := false
-	for _, m := range markers {
-		if m.Marker == markerName {
-			exists = true
-			break
-		}
+	// Insert idempotente: se já existir, nada muda (antes o handler anexava à
+	// lista em memória e regravava a tabela inteira).
+	if _, err := ctx.Store.AddTodoMarker(db.TodoMarker{
+		Marker: markerName,
+		Color:  color,
+		Active: true,
+		// Marcadores novos entram na contagem por padrão (pode ser desmarcado
+		// na aba Marcadores das configurações).
+		CountInBadge: true,
+	}); err != nil {
+		slog.Error("add marker", "marker", markerName, "error", err)
+		http.Error(w, "erro ao salvar marcador", http.StatusInternalServerError)
+		return
 	}
 
-	if !exists {
-		markers = append(markers, db.TodoMarker{
-			Marker: markerName,
-			Color:  color,
-			Active: true,
-			// Marcadores novos entram na contagem por padrão (pode ser desmarcado
-			// na aba Marcadores das configurações).
-			CountInBadge: true,
-		})
-		ctx.Store.SaveTodoMarkers(markers)
-	}
-
-	ctx.renderMarkers(w, r, markers)
+	ctx.renderMarkersFromStore(w, r)
 }
 
 func (ctx *HandlerContext) HandleUpdateTodoMarker(w http.ResponseWriter, r *http.Request) {
-	markerName := r.URL.Query().Get("marker")
+	markerName := strings.TrimSpace(r.URL.Query().Get("marker"))
 	if markerName == "" {
 		http.Error(w, "marker not specified", http.StatusBadRequest)
 		return
 	}
 
-	markers, _ := ctx.Store.GetTodoMarkers()
+	var upd db.TodoMarkerUpdate
 
-	color := r.FormValue("color")
-	activeStr := r.URL.Query().Get("active")
-	countStr := r.URL.Query().Get("count_in_badge")
-	sortOrderStr := r.FormValue("sort_order")
-
-	for i, m := range markers {
-		if m.Marker == markerName {
-			if color != "" {
-				markers[i].Color = color
-			}
-			if activeStr == "true" {
-				markers[i].Active = true
-			} else if activeStr == "false" {
-				markers[i].Active = false
-			}
-			// Se este marcador entra na contagem do badge do cabeçalho.
-			if countStr == "true" {
-				markers[i].CountInBadge = true
-			} else if countStr == "false" {
-				markers[i].CountInBadge = false
-			}
-			if sortOrderStr != "" {
-				if v, err := strconv.Atoi(sortOrderStr); err == nil && v >= 0 {
-					markers[i].SortOrder = v
-				}
-			}
-			break
-		}
+	// Os flags vêm na query string (os checkboxes do painel não têm `name`), o
+	// restante no corpo do POST. Valores diferentes de true/false são ignorados.
+	switch r.URL.Query().Get("active") {
+	case "true":
+		v := true
+		upd.Active = &v
+	case "false":
+		v := false
+		upd.Active = &v
+	}
+	switch r.URL.Query().Get("count_in_badge") {
+	case "true":
+		v := true
+		upd.CountInBadge = &v
+	case "false":
+		v := false
+		upd.CountInBadge = &v
 	}
 
-	ctx.Store.SaveTodoMarkers(markers)
-	ctx.renderMarkers(w, r, markers)
+	if color := strings.TrimSpace(r.FormValue("color")); processor.IsValidTodoMarkerColor(color) {
+		upd.Color = &color
+	}
+
+	if sortOrderStr := strings.TrimSpace(r.FormValue("sort_order")); sortOrderStr != "" {
+		v, err := strconv.Atoi(sortOrderStr)
+		if err != nil || v < 0 {
+			http.Error(w, "ordem inválida", http.StatusBadRequest)
+			return
+		}
+		upd.SortOrder = &v
+	}
+
+	if upd.Active == nil && upd.CountInBadge == nil && upd.Color == nil && upd.SortOrder == nil {
+		http.Error(w, "nada para atualizar", http.StatusBadRequest)
+		return
+	}
+
+	// UPDATE pontual: não toca nos outros marcadores e não perde alteração
+	// concorrente (o painel dispara uma requisição por checkbox).
+	updated, err := ctx.Store.UpdateTodoMarker(markerName, upd)
+	if err != nil {
+		slog.Error("update marker", "marker", markerName, "error", err)
+		http.Error(w, "erro ao atualizar marcador", http.StatusInternalServerError)
+		return
+	}
+	if !updated {
+		// Antes isso era um no-op silencioso: o painel re-renderizava mostrando o
+		// valor antigo e o usuário achava que o clique não tinha funcionado.
+		http.Error(w, "marcador não encontrado", http.StatusNotFound)
+		return
+	}
+
+	ctx.renderMarkersFromStore(w, r)
 }
 
 func (ctx *HandlerContext) HandleRemoveTodoMarker(w http.ResponseWriter, r *http.Request) {
-	markerName := r.URL.Query().Get("marker")
+	markerName := strings.TrimSpace(r.URL.Query().Get("marker"))
 	if markerName == "" {
 		http.Error(w, "marker not specified", http.StatusBadRequest)
 		return
 	}
 
-	markers, _ := ctx.Store.GetTodoMarkers()
-	var newMarkers []db.TodoMarker
-
-	for _, m := range markers {
-		if m.Marker != markerName {
-			newMarkers = append(newMarkers, m)
-		}
+	removed, err := ctx.Store.RemoveTodoMarker(markerName)
+	if err != nil {
+		slog.Error("remove marker", "marker", markerName, "error", err)
+		http.Error(w, "erro ao excluir marcador", http.StatusInternalServerError)
+		return
+	}
+	if !removed {
+		http.Error(w, "marcador não encontrado", http.StatusNotFound)
+		return
 	}
 
-	ctx.Store.SaveTodoMarkers(newMarkers)
-	ctx.renderMarkers(w, r, newMarkers)
+	ctx.renderMarkersFromStore(w, r)
 }
 
 func (ctx *HandlerContext) HandleResetTodoMarkers(w http.ResponseWriter, r *http.Request) {
@@ -134,8 +157,13 @@ func (ctx *HandlerContext) HandleResetTodoMarkers(w http.ResponseWriter, r *http
 			CountInBadge: true,
 		})
 	}
-	ctx.Store.SaveTodoMarkers(defaults)
-	ctx.renderMarkers(w, r, defaults)
+	if err := ctx.Store.SaveTodoMarkers(defaults); err != nil {
+		slog.Error("reset markers", "error", err)
+		http.Error(w, "erro ao restaurar marcadores", http.StatusInternalServerError)
+		return
+	}
+
+	ctx.renderMarkersFromStore(w, r)
 }
 
 // ── Contagem do badge do cabeçalho ──
@@ -172,6 +200,23 @@ func (ctx *HandlerContext) todoBadgeCount() int {
 func (ctx *HandlerContext) renderMarkers(w http.ResponseWriter, r *http.Request, markers []db.TodoMarker) {
 	MarkersList(markers).Render(r.Context(), w)
 	TodoBadgeOOB(ctx.todoBadgeCount()).Render(r.Context(), w)
+}
+
+// renderMarkersFromStore relê os marcadores do banco e renderiza.
+// Ler de volta (em vez de reaproveitar a lista em memória do handler) garante que
+// a UI mostre o estado REAL: se a escrita falhar, o painel não exibe um valor que
+// nunca foi gravado.
+func (ctx *HandlerContext) renderMarkersFromStore(w http.ResponseWriter, r *http.Request) {
+	markers, err := ctx.Store.GetTodoMarkers()
+	if err != nil {
+		slog.Error("get markers após escrita", "error", err)
+		http.Error(w, "erro ao carregar marcadores", http.StatusInternalServerError)
+		return
+	}
+	if markers == nil {
+		markers = []db.TodoMarker{}
+	}
+	ctx.renderMarkers(w, r, markers)
 }
 
 // HandleTodoCount renderiza o badge com a contagem de tarefas do cabeçalho.

@@ -61,14 +61,78 @@ var DefaultTodoMarkers = []DefaultMarkerInfo{
 	{Marker: "DONE", Color: "#10b981", Active: true},
 }
 
+// noTodoMarkerPattern é um regex que NUNCA casa (nenhum caractere é, ao mesmo
+// tempo, espaço e não-espaço). Usado quando não há marcador válido para detectar.
+const noTodoMarkerPattern = `[^\s\S]`
+
+// todoMarkerNameRegex valida o nome de um marcador criado pelo usuário:
+// letras (acentos incluídos), números, espaço, "_", "-" e "." — sem dois-pontos,
+// sem metacaractere de regex e sem caractere que atrapalhe a query string das
+// URLs do HTMX. Máximo de 32 caracteres.
+var todoMarkerNameRegex = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} _.\-]{0,31}$`)
+
+// IsValidTodoMarkerName diz se o nome pode virar marcador.
+//
+// Rejeita o reservado "TASK": é o tipo dos checkboxes `- [ ]` / `- [x]` de
+// markdown, que não são marcadores e ficam fora da listagem (HandleListTodos) e
+// da contagem do cabeçalho (CountTodosByMarkers) — um marcador com esse nome
+// contaria itens que não aparecem em lugar nenhum.
+func IsValidTodoMarkerName(name string) bool {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" || strings.EqualFold(trimmed, "TASK") {
+		return false
+	}
+	return todoMarkerNameRegex.MatchString(trimmed)
+}
+
+// todoMarkerColorRegex aceita só `#rrggbb`.
+var todoMarkerColorRegex = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// IsValidTodoMarkerColor diz se a cor é segura/útil para o estilo inline dos
+// templates (o valor é interpolado em `style="background:<cor>20; color:<cor>"`).
+func IsValidTodoMarkerColor(color string) bool {
+	return todoMarkerColorRegex.MatchString(strings.TrimSpace(color))
+}
+
+// getTodoRegex compila (com cache) o regex de marcadores do tipo `TODO: texto`.
+//
+// Os marcadores são NOMEADOS pelo usuário (Configurações → Marcadores) e são
+// interpolados no regex, então cada um passa por regexp.QuoteMeta. Sem isso um
+// marcador como `(` derrubava o regexp.MustCompile com **panic** no próximo save
+// de nota — e como o panic acontece antes do SaveNote, a nota não era salva e o
+// app ficava inutilizável para escrever até o marcador ser removido. Além do
+// panic, um marcador com metacaractere virava curinga silencioso (ex: `.` casava
+// qualquer linha no formato `x: texto`). QuoteMeta é a proteção de fato, porque
+// bancos antigos podem ter marcadores gravados antes da validação de nome.
+//
+// markers == nil significa "não informado" → usa os defaults. Slice vazio (ou só
+// com nomes inválidos) significa "nenhum marcador ativo" → não detecta nada: antes
+// o vazio caía nos defaults e continuava criando tarefas de marcadores que o
+// usuário havia desativado.
 func getTodoRegex(markers []string) *regexp.Regexp {
-	if len(markers) == 0 {
+	if markers == nil {
 		markers = make([]string, len(DefaultTodoMarkers))
 		for i, m := range DefaultTodoMarkers {
 			markers[i] = m.Marker
 		}
 	}
-	pattern := strings.Join(markers, "|")
+
+	parts := make([]string, 0, len(markers))
+	seen := make(map[string]bool, len(markers))
+	for _, m := range markers {
+		name := strings.TrimSpace(m)
+		key := strings.ToUpper(name)
+		if name == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		parts = append(parts, regexp.QuoteMeta(name))
+	}
+
+	pattern := strings.Join(parts, "|")
+	if pattern == "" {
+		pattern = noTodoMarkerPattern
+	}
 
 	todoRegexMu.RLock()
 	if todoRegexPattern == pattern && cachedTodoRegex != nil {

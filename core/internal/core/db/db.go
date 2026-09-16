@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +44,22 @@ type Store struct {
 	// chamada que usam s.queryCtx() inline.
 	cancelMu     sync.Mutex
 	queryPending []pendingCancel
+
+	// markerColsOnce/markerCols memoizam o PRAGMA table_info(todo_markers).
+	// As colunas opcionais (sort_order, count_in_badge) eram consultadas por
+	// PRAGMA em CADA chamada de GetTodoMarkers/GetActiveTodoMarkers/
+	// SaveTodoMarkers — e o badge do cabeçalho chama GetActiveTodoMarkers a cada
+	// carga de página. As migrações rodam em NewStore, então o resultado não
+	// muda depois do boot.
+	markerColsOnce sync.Once
+	markerCols     map[string]bool
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 // pendingCancel guarda o par ctx/cancel de um timeout de query individual.
@@ -602,25 +619,29 @@ func scanTodoMarker(rows *sql.Rows, hasSortOrder, hasCountColumn bool) (TodoMark
 // hasMarkerColumn verifica via PRAGMA se uma coluna existe na tabela todo_markers.
 // Necessário para retrocompatibilidade com bancos criados antes das migrações
 // que adicionaram colunas (v10 = sort_order, v12 = count_in_badge).
+//
+// O resultado é memoizado por Store: as migrações rodam em NewStore, antes de
+// qualquer query, então a lista de colunas não muda durante a vida do processo.
 func (s *Store) hasMarkerColumn(name string) bool {
-	rows, err := s.DB.Query("PRAGMA table_info(todo_markers)")
-	if err != nil {
-		return false
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var cid int
-		var colName, colType string
-		var notNull int
-		var dfltValue sql.NullString
-		var pk int
-		if rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk) == nil {
-			if colName == name {
-				return true
+	s.markerColsOnce.Do(func() {
+		s.markerCols = map[string]bool{}
+		rows, err := s.DB.Query("PRAGMA table_info(todo_markers)")
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var cid int
+			var colName, colType string
+			var notNull int
+			var dfltValue sql.NullString
+			var pk int
+			if rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk) == nil {
+				s.markerCols[colName] = true
 			}
 		}
-	}
-	return false
+	})
+	return s.markerCols[name]
 }
 
 // SaveTodoMarkers substitui todos os marcadores pelos fornecidos.
@@ -672,6 +693,137 @@ func (s *Store) SaveTodoMarkers(markers []TodoMarker) error {
 
 		return nil
 	})
+}
+
+// TodoMarkerUpdate descreve uma alteração pontual de um marcador.
+// Campo nil = "não mexe neste campo".
+type TodoMarkerUpdate struct {
+	Active       *bool
+	CountInBadge *bool
+	Color        *string
+	SortOrder    *int
+}
+
+// UpdateTodoMarker atualiza APENAS os campos informados, em um único UPDATE.
+// Retorna false quando o marcador não existe (o handler responde 404 em vez de
+// fingir que atualizou).
+//
+// Por que não usar SaveTodoMarkers: o fluxo antigo dos handlers era
+// ler a tabela inteira, alterar um item em memória e regravar tudo (DELETE +
+// INSERT). Isso tinha dois defeitos reais: (1) duas requisições concorrentes
+// (dois cliques rápidos no painel de marcadores) podiam perder uma das
+// alterações — read-modify-write fora do WriteMu; (2) qualquer erro de leitura
+// que passasse batido fazia o save gravar uma lista incompleta, apagando a
+// configuração de marcadores do usuário.
+func (s *Store) UpdateTodoMarker(marker string, u TodoMarkerUpdate) (bool, error) {
+	marker = strings.TrimSpace(marker)
+	if marker == "" {
+		return false, fmt.Errorf("update todo marker: marcador vazio")
+	}
+
+	var set []string
+	var args []any
+
+	if u.Active != nil {
+		set = append(set, "active = ?")
+		args = append(args, boolToInt(*u.Active))
+	}
+	if u.Color != nil {
+		set = append(set, "color = ?")
+		args = append(args, *u.Color)
+	}
+	if u.SortOrder != nil {
+		if !s.hasMarkerColumn("sort_order") {
+			return false, fmt.Errorf("update todo marker: coluna sort_order ausente")
+		}
+		set = append(set, "sort_order = ?")
+		args = append(args, *u.SortOrder)
+	}
+	if u.CountInBadge != nil {
+		if !s.hasMarkerColumn("count_in_badge") {
+			return false, fmt.Errorf("update todo marker: coluna count_in_badge ausente")
+		}
+		set = append(set, "count_in_badge = ?")
+		args = append(args, boolToInt(*u.CountInBadge))
+	}
+
+	if len(set) == 0 {
+		return false, fmt.Errorf("update todo marker: nenhum campo informado")
+	}
+
+	args = append(args, marker)
+
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	res, err := s.DB.Exec("UPDATE todo_markers SET "+strings.Join(set, ", ")+" WHERE marker = ?", args...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// AddTodoMarker cria o marcador se ele ainda não existir.
+// Retorna false quando já existia (idempotente — a UI pode reenviar).
+func (s *Store) AddTodoMarker(m TodoMarker) (bool, error) {
+	m.Marker = strings.TrimSpace(m.Marker)
+	if m.Marker == "" {
+		return false, fmt.Errorf("add todo marker: marcador vazio")
+	}
+
+	cols := "marker, color, active"
+	placeholders := "?, ?, ?"
+	args := []any{m.Marker, m.Color, boolToInt(m.Active)}
+
+	if s.hasMarkerColumn("sort_order") {
+		cols += ", sort_order"
+		placeholders += ", ?"
+		args = append(args, m.SortOrder)
+	}
+	if s.hasMarkerColumn("count_in_badge") {
+		cols += ", count_in_badge"
+		placeholders += ", ?"
+		args = append(args, boolToInt(m.CountInBadge))
+	}
+
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	res, err := s.DB.Exec("INSERT OR IGNORE INTO todo_markers ("+cols+") VALUES ("+placeholders+")", args...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// RemoveTodoMarker apaga um marcador. Retorna false quando ele não existia.
+// A configuração dos demais marcadores não é tocada.
+func (s *Store) RemoveTodoMarker(marker string) (bool, error) {
+	marker = strings.TrimSpace(marker)
+	if marker == "" {
+		return false, fmt.Errorf("remove todo marker: marcador vazio")
+	}
+
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	res, err := s.DB.Exec("DELETE FROM todo_markers WHERE marker = ?", marker)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // Close fecha a conexão com o banco.

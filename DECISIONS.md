@@ -530,13 +530,18 @@ Regras de segurança: a função **só remove espaço vazio e desembrulha wrappe
 
 | Peça | Detalhe |
 |---|---|
-| Container | `<span id="todos-badge" hx-get="/api/todos/count?r=<token>" hx-trigger="load, todos-updated from:body" hx-swap="innerHTML">` (desktop e mobile, com ids distintos) |
+| Container | `<span id="todos-badge" hx-get="/api/todos/count?r=<token>" hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace">` (desktop e mobile, com ids distintos) |
 | Fragmento | `todos.TodoBadge(count)` — **só o conteúdo** (a pílula). Contagem 0 não renderiza nada |
 | Ao mexer nos marcadores | **swap out-of-band**: a resposta do `/api/todo-markers/*` traz `MarkersList` (alvo) **+** `TodoBadgeOOB(count)` com `hx-swap-oob="innerHTML:#todos-badge"` / `#mobile-todos-badge` — o HTMX atualiza os dois badges na MESMA resposta |
 | Ao salvar nota | evento **`todos-updated`** (`document.body.dispatchEvent` no save do editor) — aqui não existe requisição HTMX de onde pendurar o OOB |
+| Ao excluir/arquivar/restaurar | `hx-on::after-request="tonRefreshTodosBadge()"` nos botões que removem ou recriam linhas de `todos` (sidebar, arquivar/excluir em massa, restaurar backup). Sem isso a contagem ficava velha até um reload completo |
 | GET `/api/todos/count` | responde com `Cache-Control: no-store` + a URL carrega `?r=<token>` gerado por `badgeCacheBuster()` em cada render da página (contagem dinâmica **nunca** pode vir do cache do browser) |
 
-> ⚠️ **Já foram bugs reais (15/09/2026):** (1) o badge era atualizado só por `HX-Trigger: todos-updated` + `hx-trigger="... from:body"` e podia ficar no valor antigo; (2) mesmo com a contagem certa no banco, a página exibia número velho por cache. Hoje o caminho dos marcadores é **dirigido pela própria resposta** (OOB) e a URL da contagem tem **cache-buster** — não depende de evento, de ordem de processamento nem de cache.
+> 🚨 **CAUSA RAIZ dos “números errados/travados” (encontrada em 15/09/2026):** o `src/app.js` tinha uma função **legada** `updateTodosCount()` que sobrescrevia `#nav-todos` com `innerHTML = "<svg>… Task N"`. Isso **removia o `<span id="todos-badge">` do DOM** (com seus atributos `hx-*`) em TODA carga de página. Efeitos: (a) o número exibido no desktop vinha de `/api/todos?type=all&status=pending&format=json`, que **ignora `count_in_badge` e `active`** — medido no banco real do usuário: badge correto **1**, endpoint legado **2** (DONE com “Contar” desmarcado continuava contando); (b) sem o container, o swap OOB caía em `htmx:oobErrorNoTarget` e o evento `todos-updated` não tinha listener — o badge era o **único** elemento que nunca se atualizava; (c) no mobile o número era injetado no rótulo `TASK N`, duplicando a contagem. **Não reintroduzir JS imperativo no badge**: a responsabilidade é do HTMX e a guarda é `web/tests/todos-badge.unit.cjs`.
+
+> ⚠️ **Nomes de evento do htmx são camelCase.** O vendor é o htmx **1.9.12**, que dispara `htmx:sendError` / `htmx:responseError` / `htmx:timeout` — **não** existe versão kebab-case. `hx-on::send-error` registrava o listener em um evento que nunca ocorre, então o “?” de servidor fora do ar **não** aparecia em falha de rede (só funcionava o `hx-on::timeout`, que já estava em camelCase). Guarda em `web/tests/todos-badge.unit.cjs`.
+
+> ⚠️ **Já foram bugs reais (15/09/2026):** (1) o badge era atualizado só por `HX-Trigger: todos-updated` + `hx-trigger="... from:body"` e podia ficar no valor antigo — na verdade isso era sintoma do `innerHTML` do app.js (acima); (2) mesmo com a contagem certa no banco, a página exibia número velho por cache. Hoje o caminho dos marcadores é **dirigido pela própria resposta** (OOB), a URL da contagem tem **cache-buster** e `hx-sync="this:replace"` descarta resposta fora de ordem.
 
 > ⚠️ **Ao investigar “continua contando”:** confira se o servidor está vivo antes de olhar a tela. O `run.sh` roda o binário em **primeiro plano** (`./ton618 | tee`), então **Ctrl+Z suspende o app** (saída 148 = 128+SIGTSTP) e a página continua mostrando dados velhos. Cheque com `ps aux | grep '[t]on618'`: `Z`/`<defunct>` = morto, `T` = suspenso. `./run.sh` de novo resolve (ele já faz `fuser -k "$PORT"/tcp`) — ou `nohup ./run.sh > /dev/null 2>&1 &` para não prender o terminal.
 
@@ -548,7 +553,41 @@ Regras de segurança: a função **só remove espaço vazio e desembrulha wrappe
 
 **Fora da listagem:** a página 🎯 TODOs passou a **ignorar itens do tipo `TASK`** (`- [ ]` / `- [x]` de markdown) em `HandleListTodos`, e o botão de filtro `TASK` foi removido da UI. A extração continua gravando esses itens na tabela `todos` (nada foi perdido), apenas a listagem e a contagem os ignoram.
 
+**Escrita dos marcadores (reescrito em 15/09/2026):** os handlers **não** fazem mais read-modify-write da tabela (`GetTodoMarkers` → altera em memória → `SaveTodoMarkers`, que é `DELETE`+`INSERT` de tudo). Agora existe update pontual: `Store.UpdateTodoMarker(marker, TodoMarkerUpdate{...})`, `Store.AddTodoMarker` (INSERT OR IGNORE idempotente) e `Store.RemoveTodoMarker`. Motivos: (a) duas requisições concorrentes do painel (um checkbox por linha, sem `hx-sync`) perdiam uma das alterações; (b) erro de leitura era ignorado (`markers, _ := …`) e o `SaveTodoMarkers` seguinte apagava a configuração inteira; (c) `UPDATE` inexistente virou **404** e nome inválido **400** — antes o painel re-renderizava com o valor antigo como se nada tivesse falhado. `SaveTodoMarkers` continua existindo apenas para o “Restaurar padrão” (substituição completa é a intenção).
+
+**Nome/cor de marcador são validados** (`processor.IsValidTodoMarkerName` / `IsValidTodoMarkerColor`): letras (com acento), números, espaço, `_`, `-`, `.`, até 32 chars; `TASK` é reservado (contaria checkboxes que não aparecem em lugar nenhum). A cor precisa ser `#rrggbb` (vai para um `style` inline).
+
+> 🚨 **Marcador vira regex — `regexp.QuoteMeta` é obrigatório.** `getTodoRegex` interpola os marcadores em `(?i)^\s*(TODO|DOING):\s*(.+)$`. Sem escapar, um marcador com metacaractere (`(`, `[`, `*`…) fazia o `regexp.MustCompile` **entrar em panic** — e como o panic acontecia dentro de `ExtractTodos` **antes** do `SaveNote`, a nota **não era salva** e nenhuma outra conseguia ser salva enquanto o marcador existisse (500 via `middleware.Recovery`). `.`/`?`/`+` viravam curinga silencioso (criavam tarefas para linhas como `qualquer coisa: valor`). O `QuoteMeta` é a proteção de fato: bancos antigos podem ter marcadores gravados antes da validação. Testes em `processor/markdown_test.go` (`TestExtractTodos_MarcadorComMetacaractereNaoPanica`, `…NaoViraCuringa`).
+
+> ⚠️ **`ExtractTodos(markers nil)` ≠ `ExtractTodos(markers []string{})`.** `nil` = “não informado” → usa `DefaultTodoMarkers`; slice **vazio** = “nenhum marcador ativo” → **não detecta nada**. Antes o vazio caía nos defaults e o app continuava criando tarefas de `TODO/DOING/DONE` **desativados**. Por isso `NoteService.processAndSave` usa `make([]string, 0, len(activeMarkers))` — `var markers []string` fica `nil` quando não há marcador ativo.
+
+**Nomes de marcador nas URLs do painel são escapados** (`markerURL` em `markers.templ`, com `url.QueryEscape`): marcador com `&`/`#` truncava a query, `+` chegava como espaço e `%` invalidava o escape — em todos os casos o clique no checkbox “Contar” (ou ativo/cor/ordem/excluir) não fazia nada, sem aviso.
+
+**Performance/estabilidade:** `hasMarkerColumn` (PRAGMA `table_info`) é **memoizado por Store** (`sync.Once`) — era consultado até 4× por chamada, e o badge chama `GetActiveTodoMarkers` a cada carga de página.
+
 **Upgrade de banco existente (validado):** um banco sem a coluna e sem o registro da v12 sobe normalmente, a migração adiciona `count_in_badge` com default 1 (marcadores antigos continuam contando) e não há erro no boot. `db.CountInBadge` é lido com as colunas opcionais resolvidas via `PRAGMA table_info` (`hasMarkerColumn`), então o app também funciona se a coluna ainda não existir.
+
+**Testes:** `internal/features/todos/markers_count_test.go` (contagem, 404/400, idempotência, escape de URL no painel), `internal/core/db/todos_count_test.go` (update pontual, add/remove idempotentes, memoize), `internal/processor/markdown_test.go` (metacaractere, nome/cor) e `web/tests/todos-badge.unit.cjs` (guarda do frontend: app.js sem innerHTML no badge, `sendError` camelCase, `innerHTML` no container, OOB dos dois badges).
+
+## 6.16 Remoção do módulo de Ajuda/Documentação (16/09/2026)
+
+📍 `core/internal/features/system/` | `core/web/layout/navbar.templ` | `core/web/build.js`
+
+O módulo de ajuda foi **removido por completo** (decisão do usuário: o ícone de ajuda do header não é mais usado). O que saiu:
+
+| Peça | O que era |
+|---|---|
+| `features/system/docs.templ` | página `/help`: TOC gerada em JS + `marked` via CDN + blocos `prose` do Tailwind |
+| `features/system/embed.go` | `//go:embed help.md`, `TemplatesFS` e `HelpMD()` |
+| `features/system/help.md` | conteúdo da documentação |
+| `handlers.go` | `HandleHelp` e `HandleHelpMarkdown` |
+| `cmd/server/routes.go` | `GET /help` e `GET /api/help/markdown` |
+| `navbar.templ` | ícone de ajuda (desktop) e a entrada `TUTORIAL` do menu mobile |
+| `ui/icons/config.go` | chaves `ajuda`/`help` (ícones de utilitários do header) |
+
+> ℹ️ O resolvedor de SVG (`icons.templ`/`icons.go`) **mantém** os nomes `help`/`help-circle`/`circle-help`: eles também servem para nomes de notas (`GetIcon`), não são exclusivos da página de ajuda.
+
+> ⚠️ **Efeito colateral tratado:** a página de ajuda era a **única** usuária da utility Tailwind `prose` (plugin typography). O `build.js` tinha uma "validação de sanidade" que exigia as substrings `green-500` e `prose` no `static/app.css` para provar que o `@source` de `internal/features` estava sendo escaneado. Verificou-se que o `.prose` presente no CSS vem do `@tailwindcss/typography` (emitido **independente de uso**, 328 ocorrências no build com a página já removida) — ou seja, essa exigência **não provava nada** sobre o scan do backend e ainda mascarava a remoção. A checagem agora exige apenas `green-500`, que vem de `features/system/handlers.go` (template do backend).
 
 ## 7. Arquitetura de Busca
 
@@ -627,7 +666,6 @@ Correções guiadas por benchmarks (`perf_bench_test.go` em `internal/search` e 
 
 > Não alterados (avaliados, menor prioridade/risco de contrato): o `COUNT(*)` do FTS5 por busca, o filtro `tags NOT LIKE '%drawing%'` dentro da query FTS e a queda para `SearchFTSLike` (full scan `LOWER(texto) LIKE`) em buscas sem resultado.
 
-[HELP do sistema](core/internal/features/system/help.md)
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 
 https://lucide.dev/icons/

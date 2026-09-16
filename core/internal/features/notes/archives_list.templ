@@ -31,6 +31,7 @@ templ ArchivesList(archives []domain.ArchiveInfo) {
                         </div>
                     </div>
                     <button type="button" hx-post="/api/archive/restore" hx-vals={ fmt.Sprintf(`{"archive": "%s"}`, arch.Name) } hx-target="#restore-result-area" hx-confirm="Deseja realmente restaurar as notas deste arquivo?"
+                        hx-on::after-request="tonRefreshTodosBadge()"
                         class="px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-sky-600 text-zinc-300 hover:text-white text-xs font-bold transition-colors shrink-0">
                         Restaurar
                     </button>

@@ -101,6 +101,7 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
             @icons.Icon("edit-3", "w-3.5 h-3.5")
         </button>
         <button type="button" hx-post="/api/notes/delete" hx-vals={ `{"filename": "` + n.Arquivo + `"}` } hx-target="#sidebar-tree" hx-swap="none" hx-confirm={ "Excluir " + n.Arquivo + "?" } 
+            hx-on::after-request="tonRefreshTodosBadge()"
             class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">
             @icons.Icon("trash-2", "w-3.5 h-3.5")
         </button>

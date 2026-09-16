@@ -25,13 +25,11 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/todos", sysCtx.HandleTodosPage)
 	mux.Get("/settings", sysCtx.HandleTodoSettingsPage)
 	mux.Get("/database", sysCtx.HandleDatabasePage)
-	mux.Get("/help", sysCtx.HandleHelp)
 	mux.Get("/login", sysCtx.HandleLogin)
 
 	// API System
 	mux.Get("/api/status", sysCtx.HandleStatus)
 	mux.Get("/api/health", sysCtx.HandleHealth)
-	mux.Get("/api/help/markdown", sysCtx.HandleHelpMarkdown)
 	mux.Get("/api/todos", sysCtx.HandleListTodos)
 	mux.Get("/api/settings/ntfy", sysCtx.HandleGetNtfySettings)
 	mux.Post("/api/settings/ntfy", sysCtx.HandlePostNtfySettings)

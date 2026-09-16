@@ -15,7 +15,16 @@ try {
 // Validação de sanidade: garante que o Tailwind encontrou as classes do backend (internal/features)
 try {
   const cssContent = readFileSync("static/app.css", "utf8");
-  const requiredClasses = ["green-500", "prose"];
+  // ⚠️ A classe precisa vir de um TEMPLATE do backend: `green-500` está em
+  // core/internal/features/system/handlers.go, então se ela sumir é porque o
+  // @source de internal/features parou de ser escaneado (é o que esta validação
+  // protege).
+  // Removida a checagem de "prose" (16/09/2026): o único template que usava a
+  // utility `prose` era a página de ajuda/docs (/help), apagada junto com o
+  // módulo de ajuda; e o CSS `.prose` que aparece no app.css vem do plugin
+  // @tailwindcss/typography (emitido independente de uso), ou seja, a checagem
+  // passava mesmo com o scan do backend quebrado.
+  const requiredClasses = ["green-500"];
   for (const cls of requiredClasses) {
     if (!cssContent.includes(cls)) {
       throw new Error(`A classe obrigatória "${cls}" não foi encontrada no static/app.css. Verifique se o Tailwind está escaneando as pastas do backend (internal/features) corretamente.`);

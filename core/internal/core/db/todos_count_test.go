@@ -174,3 +174,209 @@ func TestTodoMarkers_CountInBadgeColumnExiste(t *testing.T) {
 		t.Fatal("coluna sort_order não existe em todo_markers")
 	}
 }
+
+// ── Update/Add/Remove pontuais ──
+//
+// O painel de marcadores dispara uma requisição por checkbox. O fluxo antigo
+// (GetTodoMarkers → altera em memória → SaveTodoMarkers) reescrevia a tabela
+// inteira a cada toggle: duas requisições concorrentes perdiam uma das
+// alterações e um erro de leitura apagava a configuração toda. Estes métodos
+// fazem UPDATE/INSERT/DELETE pontuais.
+
+func TestUpdateTodoMarker_SoAlteraOCampoInformado(t *testing.T) {
+	s := newTestStore(t)
+
+	antes, err := s.GetTodoMarkers()
+	if err != nil {
+		t.Fatalf("GetTodoMarkers: %v", err)
+	}
+	if len(antes) < 2 {
+		t.Fatalf("esperava ao menos 2 marcadores, got %d", len(antes))
+	}
+
+	alvo := antes[0]
+	outro := antes[1]
+
+	// Só o CountInBadge do alvo muda.
+	novoCount := !alvo.CountInBadge
+	ok, err := s.UpdateTodoMarker(alvo.Marker, TodoMarkerUpdate{CountInBadge: &novoCount})
+	if err != nil {
+		t.Fatalf("UpdateTodoMarker: %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdateTodoMarker deveria informar que atualizou")
+	}
+
+	depois, err := s.GetTodoMarkers()
+	if err != nil {
+		t.Fatalf("GetTodoMarkers após update: %v", err)
+	}
+	if len(depois) != len(antes) {
+		t.Fatalf("quantidade mudou: %d → %d", len(antes), len(depois))
+	}
+
+	for _, m := range depois {
+		switch m.Marker {
+		case alvo.Marker:
+			if m.CountInBadge != novoCount {
+				t.Errorf("CountInBadge do alvo = %v, want %v", m.CountInBadge, novoCount)
+			}
+			// Campos não informados ficam como estavam.
+			if m.Color != alvo.Color || m.Active != alvo.Active || m.SortOrder != alvo.SortOrder {
+				t.Errorf("campos não informados mudaram: antes=%+v depois=%+v", alvo, m)
+			}
+		case outro.Marker:
+			if m.CountInBadge != outro.CountInBadge {
+				t.Errorf("marcador %s não deveria ter sido afetado", m.Marker)
+			}
+		}
+	}
+}
+
+func TestUpdateTodoMarker_OutrosCampos(t *testing.T) {
+	s := newTestStore(t)
+
+	ativo := false
+	color := "#101010"
+	ordem := 3
+
+	if ok, err := s.UpdateTodoMarker("DOING", TodoMarkerUpdate{
+		Active:       &ativo,
+		Color:        &color,
+		SortOrder:    &ordem,
+		CountInBadge: &ativo,
+	}); err != nil || !ok {
+		t.Fatalf("UpdateTodoMarker: ok=%v err=%v", ok, err)
+	}
+
+	markers, err := s.GetTodoMarkers()
+	if err != nil {
+		t.Fatalf("GetTodoMarkers: %v", err)
+	}
+	for _, m := range markers {
+		if m.Marker != "DOING" {
+			continue
+		}
+		if m.Active || m.CountInBadge {
+			t.Errorf("flags deveriam estar false: %+v", m)
+		}
+		if m.Color != color {
+			t.Errorf("cor = %q, want %q", m.Color, color)
+		}
+		if m.SortOrder != ordem {
+			t.Errorf("sort_order = %d, want %d", m.SortOrder, ordem)
+		}
+		return
+	}
+	t.Fatal("marcador DOING sumiu")
+}
+
+func TestUpdateTodoMarker_MarcadorInexistente(t *testing.T) {
+	s := newTestStore(t)
+
+	v := false
+	ok, err := s.UpdateTodoMarker("NAOEXISTE", TodoMarkerUpdate{CountInBadge: &v})
+	if err != nil {
+		t.Fatalf("UpdateTodoMarker: %v", err)
+	}
+	if ok {
+		t.Error("não deveria informar update para marcador inexistente")
+	}
+}
+
+func TestAddTodoMarker_IdempotenteEPreservaCor(t *testing.T) {
+	s := newTestStore(t)
+
+	criado, err := s.AddTodoMarker(TodoMarker{Marker: "NOVO", Color: "#111111", Active: true, CountInBadge: true})
+	if err != nil || !criado {
+		t.Fatalf("AddTodoMarker: criado=%v err=%v", criado, err)
+	}
+
+	// Segunda chamada não cria de novo nem sobrescreve a cor.
+	criado, err = s.AddTodoMarker(TodoMarker{Marker: "NOVO", Color: "#222222", Active: true, CountInBadge: false})
+	if err != nil {
+		t.Fatalf("AddTodoMarker (2ª): %v", err)
+	}
+	if criado {
+		t.Error("segundo AddTodoMarker deveria retornar false (já existia)")
+	}
+
+	markers, err := s.GetTodoMarkers()
+	if err != nil {
+		t.Fatalf("GetTodoMarkers: %v", err)
+	}
+	ocorrencias := 0
+	for _, m := range markers {
+		if m.Marker == "NOVO" {
+			ocorrencias++
+			if m.Color != "#111111" {
+				t.Errorf("cor = %q, want #111111 (preservada)", m.Color)
+			}
+			if !m.CountInBadge {
+				t.Error("CountInBadge original deveria ter sido preservado")
+			}
+		}
+	}
+	if ocorrencias != 1 {
+		t.Errorf("NOVO deveria existir 1x, got %d", ocorrencias)
+	}
+}
+
+func TestRemoveTodoMarker(t *testing.T) {
+	s := newTestStore(t)
+
+	antes, _ := s.GetTodoMarkers()
+
+	removido, err := s.RemoveTodoMarker("DONE")
+	if err != nil || !removido {
+		t.Fatalf("RemoveTodoMarker: removido=%v err=%v", removido, err)
+	}
+
+	// Idempotência: remover de novo retorna false, sem erro.
+	removido, err = s.RemoveTodoMarker("DONE")
+	if err != nil {
+		t.Fatalf("RemoveTodoMarker (2ª): %v", err)
+	}
+	if removido {
+		t.Error("segunda remoção deveria retornar false")
+	}
+
+	depois, _ := s.GetTodoMarkers()
+	if len(depois) != len(antes)-1 {
+		t.Fatalf("esperava %d marcadores, got %d", len(antes)-1, len(depois))
+	}
+	for _, m := range depois {
+		if m.Marker == "DONE" {
+			t.Error("DONE deveria ter sido removido")
+		}
+	}
+}
+
+// TestUpdateTodoMarker_SemCampos garante erro em vez de UPDATE vazio (SQL inválido).
+func TestUpdateTodoMarker_SemCampos(t *testing.T) {
+	s := newTestStore(t)
+
+	if _, err := s.UpdateTodoMarker("TODO", TodoMarkerUpdate{}); err == nil {
+		t.Error("esperava erro quando nenhum campo é informado")
+	}
+}
+
+// TestHasMarkerColumn_Memoizado garante que o PRAGMA é feito uma única vez por
+// Store (o badge do cabeçalho chama GetActiveTodoMarkers a cada carga de página).
+func TestHasMarkerColumn_Memoizado(t *testing.T) {
+	s := newTestStore(t)
+
+	if !s.hasMarkerColumn("count_in_badge") {
+		t.Fatal("coluna count_in_badge deveria existir")
+	}
+	if s.markerCols == nil {
+		t.Fatal("esperava cache de colunas preenchido")
+	}
+
+	// Se o memoize estivesse errado (relendo o banco), marcar o cache como cheio
+	// e removido forçaria uma releitura; aqui basta garantir que o mapa é estável.
+	s.markerCols["coluna_fake"] = true
+	if !s.hasMarkerColumn("coluna_fake") {
+		t.Error("hasMarkerColumn deveria consultar o cache memoizado")
+	}
+}

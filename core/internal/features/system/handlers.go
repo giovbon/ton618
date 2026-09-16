@@ -43,23 +43,6 @@ func (ctx *HandlerContext) HandleHealth(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(`{"status":"up","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
 }
 
-// ── Help / Documentation ──
-
-func (ctx *HandlerContext) HandleHelp(w http.ResponseWriter, r *http.Request) {
-	Docs("Documentação — TON-618").Render(r.Context(), w)
-}
-
-func (ctx *HandlerContext) HandleHelpMarkdown(w http.ResponseWriter, r *http.Request) {
-	content, err := HelpMD()
-	if err != nil {
-		slog.Error("ler help.md embedado", "error", err)
-		http.Error(w, "Documentação não encontrada", http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Write(content)
-}
-
 func (ctx *HandlerContext) HandleGetTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	tags, err := ctx.Store.GetAllTags()

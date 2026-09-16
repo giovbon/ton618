@@ -1,10 +1,28 @@
 package todos
 
 import (
+	"net/url"
 	"strconv"
 	"ton618/core/internal/core/db"
 	"ton618/core/internal/ui/icons"
 )
+
+// markerURL monta a URL de uma ação do painel de marcadores, com o nome do
+// marcador escapado para query string.
+//
+// O nome é digitado pelo usuário e ia cru para dentro da URL: marcador com `&`
+// ou `#` truncava a query, `+` chegava como espaço no Go e `%` invalidava o
+// escape — em todos esses casos o clique no checkbox "Contar" (ou o "ativo", a
+// cor, a ordem e o excluir) não fazia nada, sem nenhum aviso na tela.
+//
+// extra recebe pares `chave=valor` já prontos (valores são literais do template).
+func markerURL(base, marker string, extra ...string) string {
+	u := base + "?marker=" + url.QueryEscape(marker)
+	for _, kv := range extra {
+		u += "&" + kv
+	}
+	return u
+}
 
 templ MarkersList(markers []db.TodoMarker) {
     <div id="markers-container" class="space-y-6">
@@ -23,9 +41,9 @@ templ MarkersList(markers []db.TodoMarker) {
                             <!-- Checkbox ativo -->
                             <label class="flex items-center gap-2 cursor-pointer shrink-0">
                                 if m.Active {
-                                    <input type="checkbox" checked hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&active=false")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
+                                    <input type="checkbox" checked hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker, "active=false"))) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
                                 } else {
-                                    <input type="checkbox" hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&active=true")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
+                                    <input type="checkbox" hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker, "active=true"))) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 cursor-pointer" />
                                 }
                             </label>
 
@@ -34,9 +52,9 @@ templ MarkersList(markers []db.TodoMarker) {
                             <!-- Contar no badge do cabeçalho -->
                             <label class="flex items-center gap-1.5 cursor-pointer shrink-0" title="Contar as tarefas deste marcador no ícone Task do cabeçalho">
                                 if m.CountInBadge {
-                                    <input type="checkbox" checked hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&count_in_badge=false")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-sky-500 focus:ring-sky-500 cursor-pointer" />
+                                    <input type="checkbox" checked hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker, "count_in_badge=false"))) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-sky-500 focus:ring-sky-500 cursor-pointer" />
                                 } else {
-                                    <input type="checkbox" hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker + "&count_in_badge=true")) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-sky-500 focus:ring-sky-500 cursor-pointer" />
+                                    <input type="checkbox" hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker, "count_in_badge=true"))) } hx-target="#markers-container" hx-swap="outerHTML" class="w-4 h-4 rounded-sm border-zinc-600 bg-zinc-800 text-sky-500 focus:ring-sky-500 cursor-pointer" />
                                 }
                                 <span class="text-[10px] text-zinc-500 whitespace-nowrap">Contar</span>
                             </label>
@@ -48,7 +66,7 @@ templ MarkersList(markers []db.TodoMarker) {
                                 <label class="text-[10px] text-zinc-600 whitespace-nowrap">Ordem</label>
                                 <select
                                     name="sort_order"
-                                    hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) }
+                                    hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker))) }
                                     hx-target="#markers-container"
                                     hx-swap="outerHTML"
                                     hx-trigger="change"
@@ -63,10 +81,10 @@ templ MarkersList(markers []db.TodoMarker) {
 
                             <!-- Cor -->
                             <form class="flex items-center gap-2 m-0 shrink-0">
-                                <input type="color" name="color" value={ m.Color } hx-post={ string(templ.URL("/api/todo-markers/update?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" class="w-8 h-8 rounded-sm cursor-pointer border-0 bg-transparent p-0" />
+                                <input type="color" name="color" value={ m.Color } hx-post={ string(templ.URL(markerURL("/api/todo-markers/update", m.Marker))) } hx-target="#markers-container" hx-swap="outerHTML" class="w-8 h-8 rounded-sm cursor-pointer border-0 bg-transparent p-0" />
                             </form>
 
-                            <button hx-delete={ string(templ.URL("/api/todo-markers/remove?marker=" + m.Marker)) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all p-1 cursor-pointer shrink-0">
+                            <button hx-delete={ string(templ.URL(markerURL("/api/todo-markers/remove", m.Marker))) } hx-target="#markers-container" hx-swap="outerHTML" hx-confirm={ "Excluir o marcador " + m.Marker + "?" } class="marker-delete text-zinc-600 hover:text-red-400 transition-all p-1 cursor-pointer shrink-0">
                                 @icons.Icon("x", "w-3.5 h-3.5")
                             </button>
                         </div>
@@ -78,7 +96,7 @@ templ MarkersList(markers []db.TodoMarker) {
         <!-- Novo marcador -->
         <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
             <label class="block text-sm font-semibold text-zinc-200 mb-2">Novo marcador</label>
-            <form hx-post="/api/todo-markers/add" hx-target="#markers-container" hx-swap="outerHTML" class="flex gap-2 m-0">
+            <form hx-post="/api/todo-markers/add" hx-target="#markers-container" hx-swap="outerHTML" hx-on::responseError="alert(event.detail.xhr.responseText)" class="flex gap-2 m-0">
                 <input type="text" name="marker" placeholder="Ex: URGENTE"
                     class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 uppercase placeholder:normal-case focus:outline-hidden focus:border-sky-500" required />
                 <input type="color" name="color" value="#3b82f6"

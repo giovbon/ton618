@@ -373,50 +373,23 @@ window.logout = logout;
     };
 })();
 
-// ── Marcadores (HTMX HATEOAS) ──
-
-async function updateTodosCount() {
-    try {
-        const response = await fetch("/api/todos?type=all&status=pending&format=json");
-        if (!response.ok) return;
-        const data = await response.json();
-        const count = data.todos ? data.todos.length : 0;
-
-        const navTodos = document.getElementById("nav-todos");
-        const mobileNavTodos = document.getElementById("mobile-nav-todos");
-
-        if (navTodos) {
-            const iconEl = navTodos.querySelector("svg, i");
-            const iconHtml = iconEl ? iconEl.outerHTML : '';
-            navTodos.innerHTML = `${iconHtml} Task${count > 0 ? ' ' + count : ''}`;
-        }
-        if (mobileNavTodos) {
-            const iconEl = mobileNavTodos.querySelector("svg, i");
-            const iconHtml = iconEl ? iconEl.outerHTML : '';
-            const span = mobileNavTodos.querySelector("span");
-            if (span) {
-                span.textContent = count > 0 ? `TASK ${count}` : `TASK`;
-            } else {
-                mobileNavTodos.innerHTML = `${iconHtml} <span class="text-[11px] font-bold tracking-wider">TASK${count > 0 ? ' ' + count : ''}</span>`;
-            }
-        }
-        renderLucideIcons();
-    } catch (e) {
-        console.error("Error updating todos count:", e);
-    }
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    updateTodosCount();
-
-    if (window.location.pathname === "/todos") {
-        const navTodos = document.getElementById("nav-todos");
-        const mobileNavTodos = document.getElementById("mobile-nav-todos");
-        if (navTodos) {
-            navTodos.className = "px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-500/30 text-amber-400 flex items-center gap-1.5 transition-all";
-        }
-        if (mobileNavTodos) {
-            mobileNavTodos.className = "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-amber-400 bg-amber-950/40 border border-amber-500/20 transition-colors";
-        }
-    }
-});
+// ── Marcadores / contagem de Tasks ──
+//
+// ⚠️ NÃO reintroduzir aqui contagem/atualização do badge de Tasks do cabeçalho.
+//
+// Existia neste arquivo uma função `updateTodosCount()` que buscava
+// `/api/todos?type=all&status=pending&format=json` e sobrescrevia o conteúdo de
+// `#nav-todos` com `innerHTML = ...`. Isso DESTRUÍA o `<span id="todos-badge">`
+// (junto com os atributos hx-get/hx-trigger) em toda carga de página, com três
+// efeitos: (1) o número exibido vinha daquele endpoint antigo, que ignora
+// `todo_markers.count_in_badge` e `todo_markers.active` — ou seja, o checkbox
+// "Contar" das configurações não tinha efeito no desktop; (2) o swap
+// out-of-band (`hx-swap-oob="innerHTML:#todos-badge"`) e o evento
+// `todos-updated` não tinham mais onde ser aplicados, então o badge era o único
+// elemento da UI que nunca se atualizava sem reload; (3) no mobile o número era
+// injetado no rótulo `TASK N`, duplicando a contagem ao lado do badge real.
+//
+// A responsabilidade é do HTMX hoje: o container vive em `layout/navbar.templ`
+// (`hx-get="/api/todos/count"` + `hx-trigger="load, todos-updated from:body"`) e
+// quem quiser atualizar o número dispara o evento `todos-updated` no `body`.
+// O destaque do link ativo do cabeçalho também é feito no próprio navbar.templ.

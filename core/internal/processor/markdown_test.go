@@ -433,7 +433,7 @@ a = b
 }
 
 func TestExtractTitle_RegressoesIsolamento(t *testing.T) {
-	// Markdown normal com '=' no início de linhas (não deve extrair '=' como título)
+	// Markdown normal com '=' no início de linhas (não deve extrair '=' com o título)
 	contentNormal := `
 = Título MD Falso
 # Título MD Real
@@ -441,5 +441,178 @@ func TestExtractTitle_RegressoesIsolamento(t *testing.T) {
 	titleNormal := ExtractTitle(contentNormal, "notes/normal.md")
 	if titleNormal != "Título MD Real" {
 		t.Errorf("MD normal: esperado 'Título MD Real', got %q", titleNormal)
+	}
+}
+
+// ── Marcadores de TODO (configurados pelo usuário) ──
+//
+// Os marcadores são digitados no painel de configurações e interpolados no regex
+// de extração. Estes testes cobrem os dois defeitos que existiam:
+//  1. metacaractere de regex derrubava o regexp.MustCompile com panic — o panic
+//     acontecia durante o save da nota (antes do SaveNote), então a nota não era
+//     salva e nenhuma outra conseguia ser salva enquanto o marcador existisse;
+//  2. metacaractere virava curinga silencioso, criando tarefas que não existem
+//     no texto (ex: marcador "." casando qualquer `x: texto`).
+
+func TestExtractTodos_MarcadorComMetacaractereNaoPanica(t *testing.T) {
+	mTime := time.Now().UTC()
+
+	// Cada marcador aqui quebraria o regex sem regexp.QuoteMeta ("(" e "[" são
+	// sintaxe inválida, "*" e "?" no início são erro de compilação).
+	tests := []struct {
+		marker  string
+		content string
+	}{
+		{"A(B", "A(B: texto com parêntese"},
+		{"X[Y", "X[Y: texto com colchete"},
+		{"Z*", "Z*: texto com asterisco"},
+		{"W+", "W+: texto com mais"},
+		{"V\\", `V\: texto com barra invertida`},
+		{"C{2}", "C{2}: texto com chaves"},
+		{"$FIM", "$FIM: texto com cifrão"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.marker, func(t *testing.T) {
+			// Não deve entrar em panic (era o comportamento antigo).
+			todos := ExtractTodos(tc.content, "nota.md", mTime, []string{tc.marker})
+
+			if len(todos) != 1 {
+				t.Fatalf("marcador %q: esperava 1 tarefa, got %d (%+v)", tc.marker, len(todos), todos)
+			}
+			// O tipo é o marcador LITERAL (não a versão interpretada pelo regex).
+			if todos[0].Type != strings.ToUpper(tc.marker) {
+				t.Errorf("marcador %q: Type = %q, want %q", tc.marker, todos[0].Type, strings.ToUpper(tc.marker))
+			}
+			if !strings.HasPrefix(todos[0].Text, "texto com") {
+				t.Errorf("marcador %q: texto inesperado %q", tc.marker, todos[0].Text)
+			}
+		})
+	}
+}
+
+func TestExtractTodos_MarcadorComPontoNaoViraCuringa(t *testing.T) {
+	mTime := time.Now().UTC()
+
+	// "." como marcador não pode casar "qualquer coisa: valor" (linha comum de
+	// anotação, frontmatter, URL etc).
+	todos := ExtractTodos("qualquer coisa: valor\nABC: outro valor", "nota.md", mTime, []string{"."})
+	if len(todos) != 0 {
+		t.Fatalf("marcador '.' não pode casar linhas arbitrárias, got %+v", todos)
+	}
+
+	// O literal "." continua funcionando.
+	todos = ExtractTodos(".: ponto literal", "nota.md", mTime, []string{"."})
+	if len(todos) != 1 || todos[0].Text != "ponto literal" {
+		t.Fatalf("literal '.' deveria casar, got %+v", todos)
+	}
+}
+
+func TestExtractTodos_SemMarcadoresNaoDetectaNada(t *testing.T) {
+	mTime := time.Now().UTC()
+
+	// Slice VAZIO = "nenhum marcador ativo" (usuário desativou todos no painel).
+	// Antes o vazio caía nos marcadores padrão e as tarefas continuavam sendo
+	// criadas mesmo com TODO/DOING/DONE desativados.
+	conteudo := "TODO: nao deve aparecer\nDOING: nem isso\nDONE: nem aquilo\n- [ ] checkbox continua\n"
+	todos := ExtractTodos(conteudo, "nota.md", mTime, []string{})
+
+	for _, td := range todos {
+		if td.Type != "TASK" {
+			t.Errorf("sem marcadores ativos nada deveria ser detectado, veio %+v", td)
+		}
+	}
+	if len(todos) != 1 || todos[0].Type != "TASK" {
+		t.Errorf("esperava apenas o checkbox, got %+v", todos)
+	}
+
+	// nil = "não informado" → mantém o fallback para os marcadores padrão.
+	todos = ExtractTodos("TODO: com defaults", "nota.md", mTime, nil)
+	encontrou := false
+	for _, td := range todos {
+		if td.Type == "TODO" {
+			encontrou = true
+		}
+	}
+	if !encontrou {
+		t.Errorf("nil deveria usar os marcadores padrão, got %+v", todos)
+	}
+}
+
+func TestExtractTodos_MarcadoresDuplicadosEVazios(t *testing.T) {
+	mTime := time.Now().UTC()
+
+	// Vazio/duplicado não pode gerar alternativa vazia no regex
+	// (`TODO||FIXME` casaria uma linha começando com ":").
+	todos := ExtractTodos(": linha começando com dois pontos\nTODO: valido", "nota.md", mTime,
+		[]string{"TODO", "todo", "  ", "", "TODO"})
+
+	if len(todos) != 1 {
+		t.Fatalf("esperava só 1 tarefa (TODO: valido), got %+v", todos)
+	}
+	if todos[0].Text != "valido" {
+		t.Errorf("texto errado: %q", todos[0].Text)
+	}
+}
+
+func TestIsValidTodoMarkerName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"Simples", "URGENTE", true},
+		{"Com número", "BUG2", true},
+		{"Com espaço", "FIX ME", true},
+		{"Com hífen e underscore", "BUG-FIX_1", true},
+		{"Com acento", "AÇÃO", true},
+		{"Com ponto", "V1.2", true},
+		{"Vazio", "", false},
+		{"Só espaços", "   ", false},
+		{"Reservado TASK", "TASK", false},
+		{"Reservado task minúsculo", "task", false},
+		{"Reservado com espaço", " TASK ", false},
+		{"Parêntese (quebra regex)", "A(B", false},
+		{"Colchete", "A[B", false},
+		{"Ponto de interrogação (curinga)", "A?", false},
+		{"Ampersand (quebra query string)", "A&B", false},
+		{"Dois pontos", "TODO:", false},
+		{"Traço do início (viraria opção)", "-TODO", false},
+		{"Muito longo (33 chars)", strings.Repeat("A", 33), false},
+		{"Limite (32 chars)", strings.Repeat("A", 32), true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsValidTodoMarkerName(tc.input); got != tc.want {
+				t.Errorf("IsValidTodoMarkerName(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsValidTodoMarkerColor(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"#3b82f6", true},
+		{"#ABCDEF", true},
+		{"#000000", true},
+		{"", false},
+		{"3b82f6", false},
+		{"#fff", false},
+		{"#3b82f6; background:red", false},
+		{"red", false},
+		// Espaço em volta é removido (o helper faz TrimSpace) — quem chama já
+		// trimou, então aceitar é coerente.
+		{"#3b82f6\n", true},
+		{"#3b82f6\nred", false},
+	}
+
+	for _, tc := range tests {
+		if got := IsValidTodoMarkerColor(tc.input); got != tc.want {
+			t.Errorf("IsValidTodoMarkerColor(%q) = %v, want %v", tc.input, got, tc.want)
+		}
 	}
 }

@@ -129,10 +129,16 @@ templ Navbar() {
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
                     @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task")) Task
                     <!-- Contagem de tarefas: carregada pelo HTMX (swap innerHTML para
-                         o container sobreviver à troca). O `?r=` é cache-buster e o
-                         timeout de 5s evita que um servidor travado deixe o número
-                         velho na tela sem avisar (mostra "?" vermelho). -->
-                    <span id="todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::send-error="todosBadgeOffline(this)"></span>
+                         o container sobreviver à troca — NUNCA trocar por outerHTML,
+                         senão o span perde os atributos hx-* e só atualiza uma vez).
+                         O `?r=` é cache-buster, `hx-sync="this:replace"` aborta uma
+                         requisição em voo (resposta fora de ordem mostraria número
+                         velho) e o timeout de 5s evita que um servidor travado deixe
+                         o número antigo na tela em silêncio (mostra "?" vermelho).
+                         ⚠️ O evento de falha de REDE do htmx 1.9.12 chama-se
+                         `htmx:sendError` (camelCase) — com `send-error` o handler
+                         nunca dispara e o "?" não aparece. -->
+                    <span id="todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                 </a>
                 <a id="nav-database" href="/database"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Tabulator">
@@ -140,9 +146,6 @@ templ Navbar() {
                 </a>
 
                 <!-- Utility icons (cinza conforme especificado) -->
-                <a href="/help" class="text-zinc-400 hover:text-sky-400 transition-colors" title="Ajuda">
-                    @icons.Icon(icons.GetIcon("ajuda"), "w-4 h-4 " + icons.GetColor("ajuda"))
-                </a>
                 <button @click="$store.settings.openTab('arquivamento')"
                     class="text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Configurações">
                     @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
@@ -232,19 +235,13 @@ templ Navbar() {
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
                         @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task"))
                         <span class="text-[11px] font-bold tracking-wider">TASK</span>
-                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::send-error="todosBadgeOffline(this)"></span>
+                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                     </a>
                     
                     <a id="mobile-nav-database" href="/database" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900/50 transition-colors">
                         @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator"))
                         <span class="text-[11px] font-bold tracking-wider">TABULATOR</span>
-                    </a>
-
-                    <a href="/help" @click="mobileMenuOpen = false"
-                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
-                        @icons.Icon(icons.GetIcon("ajuda"), "w-4 h-4 " + icons.GetColor("ajuda"))
-                        <span class="text-[11px] font-bold tracking-wider">TUTORIAL</span>
                     </a>
 
                     <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
@@ -272,6 +269,17 @@ templ Navbar() {
         window.todosBadgeOffline = function (el) {
             if (!el) return;
             el.innerHTML = '<span class="ml-0.5 px-1.5 py-0.5 rounded-sm bg-red-500/20 text-red-400 text-[9px] font-black leading-none" title="Servidor não respondeu — a contagem pode estar desatualizada">?</span>';
+        };
+
+        // Recarrega a contagem de Tasks do cabeçalho sob demanda.
+        // Use em qualquer ação que crie/remova linhas da tabela `todos` fora do
+        // editor (que já dispara o evento no save): excluir nota pela sidebar,
+        // arquivar/excluir em massa, restaurar arquivo de backup.
+        // Sem isso o número fica velho até o próximo reload completo.
+        window.tonRefreshTodosBadge = function () {
+            try {
+                document.body.dispatchEvent(new Event("todos-updated"));
+            } catch (e) { /* ambiente sem body/Event */ }
         };
 
         (function() {

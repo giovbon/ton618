@@ -61,8 +61,6 @@ var Config = map[string]IconSpec{
 	"settings": {Icon: "settings", Color: "#696969"},
 	"sair":     {Icon: "log-out", Color: "#696969"},
 	"logout":   {Icon: "log-out", Color: "#696969"},
-	"ajuda":    {Icon: "help", Color: "#696969"},
-	"help":     {Icon: "help", Color: "#696969"},
 
 	// ── AÇÕES E BOTÕES DENTRO DAS NOTAS ──
 	"salvar":   {Icon: "save", Color: "text-emerald-400"},
