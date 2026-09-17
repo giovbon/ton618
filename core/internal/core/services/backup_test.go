@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"ton618/core/internal/core/db"
 )
@@ -224,6 +225,48 @@ func TestBackup_ParallelZipValido(t *testing.T) {
 	}
 	if found != n {
 		t.Errorf("esperava %d notas no ZIP, got %d", n, found)
+	}
+}
+
+// TestBackup_NomesUTF8ComFlag garante que as entradas de notas (gravadas via
+// zip.Writer.CreateRaw) carregam o flag UTF-8 (bit 11 / 0x800). Sem ele, os
+// extratores que não adivinham encoding (Windows Explorer, gerenciadores de
+// arquivos mobile, unzip antigo) decodificam o nome como CP-437 e o título da
+// nota vira mojibake ("reunião" → "reuni├úo").
+func TestBackup_NomesUTF8ComFlag(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+
+	const nomeComAcento = "notes/reunião-de-equipe-Café.md"
+	if err := store.SaveNote(nomeComAcento, "# Reunião\n\nPauta: ações e decisões.", time.Now().Format(time.RFC3339)); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+
+	data, err := svc.Create(false)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("ZIP inválido: %v", err)
+	}
+
+	var found bool
+	for _, f := range zr.File {
+		if f.Name != nomeComAcento {
+			continue
+		}
+		found = true
+		if f.Flags&0x800 == 0 {
+			t.Errorf("entrada %q sem o flag UTF-8 (0x800); flags=0x%04x", f.Name, f.Flags)
+		}
+		// O nome precisa estar gravado como bytes UTF-8 (e não CP-437)
+		if !utf8.ValidString(f.Name) || !strings.Contains(f.Name, "reunião") {
+			t.Errorf("nome corrompido no ZIP: %q", f.Name)
+		}
+	}
+	if !found {
+		t.Errorf("nota %q não encontrada no ZIP", nomeComAcento)
 	}
 }
 

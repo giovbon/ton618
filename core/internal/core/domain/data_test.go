@@ -59,6 +59,8 @@ func TestDetectNoteType(t *testing.T) {
 		{name: "EPUB path", tags: nil, arquivo: "epubs/livro.epub", expected: NoteTypeEPUB},
 		{name: "EPUB extension", tags: nil, arquivo: "notes/livro.epub", expected: NoteTypeEPUB},
 		{name: "Image img_ prefix", tags: nil, arquivo: "notes/img_172300000_foto.png", expected: NoteTypeImage},
+		{name: "Image images/ prefix", tags: nil, arquivo: "images/img_172300000_foto.png", expected: NoteTypeImage},
+		{name: "Image images/ com nome arbitrário", tags: nil, arquivo: "images/qualquer-coisa.png", expected: NoteTypeImage},
 		{name: "Image jpeg extension", tags: nil, arquivo: "notes/foto.jpeg", expected: NoteTypeImage},
 		{name: "Filename mindmap", tags: nil, arquivo: "notes/mindmap-geral.md", expected: NoteTypeMindmap},
 		{name: "Filename markmap", tags: nil, arquivo: "notes/markmap-geral.md", expected: NoteTypeMindmap},

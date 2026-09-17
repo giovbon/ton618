@@ -33,7 +33,7 @@ const (
 	fileTypePDF                   // PDF em pdfs/ ou notes/
 	fileTypeEPUB                  // EPUB em epubs/
 	fileTypeZip                   // ZIP/attachment em attachments/ (ou archives/)
-	fileTypeImage                 // Imagem em notes/ ou attachments/
+	fileTypeImage                 // Imagem em images/, notes/ (legado) ou attachments/
 )
 
 // resolveFileInfo determina o tipo, nome lógico e caminho completo de um arquivo.
@@ -77,10 +77,7 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg":
 		basename := filepath.Base(raw)
-		sd := "notes"
-		if strings.HasPrefix(raw, "attachments/") {
-			sd = "attachments"
-		}
+		sd := imageSubdir(docsDir, raw, basename)
 		filename = sd + "/" + basename
 		var err error
 		fullPath, err = safeJoin(docsDir, filename)
@@ -101,6 +98,25 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 		// Não verifica existência — a nota pode estar só no DB
 		return fileTypeNote, filename, fullPath, true
 	}
+}
+
+// imageSubdir resolve em qual subdiretório de docs/ uma imagem vive. O prefixo
+// informado manda: images/ é o canônico desde 17/09/2026 e attachments/ continua
+// aceito para imagens anexadas manualmente. Sem prefixo (ex: só "foto.png"),
+// prefere images/ quando o arquivo existe lá e cai para notes/, onde as imagens
+// eram gravadas antes — mantendo as referências antigas funcionando.
+func imageSubdir(docsDir, raw, basename string) string {
+	switch {
+	case strings.HasPrefix(raw, imagesPrefix):
+		return "images"
+	case strings.HasPrefix(raw, "attachments/"):
+		return "attachments"
+	case !strings.Contains(raw, "/"):
+		if _, err := os.Stat(filepath.Join(docsDir, "images", basename)); err == nil {
+			return "images"
+		}
+	}
+	return "notes"
 }
 
 // resolveFileInfoStrict como resolveFileInfo, mas retorna found=false se o arquivo

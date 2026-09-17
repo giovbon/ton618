@@ -300,6 +300,17 @@ func compressEntry(e noteEntry) compressedEntry {
 	}
 }
 
+// zipFlagUTF8 é o bit 11 (0x800) do header ZIP: sinaliza que Name/Comment estão
+// codificados em UTF-8.
+//
+// ⚠️ OBRIGATÓRIO nas entradas gravadas via zip.Writer.CreateRaw: o CreateHeader
+// aplica sozinho a heurística de encoding (seta 0x800 quando o nome é UTF-8
+// válido), mas o CreateRaw grava os Flags exatamente como recebidos — sem o bit,
+// extratores que não "adivinham" UTF-8 (Windows Explorer, gerenciadores de
+// arquivos mobile, unzip antigo) decodificam o nome como CP-437 e o título vira
+// mojibake ("reunião" → "reuni├úo"). Corrigido em 17/09/2026.
+const zipFlagUTF8 = 0x800
+
 // writeNotesParallel comprime as notas em um pool limitado de workers
 // (compressão é CPU-bound) e grava no ZIP sequencialmente via CreateRaw.
 // O número de workers é limitado a GOMAXPROCS (máx. 4) para não sobrecarregar
@@ -369,6 +380,9 @@ func (s *BackupService) writeNotesParallel(ctx context.Context, zw *zip.Writer, 
 		h := &zip.FileHeader{
 			Name:   res.name,
 			Method: res.method,
+			// CreateRaw NÃO aplica a heurística de encoding do CreateHeader:
+			// sem este bit os nomes com acento saem como CP-437 nos extratores.
+			Flags: zipFlagUTF8,
 		}
 		h.CRC32 = res.crc32
 		h.CompressedSize64 = res.comp

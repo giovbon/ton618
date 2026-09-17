@@ -17,6 +17,16 @@ import (
 	"ton618/core/internal/watcher"
 )
 
+// imagesPrefix é o diretório (dentro de docs/) onde as imagens enviadas pelo
+// editor são gravadas — separado de notes/ para não misturar binários com as
+// notas markdown (as notas vivem no SQLite, a pasta só continha os img_*).
+//
+// ⚠️ Ao mudar este prefixo, mantenha em sincronia: allowedPrefixes
+// (handlers_file.go), Watcher.MonitoredSubDirs (imagens do disco no boot),
+// imageSubdir (handlers_filetype.go) e as listas de prefixos de link
+// (processor/markdown.go e note_service.go).
+const imagesPrefix = "images/"
+
 // HandleUploadAttachment handles generic file uploads (attachments) and packages them into a ZIP.
 func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(126 << 20); err != nil { // 126MB
@@ -159,10 +169,10 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 			filename += ".epub"
 		}
 	} else {
-		// Imagem: salva em notes/ com prefixo img_ para evitar conflito
+		// Imagem: salva em images/ com prefixo img_ para evitar conflito
 		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
 		cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
-		filename = fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
+		filename = fmt.Sprintf("%simg_%s_%s", imagesPrefix, timestamp, cleanName)
 	}
 
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
@@ -195,7 +205,7 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// HandleUploadImage recebe uma imagem, salva em notes/ e retorna JSON com a URL.
+// HandleUploadImage recebe uma imagem, salva em images/ e retorna JSON com a URL.
 // Diferente do HandleUpload, não redireciona — usado pelo editor via fetch.
 func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB
@@ -215,19 +225,17 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp"
-
-	if !isImage {
+	if !isSupportedImageExt(ext) {
 		httputil.WriteJSON(w, map[string]interface{}{
 			"ok": false, "error": "apenas imagens (.png, .jpg, .jpeg, .gif, .webp)",
 		})
 		return
 	}
 
-	// Salva em notes/ com prefixo img_
+	// Salva em images/ com prefixo img_
 	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
 	cleanName := strings.ReplaceAll(filepath.Base(header.Filename), " ", "_")
-	filename := fmt.Sprintf("notes/img_%s_%s", timestamp, cleanName)
+	filename := fmt.Sprintf("%simg_%s_%s", imagesPrefix, timestamp, cleanName)
 
 	fullPath := filepath.Join(ctx.Cfg.DocsDir, filename)
 	os.MkdirAll(filepath.Dir(fullPath), 0755)
@@ -268,62 +276,81 @@ func (ctx *HandlerContext) HandleUploadImage(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// HandleCleanupImages varre o diretorio notes/ em busca de arquivos img_*
+// isSupportedImageExt informa se a extensão corresponde a uma imagem aceita no
+// upload pelo editor (mesma lista usada na limpeza de órfãs).
+func isSupportedImageExt(ext string) bool {
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+		return true
+	}
+	return false
+}
+
+// imageCleanupPrefixes são os diretórios varridos pela limpeza de imagens órfãs:
+// o canônico (images/) e o legado (notes/), onde as imagens ficavam antes de
+// 17/09/2026 — os arquivos antigos continuam sendo limpos normalmente.
+var imageCleanupPrefixes = []string{imagesPrefix, "notes/"}
+
+// HandleCleanupImages varre os diretórios de imagens em busca de arquivos img_*
 // que não são referenciados por nenhum documento (texto), e os remove
 // junto com seus registros no DB (documento stub, file_mod).
 func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Request) {
-	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")
-	entries, err := os.ReadDir(notesDir)
-	if err != nil {
-		ArchiveAlert("Erro ao ler diretório de notas.", false).Render(r.Context(), w)
-		return
-	}
-
 	var removed []string
 	var errors []string
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		// Só processa arquivos com prefixo img_
-		if !strings.HasPrefix(name, "img_") {
-			continue
-		}
-		// Verifica se é extensão de imagem
-		ext := strings.ToLower(filepath.Ext(name))
-		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" {
-			continue
-		}
-
-		filename := "notes/" + name
-		// Verifica se a imagem é referenciada em algum documento
-		count, err := ctx.Store.SearchDocumentText(filename)
+	for _, prefix := range imageCleanupPrefixes {
+		dirPath := filepath.Join(ctx.Cfg.DocsDir, strings.TrimSuffix(prefix, "/"))
+		entries, err := os.ReadDir(dirPath)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: erro ao buscar: %v", name, err))
-			continue
-		}
-		if count > 0 {
-			continue // ainda referenciada
-		}
-
-		// Remove o arquivo físico
-		fullPath := filepath.Join(notesDir, name)
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			errors = append(errors, fmt.Sprintf("%s: erro ao remover: %v", name, err))
+			if os.IsNotExist(err) {
+				continue // diretório ainda não existe: nada a limpar
+			}
+			errors = append(errors, fmt.Sprintf("%s: erro ao ler diretório: %v", prefix, err))
 			continue
 		}
 
-		// Remove registros do DB
-		ctx.Store.DeleteDocumentsByFile(filename)
-		ctx.Store.DeleteFTSByFile(filename)
-		ctx.Store.DeleteFileMod(filename)
-		ctx.Store.ResetPopularity(filename)
-		ctx.Store.SetFileTags(filename, nil)
-		ctx.Store.ClearLinks(filename)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			// Só processa arquivos com prefixo img_
+			if !strings.HasPrefix(name, "img_") {
+				continue
+			}
+			// Verifica se é extensão de imagem
+			if !isSupportedImageExt(strings.ToLower(filepath.Ext(name))) {
+				continue
+			}
 
-		removed = append(removed, name)
+			filename := prefix + name
+			// Verifica se a imagem é referenciada em algum documento
+			count, err := ctx.Store.SearchDocumentText(filename)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("%s: erro ao buscar: %v", name, err))
+				continue
+			}
+			if count > 0 {
+				continue // ainda referenciada
+			}
+
+			// Remove o arquivo físico
+			fullPath := filepath.Join(dirPath, name)
+			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+				errors = append(errors, fmt.Sprintf("%s: erro ao remover: %v", name, err))
+				continue
+			}
+
+			// Remove registros do DB
+			ctx.Store.DeleteDocumentsByFile(filename)
+			ctx.Store.DeleteFTSByFile(filename)
+			ctx.Store.DeleteFileMod(filename)
+			ctx.Store.ResetPopularity(filename)
+			ctx.Store.SetFileTags(filename, nil)
+			ctx.Store.ClearLinks(filename)
+
+			removed = append(removed, name)
+		}
 	}
 
 	slog.Info("Limpeza de imagens órfãs", "removidas", len(removed), "erros", len(errors))

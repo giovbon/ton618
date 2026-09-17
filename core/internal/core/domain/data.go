@@ -146,7 +146,10 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 	}
 
 	ext := strings.ToLower(filepath.Ext(arquivo))
-	if strings.HasPrefix(arquivo, "notes/img_") || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" || ext == ".svg" {
+	// Imagens: prefixo canônico images/ (desde 17/09/2026) e o legado notes/img_.
+	// Qualquer outra extensão de imagem também é tratada como imagem.
+	if strings.HasPrefix(arquivo, "images/") || strings.HasPrefix(arquivo, "notes/img_") ||
+		ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" || ext == ".svg" {
 		return NoteTypeImage
 	}
 
@@ -273,7 +276,7 @@ func DisplayName(name string) string {
 }
 
 // AllowedFilePrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
-var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/", "epubs/"}
+var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/", "epubs/", "images/"}
 
 // NoteIcon retorna o nome do ícone Lucide correspondente ao tipo de nota vindo do mapa de configuração centralizado.
 func NoteIcon(arquivo string, tags []string) string {

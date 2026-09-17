@@ -336,7 +336,7 @@ func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
 			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldUrlEsc, "file="+newUrlEsc)
 			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldName, "file="+newName)
 
-			for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/", "notes/"} {
+			for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/", "images/", "notes/"} {
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBase, prefix+newBase)
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseEsc, prefix+newBaseEsc)
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseUrlEsc, prefix+newBaseUrlEsc)

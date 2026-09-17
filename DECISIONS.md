@@ -869,6 +869,42 @@ Correções guiadas por benchmarks (`perf_bench_test.go` em `internal/search` e 
 
 > Não alterados (avaliados, menor prioridade/risco de contrato): o `COUNT(*)` do FTS5 por busca, o filtro `tags NOT LIKE '%drawing%'` dentro da query FTS e a queda para `SearchFTSLike` (full scan `LOWER(texto) LIKE`) em buscas sem resultado.
 
+## 11. Backup ZIP — nomes de arquivo em UTF-8 (17/09/2026)
+
+📍 `internal/core/services/backup.go` (`zipFlagUTF8`, `writeNotesParallel`) | teste `internal/core/services/backup_test.go`
+
+**Bug real (reportado pelo usuário):** ao exportar as notas (`/api/backup`), os **títulos com acento viravam mojibake** ao descompactar (`reunião` → `reuni├úo`, `Café` → `Caf├⌐`, `Adoção` → `Ado├º├úo`).
+
+Causa: as notas são gravadas no ZIP via `zip.Writer.CreateRaw` (a compressão DEFLATE roda em pool paralelo e o `CreateRaw` aceita dados já comprimidos). O `CreateHeader` do stdlib aplica sozinho a heurística de encoding — seta o **bit 11 / `0x800`** quando o nome é UTF-8 válido —, mas o **`CreateRaw` grava os `Flags` exatamente como recebe**. As entradas de nota saíam com `Flags = 0x0000` e os extratores que não "adivinham" UTF-8 (Windows Explorer, gerenciadores de arquivos mobile, `unzip` antigo) decodificam o nome como **CP-437**.
+
+Verificado empiricamente com sonda em Go 1.26 (o ponto do stdlib é a `case fh.NonUTF8: Flags &^= 0x800` / `default: Flags |= 0x800` do `CreateHeader`):
+
+| Como foi gravado | `Flags` | flag UTF-8 |
+|---|---|---|
+| `CreateHeader` (Deflate ou Store) | `0x0808` | ✅ |
+| `CreateRaw` | `0x0000` | ❌ |
+| `CreateRaw` com `Flags: 0x800` | `0x0800` | ✅ |
+
+**Correção:** constante `zipFlagUTF8 = 0x800` aplicada ao `zip.FileHeader` de toda entrada de nota em `writeNotesParallel`. Arquivos do disco (PDFs, anexos, imagens) já passavam por `addFileToZip` → `CreateHeader`, portanto **não** eram afetados — o que explica o sintoma aparecer apenas no backup de notas.
+
+**Teste de regressão:** `TestBackup_NomesUTF8ComFlag` exige `Flags & 0x800 != 0` e o nome UTF-8 íntegro numa nota com acentos.
+
+## 12. Imagens do editor em `docs/images/` (17/09/2026)
+
+📍 `internal/features/notes/handlers_upload.go` (`imagesPrefix`) | `handlers_filetype.go` (`imageSubdir`) | `handlers_file.go` | `internal/watcher/watcher.go` | `internal/core/domain/data.go` | `internal/core/db/query.sql`
+
+As imagens enviadas pelo editor (colar/arrastar ou botão **Imagem** → `POST /api/upload-image`) eram gravadas em **`notes/`** com o prefixo `img_<timestamp>_<nome>`, misturando binários com a pasta de notas. Agora vão para **`docs/images/`**.
+
+- O nome continua `img_<timestampUnixMilli>_<nome sanitizado>` (evita colisão e permite a limpeza por prefixo).
+- **Tipo da nota inalterado:** `domain.DetectNoteType` já classificava qualquer extensão de imagem como `NoteTypeImage`; o prefixo `images/` foi adicionado explicitamente e `notes/img_` continua reconhecido (legado).
+- **Legado continua funcionando:** imagens antigas em `notes/` seguem sendo servidas (`/file?name=notes/img_...`), resolvidas (`imageSubdir` cai em `notes/` quando o arquivo não existe em `images/`) e limpas — `HandleCleanupImages` varre `images/` **e** `notes/` (e agora ignora diretório inexistente em vez de falhar).
+- Prefixo `images/` registrado em: `allowedPrefixes` (`/file`, `/file/download`), `NoteFilename`, `IsNoteOrPdf`, `domain.AllowedFilePrefixes`, `MonitoredSubDirs` (o boot/rescan passa a registrar o documento stub da imagem, como já fazia com PDFs/anexos) e nas listas de prefixos usadas por backlinks/renomeação (`processor/markdown.go`, `NoteService.UpdateBacklinksOnRename`).
+- **Paridade Go/SQL (regra 3.5):** `AND n.filename NOT LIKE 'images/%'` adicionado a `CountEmbeddableNotes` e `GetPendingEmbeddingNotes` (`query.sql` **e** `generated/query.sql.go`), espelhando `IsNoteEmbeddable` (que classifica `images/*` como imagem → não indexável).
+- As imagens continuam **invisíveis** na sidebar/banco de dados: `NoteService.GetMany` descarta `NoteTypeImage` e o watcher não grava `file_mod` para imagens (só o documento stub).
+- ⚠️ **O bundle do frontend não mudou:** o editor insere a URL absoluta devolvida pelo handler (`/file?name=images/...`), então nenhum rebuild de `web/static/` é necessário.
+- ⚠️ Ao mexer nesse prefixo no futuro, mantenha em sincronia os pontos listados no comentário de `imagesPrefix`.
+- **Validação (17/09/2026):** `go test ./internal/features/notes/ ./internal/watcher/ ./internal/core/domain/ ./internal/core/db/ ./internal/core/services/ ./internal/processor/` — todos OK. Testes novos: `TestHandleUploadImage_Success` (grava em `images/`), `TestResolveFileInfo_ImagemEmImages`, `TestHandleCleanupImages_RemovesOrphanInImagesDir`, `TestHandleFileDelete_ImageInImagesDir`, `TestIsNoteOrPdf_Images`, casos de `DetectNoteType` e `TestMonitoredSubDirs`.
+
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 
 https://lucide.dev/icons/

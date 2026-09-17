@@ -54,7 +54,10 @@ func isRecentlyProcessed(filename string) bool {
 }
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
-var MonitoredSubDirs = []string{"pdfs", "attachments", "archives", "epubs"}
+// "images" guarda as imagens enviadas pelo editor (desde 17/09/2026) — entrar
+// aqui garante que elas sejam registradas como documento stub no boot/rescan,
+// como já acontece com PDFs e anexos.
+var MonitoredSubDirs = []string{"pdfs", "attachments", "archives", "epubs", "images"}
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{

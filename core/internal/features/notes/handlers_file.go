@@ -84,7 +84,7 @@ var compressedExts = map[string]bool{
 }
 
 // allowedPrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
-var allowedPrefixes = []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/"}
+var allowedPrefixes = []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/", "images/"}
 
 // ── Helpers de normalizacao ──
 
@@ -115,15 +115,15 @@ func NoteFilename(name string) string {
 	if ext == "" {
 		name += ".md"
 	}
-	if !strings.HasPrefix(name, "notes/") && !strings.HasPrefix(name, "pdfs/") && !strings.HasPrefix(name, "attachments/") && !strings.HasPrefix(name, "archives/") && !strings.HasPrefix(name, "epubs/") {
+	if !strings.HasPrefix(name, "notes/") && !strings.HasPrefix(name, "pdfs/") && !strings.HasPrefix(name, "attachments/") && !strings.HasPrefix(name, "archives/") && !strings.HasPrefix(name, "epubs/") && !strings.HasPrefix(name, "images/") {
 		name = "notes/" + name
 	}
 	return name
 }
 
-// isNoteOrPdf checks if a file path belongs to a note, PDF or attachment document.
+// IsNoteOrPdf checks if a file path belongs to a note, PDF, attachment or image document.
 func IsNoteOrPdf(path string) bool {
-	return strings.HasPrefix(path, "notes/") || strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/")
+	return strings.HasPrefix(path, "notes/") || strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "images/")
 }
 
 // ── File handlers ──

@@ -33,6 +33,12 @@ func TestIsNoteOrPdf_Attachments(t *testing.T) {
 	}
 }
 
+func TestIsNoteOrPdf_Images(t *testing.T) {
+	if !isNoteOrPdf("images/img_1_foto.png") {
+		t.Error("images/ prefix deve retornar true")
+	}
+}
+
 func TestIsNoteOrPdf_Other(t *testing.T) {
 	if isNoteOrPdf("other/file.txt") {
 		t.Error("outros prefixos deve retornar false")
@@ -448,8 +454,54 @@ func TestHandleUploadImage_Success(t *testing.T) {
 	if ok, _ := resp["ok"].(bool); !ok {
 		t.Errorf("esperado ok=true, got %v", resp)
 	}
-	if resp["filename"] == nil {
-		t.Error("esperado filename na resposta")
+
+	// A imagem deve ser gravada em images/ (fora da pasta de notas) e existir no disco.
+	filename, _ := resp["filename"].(string)
+	if !strings.HasPrefix(filename, "images/img_") {
+		t.Errorf("esperado filename em images/img_*, got %q", filename)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, filename)); err != nil {
+		t.Errorf("imagem deveria existir no disco: %v", err)
+	}
+	if url, _ := resp["url"].(string); !strings.HasPrefix(url, "/file?name=images/") {
+		t.Errorf("esperado url /file?name=images/..., got %q", url)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, "notes", filepath.Base(filename))); err == nil {
+		t.Error("imagem não deveria ser gravada em notes/")
+	}
+}
+
+// TestResolveFileInfo_ImagemEmImages garante que a resolução de imagens
+// encontra o arquivo em images/ (canônico) sem depender do legado notes/.
+func TestResolveFileInfo_ImagemEmImages(t *testing.T) {
+	ctx := newTestContext(t)
+
+	dir := filepath.Join(ctx.Cfg.DocsDir, "images")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("erro ao criar images/: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "img_1_foto.png"), []byte("fake png"), 0644); err != nil {
+		t.Fatalf("erro ao criar imagem: %v", err)
+	}
+
+	ft, filename, fullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, "images/img_1_foto.png")
+	if !found {
+		t.Fatal("imagem em images/ deveria ser encontrada")
+	}
+	if ft != fileTypeImage {
+		t.Errorf("esperado fileTypeImage, got %d", ft)
+	}
+	if filename != "images/img_1_foto.png" {
+		t.Errorf("esperado images/img_1_foto.png, got %q", filename)
+	}
+	if fullPath != filepath.Join(dir, "img_1_foto.png") {
+		t.Errorf("fullPath inesperado: %q", fullPath)
+	}
+
+	// Nome sem prefixo: prefere images/ quando o arquivo existe lá.
+	ft, filename, _, found = resolveFileInfoStrict(ctx.Cfg.DocsDir, "img_1_foto.png")
+	if !found || ft != fileTypeImage || filename != "images/img_1_foto.png" {
+		t.Errorf("sem prefixo deveria resolver para images/ (found=%v ft=%d filename=%q)", found, ft, filename)
 	}
 }
 
@@ -554,6 +606,69 @@ func TestHandleCleanupImages_SkipsReferencedImage(t *testing.T) {
 	// Arquivo deve permanecer
 	if _, err := os.Stat(imgPath); os.IsNotExist(err) {
 		t.Error("imagem referenciada nao deveria ter sido removida")
+	}
+}
+
+// TestHandleCleanupImages_RemovesOrphanInImagesDir garante que a limpeza também
+// varre o diretório canônico images/ (as imagens novas não ficam mais em notes/).
+func TestHandleCleanupImages_RemovesOrphanInImagesDir(t *testing.T) {
+	ctx := newTestContext(t)
+
+	imgName := "images/img_777777_nova.png"
+	imgPath := filepath.Join(ctx.Cfg.DocsDir, imgName)
+	os.MkdirAll(filepath.Dir(imgPath), 0755)
+	if err := os.WriteFile(imgPath, []byte("fake png"), 0644); err != nil {
+		t.Fatalf("erro ao criar imagem: %v", err)
+	}
+	ctx.Store.SetFileMod(imgName, "2025-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/cleanup-images", nil)
+
+	ctx.HandleCleanupImages(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "1 imagens órfãs removidas") {
+		t.Errorf("esperado mensagem contendo '1 imagens órfãs removidas', got %q", rec.Body.String())
+	}
+	if _, err := os.Stat(imgPath); !os.IsNotExist(err) {
+		t.Error("imagem orfa em images/ deveria ter sido removida")
+	}
+	mod, _ := ctx.Store.GetFileMod(imgName)
+	if mod != "" {
+		t.Error("file_mod da imagem deveria ser removido do banco")
+	}
+}
+
+// TestHandleFileDelete_ImageInImagesDir garante que a exclusão de uma imagem
+// resolve corretamente o caminho em images/ (e não em notes/).
+func TestHandleFileDelete_ImageInImagesDir(t *testing.T) {
+	ctx := newTestContext(t)
+	imagesDir := filepath.Join(ctx.Cfg.DocsDir, "images")
+	os.MkdirAll(imagesDir, 0755)
+
+	filename := "images/img_54321_test.png"
+	imgPath := filepath.Join(imagesDir, "img_54321_test.png")
+	if err := os.WriteFile(imgPath, []byte("fake image data"), 0644); err != nil {
+		t.Fatalf("erro ao criar imagem: %v", err)
+	}
+	ctx.Store.SetFileMod(filename, "2026-01-01T00:00:00Z")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=" + filename)
+	req := httptest.NewRequest("POST", "/file/delete", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("esperado 200 ao deletar imagem, got %d", rec.Code)
+	}
+	if _, err := os.Stat(imgPath); !os.IsNotExist(err) {
+		t.Error("imagem física em images/ deveria ter sido deletada do disco")
+	}
+	mod, _ := ctx.Store.GetFileMod(filename)
+	if mod != "" {
+		t.Error("file_mod da imagem deveria ser removido do banco")
 	}
 }
 
