@@ -19,7 +19,14 @@ import { Markdown } from "tiptap-markdown";
 import { marked } from "marked";
 import CodeBlockLowlightExt from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
-import Paragraph from "@tiptap/extension-paragraph";
+
+// ⚠️ NÃO reintroduzir o serializador de parágrafo que escrevia "&nbsp;" no
+// markdown (existiu aqui até 17/09/2026): o placeholder do parágrafo vazio é
+// uma ENTIDADE HTML e ia crua para o arquivo da nota, aparecendo como texto
+// "&nbsp;" na busca, em previews e ao reabrir a nota. Parágrafo vazio agora usa
+// a serialização padrão do tiptap-markdown (vira linha em branco, que é o que o
+// markdown sabe representar). O lixo já gravado é limpo por
+// EditorCommon.stripNbspParagraphs() antes de cada save.
 
 const lowlight = createLowlight(common);
 
@@ -44,28 +51,6 @@ const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
         0,
       ],
     ];
-  },
-});
-
-// Extensão customizada do Paragraph que serializa parágrafos vazios como &nbsp;
-const CustomParagraph = Paragraph.extend({
-  addStorage() {
-    return {
-      markdown: {
-        serialize(state, node) {
-          if (node.content.size === 0) {
-            state.write("&nbsp;");
-            state.closeBlock(node);
-          } else {
-            state.renderInline(node);
-            state.closeBlock(node);
-          }
-        },
-        parse: {
-          // handled by markdown-it
-        },
-      },
-    };
   },
 });
 
@@ -94,7 +79,6 @@ const CustomParagraph = Paragraph.extend({
  * @property {Object} marked - Biblioteca marked
  * @property {Object} CodeBlockLowlightExt - Bloco de código com syntax highlight
  * @property {Object} lowlight - Instância lowlight para highlight
- * @property {Object} CustomParagraph - Parágrafo customizado (&nbsp;)
  */
 window.TipTapEditor = {
   Editor,
@@ -114,6 +98,5 @@ window.TipTapEditor = {
   marked,
   CodeBlockLowlightExt: CodeBlockLangLabel,
   lowlight,
-  CustomParagraph,
 };
 

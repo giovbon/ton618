@@ -11,6 +11,7 @@ templ EpubReader(file string) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Leitor EPUB</title>
+    <link rel="stylesheet" href="/static/fonts/fonts.css" />
     <script src="/static/js/vendor/jszip.min.js"></script>
     <script src="/static/js/vendor/epub.min.js"></script>
     <style>
@@ -20,7 +21,7 @@ templ EpubReader(file string) {
             margin: 0;
             background-color: #09090b;
             color: #a1a1aa;
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: "Noto Sans", system-ui, -apple-system, sans-serif;
             height: 100vh;
             height: 100dvh;
             display: flex;

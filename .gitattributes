@@ -1,0 +1,19 @@
+# O projeto roda em Linux/WSL (run.sh, deploy.sh, Docker). Arquivos de texto
+# ficam em LF também na cópia de trabalho, porque o CRLF quebra as ferramentas:
+#
+#   • scripts bash → "bad interpreter: /bin/bash^M"
+#   • `go run templ@vX` → o run.sh extrai a versão do go.mod com grep/awk e o
+#     CR no fim da linha vira `version "v0.3.1020\r" invalid`
+#   • `gofmt -l .` lista o repositório inteiro (só no Windows; no CI fica vazio)
+#   • Dockerfile com CR: continuação de linha com `\` quebra o build
+#
+# ⚠️ DECISIONS.md NÃO entra aqui: está commitado com CRLF, então declará-lo LF
+# geraria um diff de arquivo inteiro no próximo checkout.
+*.sh text eol=lf
+*.go text eol=lf
+*.templ text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Dockerfile text eol=lf

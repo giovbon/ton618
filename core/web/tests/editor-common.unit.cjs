@@ -347,3 +347,43 @@ test('applyRenameToUI não quebra em ambiente sem DOM/history', (t) => {
   assert.strictEqual(input.value, 'sem-dom.md');
   assert.strictEqual(input.dataset.filename, 'notes/sem-dom.md');
 });
+
+
+// ── stripNbspParagraphs: lixo do placeholder de parágrafo vazio ──
+
+test('stripNbspParagraphs remove parágrafos de placeholder e preserva o resto', (t) => {
+  const md = [
+    '# Título',
+    '',
+    '&nbsp;',
+    'texto normal',
+    '\\&nbsp;',
+    '\u00a0',
+    '  &nbsp;  ',
+    '',
+    '- item',
+  ].join('\n');
+
+  const out = EditorCommon.stripNbspParagraphs(md);
+
+  // Nenhuma das três formas do placeholder sobrevive.
+  assert.ok(!/&nbsp;/i.test(out), 'não deveria sobrar &nbsp;: ' + JSON.stringify(out));
+  assert.ok(out.indexOf('\u00a0') === -1, 'não deveria sobrar U+00A0');
+
+  // O conteúdo real continua intacto.
+  assert.ok(out.includes('# Título'));
+  assert.ok(out.includes('texto normal'));
+  assert.ok(out.includes('- item'));
+});
+
+test('stripNbspParagraphs preserva &nbsp; no meio de uma frase', (t) => {
+  // Uso legítimo (evitar quebra de linha) não é afetado pela limpeza.
+  const md = 'Rua Amazonas&nbsp;123, centro';
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(md), md);
+});
+
+test('stripNbspParagraphs tolera entrada vazia/nula', (t) => {
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(''), '');
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(null), null);
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(undefined), undefined);
+});

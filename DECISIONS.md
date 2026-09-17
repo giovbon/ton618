@@ -589,6 +589,209 @@ O módulo de ajuda foi **removido por completo** (decisão do usuário: o ícone
 
 > ⚠️ **Efeito colateral tratado:** a página de ajuda era a **única** usuária da utility Tailwind `prose` (plugin typography). O `build.js` tinha uma "validação de sanidade" que exigia as substrings `green-500` e `prose` no `static/app.css` para provar que o `@source` de `internal/features` estava sendo escaneado. Verificou-se que o `.prose` presente no CSS vem do `@tailwindcss/typography` (emitido **independente de uso**, 328 ocorrências no build com a página já removida) — ou seja, essa exigência **não provava nada** sobre o scan do backend e ainda mascarava a remoção. A checagem agora exige apenas `green-500`, que vem de `features/system/handlers.go` (template do backend).
 
+## 6.17 Hierarquia de Notas — Nested Data Tree no Tabulator (16/09/2026)
+
+📍 `core/internal/features/system/note_tree.go` (novo) | `.../handlers.go` | `core/web/src/database.js` | `core/internal/features/notes/database.templ`
+
+As notas agora podem ser **aninhadas** umas dentro das outras, e o Tabulator exibe essa hierarquia como uma árvore (setinha para abrir/fechar), usando o **módulo Data Tree** do Tabulator 6.x — que já vem embutido no bundle vendorizado (`static/tabulator.min.js`, v6.3.1).
+
+> 🔁 **Revisto em 6.19 (mesmo dia, depois do primeiro uso):** a chave canônica virou **`pai`** (coluna "Pai"), o editor de célula foi corrigido (o `editor` em função precisa **devolver um nó**, não o nome do editor — por isso a coluna de hierarquia não era editável), abrir a nota passou a ser **duplo clique** (coluna "Abrir" oculta), o contador do topo mostra **quantas notas estão sendo exibidas** e a busca ganhou **dois modos** (com pai/irmãs ou só resultados), deixando de usar `table.setFilter`. Nesta seção, onde se lê `parent`/coluna "Parent" e `setFilter`, vale o 6.19.
+
+### O vínculo é uma propriedade do frontmatter
+
+A nota **filha** declara a nota-mãe (a nota-mãe não muda nada):
+
+```yaml
+---
+tags: [sqlite]
+parent: projeto-ton618
+---
+```
+
+| Regra | Decisão |
+|---|---|
+| Chave | `parent` (minúscula; a leitura tolera `Parent:`). Exibida como coluna "Parent". **Alterado em 6.19: a chave canônica passou a ser `pai`; `parent` continua sendo lido (legado).** |
+| Valor canônico | **nome curto**, sem pasta e sem `.md` |
+| Formas aceitas na leitura e na gravação | `seila`, `seila.md`, `notes/seila.md`, `[[seila]]`, `[[seila\|alias]]`, `[[seila#secao]]`, com ou sem aspas, qualquer caixa |
+| Gravação | o valor é **normalizado** (`NormalizeParentRef`) antes de ir para o YAML — a célula editada no Tabulator grava sempre a forma canônica |
+| Pais por nota | **1** (árvore, não grafo) |
+| Profundidade | **ilimitada** |
+| Pai inexistente | **permitido**: a filha simplesmente fica na raiz até a outra existir (sem erro na UI) |
+| Auto-pai e ciclo | **bloqueados** na gravação (HTTP 400) e desfeitos na leitura (segurança) |
+
+**Nome duplicado** (existem pastas `notes/`, `pdfs/`, `archives/`, `epubs/`): vence `notes/`; em empate, o mtime mais recente. Digitando o caminho completo (`parent: pdfs/seila`) a resolução é exata. A escolha é feita varrendo a *slice* de entrada — nunca a ordem de iteração de map (mesmo cuidado do `icons.GetColor`, ver 6.9).
+
+> ⚠️ **Cuidado com YAML (descoberto em teste manual, 16/09/2026):** `parent: [[nota]]` **sem aspas** não é string em YAML — vira uma **lista aninhada** (`[["nota"]]`) e `parent: [nota]` uma lista de um item. O resolver tolera (o valor cai no fallback `fmt.Sprintf` → `NormalizeParentRef` remove os colchetes), então **aninhar funciona**, mas a célula do Tabulator receberia um objeto. O frontend agora stringifica valores não primitivos (antes: célula vazia + "Format Error" no console). **Formato recomendado: `parent: nota`** (sem colchetes) ou `parent: "[[nota]]"` com aspas.
+
+### Backend
+
+- `buildNoteTree(rows)` (em `note_tree.go`) reorganiza as linhas **achatadas** do `HandleGetDatabaseData` em floresta, injetando `_children` — o campo que o módulo Data Tree lê. O JSON ganhou `meta: {hasTree, total}`; `hasTree=false` devolve as linhas como estavam (zero custo para quem não usa a propriedade).
+- 🔴 **Armadilha real (testada):** o `dbCache` do Tabulator guarda o **map da linha por referência** (`context.go`). Escrever `_children` ali faria o cache acumular filhos a cada request (linhas duplicadas na tabela). Por isso `buildNoteTree` devolve **cópias rasas** dos nós e nunca escreve nos maps cacheados — `TestBuildNoteTree_DoesNotMutateInputRows` e `TestHandleGetDatabaseData_Tree` (dois requests seguidos) travam essa regressão.
+- `_children` nunca vira coluna: prefixo `_` já é ignorado pelo `HandleGetDatabaseData` (convenção do SSOT de ícones, 6.9). Já a coluna **`parent` existe sempre** (mesmo sem nenhuma nota aninhada), porque é por ela que a primeira hierarquia é criada direto na tabela.
+- **Validação de integridade** (`validateParentAssignment`, chamada em `HandleUpdateNoteProperty` quando a chave é `parent`): recusa auto-pai e ciclo. Para isso sobe a cadeia lendo o frontmatter das notas (`parentRefOf`), com memo e teto de 100 níveis (erra para o lado seguro). Pai inexistente **não** bloqueia — é o comportamento combinado (a nota fica na raiz).
+- Ciclo na **leitura**: `hasParentCycle` anda pela cadeia com um set de visitados, então a caminhada sempre termina; o vínculo que *fecha* o laço é descartado e a nota volta para a raiz. Como a varredura é feita na ordem das linhas, o resultado é determinístico (a dupla vira uma cadeia de 2 níveis).
+
+### Frontend (`database.js`)
+
+- `dataTree`, `dataTreeChildField: "_children"`, `dataTreeElementColumn: "titulo"` (a setinha fica no título, não na coluna "Abrir"), `dataTreeChildIndent: 18`, `dataTreeBranchElement: false` e `dataTreeSort: false` (filhos mantêm a ordem do servidor; só o nível raiz é ordenado).
+- **Sem paginação no modo árvore** (`pagination: hasTree ? false : "local"`): filhos contam como linhas e uma página cortaria uma família no meio.
+- **Estado de expansão por nota** em `localStorage` (`db_tree_expanded`), atualizado pelos eventos `dataTreeRowExpanded`/`dataTreeRowCollapsed`. Primeiro nível começa aberto.
+- ⚠️ **Nunca use `dataTreeExpandElement`/`dataTreeCollapseElement`** (erro cometido e corrigido no mesmo dia): no Tabulator 6.3.1 esses options **substituem o controle inteiro** — o `div.tabulator-data-tree-control` (com o `tabIndex` e o layout `inline-flex` do tema) **deixa de existir** e o HTML fornecido é inserido direto na célula, sem CSS de sizing (o SVG apareceu com 221px). O controle padrão é o caminho correto; o dark mode é ajustado por CSS em `database.templ`, que depende justamente do wrapper `.tabulator-data-tree-control`. Verificado no bundle (`web/static/tabulator.min.js`): `t.dataTreeCollapseElement ? (… this.collapseEl = e.firstChild) : (… crie div + classList.add("tabulator-data-tree-control"))`.
+- **Busca com árvore (bug real, corrigido):** o filtro padrão escondia o resultado — buscando "sqlite" (nota de 2º nível) a tabela ficava **vazia**, porque o pai não casava e era removido do render, levando o filho junto. Agora o predicado é `nodeOrDescendantMatches`: um nó permanece visível se ele **ou algum descendente** casar (os filhos vêm em `_children` no dado da linha), e os nós visíveis são **auto-expandidos** ao filtrar. Resultado: `sqlite` → `projeto → backend → sqlite`.
+- **Editar o `parent` de uma célula remonta a tabela** (`reloadTable()` → `destroy()` + `initTabulator()`): o Tabulator não recalcula a árvore sozinha. Colunas visíveis, última busca e expansão vivem no `localStorage`, então nada se perde.
+- A restauração da última busca (`db_last_query`) passou a esperar o evento **`tableBuilt`** (`table.initialized` como atalho): antes o `setFilter` rodava antes da tabela estar pronta e o Tabulator avisava *"Table Not Initialized"* no console.
+- `populateColumnCheckboxes(cols, table, lockedFields)` ganhou colunas travadas: no modo árvore a coluna **Título** não pode ser ocultada (ocultá-la desativaria o módulo Data Tree).
+- O filtro de busca **ignora chaves com prefixo `_`** (antes, `_children` entrava no `for...in` e virava `"[object Object]"` na comparação de termos gerais).
+- Formatter genérico das colunas editáveis **stringifica valores não primitivos** (`String(val)`): devolver objeto/array faz o Tabulator limpar a célula e logar "Format Error" — era o caso do `parent` em lista.
+- Contador do topo passou a usar `meta.total`: com árvore, `data` contém só as raízes.
+
+### Busca e embeddings
+
+O filtro continua sendo 100% client-side e acha a nota **independente da indentação** (com o ajuste de ancestrais descrito acima). `parent` é indexado no FTS como qualquer outro campo do frontmatter — nada muda na busca semântica/híbrida.
+
+### Validação (16/09/2026)
+
+Toda a feature foi validada **executando o app** (sandbox isolado: `DOCS_DIR`/`DB_PATH`/`STATE_DIR` em `core/data/e2e-*`, porta 6199), já que Go e Node não existem no Windows do desenvolvedor:
+
+- **Go** (container `golang:1.26-alpine`, com `templ generate` pinado): `go vet` OK, `go test ./...` verde, `go build -tags sqlite_fts5` OK, `gofmt` limpo.
+- **Frontend** (Node do nvm no WSL Ubuntu): `npm run typecheck` limpo, `node build.js --dev` OK, `npm test` 31/31.
+- **E2E no navegador**, com 6 notas de teste: aninhamento de 3 níveis (`projeto → backend → sqlite`), `parent: [[PROJETO]]` (lista aninhada) resolvido, órfã na raiz, ciclo e auto-pai recusados com 400, expandir/recolher pelo controle, expansão persistida no reload, busca por nota de 2º nível mostrando o caminho, e **zero avisos de console**.
+
+### Testes
+
+`core/internal/features/system/note_tree_test.go` — aninhamento de 3 níveis, órfã/auto-pai/ciclo voltando para a raiz, formato de referência (`[[alvo]]`, alias, âncora, caminho, aspas), `parent` como lista YAML (aninhada e simples), desempate de nome duplicado (pasta `notes/` e mtime), não-mutação das linhas de entrada, payload do Tabulator (`_children` presente, `_children` ausente das colunas, `parent` presente), tabela plana sem `parent`, normalização na gravação e recusa de auto-pai/ciclo (13 testes).
+
+### Pendências (escopo futuro, combinado com o usuário)
+
+- Botão **"Acima de"** no editor (abaixo do badge de backlinks) para escolher o pai sem digitar YAML.
+- **Rename do pai** ainda não propaga o `parent` das filhas — hoje a filha vira órfã e volta para a raiz (`UpdateBacklinksOnRename` é o gancho natural).
+- Contagem/exibição de filhas no editor e na sidebar.
+
+## 6.18 Fins de linha — `.gitattributes` com LF (16/09/2026)
+
+📍 `.gitattributes` (novo)
+
+**Problema:** desenvolver pelo checkout do Windows (VS Code) e **rodar pelo WSL** quebrava em vários pontos, todos pela mesma causa — o `core.autocrlf=true` do Git deixa a cópia de trabalho com **CRLF**:
+
+| Sintoma | Causa |
+|---|---|
+| `./run.sh` → `bad interpreter: /bin/bash^M` | shebang com CR |
+| `go run templ@v0.3.1020` → `version "v0.3.1020\r" invalid` | o `run.sh` extrai a versão com `grep`/`awk` do `go.mod` e o CR entra na variável |
+| `gofmt -l .` listando o repo inteiro | gofmt considera CRLF como fora de formato |
+| risco no `docker build` | `\` de continuação de linha + CR |
+
+**Decisão:** declarar LF na cópia de trabalho para os arquivos de ferramenta:
+
+```
+*.sh  *.go  *.templ  *.yml  *.yaml  go.mod  go.sum  Dockerfile   →  text eol=lf
+```
+
+- O **índice do Git já era LF** em 464 dos 465 arquivos (só `DECISIONS.md` é `i/crlf`), então normalizar a cópia de trabalho foi **no-op de conteúdo** — confirmado por `git diff --stat` mostrando apenas as mudanças reais.
+- ⚠️ **`DECISIONS.md` fica fora da lista** de propósito: como está commitado com CRLF, declará-lo LF geraria um diff de arquivo inteiro no próximo checkout.
+- Consequência prática: os 150+ arquivos normalizados apareceram como `M` no `git status` (cache de stat), mas com conteúdo idêntico; `git add -A`/commit limpa a listagem e nada extra é commitado.
+- Artefatos gerados pelo build (`web/static/*.js`) **seguem fora** do `.gitattributes` — a convenção de revertê-los após um build local (ver 6.15) continua valendo.
+
+## 6.19 Tabulator — hierarquia `pai`, edição das células e busca em dois modos (16/09/2026)
+
+📍 `core/internal/features/system/note_tree.go` | `.../handlers.go` | `core/web/src/database.js` | `core/internal/features/notes/database.templ` | `core/web/layout/navbar.templ`
+
+Ajustes pedidos depois do primeiro uso da árvore (6.17).
+
+### A chave da hierarquia passa a ser `pai`
+
+| Regra | Decisão |
+|---|---|
+| Chave canônica | **`pai`** — coluna **"Pai"** no Tabulator |
+| Leitura | aceita `pai` **e** o nome antigo `parent` (qualquer caixa): notas gravadas antes continuam aninhadas |
+| Gravação | **sempre** em `pai`; a chave `parent` é removida do frontmatter na primeira edição da célula (migração silenciosa) |
+| Linha do Tabulator | `normalizeParentKey` move qualquer variação da chave para `pai` antes de montar as colunas |
+
+- `isParentKey` centraliza "canônica ou legada" (usado no `HandleUpdateNoteProperty`); `parentRefFromMap` procura na ordem `pai` → `parent`.
+- `normalizeParentKey` roda **antes** do `columnSet` (é de lá que saem as colunas dinâmicas): sem isso, uma nota que ainda usa `parent` apareceria com **duas** colunas de hierarquia ("Pai" vazia + "Parent" preenchida).
+- Testes: `TestNormalizeParentKey` (caixa alta, legada, ambas presentes), `TestHandleUpdateNoteProperty_LegacyParentKeyMigratesToPai`, `TestHandleUpdateNoteProperty_RemovalClearsLegacyKey` e `TestHandleGetDatabaseData_Tree` (payload só com `pai`, rótulo "Pai").
+
+### Editar célula: o editor adaptativo virou editor customizado (bug real)
+
+🔴 **Causa raiz:** a opção `editor` de uma coluna aceita **string** (editor embutido) ou **função que é o próprio editor** — e nesse caso ela precisa devolver um **nó do DOM**. O código devolvia o *nome* do editor ("input"/"date"/"number"), então o Tabulator tratava a função como editor customizado e falhava:
+
+```
+Edit Error - Editor should return an instance of Node, the editor returned: input
+```
+
+Só `Título` e `Tags` (editor embutido) eram editáveis; **a coluna de hierarquia não era**.
+
+- Agora `autoEditor(cell, onRendered, success, cancel)` monta o `<input>` conforme o valor (checkbox para booleano, `date` para `AAAA-MM-DD`, texto para o resto — números e listas YAML continuam texto, e o `handleCellEdit` converte) e **devolve o nó**.
+- Enter/blur confirmam, Esc cancela; a trava `finished` impede o commit duplo (`success()` fecha a célula, o que dispara o `blur` do input).
+- Valor inalterado devolve o valor original: nada é gravado à toa.
+
+### Abrir a nota: duplo clique (coluna "Abrir" nasce oculta)
+
+- O clique simples numa célula editável abre o editor, então abrir a nota é **duplo clique na linha**: o 1º clique já abriu o editor e o duplo clique cai dentro do input, então o handler **cancela a edição** (`cancelEdit`) e navega.
+- Cliques no controle da árvore e em links (`Abrir`) são ignorados.
+- A coluna `abrir_link` continua no payload, mas com `visible: false` — quem preferir o link explícito religa no seletor "Colunas" (a escolha vive no `localStorage`).
+- Teste: `TestHandleGetDatabaseData_AbrirColumnHiddenByDefault`.
+
+### Contador do topo
+
+Mostra **apenas o número** de notas exibidas agora (antes: "N notas registradas", que era o total e ignorava a busca). O valor sai da própria floresta filtrada (`countRows`), então bate exatamente com a tela — inclusive no modo contexto, em que pais e irmãs também são linhas.
+
+### Busca em dois modos (botão ao lado do campo)
+
+| Modo | O que mostra |
+|---|---|
+| **Pai + irmãos** (padrão) | o resultado + a cadeia de pais + as irmãs dele |
+| **Só resultados** | apenas as notas que casaram (promovidas à raiz quando o pai não casou) |
+
+- Escolha persistida em `localStorage` (`db_search_mode`); o botão mostra o modo ativo e o `title` explica o próximo clique.
+- ⚠️ **O filtro deixou de usar `table.setFilter`** e passou a reconstruir a floresta e chamar `setData`. Motivo: o módulo Data Tree **esconde os filhos de uma linha filtrada** — era o que obrigava o predicado a manter os ancestrais (ver 6.17) e o que tornaria impossível o modo "só resultados" (um resultado aninhado desapareceria). Reconstruindo os `_children` no cliente, a árvore exibida é exatamente o conjunto calculado e o contador sai de graça.
+- Com busca ativa, `dataTreeStartExpanded` devolve `true` para todos os níveis: o caminho até o resultado (e as irmãs) aparece sem abrir nível por nível. O estado salvo por nota (`db_tree_expanded`) não é afetado — a expansão automática não gera os eventos que persistem a escolha.
+- A digitação tem **debounce de 120 ms** (`SEARCH_DEBOUNCE_MS`): cada tecla recalcula e chama `setData`, e sem agrupamento uma tabela com milhares de notas travaria.
+- A sintaxe avançada da busca (`titulo:`, `tags:`, termos gerais) é a mesma de antes — só mudou o caminho de aplicação.
+
+### Tabulator fora do mobile
+
+O link `#mobile-nav-database` **saiu do menu mobile** (árvore com várias colunas não é utilizável no celular). O acesso continua no menu desktop (`#nav-database`) e pela URL `/database`.
+
+## 6.20 Fontes self-hosted, TOC bidirecional e fim do "&nbsp;" (17/09/2026)
+
+📍 `core/web/static/fonts/` (novo) | `core/web/src/input.css` | `core/web/layout/layout.templ` | `core/internal/features/{system/login,notes/editor,notes/database,notes/mindmap,notes/epub_reader}.templ` | `core/web/src/editor-init.js` | `core/web/src/editor.js` | `core/web/static/editor-common.js`
+
+### Fontes: Noto Sans + Geist Mono, self-hosted (sem CDN)
+
+| Peça | Decisão |
+|---|---|
+| Tokens | `--font-sans: "Noto Sans", …` e `--font-mono: "Geist Mono", …` no `@theme` de `web/src/input.css` — o preflight e todas as classes `font-sans`/`font-mono` do Tailwind seguem daí (fonte única de verdade) |
+| Arquivos | `static/fonts/NotoSans/` e `static/fonts/GeistMono/` (woff2 **variáveis**: um arquivo por subconjunto/estilo cobre 100–900) |
+| `@font-face` | `static/fonts/fonts.css`, com os mesmos `unicode-range` do Google (o browser baixa só o subconjunto usado) |
+| Peso | ~490 KB no repo, mas uma página em pt-BR baixa **~60 KB** (latin normal de cada família); o resto é lazy |
+| ⚠️ | **NÃO reintroduzir `<link>` do Google Fonts** (layout.templ/login.templ): o app precisa funcionar offline e a CSP é restritiva |
+| Onde linkar | `layout.Layout` (via `staticver.URL`) e as páginas com `<head>` próprio (`login.templ`, `epub_reader.templ`) |
+| CSS legado | `'Inter'` e as pilhas `ui-monospace, …` hardcoded em templates viraram `var(--font-sans)` / `var(--font-mono)` |
+
+### TOC bidirecional (editar ≠ só criar)
+
+`applyToc` só sabia mapear linhas sobre os títulos existentes (`min(linhas, títulos)`), então **apagar uma linha não removia nada da nota** — e o alinhamento dependia de um `offset` calculado na mão. Agora:
+
+- `collectHeadings()` é compartilhado por `updateToc`/`applyToc` (títulos com texto, na ordem do documento) — título vazio é ignorado nos dois lados, senão as linhas sairiam de sincronia com os títulos;
+- as mudanças (nível, texto, **remoção** e criação) são aplicadas **de trás para frente**, em uma única transação, usando as posições do documento original — uma alteração nunca invalida a posição da anterior;
+- linha apagada → o título correspondente é **removido** da nota; linha nova → título criado no fim; tabulação → nível 1..6;
+- se nada mudou de verdade, **nenhuma transação é disparada** (não marca a nota como suja nem agenda save);
+- `updateToc` só escreve no textarea quando o valor muda — atribuir o mesmo valor jogaria o cursor para o fim enquanto o usuário digita no TOC.
+
+### Fim do "&nbsp;" nas notas (bug real)
+
+🔴 **Causa:** a extensão `CustomParagraph` (`web/src/editor.js`) serializava parágrafo vazio como o **texto literal** `&nbsp;`. A entidade ia crua para o arquivo (e, escapada pelo serializador, como `\&nbsp;`), reaparecendo como texto visível na busca, em previews e ao reabrir a nota.
+
+- A extensão foi **removida** (e o `paragraph: false` do StarterKit junto): o parágrafo vazio volta à serialização padrão do `tiptap-markdown`, que produz uma linha em branco — que é o que o markdown sabe representar.
+- `EditorCommon.stripNbspParagraphs()` limpa linhas que só têm o placeholder nas **três** formas (`&nbsp;`, `\&nbsp;`, U+00A0) e é aplicado **na abertura da nota e antes de cada gravação** — as notas antigas se limpam sozinhas no primeiro save. `&nbsp;` no meio de uma frase (uso legítimo) é preservado.
+- Guarda: 3 casos em `web/tests/editor-common.unit.cjs` (limpeza, preservação no meio da frase, entrada vazia/nula).
+
+### Validação (17/09/2026)
+
+- Go: `templ generate` + `go vet` + `go test ./...` verdes; binário recompilado.
+- Frontend: `tsc` limpo, `npm test` **34/34** (inclui os 3 novos casos do `&nbsp;`).
+- E2E no navegador (sandbox isolado, porta 6199): fontes carregando dos arquivos locais (`document.fonts.check` = true para Noto Sans e Geist Mono, com o frontmatter/TOC em Geist Mono), nota com `&nbsp;` e `\&nbsp;` gravados abrindo **sem** o lixo, TOC renomeando/removendo/criando títulos (e o markdown salvo refletindo cada caso) e parágrafo vazio novo gravando linha em branco, sem `&nbsp;`.
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.

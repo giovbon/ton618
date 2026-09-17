@@ -35,6 +35,7 @@ templ Navbar() {
                                 fill="white" opacity="0.5" transform="rotate(240 50 50)" />
                         </svg>
                     </div>
+                    <span class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
                 </a>
                 <!-- Progress Bar -->
                 <div id="upload-progress-container" x-data="{ uploading: false, progress: 0 }"
@@ -238,11 +239,10 @@ templ Navbar() {
                         <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                     </a>
                     
-                    <a id="mobile-nav-database" href="/database" @click="mobileMenuOpen = false"
-                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900/50 transition-colors">
-                        @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator"))
-                        <span class="text-[11px] font-bold tracking-wider">TABULATOR</span>
-                    </a>
+                    <!-- Tabulator: fora do menu mobile de propósito — a tabela
+                         (árvore + várias colunas) não é utilizável numa tela de
+                         celular. O acesso continua no menu do desktop
+                         (#nav-database) e pela URL /database. -->
 
                     <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
                         class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">
@@ -295,10 +295,9 @@ templ Navbar() {
                 const mNav = document.getElementById('mobile-nav-todos');
                 if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-amber-400 bg-amber-950/40 border border-amber-500/20 transition-colors';
             } else if (path === '/database') {
+                // Só o item do desktop: o Tabulator saiu do menu mobile de propósito.
                 const nav = document.getElementById('nav-database');
                 if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 transition-all';
-                const mNav = document.getElementById('mobile-nav-database');
-                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 transition-colors';
             }
         })();
     </script>

@@ -18,7 +18,9 @@ templ databaseContent() {
                 @icons.Icon(icons.GetIcon("tabulator"), "w-6 h-6 " + icons.GetColor("tabulator")) Tabulator
             </h1>
             <div class="flex items-center gap-4">
-                <div class="text-sm text-zinc-400" id="db-stats">Carregando...</div>
+                <!-- Contador: apenas QUANTAS notas estão sendo exibidas agora
+                     (muda com a busca — ver setStats em database.js) -->
+                <div class="text-sm font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
                 
                 <!-- Column Visibility Selector -->
                 <div class="relative" id="column-selector-container">
@@ -38,11 +40,23 @@ templ databaseContent() {
         </div>
 
         <!-- Search input and filters -->
-        <div class="relative mt-2 flex items-center">
-            <input id="db-search" type="text" placeholder="Buscar em qualquer campo..." autocomplete="off"
-                class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 transition-all" />
-            <button id="db-search-clear" type="button" class="absolute right-3 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
-                @icons.Icon("x", "w-3.5 h-3.5")
+        <div class="mt-2 flex items-center gap-2">
+            <div class="relative flex-1 min-w-0">
+                <input id="db-search" type="text" placeholder="Buscar em qualquer campo..." autocomplete="off"
+                    class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 transition-all" />
+                <button id="db-search-clear" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
+                    @icons.Icon("x", "w-3.5 h-3.5")
+                </button>
+            </div>
+            <!-- Alterna o modo de busca (ver applySearch/setupSearchModeButton).
+                 "Pai + irmãos": resultado + caminho de pais + irmãs.
+                 "Só resultados": apenas as notas que casaram. -->
+            <button id="db-search-mode" type="button" aria-pressed="false"
+                class="shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 focus:outline-hidden focus:border-sky-500 transition-all"
+                title="Busca: mostrando o resultado com o caminho de pais e as irmãs — clique para mostrar só as notas que casaram">
+                <span id="db-search-mode-icon-contexto">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
+                <span id="db-search-mode-icon-resultados" class="hidden">@icons.Icon("search", "w-3.5 h-3.5")</span>
+                <span id="db-search-mode-label">Pai + irmãos</span>
             </button>
         </div>
     </div>
@@ -67,7 +81,7 @@ templ databaseContent() {
     .tabulator {
         background-color: transparent !important;
         border: none !important;
-        font-family: 'Inter', system-ui, sans-serif !important;
+        font-family: var(--font-sans) !important;
         font-size: 13px;
     }
     .tabulator-header {
@@ -120,7 +134,46 @@ templ databaseContent() {
         margin-right: 4px;
         margin-bottom: 2px;
     }
-    
+
+    /* ── Hierarquia de notas (módulo Data Tree) ──
+       Controle padrão do Tabulator, recolorido para o dark mode do TON-618.
+       ⚠️ Não use dataTreeExpandElement/CollapseElement: o Tabulator substitui o
+       controle inteiro por eles (some o wrapper e o tabIndex) — ver database.js. */
+    #notes-table .tabulator-data-tree-control {
+        background: #18181b !important; /* zinc-900 */
+        border: 1px solid #3f3f46 !important; /* zinc-700 */
+        border-radius: 5px !important;
+        width: 15px !important;
+        height: 15px !important;
+        margin-right: 7px !important;
+        justify-content: center;
+    }
+    #notes-table .tabulator-data-tree-control:hover {
+        background: #27272a !important; /* zinc-800 */
+        border-color: #0ea5e9 !important; /* sky-500 */
+    }
+    /* Barras do +/- do controle padrão (o tema claro as desenha em branco) */
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-expand,
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-collapse {
+        background: #a1a1aa !important; /* zinc-400 */
+    }
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-expand:before,
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-expand:after,
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-collapse:before,
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-collapse:after {
+        background: #a1a1aa !important; /* zinc-400 */
+        border-color: #a1a1aa !important;
+    }
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-expand,
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-collapse,
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-expand:before,
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-expand:after,
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-collapse:before,
+    #notes-table .tabulator-data-tree-control:hover .tabulator-data-tree-control-collapse:after {
+        background: #38bdf8 !important; /* sky-400 */
+        border-color: #38bdf8 !important;
+    }
+
     /* Premium Dark Mode Footer & Pagination styling */
     .tabulator-footer {
         background-color: #09090b !important; /* zinc-950 */

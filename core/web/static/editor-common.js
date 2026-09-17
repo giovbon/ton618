@@ -152,6 +152,24 @@
                 );
         },
 
+        // ── stripNbspParagraphs: remove o lixo de "&nbsp;" das notas ──
+        // O editor já gravou parágrafos vazios como o texto literal "&nbsp;"
+        // (e, quando o markdown-it reprocessava a entidade, como U+00A0). Isso
+        // vazava para o arquivo da nota e aparecia como texto na busca/preview.
+        // Aqui as linhas que só têm esse placeholder voltam a ser linhas em
+        // branco — o markdown sabe representar isso. É aplicado ANTES de cada
+        // gravação, então as notas antigas se limpam sozinhas no próximo save.
+        stripNbspParagraphs: function (markdown) {
+            if (!markdown) return markdown;
+            // Cobre as três formas em que o placeholder aparece no arquivo: a
+            // entidade ("&nbsp;"), a entidade escapada pelo serializador
+            // ("\&nbsp;") e o próprio caractere U+00A0.
+            return markdown.replace(
+                /^[ \t]*(?:\\?(?:&nbsp;|\u00a0))+[ \t]*$/gm,
+                "",
+            );
+        },
+
         // ── setupCodeJarActiveLine: highlights active line in CodeJar editor ──
         setupCodeJarActiveLine: function (editorEl) {
             if (!editorEl) return;

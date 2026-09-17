@@ -86,7 +86,7 @@ templ editorContent(data domain.EditorData) {
             </svg>
             TOC
         </button>
-        <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-hidden focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(navegue e edite a indentacao dos titulos)" spellcheck="false"></textarea>
+        <textarea id="toc-area" class="hidden w-full mt-2 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 focus:outline-hidden focus:border-zinc-600 transition-all resize-y min-h-[60px]" placeholder="(edite o texto, use Tab para o nível e apague a linha para remover o título)" spellcheck="false"></textarea>
     </div>
 
 
@@ -187,7 +187,7 @@ templ editorContent(data domain.EditorData) {
         cursor: pointer;
         line-height: 1.2;
         transition: all 0.12s;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-family: var(--font-mono);
     }
     .table-bubble-btn:hover {
         color: #e4e4e7;
@@ -376,7 +376,7 @@ templ editorContent(data domain.EditorData) {
         top: 6px;
         right: 10px;
         font-size: 10px;
-        font-family: monospace;
+        font-family: var(--font-mono);
         color: #52525b;
         letter-spacing: 0.04em;
         text-transform: uppercase;

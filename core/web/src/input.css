@@ -17,7 +17,12 @@
 @source "../static/js/**/*.js";                    /* web/static/js commitado (ambos) */
 
 @theme {
-  --font-sans: "Inter", "system-ui", "sans-serif";
+  /* Fontes self-hosted (ver web/static/fonts/fonts.css): Noto Sans para a
+     interface e o texto das notas, Geist Mono para monoespaçado. O Tailwind v4
+     usa estes dois tokens em todo lugar (preflight, font-sans/font-mono,
+     --default-font-family) — trocar aqui troca a aplicação inteira. */
+  --font-sans: "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --animate-fast-spin: fast-spin 0.4s linear infinite;
 

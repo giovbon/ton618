@@ -165,7 +165,7 @@ templ mindmapContent(data domain.EditorData) {
     .editor-codejar {
         margin: 0 !important;
         padding: 16px !important;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-family: var(--font-mono) !important;
         font-size: 14px !important;
         line-height: 1.625 !important;
         white-space: pre-wrap !important;
@@ -242,7 +242,7 @@ templ mindmapContent(data domain.EditorData) {
 
     #mindmap-svg g.markmap-node text {
         fill: #f4f4f5 !important; /* zinc-100 */
-        font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+        font-family: var(--font-sans) !important;
         font-weight: 500;
         font-size: 13px !important;
     }
@@ -274,7 +274,7 @@ templ mindmapContent(data domain.EditorData) {
     /* Foreign object styling for normal nodes */
     #mindmap-svg .markmap-foreign {
         color: #f4f4f5 !important; /* zinc-100 */
-        font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+        font-family: var(--font-sans) !important;
         font-size: 13px !important;
         font-weight: 500 !important;
         line-height: 1.5 !important;
@@ -292,7 +292,7 @@ templ mindmapContent(data domain.EditorData) {
 
     /* Inline and Block Code Styling */
     #mindmap-svg .markmap-foreign code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-family: var(--font-mono) !important;
         font-weight: 600 !important; /* Thicker font for readability */
         font-size: 12px !important;
         background-color: #18181b !important; /* zinc-900 */

@@ -38,6 +38,10 @@
         frontmatterText = fmMatch[1];
         bodyContent = fmMatch[2];
     }
+    // Notas antigas podem ter o placeholder "&nbsp;" gravado no meio do texto
+    // (ver stripNbspParagraphs): limpa já na abertura, para o lixo não reaparecer
+    // na tela antes do primeiro save.
+    bodyContent = EditorCommon.stripNbspParagraphs(bodyContent);
 
     // ── Helper: limpa timers pendentes ──
     function clearAllTimers() {
@@ -541,9 +545,7 @@
             T.StarterKit.configure({
                 heading: { levels: [1, 2, 3, 4, 5, 6] },
                 codeBlock: false,
-                paragraph: false,
             }),
-            T.CustomParagraph,
             T.Placeholder.configure({
                 placeholder: "Pressione / para comandos...",
             }),
@@ -858,6 +860,7 @@
         if (!editor) return;
         var md = "";
         try { md = editor.storage.markdown.getMarkdown(); } catch (e) { md = editor.getHTML(); }
+        md = EditorCommon.stripNbspParagraphs(md);
         var fm = document.getElementById("frontmatter-area").value.trim();
         var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
         finalContent = EditorCommon.wikilinksToMarkdown(finalContent);
@@ -1475,92 +1478,108 @@
         if (arrow) arrow.classList.toggle("rotate-90", backlinksVisible);
     }
 
-function updateToc() {
-        if (!editor || editor.isDestroyed) return;
+    // Títulos do documento (na ordem em que aparecem) com o texto já aparado.
+    // Ignora título sem texto: ele não aparece no TOC, então não pode entrar no
+    // pareamento linha↔título do applyToc (senão as linhas sairiam de sincronia).
+    function collectHeadings() {
         var headings = [];
+        if (!editor || editor.isDestroyed) return headings;
         editor.state.doc.descendants(function (node, pos) {
-            if (node.type.name === "heading") {
-                var level = node.attrs.level;
-                var text = node.textContent.trim();
-                if (text) headings.push({ level: level, text: text, pos: pos });
-            }
+            if (node.type.name !== "heading") return;
+            var text = node.textContent.trim();
+            if (text) headings.push({ pos: pos, node: node, level: node.attrs.level, text: text });
         });
+        return headings;
+    }
+
+    function tocLevel(tabs) {
+        return Math.min(Math.max(tabs + 1, 1), 6);
+    }
+
+    function updateToc() {
+        if (!editor || editor.isDestroyed) return;
         var el = document.getElementById("toc-area");
-        el.value = headings.map(function (h) {
+        if (!el) return;
+        var next = collectHeadings().map(function (h) {
             var indent = "";
             for (var i = 1; i < h.level; i++) indent += "\t";
             return indent + h.text;
         }).join("\n");
+        // Só escreve se mudou: atribuir o mesmo valor move o cursor do textarea
+        // para o fim, atrapalhando quem está digitando no TOC.
+        if (el.value !== next) el.value = next;
         // Ajusta altura
         el.style.height = "auto";
         el.style.height = el.scrollHeight + "px";
     }
 
+    // Aplica o texto do TOC no documento — espelha a caixa nos dois sentidos:
+    //   · linha editada  → renomeia o título;
+    //   · tabulação      → nível do título (1..6);
+    //   · linha APAGADA  → o título correspondente é REMOVIDO da nota (era o que
+    //     faltava: apagar no TOC não refletia em nada);
+    //   · linha nova     → cria um título novo no fim da nota.
+    // As posições são as do documento ORIGINAL, então as mudanças são aplicadas
+    // de trás para frente — assim uma alteração nunca invalida a posição da
+    // anterior (a versão antiga somava um "offset" na mão e só sabia lidar com o
+    // mesmo número de linhas).
     function applyToc(tocText) {
         if (!editor || editor.isDestroyed) return;
-        var lines = tocText.split("\n").filter(function (l) { return l.trim(); });
 
-        // Parseia cada linha: { tabs, text }
-        var parsed = lines.map(function (l) {
-            var tabs = 0;
-            for (var i = 0; i < l.length; i++) {
-                if (l[i] === "\t") tabs++;
-                else break;
+        var parsed = String(tocText == null ? "" : tocText).split("\n")
+            .map(function (l) {
+                var tabs = 0;
+                while (tabs < l.length && l.charAt(tabs) === "\t") tabs++;
+                return { tabs: tabs, text: l.slice(tabs).trim() };
+            })
+            .filter(function (p) { return p.text; });
+
+        var headings = collectHeadings();
+        var limit = Math.min(parsed.length, headings.length);
+
+        // Sem mudança real? Não gera transação (nem marca a nota como suja).
+        var changed = parsed.length !== headings.length;
+        for (var c = 0; !changed && c < limit; c++) {
+            if (parsed[c].text !== headings[c].text ||
+                tocLevel(parsed[c].tabs) !== headings[c].level) {
+                changed = true;
             }
-            return { tabs: tabs, text: l.trim() };
-        });
+        }
+        if (!changed) return;
 
-        // Passo único: coleta headings e aplica níveis + textos em uma transação
         var tr = editor.state.tr;
-        var headings = [];
-        editor.state.doc.descendants(function (node, pos) {
-            if (node.type.name === "heading") {
-                headings.push({ pos: pos, node: node });
-            }
-        });
 
-        var offset = 0;
-        for (var idx = 0; idx < headings.length && idx < parsed.length; idx++) {
-            var entry = headings[idx];
-            var pos = entry.pos;
+        // 1. Sobraram títulos no documento (TOC com menos linhas) → removê-los.
+        for (var d = headings.length - 1; d >= parsed.length; d--) {
+            tr.delete(headings[d].pos, headings[d].pos + headings[d].node.nodeSize);
+        }
+
+        // 2. Nível e texto dos títulos que continuam (de trás para frente).
+        for (var u = limit - 1; u >= 0; u--) {
+            var entry = headings[u];
             var node = entry.node;
+            var level = tocLevel(parsed[u].tabs);
 
-            // Atualiza nível
-            var newLevel = Math.min(Math.max(parsed[idx].tabs + 1, 1), 6);
-            if (newLevel !== node.attrs.level) {
-                tr.setNodeMarkup(pos + offset, null, { level: newLevel });
+            if (entry.level !== level) {
+                var attrs = Object.assign({}, node.attrs, { level: level });
+                tr.setNodeMarkup(entry.pos, null, attrs);
             }
 
-            // Atualiza texto
-            var oldText = node.textContent;
-            var newText = parsed[idx].text;
-            if (newText && newText !== oldText) {
-                var textNode = editor.state.schema.text(newText);
-                var from = pos + 1 + offset;
-                var to = pos + node.nodeSize - 1 + offset;
-                if (to > from) {
-                    tr.replaceWith(from, to, textNode);
-                } else {
-                    tr.insert(from, textNode);
-                }
-                offset += newText.length - oldText.length;
+            if (parsed[u].text !== entry.text) {
+                var from = entry.pos + 1;
+                var to = entry.pos + node.nodeSize - 1;
+                var textNode = editor.state.schema.text(parsed[u].text);
+                if (to > from) tr.replaceWith(from, to, textNode);
+                else tr.insert(from, textNode);
             }
         }
 
-        // Cria headings novos se o TOC tiver mais linhas
-        if (parsed.length > headings.length) {
-            var lastPos = editor.state.doc.content.size + offset;
-            for (var idx = headings.length; idx < parsed.length; idx++) {
-                var p = parsed[idx];
-                if (!p.text) continue;
-                var newLevel = Math.min(Math.max(p.tabs + 1, 1), 6);
-                var hNode = editor.state.schema.nodes.heading.create(
-                    { level: newLevel },
-                    editor.state.schema.text(p.text)
-                );
-                tr.insert(lastPos - 1, hNode);
-                lastPos += hNode.nodeSize;
-            }
+        // 3. TOC com mais linhas → títulos novos no fim da nota.
+        for (var n = limit; n < parsed.length; n++) {
+            tr.insert(tr.doc.content.size, editor.state.schema.nodes.heading.create(
+                { level: tocLevel(parsed[n].tabs) },
+                editor.state.schema.text(parsed[n].text)
+            ));
         }
 
         if (tr.steps.length) editor.view.dispatch(tr);
@@ -1719,6 +1738,7 @@ function updateToc() {
         } catch (e) {
             md = editor.getHTML();
         }
+        md = EditorCommon.stripNbspParagraphs(md);
         var fm = (/** @type {HTMLTextAreaElement} */(document.getElementById("frontmatter-area"))).value.trim();
         var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
         // Converte links do editor de volta para [[wikilinks]]
@@ -1791,6 +1811,7 @@ function updateToc() {
         } catch (e) {
             md = editor.getHTML();
         }
+        md = EditorCommon.stripNbspParagraphs(md);
         var fm = document.getElementById("frontmatter-area").value.trim();
         var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
         // Converte links do editor de volta para [[wikilinks]]

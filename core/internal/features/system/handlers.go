@@ -499,6 +499,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		// Injeta o status de embedding dinamicamente (garante dados em tempo real sem expirar o cache do arquivo)
 		row["embeded"] = embeddedFiles[n.Arquivo]
 
+		// A hierarquia tem UMA chave canônica ("pai"): normaliza a linha para o
+		// Tabulator nunca exibir duas colunas de hierarquia quando a nota ainda
+		// usa o nome antigo "parent" — ver normalizeParentKey (DECISIONS 6.19).
+		normalizeParentKey(row)
+
 		// Adiciona as colunas dinâmicas encontradas nesta linha para o set de colunas global.
 		// Campos internos prefixados com "_" (_icon, _url, _blank) são helpers usados apenas
 		// pelo formatter da coluna "abrir_link" — nunca devem virar colunas visíveis.
@@ -508,6 +513,11 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		}
 		columnSet["type"] = true
+		// A coluna de hierarquia existe SEMPRE (mesmo sem nenhuma nota com o
+		// vínculo ainda), para que a primeira hierarquia possa ser criada
+		// direto na tabela — ver DECISIONS 6.17/6.19. O campo é "pai" e o rótulo
+		// exibido é "Pai" (title-case abaixo).
+		columnSet[parentKey] = true
 
 		data = append(data, row)
 	}
@@ -521,9 +531,21 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		ctx.dbCacheMu.Unlock()
 	}
 
+	// Hierarquia de notas: reorganiza as linhas em floresta, injetando o campo
+	// "_children" que o módulo Data Tree do Tabulator lê (propriedade "pai" do
+	// frontmatter — ver note_tree.go e DECISIONS 6.17/6.19).
+	//
+	// IMPORTANTE: o cache acima guarda as linhas ACHATADAS por referência de
+	// map. buildNoteTree devolve cópias dos nós, então nada do que é enviado ao
+	// frontend é escrito nos maps cacheados.
+	data, hasTree := buildNoteTree(data)
+
 	var columns []map[string]interface{}
 	// Enforce column order for base columns
-	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "headerSort": false, "width": 80, "hozAlign": "center"})
+	// A coluna "Abrir" nasce OCULTA: abrir a nota é um duplo clique na linha
+	// (ver database.js). Ela segue disponível no seletor "Colunas" para quem
+	// preferir o link explícito.
+	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "visible": false, "headerSort": false, "width": 80, "hozAlign": "center"})
 	columns = append(columns, map[string]interface{}{"title": "Arquivo", "field": "arquivo", "visible": false})
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
@@ -533,8 +555,12 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	for col := range columnSet {
 		lowerCol := strings.ToLower(col)
 		if lowerCol != "arquivo" && lowerCol != "titulo" && lowerCol != "tags" && lowerCol != "mtime" && lowerCol != "type" {
+			// Hierarquia: campo "pai" com o rótulo "Pai" (trava em
+			// TestHandleGetDatabaseData_Tree); as demais colunas dinâmicas usam
+			// o próprio nome com a 1ª letra maiúscula.
+			title := strings.ToUpper(col[:1]) + col[1:] // strings.Title is deprecated, simple inline title case
 			columns = append(columns, map[string]interface{}{
-				"title":  strings.ToUpper(col[:1]) + col[1:], // strings.Title is deprecated, simple inline title case
+				"title":  title,
 				"field":  col,
 				"editor": "input",
 			})
@@ -544,6 +570,9 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false, "visible": false})
 
 	w.Header().Set("Content-Type", "application/json")
+	// meta.total = total de notas (com árvore ligada, data contém só as raízes,
+	// então o contador do topo da página não pode usar data.length).
+	meta := map[string]interface{}{"hasTree": hasTree, "total": len(noteList)}
 	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
@@ -551,11 +580,13 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		json.NewEncoder(gz).Encode(map[string]interface{}{
 			"columns": columns,
 			"data":    data,
+			"meta":    meta,
 		})
 	} else {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"columns": columns,
 			"data":    data,
+			"meta":    meta,
 		})
 	}
 }
@@ -733,6 +764,28 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Hierarquia de notas (DECISIONS 6.17/6.19): aceita a chave canônica `pai`
+	// e a antiga `parent`, normaliza o valor digitado ("nota", "nota.md",
+	// "notes/nota.md", "[[nota]]") para o formato canônico e recusa vínculos que
+	// criariam ciclo. Nota-pai inexistente é permitida (a filha fica na raiz até
+	// a outra existir). A gravação é SEMPRE em `pai`: a chave legada é removida
+	// do frontmatter logo abaixo (migração silenciosa ao editar a célula).
+	removeLegacyParentKey := false
+	if isParentKey(req.Key) {
+		ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
+		if err := ctx.validateParentAssignment(req.File, ref); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		req.Key = parentKey
+		if ref == "" {
+			req.Value = "" // valor vazio remove a propriedade do frontmatter
+		} else {
+			req.Value = ref
+		}
+		removeLegacyParentKey = true
+	}
+
 	content, err := ctx.Store.GetNote(req.File)
 	if err != nil {
 		http.Error(w, "note not found", http.StatusNotFound)
@@ -743,6 +796,16 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 	if err != nil {
 		http.Error(w, "error updating frontmatter", http.StatusInternalServerError)
 		return
+	}
+
+	// Remoção da chave antiga: valor vazio apaga a chave (UpdateFrontmatterProperty).
+	// É no-op quando a nota já usa `pai`.
+	if removeLegacyParentKey {
+		newContent, err = notes.UpdateFrontmatterProperty(newContent, parentKeyLegacy, "")
+		if err != nil {
+			http.Error(w, "error updating frontmatter", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Resave to trigger reindex
