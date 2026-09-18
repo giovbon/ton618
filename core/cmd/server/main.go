@@ -120,10 +120,12 @@ func main() {
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
 	embeddingsCtx := embeddings.NewHandlerContext(cfg, store)
 
-	slog.Info("Sincronizando notas do banco de dados...")
-	if err := notesCtx.Notes.SyncDatabase(); err != nil {
-		slog.Error("erro ao sincronizar banco de dados", "error", err)
-	}
+	go func() {
+		slog.Info("Sincronizando notas do banco de dados em segundo plano...")
+		if err := notesCtx.Notes.SyncDatabase(); err != nil {
+			slog.Error("erro ao sincronizar banco de dados", "error", err)
+		}
+	}()
 
 	r := chi.NewRouter()
 
@@ -146,13 +148,12 @@ func main() {
 
 	// Arquivos do modelo de embeddings (baixados no boot) — públicos, sem auth,
 	// pois o Web Worker busca /models/... sem credenciais.
-	r.Handle("/models/*", http.StripPrefix("/models/", modelStore))
-
-	// Protege as rotas dinâmicas com BasicAuth
+	// Protege as rotas dinâmicas com BasicAuth e habilita pprof (/debug/pprof)
 	r.Group(func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler {
 			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
 		})
+		r.Mount("/debug", chimiddleware.Profiler())
 		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx, embeddingsCtx)
 	})
 
