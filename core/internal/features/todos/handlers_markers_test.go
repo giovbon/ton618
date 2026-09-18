@@ -148,3 +148,108 @@ func TestHandleRemoveTodoMarker(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleAddTodoMarker_Invalido(t *testing.T) {
+	ctx := setupTest(t)
+
+	form := url.Values{}
+	form.Add("marker", "NOME COM SIMBOLO INVALIDO @#$!*&")
+
+	req, err := http.NewRequest("POST", "/todos/markers/add", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	ctx.HandleAddTodoMarker(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdateTodoMarker_SemMarker(t *testing.T) {
+	ctx := setupTest(t)
+
+	req, err := http.NewRequest("POST", "/todos/markers/update", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+
+	ctx.HandleUpdateTodoMarker(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdateTodoMarker_NaoEncontrado(t *testing.T) {
+	ctx := setupTest(t)
+
+	req, err := http.NewRequest("POST", "/todos/markers/update?marker=INEXISTENTE&active=false", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+
+	ctx.HandleUpdateTodoMarker(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("status incorreto: got %v want 404", status)
+	}
+}
+
+func TestHandleRemoveTodoMarker_NaoEncontrado(t *testing.T) {
+	ctx := setupTest(t)
+
+	req, err := http.NewRequest("POST", "/todos/markers/remove?marker=INEXISTENTE", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+
+	ctx.HandleRemoveTodoMarker(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("status incorreto: got %v want 404", status)
+	}
+}
+
+func TestHandleResetTodoMarkers(t *testing.T) {
+	ctx := setupTest(t)
+
+	req, err := http.NewRequest("POST", "/todos/markers/reset", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+
+	ctx.HandleResetTodoMarkers(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusOK)
+	}
+}
+
+func TestHandleTodoCount(t *testing.T) {
+	ctx := setupTest(t)
+
+	req, err := http.NewRequest("GET", "/todos/count", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+
+	ctx.HandleTodoCount(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("status incorreto: got %v want %v", status, http.StatusOK)
+	}
+
+	if cacheControl := rr.Header().Get("Cache-Control"); cacheControl != "no-store" {
+		t.Errorf("Header Cache-Control incorreto: got %q, want no-store", cacheControl)
+	}
+}
+
