@@ -252,4 +252,3 @@ func TestHandleTodoCount(t *testing.T) {
 		t.Errorf("Header Cache-Control incorreto: got %q, want no-store", cacheControl)
 	}
 }
-
