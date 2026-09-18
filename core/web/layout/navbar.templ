@@ -236,7 +236,7 @@ templ Navbar() {
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
                         @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task"))
                         <span class="text-[11px] font-bold tracking-wider">TASK</span>
-                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
+                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                     </a>
                     
                     <!-- Tabulator: fora do menu mobile de propósito — a tabela
