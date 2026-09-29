@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"net/url"
+	"sync"
 	"ton618/core/internal/core/domain"
 
 	"fmt"
@@ -35,6 +36,12 @@ type NoteService struct {
 	pop     repository.PopStore
 	fileMod repository.FileModStore
 	docsDir string
+
+	// Cache do mapa de contagens de filhas (badge da sidebar). Ver
+	// GetChildrenCounts/invalidateChildrenCounts em hierarchy.go.
+	childrenMu  sync.Mutex
+	childrenMap map[string]int
+	childrenAt  time.Time
 }
 
 // NewNoteService cria o serviço de notas.
@@ -72,8 +79,8 @@ func (s *NoteService) SaveWithContext(ctx context.Context, filename, content str
 	if !strings.HasSuffix(filename, ".md") {
 		filename += ".md"
 	}
-	if !strings.HasPrefix(filename, "notes/") {
-		filename = "notes/" + filename
+	if !strings.HasPrefix(filename, domain.NotePrefix) {
+		filename = domain.NotePrefix + filename
 	}
 
 	mtime := time.Now().UTC()
@@ -89,19 +96,22 @@ func (s *NoteService) Delete(filename string) error {
 		slog.Error("delete all file records", "file", filename, "error", err)
 	}
 
+	// Uma nota removida não pode continuar contando como filha na sidebar.
+	s.invalidateChildrenCounts()
+
 	return nil
 }
 
 // Rename renomeia uma nota e atualiza todos os índices.
 func (s *NoteService) Rename(oldName, newName string) error {
-	if !strings.HasPrefix(oldName, "notes/") {
-		oldName = "notes/" + oldName
+	if !strings.HasPrefix(oldName, domain.NotePrefix) {
+		oldName = domain.NotePrefix + oldName
 	}
 	if !strings.HasSuffix(oldName, ".md") {
 		oldName += ".md"
 	}
-	if !strings.HasPrefix(newName, "notes/") {
-		newName = "notes/" + newName
+	if !strings.HasPrefix(newName, domain.NotePrefix) {
+		newName = domain.NotePrefix + newName
 	}
 	if !strings.HasSuffix(newName, ".md") {
 		newName += ".md"
@@ -116,7 +126,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 	if !oldExists {
 		if mods, err := s.store.GetFilesModsAndTags(); err == nil {
 			for _, m := range mods {
-				if m.Arquivo == oldName || m.Arquivo == strings.TrimPrefix(oldName, "notes/") {
+				if m.Arquivo == oldName || m.Arquivo == strings.TrimPrefix(oldName, domain.NotePrefix) {
 					oldExists = true
 					break
 				}
@@ -201,6 +211,12 @@ func (s *NoteService) Rename(oldName, newName string) error {
 	// Atualiza os wikilinks e URLs nos arquivos que referenciavam a nota antiga
 	if err := s.UpdateBacklinksOnRename(oldName, newName); err != nil {
 		slog.Error("update backlinks on rename", "oldName", oldName, "newName", newName, "error", err)
+	}
+
+	// Propaga a mudança de nome para filhas: atualiza o campo `pai:` de todas as
+	// notas que apontavam para o nome antigo, para que não se tornem órfãs.
+	if err := s.UpdateParentOnRename(oldName, newName); err != nil {
+		slog.Error("update parent on rename", "oldName", oldName, "newName", newName, "error", err)
 	}
 
 	return nil
@@ -316,7 +332,7 @@ func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
 					if oldExt != "" && normTarget+strings.ToLower(oldExt) == strings.ToLower(oldBase) {
 						return strings.Replace(match, target, newTitle, 1)
 					}
-					if normTarget+".md" == strings.ToLower(oldBase) || "notes/"+normTarget+".md" == strings.ToLower(oldName) {
+					if normTarget+".md" == strings.ToLower(oldBase) || domain.NotePrefix+normTarget+".md" == strings.ToLower(oldName) {
 						return strings.Replace(match, target, newTitle, 1)
 					}
 				}
@@ -336,7 +352,7 @@ func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
 			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldUrlEsc, "file="+newUrlEsc)
 			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldName, "file="+newName)
 
-			for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/", "images/", "notes/"} {
+			for _, prefix := range domain.AllowedFilePrefixes {
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBase, prefix+newBase)
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseEsc, prefix+newBaseEsc)
 				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseUrlEsc, prefix+newBaseUrlEsc)
@@ -347,6 +363,71 @@ func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
 			if err := s.Save(refFile, updatedContent, nil); err != nil {
 				slog.Error("update referring note during rename", "refFile", refFile, "error", err)
 			}
+		}
+	}
+
+	return nil
+}
+
+// UpdateParentOnRename varre todas as notas e atualiza o campo `pai:` do
+// frontmatter naquelas que apontam para oldName, substituindo pelo newName.
+// Chamado automaticamente por Rename para evitar que filhas virem órfãs.
+func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
+	if oldName == "" || newName == "" || oldName == newName {
+		return nil
+	}
+
+	// Nome canônico (sem pasta e sem extensão) — é o formato gravado em `pai:`.
+	oldBase := filepath.Base(oldName)
+	oldShort := strings.TrimSuffix(oldBase, filepath.Ext(oldBase))
+	newBase := filepath.Base(newName)
+	newShort := strings.TrimSuffix(newBase, filepath.Ext(newBase))
+
+	if oldShort == newShort {
+		return nil // o nome-base não mudou; nenhuma filha precisará ser atualizada
+	}
+
+	contents, err := s.notes.GetAllNotesContent()
+	if err != nil {
+		return fmt.Errorf("UpdateParentOnRename: load notes: %w", err)
+	}
+
+	for refFile, refContent := range contents {
+		if refFile == oldName || refFile == newName || refContent == "" {
+			continue
+		}
+
+		fm, _, fmErr := ParseFrontmatter(refContent)
+		if fmErr != nil || fm == nil {
+			continue
+		}
+
+		// Compara já na forma canônica (nome-base minúsculo): a mesma regra usada
+		// na leitura da hierarquia (hierarchy.go), tanto para a chave `pai` quanto
+		// para a legada `parent`, e tolerando [[]], aspas, alias e caminho.
+		if ParentCompareKey(ParentRefOfContent(refContent)) != strings.ToLower(oldShort) {
+			continue // esta nota não é filha do alvo
+		}
+
+		// Grava sempre a forma canônica (nome curto, sem extensão, sem pasta)
+		updated, updErr := UpdateFrontmatterProperty(refContent, "pai", newShort)
+		if updErr != nil {
+			slog.Error("UpdateParentOnRename: update frontmatter", "file", refFile, "error", updErr)
+			continue
+		}
+
+		// Remove chave legada `parent:` se existir
+		if _, hasLegacy := fm["parent"]; hasLegacy {
+			updated, updErr = UpdateFrontmatterProperty(updated, "parent", "")
+			if updErr != nil {
+				slog.Error("UpdateParentOnRename: remove legacy parent key", "file", refFile, "error", updErr)
+			}
+		}
+
+		if err := s.Save(refFile, updated, nil); err != nil {
+			slog.Error("UpdateParentOnRename: save", "file", refFile, "error", err)
+		} else {
+			slog.Info("UpdateParentOnRename: pai atualizado", "file", refFile, "old", oldShort, "new", newShort)
 		}
 	}
 
@@ -557,6 +638,10 @@ func (s *NoteService) processAndSave(ctx context.Context, filename, content stri
 	if err := s.store.ReplaceFileIndexes(ctx, filename, docs, links, cleanTags, todos, modTime); err != nil {
 		return fmt.Errorf("replace file indexes: %w", err)
 	}
+
+	// A hierarquia (`pai:`) pode ter mudado: o badge de filhas da sidebar precisa
+	// ser recalculado na próxima leitura.
+	s.invalidateChildrenCounts()
 
 	return nil
 }

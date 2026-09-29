@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ton618/core/internal/core/db"
+	"ton618/core/internal/core/domain"
 	"ton618/core/internal/httputil"
 	"ton618/core/internal/processor"
 	"ton618/core/internal/watcher"
@@ -21,11 +22,9 @@ import (
 // editor são gravadas — separado de notes/ para não misturar binários com as
 // notas markdown (as notas vivem no SQLite, a pasta só continha os img_*).
 //
-// ⚠️ Ao mudar este prefixo, mantenha em sincronia: allowedPrefixes
-// (handlers_file.go), Watcher.MonitoredSubDirs (imagens do disco no boot),
-// imageSubdir (handlers_filetype.go) e as listas de prefixos de link
-// (processor/markdown.go e note_service.go).
-const imagesPrefix = "images/"
+// Aponta para domain.ImagePrefix (fonte única dos prefixos — DECISIONS §12);
+// não replique a string "images/" em outros arquivos.
+const imagesPrefix = domain.ImagePrefix
 
 // HandleUploadAttachment handles generic file uploads (attachments) and packages them into a ZIP.
 func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +94,7 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 	zipFile.Close()
 
 	// Cria documento FTS com a lista de arquivos (pesquisavel)
-	filename := "attachments/" + zipName
+	filename := domain.AttachmentPrefix + zipName
 	docID := processor.HashFunc("att-" + zipName)
 	fileListStr := listText.String()
 
@@ -157,13 +156,13 @@ func (ctx *HandlerContext) HandleUpload(w http.ResponseWriter, r *http.Request) 
 
 	var filename string
 	if isPdf {
-		filename = "pdfs/" + filepath.Base(header.Filename)
+		filename = domain.PDFPrefix + filepath.Base(header.Filename)
 		// Garante extensao .pdf
 		if !strings.HasSuffix(filename, ".pdf") {
 			filename += ".pdf"
 		}
 	} else if isEpub {
-		filename = "epubs/" + filepath.Base(header.Filename)
+		filename = domain.EPUBPrefix + filepath.Base(header.Filename)
 		// Garante extensao .epub
 		if !strings.HasSuffix(filename, ".epub") {
 			filename += ".epub"
@@ -289,7 +288,7 @@ func isSupportedImageExt(ext string) bool {
 // imageCleanupPrefixes são os diretórios varridos pela limpeza de imagens órfãs:
 // o canônico (images/) e o legado (notes/), onde as imagens ficavam antes de
 // 17/09/2026 — os arquivos antigos continuam sendo limpos normalmente.
-var imageCleanupPrefixes = []string{imagesPrefix, "notes/"}
+var imageCleanupPrefixes = []string{imagesPrefix, domain.NotePrefix}
 
 // HandleCleanupImages varre os diretórios de imagens em busca de arquivos img_*
 // que não são referenciados por nenhum documento (texto), e os remove

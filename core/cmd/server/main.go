@@ -118,7 +118,7 @@ func main() {
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
-	embeddingsCtx := embeddings.NewHandlerContext(cfg, store)
+	embeddingsCtx := embeddings.NewHandlerContext(cfg, store).WithModel(modelStore)
 
 	go func() {
 		slog.Info("Sincronizando notas do banco de dados em segundo plano...")

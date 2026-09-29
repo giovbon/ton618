@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
 
+	"ton618/core/internal/core/domain"
 	"ton618/core/internal/httputil"
 	"ton618/core/internal/processor"
 	"ton618/core/internal/watcher"
@@ -83,9 +84,6 @@ var compressedExts = map[string]bool{
 	".epub":  true,
 }
 
-// allowedPrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
-var allowedPrefixes = []string{"notes/", "attachments/", "pdfs/", "archives/", "epubs/", "images/"}
-
 // ── Helpers de normalizacao ──
 
 // copyFile copies a file from src to dst path, creating parent dirs as needed.
@@ -107,23 +105,22 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// noteFilename garante que o nome do arquivo:
+// NoteFilename garante que o nome do arquivo:
 // 1. Tenha extensao .md
-// 2. Esteja no diretorio notes/
+// 2. Esteja em um dos diretórios permitidos (domain.AllowedFilePrefixes)
 func NoteFilename(name string) string {
-	ext := strings.ToLower(filepath.Ext(name))
-	if ext == "" {
+	if filepath.Ext(name) == "" {
 		name += ".md"
 	}
-	if !strings.HasPrefix(name, "notes/") && !strings.HasPrefix(name, "pdfs/") && !strings.HasPrefix(name, "attachments/") && !strings.HasPrefix(name, "archives/") && !strings.HasPrefix(name, "epubs/") && !strings.HasPrefix(name, "images/") {
-		name = "notes/" + name
+	if !domain.HasAllowedFilePrefix(name) {
+		name = domain.NotePrefix + name
 	}
 	return name
 }
 
 // IsNoteOrPdf checks if a file path belongs to a note, PDF, attachment or image document.
 func IsNoteOrPdf(path string) bool {
-	return strings.HasPrefix(path, "notes/") || strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "images/")
+	return domain.HasInlineDocPrefix(path)
 }
 
 // ── File handlers ──
@@ -138,14 +135,7 @@ func (ctx *HandlerContext) HandleFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	hasPrefix := false
-	for _, p := range allowedPrefixes {
-		if strings.HasPrefix(raw, p) {
-			hasPrefix = true
-			break
-		}
-	}
-	if !hasPrefix {
+	if !domain.HasAllowedFilePrefix(raw) {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
@@ -202,14 +192,7 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	// Segurança: só permite subdiretórios conhecidos, previne path traversal
-	hasPrefix := false
-	for _, p := range allowedPrefixes {
-		if strings.HasPrefix(raw, p) {
-			hasPrefix = true
-			break
-		}
-	}
-	if !hasPrefix {
+	if !domain.HasAllowedFilePrefix(raw) {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
@@ -381,6 +364,14 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 	}
 
 	if ft == fileTypeNote {
+		// Conta as filhas ANTES de renomear para informar o usuário: o Rename já
+		// propaga o `pai:` delas (NoteService.UpdateParentOnRename), então elas
+		// deixaram de ficar órfãs — mas a mudança precisa ser visível.
+		childrenUpdated := 0
+		if _, kids, hErr := ctx.Notes.GetHierarchy(oldName); hErr == nil {
+			childrenUpdated = len(kids)
+		}
+
 		// Note: delega para o NoteService
 		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
 			msg := err.Error()
@@ -392,6 +383,9 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		w.Header().Set("HX-Trigger", "reload-sidebar")
+		if childrenUpdated > 0 {
+			w.Header().Set("X-Children-Updated", strconv.Itoa(childrenUpdated))
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -516,21 +510,23 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		mtime := time.Now().UTC().Format(time.RFC3339)
-		if err := ctx.Store.SaveNote(newFilename, content, mtime); err != nil {
+		// As tags da original (inclusive as que só existem no banco, sem
+		// frontmatter) precisam estar no conteúdo da cópia: a reindexação
+		// reconstrói a tabela `tags` a partir do frontmatter.
+		if tags, tagErr := ctx.Store.GetFileTags(oldFilename); tagErr == nil && len(tags) > 0 {
+			if merged, mErr := MergeFrontmatterTags(content, tags); mErr == nil {
+				content = merged
+			}
+		}
+
+		// Gravação ÚNICA + reindexação: Notes.Save indexa documentos, links, tags
+		// e todos numa transação. Antes havia aqui um Store.SaveNote direto antes
+		// do Save, que era redundante e deixava o índice inconsistente por um
+		// instante (o segundo Save já regrava a nota).
+		if err := ctx.Notes.Save(newFilename, content, nil); err != nil {
+			slog.Error("save duplicated note", "file", newFilename, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}
-
-		// Copy tags
-		tags, err := ctx.Store.GetFileTags(oldFilename)
-		if err == nil && len(tags) > 0 {
-			ctx.Store.SetFileTags(newFilename, tags)
-		}
-
-		// Reindex
-		if err := ctx.Notes.Save(newFilename, content, nil); err != nil {
-			slog.Error("reindex duplicated note", "file", newFilename, "error", err)
 		}
 	} else {
 		// PDF/ZIP/EPUB: copia o arquivo físico

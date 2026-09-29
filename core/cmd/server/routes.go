@@ -95,6 +95,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.With(embLimiter.Middleware).Post("/api/embeddings/search", embeddingsCtx.HandleEmbeddingSearch)
 	mux.Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
 	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
+	mux.Get("/api/embeddings/model-status", embeddingsCtx.HandleModelStatus)
 	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
 	mux.Post("/api/embeddings/reset", embeddingsCtx.HandleEmbeddingReset)
 

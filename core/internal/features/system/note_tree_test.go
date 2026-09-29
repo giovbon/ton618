@@ -636,3 +636,47 @@ func TestHandleUpdateNoteProperty_ParentAllowsMissingAndRemoval(t *testing.T) {
 		t.Fatalf("propriedade deveria ter sido removida:\n%s", content)
 	}
 }
+
+// A hierarquia é um árvore (1 pai por nota), então um valor com vírgula — que
+// normalmente é a tentativa de declarar MÚLTIPLOS pais — deve ser recusado com
+// 400. Sem esta guarda, `pai: a, b` viraria um nome inexistente e a nota cairia
+// na raiz sem aviso (regressão silenciosa).
+func TestHandleUpdateNoteProperty_ParentRejectsMultipleParents(t *testing.T) {
+	ctx := newTestContext(t)
+	saveTestNote(t, ctx, "notes/a.md", "# A", "")
+	saveTestNote(t, ctx, "notes/b.md", "# B", "")
+	saveTestNote(t, ctx, "notes/filha.md", "# Filha", "")
+
+	// Formato mais comum: "a, b".
+	rr := postProperty(t, ctx, "notes/filha.md", parentKey, "a, b")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("múltiplos pais deveriam ser recusados, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "só pode ter UM pai") {
+		t.Errorf("mensagem inesperada: %s", rr.Body.String())
+	}
+
+	// Lista YAML com colchetes: `pai: [a, b]` (sem aspas vira lista de 2 itens).
+	rr = postProperty(t, ctx, "notes/filha.md", parentKey, "[a, b]")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("lista YAML com 2 itens deveria ser recusada, got %d", rr.Code)
+	}
+
+	// O frontmatter NÃO pode ter sido gravado com a forma de lista.
+	content, _ := ctx.Store.GetNote("notes/filha.md")
+	if strings.Contains(content, parentKey+": a, b") || strings.Contains(content, parentKey+": [a, b]") {
+		t.Fatalf("o valor de múltiplos pais não podia ser gravado:\n%s", content)
+	}
+
+	// Nenhum vínculo válido é criado e a nota continua na raiz.
+	resp := fetchDatabase(t, ctx)
+	if resp.Meta.HasTree {
+		t.Error("vínculo com múltiplos pais não deve gerar árvore")
+	}
+	if kids := childFiles(t, findRow(resp.Data, "notes/a.md")); len(kids) != 0 {
+		t.Fatalf("a.md não deve ter filhas, got %v", kids)
+	}
+	if kids := childFiles(t, findRow(resp.Data, "notes/b.md")); len(kids) != 0 {
+		t.Fatalf("b.md não deve ter filhas, got %v", kids)
+	}
+}

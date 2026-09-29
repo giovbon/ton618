@@ -15,12 +15,12 @@ func TestDisplayName_RemoveCapturaPrefix(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"captura com caminho", "notes/captura-terremoto-7-4.md", "terremoto-7-4.md"},
-		{"captura sem caminho", "captura-artigo-web.md", "artigo-web.md"},
-		{"nota normal mantém", "notes/nota-qualquer.md", "nota-qualquer.md"},
+		{"captura com caminho", "notes/captura-terremoto-7-4.md", "terremoto-7-4"},
+		{"captura sem caminho", "captura-artigo-web.md", "artigo-web"},
+		{"nota normal mantém", "notes/nota-qualquer.md", "nota-qualquer"},
 		{"pdf mantém", "pdfs/doc.pdf", "doc.pdf"},
 		{"anexo mantém", "attachments/arquivo.zip", "arquivo.zip"},
-		{"captura em subcaminho", "notes/captura-a.md", "a.md"},
+		{"captura em subcaminho", "notes/captura-a.md", "a"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,5 +273,53 @@ func TestDetectNoteType_WeeklyIsAnchored(t *testing.T) {
 		if got := DetectNoteType(nil, tt.arquivo); got != tt.expected {
 			t.Errorf("DetectNoteType(nil, %q) = %v, want %v", tt.arquivo, got, tt.expected)
 		}
+	}
+}
+
+// TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica trava a consolidação do
+// layout do docs/ (DECISIONS §12): as listas derivadas precisam cobrir
+// exatamente AllowedFilePrefixes, sem literais duplicados espalhados.
+func TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica(t *testing.T) {
+	allowed := make(map[string]bool, len(AllowedFilePrefixes))
+	for _, p := range AllowedFilePrefixes {
+		allowed[p] = true
+	}
+
+	if len(NonNoteFilePrefixes)+1 != len(AllowedFilePrefixes) {
+		t.Errorf("NonNoteFilePrefixes deveria ter %d itens, got %d", len(AllowedFilePrefixes)-1, len(NonNoteFilePrefixes))
+	}
+	for i, p := range NonNoteFilePrefixes {
+		if !allowed[p] {
+			t.Errorf("NonNoteFilePrefixes[%d]=%q não está em AllowedFilePrefixes", i, p)
+		}
+		if p == NotePrefix {
+			t.Error("NonNoteFilePrefixes não deve conter notes/")
+		}
+		if FileDirs[i] != strings.TrimSuffix(p, "/") {
+			t.Errorf("FileDirs[%d]=%q não corresponde a %q", i, FileDirs[i], p)
+		}
+	}
+	if len(FileDirs) != len(NonNoteFilePrefixes) {
+		t.Errorf("FileDirs deveria espelhar NonNoteFilePrefixes (%d), got %d", len(NonNoteFilePrefixes), len(FileDirs))
+	}
+	if len(SearchDirs) != len(FileDirs)+1 || SearchDirs[len(SearchDirs)-1] != NotesDir {
+		t.Errorf("SearchDirs deveria ser FileDirs + notes/ no fim, got %v", SearchDirs)
+	}
+
+	// Matchers usados pelos handlers.
+	if !HasAllowedFilePrefix("notes/x.md") || !HasAllowedFilePrefix("images/a.png") {
+		t.Error("prefixos permitidos deveriam ser aceitos")
+	}
+	if HasAllowedFilePrefix("etc/passwd") || HasAllowedFilePrefix("x.md") {
+		t.Error("caminho fora dos prefixos permitidos não deveria ser aceito")
+	}
+	if !HasInlineDocPrefix("attachments/a.zip") || !HasInlineDocPrefix("images/a.png") {
+		t.Error("InlineDocPrefixes deve incluir attachments/ e images/")
+	}
+	if HasInlineDocPrefix("epubs/livro.epub") || HasInlineDocPrefix("archives/x.zip") {
+		t.Error("InlineDocPrefixes não deve incluir epubs/ nem archives/")
+	}
+	if HasNonNoteFilePrefix("notes/x.md") || !HasNonNoteFilePrefix("pdfs/x.pdf") {
+		t.Error("HasNonNoteFilePrefix deve excluir notes/")
 	}
 }

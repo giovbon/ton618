@@ -41,6 +41,9 @@ templ editorContent(data domain.EditorData) {
         </button>
     </div>
 
+    <!-- Hierarquia: pai (botão "Acima de") e filhas (badge + popover) -->
+    @HierarchyBar(data)
+
     <!-- Frontmatter toggle -->
     <div class="mb-3">
         <button

@@ -825,3 +825,160 @@ func TestNoteService_GetMany_DetectsNoteType(t *testing.T) {
 		}
 	}
 }
+
+// ── Tests: UpdateParentOnRename ──
+
+// newMockServiceForParent cria um NoteService com um conjunto de notas
+// em memória que pode ser inspecionado após a execução.
+func newMockServiceForParent(t *testing.T, notes map[string]string) (*NoteService, *map[string]string) {
+	t.Helper()
+	saved := make(map[string]string)
+	for k, v := range notes {
+		saved[k] = v
+	}
+
+	noteStore := &mockNoteStore{
+		getAllNotesContentFn: func() (map[string]string, error) {
+			out := make(map[string]string, len(saved))
+			for k, v := range saved {
+				out[k] = v
+			}
+			return out, nil
+		},
+		getNoteFn: func(filename string) (string, error) {
+			return saved[filename], nil
+		},
+		saveNoteFn: func(filename, content, mtime string) error {
+			saved[filename] = content
+			return nil
+		},
+		noteExistsFn: func(filename string) bool {
+			_, ok := saved[filename]
+			return ok
+		},
+	}
+
+	svc := &NoteService{
+		store:   &mockFileOps{},
+		notes:   noteStore,
+		tags:    &mockTagStore{},
+		links:   &mockLinkStore{},
+		pop:     &mockPopStore{},
+		fileMod: &mockFileModStore{},
+		docsDir: t.TempDir(),
+	}
+	return svc, &saved
+}
+
+func TestUpdateParentOnRename_PropagaParaFilha(t *testing.T) {
+	filha := "notes/filha.md"
+	pai := "notes/projeto.md"
+	novoPai := "notes/projeto-renomeado.md"
+
+	notas := map[string]string{
+		filha: "---\npai: projeto\n---\n\nConteúdo da filha.\n",
+		pai:   "---\ntitle: Projeto\n---\n\nConteúdo do pai.\n",
+	}
+
+	svc, saved := newMockServiceForParent(t, notas)
+
+	if err := svc.UpdateParentOnRename(pai, novoPai); err != nil {
+		t.Fatalf("UpdateParentOnRename: %v", err)
+	}
+
+	got := (*saved)[filha]
+	if !strings.Contains(got, "pai: projeto-renomeado") {
+		t.Errorf("esperado pai: projeto-renomeado no frontmatter da filha, got:\n%s", got)
+	}
+	if strings.Contains(got, "pai: projeto\n") {
+		t.Errorf("valor antigo (pai: projeto) ainda presente no frontmatter")
+	}
+}
+
+func TestUpdateParentOnRename_VariantesDeReferencia(t *testing.T) {
+	novoPai := "notes/novo-pai.md"
+
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"wikilink", "---\npai: \"[[velho-pai]]\"\n---\nTexto\n"},
+		{"com extensao", "---\npai: velho-pai.md\n---\nTexto\n"},
+		{"caminho completo", "---\npai: notes/velho-pai.md\n---\nTexto\n"},
+		{"caixa alta", "---\npai: Velho-Pai\n---\nTexto\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			notas := map[string]string{
+				"notes/filha.md": tc.content,
+			}
+			svc, saved := newMockServiceForParent(t, notas)
+
+			if err := svc.UpdateParentOnRename("notes/velho-pai.md", novoPai); err != nil {
+				t.Fatalf("UpdateParentOnRename: %v", err)
+			}
+
+			got := (*saved)["notes/filha.md"]
+			if !strings.Contains(got, "pai: novo-pai") {
+				t.Errorf("[%s] esperado pai: novo-pai, got:\n%s", tc.name, got)
+			}
+		})
+	}
+}
+
+func TestUpdateParentOnRename_ChaveLegadaParent(t *testing.T) {
+	notas := map[string]string{
+		"notes/filha.md": "---\nparent: velho-pai\n---\nTexto\n",
+	}
+	svc, saved := newMockServiceForParent(t, notas)
+
+	if err := svc.UpdateParentOnRename("notes/velho-pai.md", "notes/novo-pai.md"); err != nil {
+		t.Fatalf("UpdateParentOnRename: %v", err)
+	}
+
+	got := (*saved)["notes/filha.md"]
+	if !strings.Contains(got, "pai: novo-pai") {
+		t.Errorf("esperado pai: novo-pai (migrado da chave legada), got:\n%s", got)
+	}
+	if strings.Contains(got, "parent:") {
+		t.Errorf("chave legada 'parent' ainda presente após migração:\n%s", got)
+	}
+}
+
+func TestUpdateParentOnRename_IgnoraNotasSemPai(t *testing.T) {
+	semPai := "notes/sem-pai.md"
+	notas := map[string]string{
+		semPai: "---\ntitle: Sem pai\n---\nTexto\n",
+	}
+	original := notas[semPai]
+
+	svc, saved := newMockServiceForParent(t, notas)
+
+	if err := svc.UpdateParentOnRename("notes/velho-pai.md", "notes/novo-pai.md"); err != nil {
+		t.Fatalf("UpdateParentOnRename: %v", err)
+	}
+
+	if (*saved)[semPai] != original {
+		t.Errorf("nota sem pai foi modificada indevidamente:\nbefore: %s\nafter: %s", original, (*saved)[semPai])
+	}
+}
+
+func TestUpdateParentOnRename_NomeBaseIgual(t *testing.T) {
+	// Se apenas o prefixo de pasta muda mas o nome-base é o mesmo, não deve tocar em nada
+	notas := map[string]string{
+		"notes/filha.md": "---\npai: projeto\n---\nTexto\n",
+	}
+	original := notas["notes/filha.md"]
+
+	svc, saved := newMockServiceForParent(t, notas)
+
+	// Simulação: renomear "notes/projeto.md" para "notes/projeto.md" (sem mudança no nome-base)
+	if err := svc.UpdateParentOnRename("notes/projeto.md", "notes/projeto.md"); err != nil {
+		t.Fatalf("UpdateParentOnRename: %v", err)
+	}
+
+	if (*saved)["notes/filha.md"] != original {
+		t.Errorf("nota foi modificada quando não deveria:\n%s", (*saved)["notes/filha.md"])
+	}
+}

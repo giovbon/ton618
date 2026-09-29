@@ -217,7 +217,7 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		rawNew := newValStr
 
 		ext := strings.ToLower(filepath.Ext(rawOld))
-		isNote := ext == ".md" || strings.HasPrefix(rawOld, "notes/") || (!strings.HasPrefix(rawOld, "pdfs/") && !strings.HasPrefix(rawOld, "attachments/") && !strings.HasPrefix(rawOld, "archives/") && !strings.HasPrefix(rawOld, "epubs/"))
+		isNote := ext == ".md" || strings.HasPrefix(rawOld, domain.NotePrefix) || !domain.HasNonNoteFilePrefix(rawOld)
 
 		var oldName, newName string
 
@@ -231,13 +231,13 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			dir := filepath.Dir(rawOld)
 			if dir == "." || dir == "" {
 				if ext == ".pdf" {
-					dir = "pdfs"
+					dir = domain.PDFDir
 				} else if ext == ".epub" {
-					dir = "epubs"
+					dir = domain.EPUBDir
 				} else if ext == ".zip" || ext == ".rar" {
-					dir = "attachments"
+					dir = domain.AttachmentDir
 				} else {
-					dir = "notes"
+					dir = domain.NotesDir
 				}
 			}
 
@@ -248,7 +248,7 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 
 			if _, err := os.Stat(oldPath); os.IsNotExist(err) {
 				found := false
-				for _, sd := range []string{"pdfs", "epubs", "attachments", "archives", "notes"} {
+				for _, sd := range domain.SearchDirs {
 					testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
 					if _, err := os.Stat(testPath); err == nil {
 						oldName = sd + "/" + basename
@@ -340,6 +340,16 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 	removeLegacyParentKey := false
 	if isParentKey(req.Key) {
 		ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
+		// Uma nota tem NO MÁXIMO 1 pai (a hierarquia é uma árvore, não um grafo
+		// — ver DECISIONS 6.17/6.19). Uma vírgula no valor normalmente significa
+		// que o usuário tentou declarar mais de um pai; sem esta guarda o valor
+		// `a, b` viraria um nome inexistente e a nota cairia na raiz em silêncio.
+		// O caso YAML de lista (`[a, b]`, `[[a, b]]`) é capturado pelo mesmo
+		// padrão após a normalização.
+		if strings.Contains(ref, ",") {
+			http.Error(w, "uma nota só pode ter UM pai — remova a vírgula do campo 'Pai'", http.StatusBadRequest)
+			return
+		}
 		if err := ctx.validateParentAssignment(req.File, ref); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

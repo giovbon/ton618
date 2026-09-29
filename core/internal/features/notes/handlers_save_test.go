@@ -327,6 +327,108 @@ func TestHandleDuplicateNote_NotaComFrontmatterTitle_PrefixaTitle(t *testing.T) 
 	}
 }
 
+// TestHandleDuplicateNote_PreservaTagsDoBanco cobre a gravação ÚNICA do
+// HandleDuplicateNote: a tabela `tags` é reconstruída a partir do frontmatter na
+// reindexação, então uma tag que só existe no banco (sem frontmatter) precisa ser
+// mesclada no conteúdo da cópia — antes o SetFileTags era sobrescrito.
+func TestHandleDuplicateNote_PreservaTagsDoBanco(t *testing.T) {
+	ctx := newTestContext(t)
+	// Conteúdo SEM frontmatter: a tag fica só na tabela tags.
+	saveTestNote(t, ctx, "notes/nota-tag.md", "# Nota\n\nConteudo.", "tag-do-banco")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=notes/nota-tag.md")
+	req := httptest.NewRequest("POST", "/file/duplicate", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleDuplicateNote(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("esperado 200, got %d — body: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rec.Body).Decode(&resp)
+	newFilename, _ := resp["new_filename"].(string)
+
+	tags, err := ctx.Store.GetFileTags(newFilename)
+	if err != nil {
+		t.Fatalf("GetFileTags: %v", err)
+	}
+	found := false
+	for _, tag := range tags {
+		if tag == "tag-do-banco" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("tag 'tag-do-banco' perdida na cópia; tags da cópia: %v", tags)
+	}
+}
+
+// TestHandleFileRename_ReportaEFilhasRepontadas cobre o item "aviso no rename":
+// o backend propaga o `pai:` das filhas (elas não ficam órfãs) e informa quantas
+// foram atualizadas no header X-Children-Updated, que o editor exibe ao usuário.
+func TestHandleFileRename_ReportaEFilhasRepontadas(t *testing.T) {
+	ctx := newTestContext(t)
+	saveTestNote(t, ctx, "notes/pai.md", "---\ntitle: Pai\n---\n\nConteudo do pai.\n", "")
+	saveTestNote(t, ctx, "notes/filha.md", "---\npai: pai\n---\n\nConteudo da filha.\n", "")
+	saveTestNote(t, ctx, "notes/outra.md", "---\ntitle: Outra\n---\n\nSem hierarquia.\n", "")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=notes/pai.md&new=notes/pai-renomeado.md")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("esperado 200, got %d — body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Children-Updated"); got != "1" {
+		t.Errorf("esperado X-Children-Updated=1, got %q", got)
+	}
+
+	// A filha foi repontada para o novo nome (não virou órfã).
+	childContent, err := ctx.Store.GetNote("notes/filha.md")
+	if err != nil {
+		t.Fatalf("GetNote(filha): %v", err)
+	}
+	if !strings.Contains(childContent, "pai: pai-renomeado") {
+		t.Errorf("esperado `pai: pai-renomeado` no frontmatter da filha, got:\n%s", childContent)
+	}
+
+	// A nota sem hierarquia ficou intacta.
+	otherContent, err := ctx.Store.GetNote("notes/outra.md")
+	if err != nil {
+		t.Fatalf("GetNote(outra): %v", err)
+	}
+	if strings.Contains(otherContent, "pai:") {
+		t.Errorf("nota sem hierarquia foi modificada:\n%s", otherContent)
+	}
+}
+
+// TestHandleFileRename_SemFilhasNaoEnviaHeader garante que o header só aparece
+// quando há filhas (o editor usa a ausência para não exibir aviso).
+func TestHandleFileRename_SemFilhasNaoEnviaHeader(t *testing.T) {
+	ctx := newTestContext(t)
+	saveTestNote(t, ctx, "notes/sozinha.md", "---\ntitle: Sozinha\n---\n\nConteudo.\n", "")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=notes/sozinha.md&new=notes/sozinha-2.md")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("esperado 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("X-Children-Updated"); got != "" {
+		t.Errorf("header não deveria ser enviado sem filhas, got %q", got)
+	}
+}
+
 // ── HandleCapture ─────────────────────────────────────────────────────
 
 func TestHandleCapture_MetodoInvalido_Retorna405(t *testing.T) {

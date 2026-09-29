@@ -663,9 +663,7 @@ Toda a feature foi validada **executando o app** (sandbox isolado: `DOCS_DIR`/`D
 
 ### Pendências (escopo futuro, combinado com o usuário)
 
-- Botão **"Acima de"** no editor (abaixo do badge de backlinks) para escolher o pai sem digitar YAML.
-- **Rename do pai** ainda não propaga o `parent` das filhas — hoje a filha vira órfã e volta para a raiz (`UpdateBacklinksOnRename` é o gancho natural).
-- Contagem/exibição de filhas no editor e na sidebar.
+- ✅ **Implementadas em 6.21 (28/09/2026):** botão **"Nota-mãe"** e contagem/exibição de filhas, ambos no editor e na sidebar; **rename do pai propaga o `pai:` das filhas** (elas não viram mais órfãs) com aviso na UI.
 
 ## 6.18 Fins de linha — `.gitattributes` com LF (16/09/2026)
 
@@ -792,6 +790,96 @@ O link `#mobile-nav-database` **saiu do menu mobile** (árvore com várias colun
 - Frontend: `tsc` limpo, `npm test` **34/34** (inclui os 3 novos casos do `&nbsp;`).
 - E2E no navegador (sandbox isolado, porta 6199): fontes carregando dos arquivos locais (`document.fonts.check` = true para Noto Sans e Geist Mono, com o frontmatter/TOC em Geist Mono), nota com `&nbsp;` e `\&nbsp;` gravados abrindo **sem** o lixo, TOC renomeando/removendo/criando títulos (e o markdown salvo refletindo cada caso) e parágrafo vazio novo gravando linha em branco, sem `&nbsp;`.
 
+## 6.21 Hierarquia: rename propaga `pai:`, barra do editor, prefixos e modelo (28/09/2026)
+
+📍 `core/internal/features/notes/{hierarchy.go,hierarchy_bar.templ,note_service.go,handlers_file.go,handlers_editor.go,editor.templ,sidebar_tree.templ}` | `core/internal/features/system/{note_tree.go,handlers_core.go}` | `core/internal/core/domain/data.go` | `core/internal/features/embeddings/model_files.go` | `core/web/src/{editor-hierarchy.js,editor-frontmatter.js,editor-init.js}`
+
+Fecha as pendências do 6.17 e os itens levantados na revisão de código.
+
+### 1. Rename do pai propaga o `pai:` das filhas (fim das órfãs silenciosas)
+
+`NoteService.UpdateParentOnRename(old, new)` roda automaticamente ao final de `Rename`: varre as notas (uma query, `GetAllNotesContent`) e, para cada uma cujo `pai:` casa com o nome-base antigo, regrava `pai: <novo-nome>` (forma canônica) e remove a chave legada `parent:`. Antes a filha voltava silenciosamente para a raiz.
+
+- `NormalizeParentRef` e a nova `ParentCompareKey` (nome-base minúsculo, sem pasta e sem `.md`) **saíram de `system/note_tree.go` para `notes/hierarchy.go`**: Tabulator, rename e editor passam a usar a MESMA regra — antes o rename mantinha uma cópia inline da normalização.
+- **Aviso na UI:** `POST /file/rename` responde com o header `X-Children-Updated: N` (contagem feita ANTES do rename, via `NoteService.GetHierarchy`). O editor lê o header em `doRename` e mostra "N notas filhas atualizadas" na barra de hierarquia; sem filhas não há header nem aviso.
+
+### 2. Barra de hierarquia no editor ("Nota-mãe" + filhas)
+
+`notes.HierarchyBar(data)` (`hierarchy_bar.templ`), logo abaixo do badge de backlinks:
+
+| Peça | Comportamento |
+|---|---|
+| **NOTA-MÃE:** | mostra a nota-mãe atual (`—` quando raiz) e abre um picker pesquisável com a lista de `/api/notes`, excluindo a própria nota. Grava com a rota que já existia (`POST /api/notes/update-property`, `key=pai`) |
+| **×** | remove a nota-mãe (a nota volta para a raiz) |
+| **Badge de filhas** | popover com links para as filhas (o `/editor` redireciona para o editor especializado conforme o tipo) |
+
+- Nenhuma validação nova: **auto-pai e ciclo continuam recusados com HTTP 400** pelo `validateParentAssignment` do Tabulator; o picker mostra o erro devolvido.
+- `domain.EditorData` ganhou `Parent string` e `Children []domain.NoteRef`; `NoteService.GetHierarchy(filename)` preenche os dois numa query (`GetAllNotesContent`) e é chamado **só pelo `HandleEditor`** — drawing/mindmap/semana não pagam o custo (a nota semanal abre no editor markdown e ganha a barra de graça).
+- **Sidebar:** `HandleGetSidebar` preenche `NoteItem.ChildrenCount` com `NoteService.GetChildrenCounts()` (contagem por nome-base, a mesma chave gravada em `pai:`) e `SidebarNoteItem` exibe um badge indigo quando > 0. Como a sidebar é paginada com scroll infinito (uma requisição por página) e o cálculo lê o frontmatter de TODAS as notas, o mapa é **memoizado por 5s** (`childrenCacheTTL`) e **invalidado a cada gravação do `NoteService`** (`processAndSave`/`Delete`) — o TTL cobre escritas fora dele (ex: watcher).
+
+### 3. `HandleDuplicateNote` — uma única gravação
+
+Havia `Store.SaveNote` **+** `GetFileTags`/`SetFileTags` **+** `Notes.Save` na mesma nota. O `SetFileTags` era inócuo (a reindexação reconstrói a tabela `tags` a partir do frontmatter: `ReplaceFileIndexes` apaga e reinsere) e o `SaveNote` era redundante, deixando o índice inconsistente por um instante.
+
+- As tags da original agora são **mescladas no frontmatter da cópia** (`MergeFrontmatterTags`, união sem duplicatas, comparação case-insensitive) — é isso que preserva tags que existiam só no banco.
+- Uma só gravação/reindexação (`Notes.Save`) e a falha dela passou a devolver HTTP 500 (antes só era logada).
+
+### 4. Prefixos de diretório: fonte única em `domain`
+
+As listas viviam em `allowedPrefixes` (handlers_file), `NoteFilename`, `IsNoteOrPdf` e `domain.AllowedFilePrefixes` — o risco exato apontado no §12. Agora `internal/core/domain/data.go` é a **única** definição:
+
+| Item | Uso |
+|---|---|
+| consts `NotePrefix`/`PDFPrefix`/`AttachmentPrefix`/`ArchivePrefix`/`EPUBPrefix`/`ImagePrefix` e `*Dir` | strings de prefixo e nomes de pasta |
+| `AllowedFilePrefixes` | validação de path traversal (`/file`, `/file/download`) |
+| `NonNoteFilePrefixes` | anexos/mídia (tudo menos `notes/`) — links do markdown e rename |
+| `InlineDocPrefixes` | base do `IsNoteOrPdf` |
+| `FileDirs` / `SearchDirs` | `watcher.MonitoredSubDirs` e busca de arquivo sem pasta |
+| `HasAllowedFilePrefix` / `InlineDocPrefix` / `NonNoteFilePrefix` | matchers |
+
+`note_service.go`, `processor/markdown.go`, `handlers_upload.go` (`imagesPrefix = domain.ImagePrefix`), `handlers_filetype.go`, `handlers_database_tabulator.go` e `watcher.go` deixaram de repetir literais; um teste (`TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica`) trava a paridade das listas derivadas.
+
+### 5. Download do modelo ONNX: retomável e com progresso
+
+📍 `core/internal/features/embeddings/{model_files.go,handlers.go,context.go}` | `core/cmd/server/{main.go,routes.go}` | `core/internal/features/search/index.templ`
+
+- **Retomada por HTTP Range:** havendo `<arquivo>.part` com bytes, o próximo boot pede `Range: bytes=<n>-` e exige `206` + `Content-Range` começando exatamente em `n`. Resposta `200` (servidor sem Range) **trunca e reinicia**; `416` descarta o `.part` e recomeça. Falha de rede no meio **preserva** o `.part` — antes o parcial era apagado e tudo recomeçava do zero.
+- **Integridade:** o arquivo só é promovido (rename atômico) quando o total confere com o `Content-Length`; download truncado não se torna definitivo. `.part` órfão é removido quando o arquivo definitivo já existe.
+- **Progresso granular:** `ModelProgress` (arquivo atual, bytes, total, percentual, último erro) em `GET /api/embeddings/model-status` (sem cache) + cópia em blocos de 256 KiB (`copyWithProgress`, no lugar do `io.Copy` opaco). A UI da busca híbrida mostra "Servidor N% (arquivo)" enquanto o download do servidor não termina; `WithModel` injeta o `LocalModel` no `HandlerContext` (nil → `ready=true`, nada a baixar).
+
+### Validação (28/09/2026)
+
+- **Go** (container `golang:1.26-alpine`, sem Go/Node no Windows): `templ generate`, `go vet -tags sqlite_fts5 ./...`, `go build -tags sqlite_fts5` e `go test ./...` verdes; `gofmt -l .` limpo.
+- **Frontend** (Node do nvm no WSL Ubuntu): `tsc --noEmit` limpo, `npm test` **34/34**, `node build.js --dev` OK (bundle + Tailwind + worker).
+- **Testes novos:** `hierarchy_test.go` (pai/filhas com wikilink e chave legada, caminho completo, contagens, cache/invalidação, `NormalizeParentRef`/`ParentCompareKey`, `ParentRefOfContent`, `MergeFrontmatterTags`), `TestHandleDuplicateNote_PreservaTagsDoBanco`, `TestHandleFileRename_ReportaEFilhasRepontadas`, `TestHandleFileRename_SemFilhasNaoEnviaHeader`, `TestLocalModel_DownloadRetomaDoPartViaRange`, `...ComRangeRecusadoReinicia`, `...ServidorSemRangeReinicia`, `...DownloadTruncadoNaoPromoveArquivo`, `TestLocalModel_Progress`, `TestLocalModel_EnsureRemovePartOrfao`, `TestContentRangeStart`, `TestHandleModelStatus_SemModeloLocal/_ComModelo` e `TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica`.
+- **Modularização do editor (item 2 da revisão):** `slash` e `TOC` já estavam extraídos (`editor-slash.js` 207 linhas, `editor-toc.js` 127); nesta rodada saíram também o **painel de frontmatter** (`editor-frontmatter.js`, 133) e a **hierarquia** (`editor-hierarchy.js`, 234). O IIFE caiu de **1.982 → 1.567 linhas** e ficou com orquestração (estado do editor, save, rename, upload, wikilinks).
+- **E2E no app real** (sandbox isolado: `DOCS_DIR`/`DB_PATH`/`STATE_DIR` em `core/data/e2e-*`, porta 6199, container `golang:1.26-alpine` rodando o binário), com 4 notas (`pai → filha → neta` + uma solta) e requisições HTTP autenticadas: pendurar filha/neta na mesma rota do botão (`POST /api/notes/update-property`, incluindo `[[FILHA]]` normalizado), barra de hierarquia no `/editor` (chip, picker e lista de filhas), badge de filhas em `/api/sidebar` (2 badges, nenhum na nota solta), auto-pai e ciclo **recusados com 400**, pai inexistente e remoção aceitos, rename com `X-Children-Updated: 1` e a filha repontada (`pai: projeto-renomeado`, neta intocada) e `/api/embeddings/model-status` reportando `files_total: 5` com percentual real de download (25% de 118MB).
+- **No navegador** (mesmo sandbox): barra renderizada abaixo do badge de backlinks, picker listando as notas **sem a própria**, filtro digitando "net", seleção gravando e atualizando o chip sem reload (persistindo após F5), `×` devolvendo para `—`, popover "Abaixo desta: filha" abrindo, e o ciclo sendo barrado com a mensagem `vínculo recusado: "neta" já está abaixo desta nota (criaria um ciclo)` no próprio picker.
+- 🐞 **Bug real encontrado no E2E de navegador:** `disabled={ len(children) == 0 }` no templ vira o atributo literal (`disabled="false"`) e **desabilita o botão mesmo com filhas** — o popover de filhas ficaria inacessível. Corrigido para a sintaxe booleana do templ (`disabled?={ ... }`); as guardas `TestHandleGetDatabaseData_*`/E2E passaram a checar o atributo no HTML. **Regra:** em templ, use `attr?={ cond }` para atributos booleanos (HTML), nunca `attr={ cond }`.
+
+## 6.22 Rótulo da barra de hierarquia: "ACIMA DE" → "NOTA-MÃE:" (29/09/2026)
+
+📍 `core/internal/features/notes/hierarchy_bar.templ` | `core/web/src/{editor-hierarchy.js,editor-init.js}`
+
+**Problema (relatado pelo usuário):** escolhendo a nota-mãe pelo botão, o chip fica `apressado-limbo-58 · ACIMA DE · 2026-s38` e a nota aparece **aninhada dentro** da 2026-s38 no Tabulator. O comportamento está correto — o alvo é o pai (`pai: 2026-s38` no frontmatter da nota aberta) —, mas o rótulo lia-se ao contrário: lido como "esta nota ACIMA DE 2026-s38", sugeria que ela fosse o **pai**, não a filha.
+
+**Decisão:** trocar **só o rótulo**. Nenhuma linha de lógica, de rota ou de dado mudou — o botão continua gravando `pai:` via `POST /api/notes/update-property` e o backend segue recusando auto-pai/ciclo com 400.
+
+| Antes | Depois |
+|---|---|
+| `ACIMA DE <nome>` | `NOTA-MÃE: <nome>` |
+| `title` do ×: "Remover o pai (a nota volta para a raiz)" | "Remover a nota-mãe (…)" |
+
+- **Por que não inverter a semântica:** a árvore é de **pai único**. "ACIMA DE X" gravando a nota aberta como pai de X reescreveria o `pai:` que X já tinha (X trocaria de mãe em silêncio) e obrigaria um fluxo novo — o picker exclui a própria nota e `validateParentAssignment` valida "definir o MEU pai", não o de terceiros. O lado de baixo da árvore já existe: o badge de filhas com o popover **"Abaixo desta:"** (`hierarchy_bar.templ`).
+- **Alternativa descartada:** `ACIMA DESTA:` (espelharia o "Abaixo desta:" do popover). `NOTA-MÃE:` ganhou por ser impossível de ler ao contrário.
+- **Sem migração:** as notas já estavam certas — o frontmatter nunca representou o contrário do que a UI queria dizer.
+
+### Validação (29/09/2026)
+
+- **Go** (WSL, Go 1.26.3 local): `templ generate` (v0.3.1020, a pinada no `go.mod`), `gofmt -l .` limpo, `go vet -tags sqlite_fts5 ./...` limpo, `go build -tags sqlite_fts5` OK e `go test -tags sqlite_fts5 ./...` **100% verde**.
+- **Frontend** (Node v24 do nvm): `tsc --noEmit` limpo e `node build.js --dev` OK (bundle + Tailwind + checagem de sanidade do CSS) — `web/static` regenerado para os comentários não ficarem defasados em relação a `src/`.
+- **E2E no app real** (sandbox isolado: `DOCS_DIR`/`DB_PATH`/`STATE_DIR` em `/tmp`, porta 6199, binário `-tags sqlite_fts5`): `/editor?file=notes/apressado-limbo-58.md` (frontmatter `pai: projeto`) devolve 200 com **`NOTA-MÃE:`** e o chip com o pai resolvido (`<span id="parent-name" class="… text-sky-400">projeto</span>`), e **zero** ocorrências de `ACIMA DE` no HTML — confirmando de ponta a ponta que o alvo do botão é mesmo a nota-mãe (a nota aberta é a filha).
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
@@ -898,11 +986,13 @@ As imagens enviadas pelo editor (colar/arrastar ou botão **Imagem** → `POST /
 - O nome continua `img_<timestampUnixMilli>_<nome sanitizado>` (evita colisão e permite a limpeza por prefixo).
 - **Tipo da nota inalterado:** `domain.DetectNoteType` já classificava qualquer extensão de imagem como `NoteTypeImage`; o prefixo `images/` foi adicionado explicitamente e `notes/img_` continua reconhecido (legado).
 - **Legado continua funcionando:** imagens antigas em `notes/` seguem sendo servidas (`/file?name=notes/img_...`), resolvidas (`imageSubdir` cai em `notes/` quando o arquivo não existe em `images/`) e limpas — `HandleCleanupImages` varre `images/` **e** `notes/` (e agora ignora diretório inexistente em vez de falhar).
-- Prefixo `images/` registrado em: `allowedPrefixes` (`/file`, `/file/download`), `NoteFilename`, `IsNoteOrPdf`, `domain.AllowedFilePrefixes`, `MonitoredSubDirs` (o boot/rescan passa a registrar o documento stub da imagem, como já fazia com PDFs/anexos) e nas listas de prefixos usadas por backlinks/renomeação (`processor/markdown.go`, `NoteService.UpdateBacklinksOnRename`).
+- Prefixo `images/` registrado em: `domain.AllowedFilePrefixes`, `NoteFilename`, `IsNoteOrPdf`, `MonitoredSubDirs` (o boot/rescan passa a registrar o documento stub da imagem, como já fazia com PDFs/anexos) e nas listas de prefixos usadas por backlinks/renomeação (`processor/markdown.go`, `NoteService.UpdateBacklinksOnRename`).
+  - ⚠️ **Atualizado em 6.21 (28/09/2026):** esses pontos deixaram de ser listas independentes — `internal/core/domain/data.go` é a **fonte única** dos prefixos (consts + `AllowedFilePrefixes`/`NonNoteFilePrefixes`/`InlineDocPrefixes`/`FileDirs`/`SearchDirs` + matchers). Adicione um tipo de arquivo novo apenas lá.
 - **Paridade Go/SQL (regra 3.5):** `AND n.filename NOT LIKE 'images/%'` adicionado a `CountEmbeddableNotes` e `GetPendingEmbeddingNotes` (`query.sql` **e** `generated/query.sql.go`), espelhando `IsNoteEmbeddable` (que classifica `images/*` como imagem → não indexável).
 - As imagens continuam **invisíveis** na sidebar/banco de dados: `NoteService.GetMany` descarta `NoteTypeImage` e o watcher não grava `file_mod` para imagens (só o documento stub).
 - ⚠️ **O bundle do frontend não mudou:** o editor insere a URL absoluta devolvida pelo handler (`/file?name=images/...`), então nenhum rebuild de `web/static/` é necessário.
 - ⚠️ Ao mexer nesse prefixo no futuro, mantenha em sincronia os pontos listados no comentário de `imagesPrefix`.
+- ⚠️ **Desde 6.21 (28/09/2026)** o prefixo é derivado de `domain.ImagePrefix` (`const imagesPrefix = domain.ImagePrefix`) — a sincronia manual descrita acima deixou de existir.
 - **Validação (17/09/2026):** `go test ./internal/features/notes/ ./internal/watcher/ ./internal/core/domain/ ./internal/core/db/ ./internal/core/services/ ./internal/processor/` — todos OK. Testes novos: `TestHandleUploadImage_Success` (grava em `images/`), `TestResolveFileInfo_ImagemEmImages`, `TestHandleCleanupImages_RemovesOrphanInImagesDir`, `TestHandleFileDelete_ImageInImagesDir`, `TestIsNoteOrPdf_Images`, casos de `DetectNoteType` e `TestMonitoredSubDirs`.
 
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)

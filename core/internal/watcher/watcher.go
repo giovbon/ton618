@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ton618/core/internal/core/db"
+	"ton618/core/internal/core/domain"
 	"ton618/core/internal/processor"
 )
 
@@ -57,7 +58,11 @@ func isRecentlyProcessed(filename string) bool {
 // "images" guarda as imagens enviadas pelo editor (desde 17/09/2026) — entrar
 // aqui garante que elas sejam registradas como documento stub no boot/rescan,
 // como já acontece com PDFs e anexos.
-var MonitoredSubDirs = []string{"pdfs", "attachments", "archives", "epubs", "images"}
+//
+// Derivado de domain.FileDirs (fonte única dos prefixos/diretórios do docs/ —
+// DECISIONS §12): notes/ fica de fora de propósito, pois as notas vivem no
+// SQLite e não em disco.
+var MonitoredSubDirs = append([]string{}, domain.FileDirs...)
 
 // supportedExts maps file extensions to document types.
 var supportedExts = map[string]string{

@@ -40,6 +40,12 @@ func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) 
 
 	data := buildEditorData("Editor - "+domain.DisplayName(filename), filename, nd)
 	data.AllTags = nd.AllTags
+	// Hierarquia (pai + filhas) para a barra do editor — uma query em lote
+	// (GetAllNotesContent). Falha aqui não impede a abertura da nota.
+	if hParent, hChildren, hErr := ctx.Notes.GetHierarchy(filename); hErr == nil {
+		data.Parent = hParent
+		data.Children = hChildren
+	}
 	Editor(data).Render(r.Context(), w)
 }
 

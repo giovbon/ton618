@@ -306,7 +306,7 @@ test('applyRenameToUI atualiza URL, título, input e sidebar sem reload', (t) =>
     dispatchEvent: (ev) => chamadas.eventos.push(ev.type),
   };
 
-  const input = { value: 'nota-antiga.md', dataset: { filename: 'notes/nota-antiga.md' } };
+  const input = { value: 'nota-antiga', dataset: { filename: 'notes/nota-antiga.md' } };
 
   const retorno = EditorCommon.applyRenameToUI({
     newName: 'nota-nova',
@@ -320,19 +320,19 @@ test('applyRenameToUI atualiza URL, título, input e sidebar sem reload', (t) =>
   assert.strictEqual(chamadas.replaceState[0], '/editor?file=notes%2Fnota-nova.md');
 
   // Input: value exibido e data-filename (fonte de salvar/excluir/duplicar).
-  assert.strictEqual(input.value, 'nota-nova.md');
+  assert.strictEqual(input.value, 'nota-nova');
   assert.strictEqual(input.dataset.filename, 'notes/nota-nova.md');
 
   // Título da aba: mantém o prefixo do editor atual.
-  assert.strictEqual(global.document.title, 'Editor - nota-nova.md');
+  assert.strictEqual(global.document.title, 'Editor - nota-nova');
 
   // Sidebar (HTMX) recarregada pelo evento existente.
   assert.deepStrictEqual(chamadas.eventos, ['reload-sidebar']);
 
   // Prefixo preservado de outros editores (ex: Desenho).
-  global.document.title = 'Desenho - desenho-antigo.md';
+  global.document.title = 'Desenho - desenho-antigo';
   EditorCommon.applyRenameToUI({ newName: 'desenho-novo', filenameInput: input, base: '/drawing' });
-  assert.strictEqual(global.document.title, 'Desenho - desenho-novo.md');
+  assert.strictEqual(global.document.title, 'Desenho - desenho-novo');
 
   delete global.window.history;
   delete global.document.body;
@@ -344,7 +344,7 @@ test('applyRenameToUI não quebra em ambiente sem DOM/history', (t) => {
   const input = { value: '', dataset: {} };
   const nome = EditorCommon.applyRenameToUI({ newName: 'sem-dom', filenameInput: input });
   assert.strictEqual(nome, 'notes/sem-dom.md');
-  assert.strictEqual(input.value, 'sem-dom.md');
+  assert.strictEqual(input.value, 'sem-dom');
   assert.strictEqual(input.dataset.filename, 'notes/sem-dom.md');
 });
 

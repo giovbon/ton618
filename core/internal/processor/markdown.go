@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"ton618/core/internal/core/domain"
 )
 
 // Document representa um fragmento indexável de um arquivo.
@@ -319,7 +321,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				links = append(links, target)
 				// Se for um anexo sem diretório (ex: meuarquivo.zip), indexa também com os prefixos possíveis
 				if strings.Contains(target, ".") && !strings.Contains(target, "/") && !strings.HasSuffix(target, ".md") {
-					for _, prefix := range []string{"attachments/", "archives/", "pdfs/", "epubs/", "images/"} {
+					for _, prefix := range domain.NonNoteFilePrefixes {
 						links = append(links, prefix+target)
 					}
 				}

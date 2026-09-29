@@ -1,0 +1,152 @@
+package notes
+
+import (
+	"strconv"
+
+	"ton618/core/internal/core/domain"
+	"ton618/core/internal/ui/icons"
+)
+
+// HierarchyBar mostra — e permite editar sem tocar no YAML — a posição da nota
+// na hierarquia (DECISIONS §6.17/§6.19):
+//
+//   - botão "Nota-mãe": escolhe a nota-mãe (campo `pai:` do frontmatter) numa
+//     lista pesquisável, em vez de o usuário digitar o nome exato no frontmatter;
+//   - badge de filhas: quantas notas apontam para esta, com popover de navegação.
+//
+// O backend valida a gravação (auto-pai e ciclo são recusados com HTTP 400) em
+// system.HandleUpdateNoteProperty — a mesma rota usada pela célula do Tabulator.
+templ HierarchyBar(data domain.EditorData) {
+	<div class="flex items-center flex-wrap gap-2 mb-3" id="hierarchy-bar">
+		<div class="relative inline-block select-none">
+			<div class="flex items-stretch rounded-lg border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+				<button
+					id="parent-btn"
+					type="button"
+					data-filename={ data.Filename }
+					class="flex items-center gap-1.5 text-[10px] font-mono font-bold px-2 py-1 text-zinc-500 hover:text-sky-300 hover:bg-sky-950/30 transition-all"
+					title="Definir a nota-mãe (campo pai: do frontmatter)"
+				>
+					@icons.Icon(icons.GetIcon("pai"), "w-3.5 h-3.5 "+icons.GetColor("pai"))
+					<span>NOTA-MÃE:</span>
+					<span id="parent-name" class={ "font-bold " + parentNameClass(data.Parent) }>{ parentNameLabel(data.Parent) }</span>
+				</button>
+				<button
+					id="parent-clear-btn"
+					type="button"
+					class={ parentClearBtnClass(data.Parent) }
+					title="Remover a nota-mãe (a nota volta para a raiz)"
+				>
+					×
+				</button>
+			</div>
+
+			<!-- Picker da nota-mãe (renderizado aqui para o Tailwind escanear as classes; a lista é preenchida em JS) -->
+			<div
+				id="parent-picker"
+				class="hidden absolute left-0 top-full mt-2 w-72 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-2xl z-[10001] overflow-hidden"
+			>
+				<div class="p-2 border-b border-zinc-800">
+					<input
+						id="parent-search"
+						type="text"
+						placeholder="Buscar nota-mãe..."
+						autocomplete="off"
+						spellcheck="false"
+						class="w-full bg-zinc-950/60 border border-zinc-800 rounded-md px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-hidden focus:border-sky-500/50"
+					/>
+				</div>
+				<div id="parent-list" class="max-h-56 overflow-y-auto py-1">
+					<div class="px-3 py-2 text-[10px] font-mono text-zinc-600">Carregando…</div>
+				</div>
+				<div id="parent-error" class="hidden px-3 py-1.5 text-[10px] font-mono text-red-400 border-t border-zinc-800"></div>
+				<div class="px-3 py-1.5 text-[9px] font-mono text-zinc-700 border-t border-zinc-800">
+					Enter seleciona · Esc fecha
+				</div>
+			</div>
+		</div>
+
+		@ChildrenBadge(data.Children)
+
+		<!-- Aviso transitório (ex: filhas repontadas no rename) -->
+		<span id="hierarchy-msg" class="hidden text-[10px] font-mono text-emerald-400"></span>
+	</div>
+}
+
+// ChildrenBadge é o contador de filhas com popover de navegação.
+templ ChildrenBadge(children []domain.NoteRef) {
+	<div class="relative inline-block select-none" id="children-popover-wrapper">
+		<button
+			id="children-badge-btn"
+			type="button"
+			class={ childrenBadgeClass(children) }
+			title={ childrenTitle(children) }
+			disabled?={ len(children) == 0 }
+		>
+			@icons.Icon(icons.GetIcon("filhas"), "w-3.5 h-3.5 "+icons.GetColor("filhas"))
+			<span>{ strconv.Itoa(len(children)) }</span>
+		</button>
+		if len(children) > 0 {
+			<div
+				id="children-popover"
+				class="absolute left-0 top-full mt-2 w-64 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-xl shadow-2xl p-3 z-[10001] text-[11px] text-zinc-400 leading-normal hidden"
+			>
+				<div class="font-bold text-zinc-300 mb-1.5 font-mono text-[9px] uppercase tracking-wider">
+					Abaixo desta:
+				</div>
+				<div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+					for _, c := range children {
+						<a
+							href={ templ.SafeURL("/editor?file=" + SafeFileQueryEscape(c.Filename)) }
+							class="block text-sky-400 hover:text-sky-300 hover:underline transition-all truncate font-medium"
+						>{ c.DisplayName }</a>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// parentNameLabel/parentNameClass: rótulo e cor do chip conforme haja (ou não) pai.
+func parentNameLabel(parent string) string {
+	if parent == "" {
+		return "—"
+	}
+	return parent
+}
+
+func parentNameClass(parent string) string {
+	if parent == "" {
+		return "text-zinc-600"
+	}
+	return "text-sky-400"
+}
+
+// parentClearBtnClass esconde o botão "×" quando não há pai (o elemento é sempre
+// renderizado para o JS poder mostrá-lo ao definir um pai sem recarregar a página).
+func parentClearBtnClass(parent string) string {
+	const base = "px-1.5 text-[11px] leading-none text-zinc-600 hover:text-red-400 hover:bg-red-950/30 border-l border-zinc-800 transition-all"
+	if parent == "" {
+		return base + " hidden"
+	}
+	return base
+}
+
+func childrenBadgeClass(children []domain.NoteRef) string {
+	const base = "flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-1 rounded-lg border transition-all "
+	if len(children) == 0 {
+		return base + "border-zinc-800 bg-zinc-900/20 text-zinc-600 opacity-50 cursor-not-allowed"
+	}
+	return base + "border-indigo-500/30 bg-indigo-950/40 text-indigo-300 hover:text-indigo-200 hover:border-indigo-400 hover:bg-indigo-950/60 cursor-pointer"
+}
+
+func childrenTitle(children []domain.NoteRef) string {
+	switch len(children) {
+	case 0:
+		return "Esta nota não tem filhas"
+	case 1:
+		return "1 nota abaixo desta"
+	default:
+		return strconv.Itoa(len(children)) + " notas abaixo desta"
+	}
+}

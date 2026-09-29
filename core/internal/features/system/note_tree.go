@@ -110,7 +110,7 @@ func newNoteTreeIndex(entries []noteEntry) *noteTreeIndex {
 // resolve devolve o arquivo canônico da nota referenciada. Retorna "" quando a
 // nota não existe (a nota-filha fica na raiz — ver regras no cabeçalho).
 func (ix *noteTreeIndex) resolve(raw string) string {
-	ref := NormalizeParentRef(raw)
+	ref := notes.NormalizeParentRef(raw)
 	if ref == "" {
 		return ""
 	}
@@ -132,28 +132,9 @@ func (ix *noteTreeIndex) resolve(raw string) string {
 	return ""
 }
 
-// NormalizeParentRef normaliza a referência do frontmatter "pai": remove
-// espaços e aspas, desembrulha wikilinks ("[[x]]", "[[x|alias]]", "[[x#secao]]")
-// e baixa a caixa. O caminho é preservado, quando informado.
-func NormalizeParentRef(raw string) string {
-	s := strings.TrimSpace(raw)
-	s = strings.Trim(s, "\"'")
-	if strings.HasPrefix(s, "[[") {
-		s = strings.TrimPrefix(s, "[[")
-		s = strings.TrimSuffix(s, "]]")
-		if i := strings.IndexAny(s, "|#"); i >= 0 {
-			s = s[:i]
-		}
-	}
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "./")
-	s = strings.Trim(s, "/")
-	// Colchetes remanescentes: em YAML sem aspas, `parent: [[nota]]` vira uma
-	// lista aninhada e `parent: [nota]` uma lista de um item. O valor chega aqui
-	// já convertido para texto (fmt.Sprintf), então os colchetes precisam sair.
-	s = strings.Trim(s, "[]")
-	return strings.ToLower(s)
-}
+// NormalizeParentRef e ParentRefOfContent vivem em notes/hierarchy.go: os dois
+// pacotes precisam da MESMA regra de normalização (o frontmatter é lido e
+// escrito por ambos). Use notes.NormalizeParentRef.
 
 // parentRefFromMap extrai o valor da chave de hierarquia de um mapa de
 // frontmatter (ou de uma linha do Tabulator). A chave canônica (`pai`) tem
@@ -166,9 +147,9 @@ func parentRefFromMap(m map[string]interface{}) string {
 				continue
 			}
 			if s, ok := v.(string); ok {
-				return NormalizeParentRef(s)
+				return notes.NormalizeParentRef(s)
 			}
-			return NormalizeParentRef(fmt.Sprintf("%v", v))
+			return notes.NormalizeParentRef(fmt.Sprintf("%v", v))
 		}
 	}
 	return ""

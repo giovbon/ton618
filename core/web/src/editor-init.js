@@ -1,6 +1,12 @@
 // editor-init.js — Inicialização do editor TipTap TON-618
 // Extraído de internal/features/notes/editor.templ para melhor organização
 // @ts-nocheck — Código legado de script inline, tipagem dinâmica de DOM proposital
+
+import { initSlash, buildSlashActions, SLASH_COMMANDS, scoreSlashCommand } from './editor-slash.js';
+import { updateToc, applyToc } from './editor-toc.js';
+import { initFrontmatter } from './editor-frontmatter.js';
+import { initHierarchy } from './editor-hierarchy.js';
+
 (function () {
     "use strict";
     var T = window.TipTapEditor;
@@ -17,10 +23,9 @@
     var currentStatus = "saved";
     var editor = null;
     var originalFilename = filenameInput.dataset.filename;
-    var originalDisplayName = filenameInput.value;
+    var originalDisplayName = filenameInput.value.replace(/\.md$/, "");
     var slashPos = null;
     var frontmatterText = "";
-    var frontmatterVisible = false;
     var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
     var autoDetectTimer = null;
     var isInitialLoad = true;
@@ -43,6 +48,19 @@
     // na tela antes do primeiro save.
     bodyContent = EditorCommon.stripNbspParagraphs(bodyContent);
 
+    // ── Painel de frontmatter ──
+    // Toggle, autosize e sugestões de tags vivem em editor-frontmatter.js.
+    // O onChange marca a nota como suja e agenda o save (inclusive ao clicar
+    // numa tag sugerida, que dispara um "input" sintético).
+    var frontmatter = initFrontmatter({
+        onChange: function () {
+            if (isInitialLoad) return;
+            setStatus("dirty");
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = setTimeout(doSave, 2000);
+        }
+    });
+
     // ── Helper: limpa timers pendentes ──
     function clearAllTimers() {
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
@@ -55,229 +73,16 @@
     // ── Slash commands ──
     var slashFilterText = "";
 
-    function makeSlashAction(cmd, attrs) {
-        return function () {
-            hideSlashMenu();
-            if (slashPos !== null && editor) {
-                var $to = editor.state.selection.$from;
-                editor
-                    .chain()
-                    .focus()
-                    .deleteRange({
-                        from: slashPos,
-                        to: $to.pos,
-                    })
-                    .run();
-                slashPos = null;
-                slashFilterText = "";
-            }
-            exec(cmd, attrs);
-        };
-    }
-
-    var SLASH_COMMANDS = [
-        {
-            id: "task",
-            icon: "\u2611",
-            label: "Checklist (Tarefa)",
-            keywords: ["task", "todo", "check", "tarefa", "checklist", "caixa", "mark", "item"],
-            action: makeSlashAction("taskList"),
-        },
-        {
-            id: "h1",
-            icon: "H1",
-            label: "Título 1 (H1)",
-            keywords: ["h1", "titulo 1", "heading 1", "header 1", "t1"],
-            action: makeSlashAction("heading", { level: 1 }),
-        },
-        {
-            id: "h2",
-            icon: "H2",
-            label: "Título 2 (H2)",
-            keywords: ["h2", "titulo 2", "heading 2", "header 2", "t2"],
-            action: makeSlashAction("heading", { level: 2 }),
-        },
-        {
-            id: "h3",
-            icon: "H3",
-            label: "Título 3 (H3)",
-            keywords: ["h3", "titulo 3", "heading 3", "header 3", "t3"],
-            action: makeSlashAction("heading", { level: 3 }),
-        },
-        {
-            id: "bullet",
-            icon: "\u2022",
-            label: "Lista com marcadores",
-            keywords: ["bullet", "lista", "list", "ul", "ponto", "marcadores"],
-            action: makeSlashAction("bulletList"),
-        },
-        {
-            id: "ordered",
-            icon: "1.",
-            label: "Lista numerada",
-            keywords: ["ordered", "numerada", "numero", "ol", "1.", "lista numerada"],
-            action: makeSlashAction("orderedList"),
-        },
-        {
-            id: "quote",
-            icon: "\u275D",
-            label: "Citação",
-            keywords: ["quote", "citacao", "blockquote", ">"],
-            action: makeSlashAction("blockquote"),
-        },
-        {
-            id: "code",
-            icon: "\u2394",
-            label: "Bloco de código",
-            keywords: ["code", "codigo", "codeblock", "bloco de codigo", "script"],
-            action: makeSlashAction("codeBlock"),
-        },
-        {
-            id: "table",
-            icon: "\u229E",
-            label: "Tabela",
-            keywords: ["table", "tabela", "grid", "grade"],
-            action: function () {
-                hideSlashMenu();
-                if (slashPos !== null && editor) {
-                    var $to = editor.state.selection.$from;
-                    editor
-                        .chain()
-                        .focus()
-                        .deleteRange({ from: slashPos, to: $to.pos })
-                        .insertTable({
-                            rows: 3,
-                            cols: 3,
-                            withHeaderRow: true,
-                        })
-                        .run();
-                    slashPos = null;
-                    slashFilterText = "";
-                }
-            },
-        },
-        {
-            id: "hr",
-            icon: "\u2014",
-            label: "Linha horizontal",
-            keywords: ["hr", "linha", "divider", "divisoria", "horizontal"],
-            action: makeSlashAction("horizontalRule"),
-        },
-        {
-            id: "image",
-            icon: "\uD83D\uDDBC",
-            label: "Imagem",
-            keywords: ["image", "imagem", "foto", "img", "picture"],
-            action: function () {
-                hideSlashMenu();
-                if (slashPos !== null && editor) {
-                    var $to = editor.state.selection.$from;
-                    editor
-                        .chain()
-                        .focus()
-                        .deleteRange({ from: slashPos, to: $to.pos })
-                        .run();
-                    slashPos = null;
-                    slashFilterText = "";
-                }
-                document.getElementById("editor-image-input").click();
-            },
-        },
-        {
-            id: "organize",
-            icon: "\u2630",
-            label: "Organizar títulos",
-            keywords: ["organize", "organizar", "titulos", "headers", "hierarquia"],
-            action: function () {
-                hideSlashMenu();
-                if (slashPos !== null && editor) {
-                    var $to = editor.state.selection.$from;
-                    editor
-                        .chain()
-                        .focus()
-                        .deleteRange({
-                            from: slashPos,
-                            to: $to.pos,
-                        })
-                        .run();
-                    slashPos = null;
-                    slashFilterText = "";
-                }
-                organizeHeadings();
-            },
-        },
-        {
-            id: "addRowBefore",
-            icon: "➕⬆️",
-            label: "Adicionar linha acima",
-            keywords: ["linha", "above", "acima", "row"],
-            tableOnly: true,
-            action: makeSlashAction("addRowBefore"),
-        },
-        {
-            id: "addRowAfter",
-            icon: "➕⬇️",
-            label: "Adicionar linha abaixo",
-            keywords: ["linha", "below", "abaixo", "row"],
-            tableOnly: true,
-            action: makeSlashAction("addRowAfter"),
-        },
-        {
-            id: "addColumnBefore",
-            icon: "➕⬅️",
-            label: "Adicionar coluna antes",
-            keywords: ["coluna", "before", "antes", "column"],
-            tableOnly: true,
-            action: makeSlashAction("addColumnBefore"),
-        },
-        {
-            id: "addColumnAfter",
-            icon: "➕➡️",
-            label: "Adicionar coluna depois",
-            keywords: ["coluna", "after", "depois", "column"],
-            tableOnly: true,
-            action: makeSlashAction("addColumnAfter"),
-        },
-        {
-            id: "deleteRow",
-            icon: "🗑️⬇️",
-            label: "Excluir linha",
-            keywords: ["excluir", "deletar", "linha", "delete", "row"],
-            tableOnly: true,
-            action: makeSlashAction("deleteRow"),
-        },
-        {
-            id: "deleteColumn",
-            icon: "🗑️➡️",
-            label: "Excluir coluna",
-            keywords: ["excluir", "deletar", "coluna", "delete", "column"],
-            tableOnly: true,
-            action: makeSlashAction("deleteColumn"),
-        },
-        {
-            id: "deleteTable",
-            icon: "🗑️",
-            label: "Excluir tabela",
-            keywords: ["excluir", "deletar", "tabela", "delete", "table"],
-            tableOnly: true,
-            action: function () {
-                hideSlashMenu();
-                if (slashPos !== null && editor) {
-                    var $to = editor.state.selection.$from;
-                    editor
-                        .chain()
-                        .focus()
-                        .deleteRange({ from: slashPos, to: $to.pos })
-                        .run();
-                    slashPos = null;
-                    slashFilterText = "";
-                }
-                if (editor && confirm("Excluir esta tabela?")) {
-                    editor.chain().focus().deleteTable().run();
-                }
-            },
-        },
-    ];
+    initSlash({
+        getEditor: function() { return editor; },
+        getSlashPos: function() { return slashPos; },
+        setSlashPos: function(p) { slashPos = p; },
+        getSlashFilter: function() { return slashFilterText; },
+        setSlashFilter: function(t) { slashFilterText = t; },
+        hideSlashMenu: hideSlashMenu,
+        organizeHeadings: organizeHeadings
+    });
+    buildSlashActions();
 
     // ── Wikilink Autocomplete ──
     var wikiNotes = [];
@@ -597,7 +402,7 @@
             // TOC update
             if (tocVisible) {
                 if (tocUpdateTimer) clearTimeout(tocUpdateTimer);
-                tocUpdateTimer = setTimeout(updateToc, 300);
+                tocUpdateTimer = setTimeout(doUpdateToc, 300);
             }
             // Wikilink detection (também funciona sem keydown, ex: mobile)
             if (editor) {
@@ -818,13 +623,7 @@
         },
         onCreate: function () {
             // Set frontmatter textarea after editor is created
-            var fmArea = document.getElementById("frontmatter-area");
-            if (fmArea && frontmatterText) {
-                /** @type {HTMLTextAreaElement} */(fmArea).value = frontmatterText;
-                // Ajusta altura do frontmatter
-                fmArea.style.height = "auto";
-                fmArea.style.height = fmArea.scrollHeight + "px";
-            }
+            if (frontmatterText) frontmatter.setValue(frontmatterText);
 
             // Converte wikilinks existentes e calcula hash inicial em sequência
             (function initSequence() {
@@ -1231,33 +1030,7 @@
         });
     }
 
-    function scoreSlashCommand(cmd, query) {
-        if (!query) return 100;
-        var q = query.toLowerCase().trim();
-
-        if (cmd.keywords) {
-            for (var k = 0; k < cmd.keywords.length; k++) {
-                var kw = cmd.keywords[k].toLowerCase();
-                if (kw === q) return 1000;
-                if (kw.startsWith(q)) return 800 - k * 10;
-            }
-        }
-
-        var labelLower = cmd.label.toLowerCase();
-        if (labelLower.startsWith(q)) return 700;
-
-        if (cmd.keywords) {
-            for (var k = 0; k < cmd.keywords.length; k++) {
-                var kw = cmd.keywords[k].toLowerCase();
-                if (kw.indexOf(q) !== -1) return 500 - k * 10;
-            }
-        }
-
-        var labelIdx = labelLower.indexOf(q);
-        if (labelIdx !== -1) return 300 - labelIdx;
-
-        return 0;
-    }
+    // scoreSlashCommand importada de editor-slash.js
 
     function renderSlashItems(filter) {
         var f = filter.toLowerCase().trim();
@@ -1443,17 +1216,8 @@
     }
 
     // ── Frontmatter ──
-    function toggleFrontmatter() {
-        frontmatterVisible = !frontmatterVisible;
-        var el = document.getElementById("frontmatter-area");
-        var arrow = document.getElementById("fm-arrow");
-        var tagSuggest = document.getElementById("tag-suggestions");
-        if (el) el.classList.toggle("hidden", !frontmatterVisible);
-        if (arrow) arrow.classList.toggle("rotate-90", frontmatterVisible);
-        if (tagSuggest)
-            tagSuggest.classList.toggle("hidden", !frontmatterVisible);
-        if (frontmatterVisible) loadTagSuggestions();
-    }
+    // O toggle do painel, o autosize do textarea e as sugestões de tags vivem em
+    // editor-frontmatter.js (instanciado no topo, quando o frontmatter é lido).
 
     // ── TOC ──
     var tocVisible = false;
@@ -1465,7 +1229,7 @@
         var arrow = document.getElementById("toc-arrow");
         if (el) el.classList.toggle("hidden", !tocVisible);
         if (arrow) arrow.classList.toggle("rotate-90", tocVisible);
-        if (tocVisible) updateToc();
+        if (tocVisible) doUpdateToc();
     }
 
     // ── Backlinks ──
@@ -1478,118 +1242,22 @@
         if (arrow) arrow.classList.toggle("rotate-90", backlinksVisible);
     }
 
-    // Títulos do documento (na ordem em que aparecem) com o texto já aparado.
-    // Ignora título sem texto: ele não aparece no TOC, então não pode entrar no
-    // pareamento linha↔título do applyToc (senão as linhas sairiam de sincronia).
-    function collectHeadings() {
-        var headings = [];
-        if (!editor || editor.isDestroyed) return headings;
-        editor.state.doc.descendants(function (node, pos) {
-            if (node.type.name !== "heading") return;
-            var text = node.textContent.trim();
-            if (text) headings.push({ pos: pos, node: node, level: node.attrs.level, text: text });
-        });
-        return headings;
+    // updateToc e applyToc importadas de editor-toc.js.
+    // Wrappers locais injetam o editor e o textarea, mantendo a assinatura
+    // sem argumentos esperada pelos handlers e exports de window.
+    function doUpdateToc() {
+        updateToc(editor, /** @type {HTMLTextAreaElement} */(document.getElementById("toc-area")));
     }
 
-    function tocLevel(tabs) {
-        return Math.min(Math.max(tabs + 1, 1), 6);
-    }
-
-    function updateToc() {
-        if (!editor || editor.isDestroyed) return;
-        var el = document.getElementById("toc-area");
-        if (!el) return;
-        var next = collectHeadings().map(function (h) {
-            var indent = "";
-            for (var i = 1; i < h.level; i++) indent += "\t";
-            return indent + h.text;
-        }).join("\n");
-        // Só escreve se mudou: atribuir o mesmo valor move o cursor do textarea
-        // para o fim, atrapalhando quem está digitando no TOC.
-        if (el.value !== next) el.value = next;
-        // Ajusta altura
-        el.style.height = "auto";
-        el.style.height = el.scrollHeight + "px";
-    }
-
-    // Aplica o texto do TOC no documento — espelha a caixa nos dois sentidos:
-    //   · linha editada  → renomeia o título;
-    //   · tabulação      → nível do título (1..6);
-    //   · linha APAGADA  → o título correspondente é REMOVIDO da nota (era o que
-    //     faltava: apagar no TOC não refletia em nada);
-    //   · linha nova     → cria um título novo no fim da nota.
-    // As posições são as do documento ORIGINAL, então as mudanças são aplicadas
-    // de trás para frente — assim uma alteração nunca invalida a posição da
-    // anterior (a versão antiga somava um "offset" na mão e só sabia lidar com o
-    // mesmo número de linhas).
-    function applyToc(tocText) {
-        if (!editor || editor.isDestroyed) return;
-
-        var parsed = String(tocText == null ? "" : tocText).split("\n")
-            .map(function (l) {
-                var tabs = 0;
-                while (tabs < l.length && l.charAt(tabs) === "\t") tabs++;
-                return { tabs: tabs, text: l.slice(tabs).trim() };
-            })
-            .filter(function (p) { return p.text; });
-
-        var headings = collectHeadings();
-        var limit = Math.min(parsed.length, headings.length);
-
-        // Sem mudança real? Não gera transação (nem marca a nota como suja).
-        var changed = parsed.length !== headings.length;
-        for (var c = 0; !changed && c < limit; c++) {
-            if (parsed[c].text !== headings[c].text ||
-                tocLevel(parsed[c].tabs) !== headings[c].level) {
-                changed = true;
-            }
-        }
-        if (!changed) return;
-
-        var tr = editor.state.tr;
-
-        // 1. Sobraram títulos no documento (TOC com menos linhas) → removê-los.
-        for (var d = headings.length - 1; d >= parsed.length; d--) {
-            tr.delete(headings[d].pos, headings[d].pos + headings[d].node.nodeSize);
-        }
-
-        // 2. Nível e texto dos títulos que continuam (de trás para frente).
-        for (var u = limit - 1; u >= 0; u--) {
-            var entry = headings[u];
-            var node = entry.node;
-            var level = tocLevel(parsed[u].tabs);
-
-            if (entry.level !== level) {
-                var attrs = Object.assign({}, node.attrs, { level: level });
-                tr.setNodeMarkup(entry.pos, null, attrs);
-            }
-
-            if (parsed[u].text !== entry.text) {
-                var from = entry.pos + 1;
-                var to = entry.pos + node.nodeSize - 1;
-                var textNode = editor.state.schema.text(parsed[u].text);
-                if (to > from) tr.replaceWith(from, to, textNode);
-                else tr.insert(from, textNode);
-            }
-        }
-
-        // 3. TOC com mais linhas → títulos novos no fim da nota.
-        for (var n = limit; n < parsed.length; n++) {
-            tr.insert(tr.doc.content.size, editor.state.schema.nodes.heading.create(
-                { level: tocLevel(parsed[n].tabs) },
-                editor.state.schema.text(parsed[n].text)
-            ));
-        }
-
-        if (tr.steps.length) editor.view.dispatch(tr);
+    function doApplyToc(tocText) {
+        applyToc(editor, tocText);
     }
 
     document.addEventListener("input", function (e) {
         if (e.target && e.target.id === "toc-area") {
             if (tocUpdateTimer) clearTimeout(tocUpdateTimer);
             tocUpdateTimer = setTimeout(function () {
-                applyToc(document.getElementById("toc-area").value);
+                doApplyToc(document.getElementById("toc-area").value);
             }, 300);
         }
     });
@@ -1615,107 +1283,9 @@
         }
     });
 
-    function loadTagSuggestions() {
-        fetch("/api/tags")
-            .then(function (r) {
-                return r.json();
-            })
-            .then(function (data) {
-                var list = document.getElementById("tag-suggestion-list");
-                var tags = data.tags || [];
-                if (tags.length === 0) {
-                    list.innerHTML =
-                        '<span class="text-[10px] text-zinc-700">Nenhuma tag indexada.</span>';
-                    return;
-                }
-                list.innerHTML = "";
-                tags.forEach(function (t) {
-                    var btn = document.createElement("button");
-                    btn.className =
-                        "text-[10px] font-bold text-zinc-500 bg-zinc-800/40 hover:bg-zinc-700/60 hover:text-zinc-300 px-2 py-0.5 rounded-sm transition-colors";
-                    btn.textContent = "#" + t;
-                    btn.onclick = function () {
-                        addTagToFrontmatter(t);
-                    };
-                    list.appendChild(btn);
-                });
-            })
-            .catch(function () {});
-    }
-
-    function addTagToFrontmatter(tag) {
-        var fm = document.getElementById("frontmatter-area");
-        var val = fm.value;
-
-        var flowMatch = val.match(/^tags:\s*\[([^\]]*)\]/m);
-        if (flowMatch) {
-            var existing = flowMatch[1].trim();
-            var tags = existing ? existing.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
-            if (!tags.includes(tag)) {
-                tags.push(tag);
-            }
-            var newVal = val.replace(/^tags:\s*\[[^\]]*\]/m, "tags: [" + tags.join(", ") + "]");
-            fm.value = newVal;
-            triggerFmInput(fm);
-            return;
-        }
-
-        var lines = val.split('\n');
-        var tagsIndex = -1;
-        for (var i = 0; i < lines.length; i++) {
-            if (lines[i].trim() === 'tags:') {
-                tagsIndex = i;
-                break;
-            }
-        }
-        if (tagsIndex !== -1) {
-            var tags = [];
-            var lastIndex = tagsIndex;
-            for (var j = tagsIndex + 1; j < lines.length; j++) {
-                var line = lines[j];
-                var match = line.match(/^\s*-\s*(.+)$/);
-                if (match) {
-                    tags.push(match[1].trim());
-                    lastIndex = j;
-                } else if (line.trim() !== "" && !line.startsWith(" ")) {
-                    break;
-                }
-            }
-            if (!tags.includes(tag)) {
-                tags.push(tag);
-            }
-            lines.splice(tagsIndex, (lastIndex - tagsIndex) + 1, "tags: [" + tags.join(", ") + "]");
-            fm.value = lines.join('\n');
-            triggerFmInput(fm);
-            return;
-        }
-
-        if (val.trim()) {
-            fm.value = val.trim() + "\ntags: [" + tag + "]\n";
-        } else {
-            fm.value = "tags: [" + tag + "]\n";
-        }
-        triggerFmInput(fm);
-    }
-
-    function triggerFmInput(el) {
-        var evt = new Event("input", { bubbles: true });
-        el.dispatchEvent(evt);
-    }
-
-    document.addEventListener("input", function (e) {
-        if (e.target && e.target.id === "frontmatter-area") {
-            frontmatterText = e.target.value;
-            e.target.style.height = "auto";
-            e.target.style.height = e.target.scrollHeight + "px";
-            // Marca como alterado e agenda save (inclusive ao clicar em tag sugerida)
-            if (!isInitialLoad) {
-                setStatus("dirty");
-                if (saveTimer) clearTimeout(saveTimer);
-                saveTimer = setTimeout(doSave, 2000);
-            }
-        }
-    });
+    // ── Frontmatter: sugestões de tags e autosize ──
+    // Movidos para editor-frontmatter.js (com o toggle do painel e o listener de
+    // input, que agora chama o onChange passado na instanciação).
 
     // ── Status ──
     function setStatus(s) {
@@ -1751,7 +1321,7 @@
         }
 
         var fd = new FormData();
-        fd.append("filename", filenameInput.value);
+        fd.append("filename", EditorCommon.getCurrentFilename(filenameInput));
         fd.append("content", finalContent);
         fd.append("tags", "");
         try {
@@ -1831,6 +1401,16 @@
                     var errTxt = await renameResp.text().catch(function () { return ""; });
                     throw new Error(errTxt || "Erro ao renomear no servidor");
                 }
+                // O backend propaga o `pai:` das filhas no rename (elas não ficam
+                // mais órfãs). O contador vem no header para avisar o usuário.
+                var kidsRepointed = parseInt(renameResp.headers.get("X-Children-Updated") || "0", 10);
+                if (kidsRepointed > 0) {
+                    hierarchy.notify(
+                        kidsRepointed === 1
+                            ? "1 nota filha atualizada"
+                            : kidsRepointed + " notas filhas atualizadas"
+                    );
+                }
             }
 
             var fd = new FormData();
@@ -1900,10 +1480,16 @@
     var saveBtn = document.getElementById("save-btn");
     if (saveBtn) saveBtn.addEventListener("click", saveNow);
 
-    // ── Frontmatter toggle ──
-    document
-        .getElementById("toggle-fm-btn")
-        .addEventListener("click", toggleFrontmatter);
+    // ── Hierarquia (pai/filhas) ──
+    // O painel de frontmatter já foi inicializado no topo (antes da criação do
+    // editor, que precisa preencher o textarea). Aqui ligamos a barra de
+    // hierarquia: botão "Nota-mãe" e popover de filhas.
+    var hierarchy = initHierarchy({
+        getFilename: function () {
+            return EditorCommon.getCurrentFilename(filenameInput);
+        },
+        authHeaders: EditorCommon.getAuthHeaders,
+    });
 
     // ── Clicar fora fecha menus ──
     document.addEventListener("mousedown", function (e) {
@@ -1976,6 +1562,6 @@
     window.duplicateCurrentNote = duplicateCurrentNote;
     window.toggleToc = toggleToc;
     window.toggleBacklinks = toggleBacklinks;
-    window.updateToc = updateToc;
-    window.applyToc = applyToc;
+    window.updateToc = doUpdateToc;
+    window.applyToc = doApplyToc;
 })();

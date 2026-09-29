@@ -442,7 +442,7 @@
             opts = opts || {};
             var filename = this.normalizeFilename(opts.newName);
             var input = opts.filenameInput || document.getElementById("file-name");
-            var display = filename.split("/").pop() || filename;
+            var display = this.getDisplayName(filename);
 
             if (input) {
                 input.value = display;

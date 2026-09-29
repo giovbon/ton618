@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ton618/core/internal/core/domain"
 )
 
 // safeJoin resolve o caminho e verifica se ele está contido no diretório base,
@@ -44,7 +46,7 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 	switch ext {
 	case ".pdf":
 		basename := filepath.Base(raw)
-		subdirs := []string{"pdfs", "notes"}
+		subdirs := []string{domain.PDFDir, domain.NotesDir}
 		for _, sd := range subdirs {
 			testPath := filepath.Join(docsDir, sd, basename)
 			if _, err := os.Stat(testPath); err == nil {
@@ -55,20 +57,20 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 
 	case ".epub":
 		basename := filepath.Base(raw)
-		filename = "epubs/" + basename
-		fullPath = filepath.Join(docsDir, "epubs", basename)
+		filename = domain.EPUBPrefix + basename
+		fullPath = filepath.Join(docsDir, domain.EPUBDir, basename)
 		return fileTypeEPUB, filename, fullPath, true
 
 	case ".zip":
 		basename := filepath.Base(raw)
 		// Tenta attachments/ primeiro; se não existir, tenta archives/
-		sd := "attachments"
-		if strings.HasPrefix(raw, "archives/") {
-			sd = "archives"
-		} else if !strings.HasPrefix(raw, "attachments/") {
+		sd := domain.AttachmentDir
+		if strings.HasPrefix(raw, domain.ArchivePrefix) {
+			sd = domain.ArchiveDir
+		} else if !strings.HasPrefix(raw, domain.AttachmentPrefix) {
 			// raw veio sem prefixo: verifica se existe em archives/
-			if _, err := os.Stat(filepath.Join(docsDir, "archives", basename)); err == nil {
-				sd = "archives"
+			if _, err := os.Stat(filepath.Join(docsDir, domain.ArchiveDir, basename)); err == nil {
+				sd = domain.ArchiveDir
 			}
 		}
 		filename = sd + "/" + basename
@@ -108,15 +110,15 @@ func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath strin
 func imageSubdir(docsDir, raw, basename string) string {
 	switch {
 	case strings.HasPrefix(raw, imagesPrefix):
-		return "images"
-	case strings.HasPrefix(raw, "attachments/"):
-		return "attachments"
+		return domain.ImageDir
+	case strings.HasPrefix(raw, domain.AttachmentPrefix):
+		return domain.AttachmentDir
 	case !strings.Contains(raw, "/"):
-		if _, err := os.Stat(filepath.Join(docsDir, "images", basename)); err == nil {
-			return "images"
+		if _, err := os.Stat(filepath.Join(docsDir, domain.ImageDir, basename)); err == nil {
+			return domain.ImageDir
 		}
 	}
-	return "notes"
+	return domain.NotesDir
 }
 
 // resolveFileInfoStrict como resolveFileInfo, mas retorna found=false se o arquivo

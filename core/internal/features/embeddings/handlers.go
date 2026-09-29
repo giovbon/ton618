@@ -161,6 +161,23 @@ func (ctx *HandlerContext) HandleEmbeddingSearch(w http.ResponseWriter, r *http.
 	httputil.WriteJSON(w, searchEmbeddingResponse{Results: results})
 }
 
+// HandleModelStatus retorna o andamento do download local do modelo ONNX
+// (~120MB, baixado do HuggingFace no boot). Antes só existia log no servidor:
+// a UI agora mostra o progresso real (arquivo atual, bytes e percentual) e
+// sabe se o download é retomável.
+//
+// GET /api/embeddings/model-status
+func (ctx *HandlerContext) HandleModelStatus(w http.ResponseWriter, r *http.Request) {
+	if ctx.Model == nil {
+		// Sem modelo local gerenciado: nada a baixar (o browser usa o CDN).
+		httputil.WriteJSON(w, ModelProgress{Ready: true, TotalBytes: -1})
+		return
+	}
+	// Não cacheia: o objetivo é ver o progresso andar.
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	httputil.WriteJSON(w, ctx.Model.Progress())
+}
+
 // HandleEmbeddingStatus retorna status de indexacao semantica.
 // GET /api/embeddings/status
 func (ctx *HandlerContext) HandleEmbeddingStatus(w http.ResponseWriter, r *http.Request) {

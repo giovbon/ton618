@@ -77,6 +77,15 @@ func (ctx *HandlerContext) HandleGetSidebar(w http.ResponseWriter, r *http.Reque
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	filteredNotes := filterNotes(noteList, q)
 
+	// Badge de filhas na sidebar: o número de notas que declaram cada uma como
+	// pai (`pai:` do frontmatter). As filhas são referenciadas pelo nome-base, a
+	// mesma chave usada na árvore do banco (baseNameKey).
+	if counts, cErr := ctx.Notes.GetChildrenCounts(); cErr == nil && len(counts) > 0 {
+		for i := range filteredNotes {
+			filteredNotes[i].ChildrenCount = counts[baseNameKey(filteredNotes[i].Arquivo)]
+		}
+	}
+
 	// Paginação do scroll infinito da busca de Notas (from>0 = "carregar mais").
 	from, _ := strconv.Atoi(r.URL.Query().Get("from"))
 	size, _ := strconv.Atoi(r.URL.Query().Get("size"))

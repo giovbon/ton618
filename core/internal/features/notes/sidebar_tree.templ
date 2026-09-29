@@ -92,6 +92,16 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
                 }
             </div>
         }
+
+        if n.ChildrenCount > 0 {
+            <span
+                class="shrink-0 flex items-center gap-1 text-[9px] font-mono font-bold text-indigo-300 bg-indigo-950/40 border border-indigo-500/25 px-1.5 py-0.5 rounded-sm"
+                title={ childrenCountTitle(n.ChildrenCount) }
+            >
+                @icons.Icon(icons.GetIcon("filhas"), "w-3 h-3")
+                <span>{ strconv.Itoa(n.ChildrenCount) }</span>
+            </span>
+        }
         
         <button type="button" 
             data-oldname={ n.Arquivo }
@@ -169,6 +179,15 @@ func getVisibleTags(tags []string) []string {
         }
     }
     return visible
+}
+
+// childrenCountTitle é o tooltip do badge de filhas na sidebar (hierarquia de
+// notas: quantas notas declaram esta como pai via `pai:` no frontmatter).
+func childrenCountTitle(n int) string {
+    if n == 1 {
+        return "1 nota filha (pai: apontando para esta)"
+    }
+    return strconv.Itoa(n) + " notas filhas (pai: apontando para esta)"
 }
 
 func highlightText(text, query string) templ.Component {

@@ -70,6 +70,13 @@ var Config = map[string]IconSpec{
 	"excluir":  {Icon: "trash", Color: "text-zinc-500"},
 	"delete":   {Icon: "trash", Color: "text-zinc-500"},
 
+	// ── HIERARQUIA DE NOTAS (pai/filhas) ──
+	"pai":      {Icon: "workflow", Color: "text-sky-400"},
+	"parent":   {Icon: "workflow", Color: "text-sky-400"},
+	"filhas":   {Icon: "network", Color: "text-indigo-400"},
+	"filhos":   {Icon: "network", Color: "text-indigo-400"},
+	"children": {Icon: "network", Color: "text-indigo-400"},
+
 	// ── ABAS DO MODAL DE CONFIGURAÇÕES ──
 	"arquivamento":          {Icon: "archive", Color: "text-amber-400"},
 	"settings-arquivamento": {Icon: "archive", Color: "text-amber-400"},

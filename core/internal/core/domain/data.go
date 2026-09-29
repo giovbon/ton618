@@ -260,23 +260,123 @@ type EditorData struct {
 	Tags        []string
 	AllTags     []string
 	Backlinks   *BacklinksResult
+
+	// Hierarquia de notas (DECISIONS §6.17/§6.19). Parent é o nome canônico do
+	// pai declarado no frontmatter (`pai:`), vazio quando a nota está na raiz.
+	// Children são as notas que apontam para esta como pai.
+	Parent   string
+	Children []NoteRef
+}
+
+// NoteRef é uma referência leve a outra nota, usada em listas de navegação
+// (ex: as filhas de uma nota no editor).
+type NoteRef struct {
+	Filename    string
+	DisplayName string
 }
 
 // DisplayName extrai o nome do arquivo da rota ou caminho.
 // Remove o prefixo interno "captura-" (usado apenas na geração do nome da
-// captura) para que a exibição seja uniforme em todos os lugares — editor,
-// sidebar, banco de dados, backlinks e busca. O sufixo ".md" é mantido.
+// captura) e a extensão ".md" de notas para que a exibição seja uniforme em
+// todos os lugares — editor, sidebar, banco de dados, backlinks e busca.
+// Extensões de outros arquivos (ex: .pdf, .zip, .epub) são mantidas.
 func DisplayName(name string) string {
 	parts := strings.Split(name, "/")
 	base := name
 	if len(parts) > 0 {
 		base = parts[len(parts)-1]
 	}
-	return strings.TrimPrefix(base, "captura-")
+	base = strings.TrimPrefix(base, "captura-")
+	return strings.TrimSuffix(base, ".md")
 }
 
-// AllowedFilePrefixes são os prefixos de diretório permitidos para acesso via API de arquivos.
-var AllowedFilePrefixes = []string{"notes/", "pdfs/", "attachments/", "archives/", "epubs/", "images/"}
+// ── Layout de diretórios do docs/ ─────────────────────────────────────
+//
+// FONTE ÚNICA dos prefixos de diretório usados em todo o backend (handlers de
+// arquivo, NoteFilename, IsNoteOrPdf, indexação de links, renomeação e
+// resolução de mídia). Ao adicionar um tipo de arquivo novo, adicione o
+// prefixo AQUI — nunca replique a lista em outro arquivo (DECISIONS §12).
+const (
+	NotePrefix       = "notes/"
+	PDFPrefix        = "pdfs/"
+	AttachmentPrefix = "attachments/"
+	ArchivePrefix    = "archives/"
+	EPUBPrefix       = "epubs/"
+	ImagePrefix      = "images/"
+
+	// Nomes dos diretórios (sem a barra final), para filepath.Join.
+	NotesDir      = "notes"
+	PDFDir        = "pdfs"
+	AttachmentDir = "attachments"
+	ArchiveDir    = "archives"
+	EPUBDir       = "epubs"
+	ImageDir      = "images"
+)
+
+// FileDirs são os diretórios de ARQUIVO do docs/ (sem notes/, cujas notas vivem
+// no SQLite), na ordem em que são varridos/procurados.
+var FileDirs = []string{PDFDir, AttachmentDir, ArchiveDir, EPUBDir, ImageDir}
+
+// SearchDirs são os diretórios físicos onde um arquivo pode estar, na ordem de
+// busca: os de arquivo (FileDirs) e, por último, notes/ (legado de PDFs e
+// imagens gravados antes da separação por pasta).
+var SearchDirs = append(append([]string{}, FileDirs...), NotesDir)
+
+// AllowedFilePrefixes é a lista completa e canônica dos prefixos de diretório
+// permitidos para acesso via API de arquivos (validação de path traversal em
+// /file e /file/download).
+var AllowedFilePrefixes = []string{
+	NotePrefix, PDFPrefix, AttachmentPrefix, ArchivePrefix, EPUBPrefix, ImagePrefix,
+}
+
+// NonNoteFilePrefixes são os prefixos de ARQUIVO — tudo em AllowedFilePrefixes
+// exceto NotePrefix (as notas markdown vivem no banco, não em disco). É a lista
+// usada ao expandir um link/anexo sem pasta (ex: "manual.pdf") para todos os
+// diretórios onde ele pode estar.
+var NonNoteFilePrefixes = prefixesExcept(NotePrefix)
+
+// InlineDocPrefixes são os prefixos cujos arquivos são servidos como documento
+// (abertos/exibidos) em vez de download puro: notas, PDFs, anexos e imagens.
+// Base do antigo IsNoteOrPdf.
+var InlineDocPrefixes = []string{NotePrefix, PDFPrefix, AttachmentPrefix, ImagePrefix}
+
+// HasAllowedFilePrefix informa se o caminho começa com um dos prefixos
+// permitidos de AllowedFilePrefixes.
+func HasAllowedFilePrefix(path string) bool {
+	return hasAnyPrefix(path, AllowedFilePrefixes)
+}
+
+// HasInlineDocPrefix informa se o caminho pertence a um dos InlineDocPrefixes.
+func HasInlineDocPrefix(path string) bool {
+	return hasAnyPrefix(path, InlineDocPrefixes)
+}
+
+// HasNonNoteFilePrefix informa se o caminho pertence a um diretório de arquivo
+// (não-nota) permitido.
+func HasNonNoteFilePrefix(path string) bool {
+	return hasAnyPrefix(path, NonNoteFilePrefixes)
+}
+
+func hasAnyPrefix(path string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// prefixesExcept devolve uma cópia de AllowedFilePrefixes sem o prefixo dado,
+// preservando a ordem original (resultado determinístico).
+func prefixesExcept(exclude string) []string {
+	out := make([]string, 0, len(AllowedFilePrefixes))
+	for _, p := range AllowedFilePrefixes {
+		if p != exclude {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // NoteIcon retorna o nome do ícone Lucide correspondente ao tipo de nota vindo do mapa de configuração centralizado.
 func NoteIcon(arquivo string, tags []string) string {

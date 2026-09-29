@@ -136,6 +136,8 @@ templ indexContent() {
                     <div id="model-download-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%"></div>
                 </div>
             </div>
+            <!-- Progresso do download no SERVIDOR (modelo ONNX ~120MB, retomável) -->
+            <span id="model-server-progress" class="hidden text-[9px] font-mono text-amber-500 whitespace-nowrap shrink-0" title="Download do modelo no servidor (feito uma única vez)"></span>
             <!-- Barra de progresso integrada -->
             <div id="reindex-progress" class="hidden flex items-center gap-1.5 ml-2 shrink-0">
                 <span id="reindex-progress-text" class="text-[9px] font-mono text-zinc-500 whitespace-nowrap">0 / 0</span>
@@ -336,6 +338,44 @@ templ indexContent() {
 
         // Warm-up: pré-carrega o modelo (se já estiver pronto, onReady dispara imediatamente)
         idx.warmup();
+        // Progresso do download feito pelo SERVIDOR (uma única vez, no boot).
+        pollModelServer();
+    }
+
+    // pollModelServer mostra o andamento do download do modelo ONNX no servidor
+    // (arquivo atual + percentual). O modelo é baixado no boot para o volume
+    // persistente e servido em /models/*; o download é retomável (HTTP Range) e
+    // o .part preservado, então este painel também serve para ver a retomada.
+    var serverPoll = false;
+    function pollModelServer() {
+        if (serverPoll) return;
+        serverPoll = true;
+        var tick = function () {
+            var el = document.getElementById("model-server-progress");
+            if (!el) { serverPoll = false; return; }
+            fetch("/api/embeddings/model-status")
+                .then(function (r) { return r.json(); })
+                .then(function (p) {
+                    if (!p || p.ready) {
+                        el.classList.add("hidden");
+                        serverPoll = false;
+                        return;
+                    }
+                    var pct = typeof p.percent === "number" ? p.percent : 0;
+                    var nome = String(p.file || "").split("/").pop();
+                    var txt = "Servidor " + pct + "%";
+                    if (nome) txt += " (" + nome + ")";
+                    if (p.last_error) txt += " · erro: " + p.last_error;
+                    el.textContent = txt;
+                    el.classList.remove("hidden");
+                    setTimeout(tick, 2000);
+                })
+                .catch(function () {
+                    el.classList.add("hidden");
+                    serverPoll = false;
+                });
+        };
+        tick();
     }
 
     function updateStatus(state, modelText, indexText) {

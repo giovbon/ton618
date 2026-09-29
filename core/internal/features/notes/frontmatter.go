@@ -137,3 +137,59 @@ func UpdateFrontmatterProperty(content string, key string, value interface{}) (s
 
 	return yamlBuf.String() + body, nil
 }
+
+// MergeFrontmatterTags garante que TODAS as tags informadas estejam presentes no
+// campo `tags:` do frontmatter, preservando as que já existem (união, sem
+// duplicatas, comparação case-insensitive).
+//
+// Existe porque a reindexação (ReplaceFileIndexes) reconstrói a tabela `tags` a
+// partir do conteúdo: tags que só vivem no banco (ex: tags de tipo persistidas
+// por EnsureTypeTags) seriam perdidas ao duplicar/reescrever uma nota. Se nada
+// novo for adicionado, o conteúdo é devolvido intacto.
+func MergeFrontmatterTags(content string, extra []string) (string, error) {
+	fm, _, err := ParseFrontmatter(content)
+	if err != nil {
+		return "", err
+	}
+
+	var current []string
+	if fm != nil {
+		switch v := fm["tags"].(type) {
+		case []string:
+			current = append(current, v...)
+		case []interface{}:
+			for _, item := range v {
+				if s, ok := item.(string); ok {
+					current = append(current, s)
+				}
+			}
+		case string:
+			for _, t := range strings.Split(v, ",") {
+				if t = strings.TrimSpace(t); t != "" {
+					current = append(current, t)
+				}
+			}
+		}
+	}
+
+	seen := make(map[string]bool, len(current)+len(extra))
+	for _, t := range current {
+		seen[strings.ToLower(strings.TrimSpace(t))] = true
+	}
+
+	added := false
+	for _, t := range extra {
+		t = strings.TrimSpace(strings.TrimPrefix(t, "#"))
+		if t == "" || seen[strings.ToLower(t)] {
+			continue
+		}
+		seen[strings.ToLower(t)] = true
+		current = append(current, t)
+		added = true
+	}
+	if !added {
+		return content, nil
+	}
+
+	return UpdateFrontmatterProperty(content, "tags", strings.Join(current, ", "))
+}
