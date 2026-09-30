@@ -11,6 +11,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import Underline from "@tiptap/extension-underline";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
+import FindAndReplace from "@tiptap/extension-find-and-replace";
 
 const CustomLink = Link.extend({
   inclusive: false,
@@ -75,6 +76,7 @@ const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
  * @property {Object} FontFamily - Família de fonte
  * @property {Object} Highlight - Marcação (highlights)
  * @property {Object} Link - Links (customizado, inclusive: false)
+ * @property {Object} FindAndReplace - Busca e substituição (com suporte a regex)
  * @property {Object} Markdown - Parse/serialização markdown
  * @property {Object} marked - Biblioteca marked
  * @property {Object} CodeBlockLowlightExt - Bloco de código com syntax highlight
@@ -94,6 +96,7 @@ window.TipTapEditor = {
   Underline,
   Highlight,
   Link: CustomLink,
+  FindAndReplace,
   Markdown,
   marked,
   CodeBlockLowlightExt: CodeBlockLangLabel,

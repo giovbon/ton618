@@ -42,6 +42,7 @@ await esbuild.build({
     { in: "src/app.js", out: "js/app" },
     "src/editor.js",
     "src/editor-init.js",
+    "src/editor-find.js",
     "src/drawing.jsx",
     "src/database.js",
     "src/semantic.js"
