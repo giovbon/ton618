@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.0",
     "@tiptap/core": "^3.26.0",
     "@tiptap/extension-code-block-lowlight": "^3.26.0",
     "@tiptap/extension-font-family": "^3.26.0",
