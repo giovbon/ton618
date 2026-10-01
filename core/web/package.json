@@ -13,7 +13,6 @@
     "@huggingface/transformers": "^4.2.0",
     "@tiptap/core": "^3.26.0",
     "@tiptap/extension-code-block-lowlight": "^3.26.0",
-    "@tiptap/extension-find-and-replace": "^3.31.3",
     "@tiptap/extension-font-family": "^3.26.0",
     "@tiptap/extension-highlight": "^3.26.0",
     "@tiptap/extension-image": "^3.26.0",

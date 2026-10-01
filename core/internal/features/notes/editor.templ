@@ -103,64 +103,6 @@ templ editorContent(data domain.EditorData) {
         <div class="py-1 overflow-y-auto" id="wikilink-items"></div>
     </div>
 
-    <!-- Painel de busca e substituição (busca nativa do TipTap) -->
-    <div
-        id="find-bar"
-        class="hidden mb-3 rounded-xl border border-zinc-700/50 bg-zinc-900/95 backdrop-blur-xl shadow-xl p-2.5 space-y-2.5"
-    >
-        <!-- Linha 1: busca, navegação, contador, fechar -->
-        <div class="flex items-center gap-2">
-            <input
-                id="find-search"
-                type="text"
-                placeholder="Buscar no documento..."
-                spellcheck="false"
-                autocomplete="off"
-                class="flex-1 min-w-0 bg-zinc-800/70 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-hidden focus:border-sky-400/60 focus:ring-1 focus:ring-sky-400/30 transition-all font-mono"
-            />
-            <button data-find-action="prev" title="Anterior (Shift+Enter)"
-                class="find-btn">↑</button>
-            <button data-find-action="next" title="Próximo (Enter)"
-                class="find-btn">↓</button>
-            <span id="find-count" class="text-xs font-mono text-zinc-500 whitespace-nowrap tabular-nums min-w-[5.5rem] text-right"></span>
-            <button data-find-action="clear" title="Limpar busca"
-                class="find-btn text-zinc-500 hover:text-amber-400">✕</button>
-            <button data-find-action="close" title="Fechar (Esc)"
-                class="find-btn text-zinc-500 hover:text-sky-400">Esc</button>
-        </div>
-        <!-- Linha 2: substituir + ações -->
-        <div class="flex items-center gap-2">
-            <input
-                id="find-replace"
-                type="text"
-                placeholder="Substituir por..."
-                spellcheck="false"
-                autocomplete="off"
-                class="flex-1 min-w-0 bg-zinc-800/70 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-hidden focus:border-sky-400/60 focus:ring-1 focus:ring-sky-400/30 transition-all font-mono"
-            />
-            <button data-find-action="replace" title="Substituir esta ocorrência (Enter no campo acima)"
-                class="find-btn">Substituir</button>
-            <button data-find-action="replace-all" title="Substituir todas as ocorrências"
-                class="find-btn text-sky-400">Todas</button>
-        </div>
-        <!-- Linha 3: toggles -->
-        <div class="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
-            <label class="flex items-center gap-1.5 cursor-pointer select-none hover:text-zinc-200 transition-colors">
-                <input id="find-case" type="checkbox" class="find-chk" />
-                Maiúsc./minúsc.
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer select-none hover:text-zinc-200 transition-colors">
-                <input id="find-regex" type="checkbox" class="find-chk" />
-                Regex
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer select-none hover:text-zinc-200 transition-colors">
-                <input id="find-word" type="checkbox" class="find-chk" />
-                Palavra inteira
-            </label>
-            <span class="ml-auto text-[10px] text-zinc-600 hidden sm:inline">Regex: sintaxe RE2 (sem lookahead/lookbehind/backreference)</span>
-        </div>
-    </div>
-
     <div id="editor-wrapper" class="">
         <div id="editor-content" class="px-1 py-2 min-h-[500px]"></div>
     </div>
@@ -606,45 +548,7 @@ templ editorContent(data domain.EditorData) {
     .wikish-link:hover {
         text-decoration-color: #38bdf8 !important;
     }
-    /* ── Busca nativa (find & replace) ── */
-    /* Highlights dos resultados. A extensão roda com injectCSS:false; estes
-       estilos substituem os padrões para combinar com o tema escuro. */
-    .find-and-replace-result {
-        background-color: rgba(250, 204, 21, 0.25); /* amarelo suave */
-        border-radius: 2px;
-        box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.25);
-    }
-    .find-and-replace-result-current {
-        background-color: rgba(251, 146, 60, 0.5); /* âmbar: resultado atual */
-        border-radius: 2px;
-        box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.6);
-    }
-    .find-btn {
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-        color: #a1a1aa;
-        background: #27272a;
-        border: 1px solid #3f3f46;
-        cursor: pointer;
-        line-height: 1.1;
-        white-space: nowrap;
-        transition: all 0.12s;
-        font-family: var(--font-mono);
-    }
-    .find-btn:hover {
-        color: #e4e4e7;
-        background: #3f3f46;
-    }
-    .find-chk {
-        accent-color: #38bdf8;
-        width: 14px;
-        height: 14px;
-        cursor: pointer;
-    }
 </style>
 
-<script src={ staticver.URL("/static/editor-find.js") }></script>
 <script src={ staticver.URL("/static/editor-init.js") }></script>
 }

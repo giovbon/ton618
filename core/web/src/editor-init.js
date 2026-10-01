@@ -364,7 +364,6 @@ import { initHierarchy } from './editor-hierarchy.js';
             T.Highlight,
             T.ImageExt,
             T.Link,
-            T.FindAndReplace.configure({ injectCSS: false }),
             T.Markdown.configure({
                 transformPastedText: true,
                 transformCopiedText: false,
@@ -388,9 +387,6 @@ import { initHierarchy } from './editor-hierarchy.js';
             setStatus("dirty");
             if (saveTimer) clearTimeout(saveTimer);
             saveTimer = setTimeout(doSave, 2000);
-            // Atualiza o contador/highlights do painel de busca nativa (ex.: os
-            // resultados mudam depois de um replace ou de uma edição no texto).
-            if (window.TonFind) window.TonFind.sync();
         },
         onUpdate: function () {
             // Pula o primeiro onUpdate (disparado ao carregar o conteudo)
@@ -657,12 +653,6 @@ import { initHierarchy } from './editor-hierarchy.js';
             })();
         },
     });
-
-    // ── Busca nativa (painel find & replace) ──
-    // Disponibiliza o editor para o módulo de busca e sincroniza o painel pela
-    // primeira vez (storage já inicializado pela extensão no onCreate).
-    window.__tonfind_getEditor = function () { return editor; };
-    if (window.TonFind) window.TonFind.sync();
 
     // ── Calcula hash inicial do conteúdo (extraído para evitar race condition) ──
     async function computeInitialHash() {
