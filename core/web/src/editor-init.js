@@ -3,7 +3,7 @@
 // @ts-nocheck — Código legado de script inline, tipagem dinâmica de DOM proposital
 
 import { initSlash, buildSlashActions, SLASH_COMMANDS, scoreSlashCommand } from './editor-slash.js';
-import { updateToc, applyToc } from './editor-toc.js';
+import { updateToc, applyToc, tocLineIndex, jumpToTocLine } from './editor-toc.js';
 import { initFrontmatter } from './editor-frontmatter.js';
 import { initHierarchy } from './editor-hierarchy.js';
 
@@ -1280,6 +1280,17 @@ import { initHierarchy } from './editor-hierarchy.js';
                 ta.selectionStart = ta.selectionEnd = start + 1;
             }
             ta.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+    });
+
+    // Ctrl/Cmd+clique no TOC pula para o título da linha clicada (navegação).
+    // O TOC é uma textarea de edição; o clique vira um "índice clicável" sem
+    // sair do modo de edição — a linha do caret é pareada com o título.
+    document.addEventListener("click", function (e) {
+        var ta = /** @type {HTMLTextAreaElement} */(e.target);
+        if (ta && ta.id === "toc-area" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            jumpToTocLine(editor, tocLineIndex(ta.value, ta.selectionStart));
         }
     });
 

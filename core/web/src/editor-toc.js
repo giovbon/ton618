@@ -125,3 +125,41 @@ export function applyToc(editor, tocText) {
 
     if (tr.steps.length) editor.view.dispatch(tr);
 }
+
+/**
+ * Índice (0-based) da linha do TOC onde está o cursor.
+ * Conta as quebras de linha antes do caret; entradas fora dos limites são
+ * grampeadas em [0, length] para não estourar o pareamento linha↔título.
+ * @param {string} text - conteúdo do textarea do TOC
+ * @param {number} caret - posição do cursor (textarea.selectionStart)
+ * @returns {number}
+ */
+export function tocLineIndex(text, caret) {
+    var value = String(text == null ? "" : text);
+    var n = typeof caret === "number" && isFinite(caret) ? caret : 0;
+    var limit = Math.max(0, Math.min(n, value.length));
+    var line = 0;
+    for (var i = 0; i < limit; i++) {
+        if (value.charCodeAt(i) === 10) line++;
+    }
+    return line;
+}
+
+/**
+ * Pula para o título correspondente à linha do TOC (navegação, não edição).
+ *
+ * O TOC lista um título por linha, na mesma ordem de collectHeadings (só
+ * títulos com texto), então a linha N do textarea é headings[N]. Selecionar
+ * o início do título (pos + 1, logo após a marcação do nó) e rolar até lá
+ * mantém o cursor na nota, pronto para continuar editando.
+ * @param {object} editor - instância do TipTap Editor
+ * @param {number} lineIndex - linha do TOC clicada
+ * @returns {boolean} true se havia um título naquela linha
+ */
+export function jumpToTocLine(editor, lineIndex) {
+    if (!editor || editor.isDestroyed) return false;
+    var target = collectHeadings(editor)[lineIndex];
+    if (!target) return false;
+    editor.chain().focus().setTextSelection(target.pos + 1).scrollIntoView().run();
+    return true;
+}

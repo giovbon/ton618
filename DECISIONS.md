@@ -880,6 +880,32 @@ As listas viviam em `allowedPrefixes` (handlers_file), `NoteFilename`, `IsNoteOr
 - **Frontend** (Node v24 do nvm): `tsc --noEmit` limpo e `node build.js --dev` OK (bundle + Tailwind + checagem de sanidade do CSS) — `web/static` regenerado para os comentários não ficarem defasados em relação a `src/`.
 - **E2E no app real** (sandbox isolado: `DOCS_DIR`/`DB_PATH`/`STATE_DIR` em `/tmp`, porta 6199, binário `-tags sqlite_fts5`): `/editor?file=notes/apressado-limbo-58.md` (frontmatter `pai: projeto`) devolve 200 com **`NOTA-MÃE:`** e o chip com o pai resolvido (`<span id="parent-name" class="… text-sky-400">projeto</span>`), e **zero** ocorrências de `ACIMA DE` no HTML — confirmando de ponta a ponta que o alvo do botão é mesmo a nota-mãe (a nota aberta é a filha).
 
+## 6.23 TOC navegável: Ctrl+clique pula até o título (01/10/2026)
+
+📍 `core/web/src/editor-toc.js` | `core/web/src/editor-init.js` | `core/internal/features/notes/editor.templ` | `core/web/tests/editor-toc.unit.cjs` (novo)
+
+**Problema (relatado pelo usuário):** o TOC era **só de edição** — renomear, renivelar e remover títulos —, mas não havia como usá-lo para **navegar** até o título dentro de uma nota longa. Faltava o caminho "índice → ponto da nota".
+
+**Decisão:** **Ctrl+clique** (Cmd no Mac) numa linha do TOC seleciona o início do título correspondente e rola até ele. Nada no documento é alterado.
+
+| Peça | Decisão |
+|---|---|
+| Widget | Mantém a `<textarea>`: edição e navegação no mesmo lugar, sem uma segunda lista de índice para manter em sincronia |
+| Pareamento | A linha N do TOC é `collectHeadings(editor)[N]` — o TOC lista um título por linha (só os que têm texto), na mesma ordem do documento |
+| Destino | `pos + 1` (logo após a marcação do nó = início do texto do título), com `scrollIntoView()` |
+| Extração da linha | `tocLineIndex(text, caret)` — **função pura** que conta as quebras de linha antes do caret e grampeia entradas fora dos limites em `[0, length]` |
+| Atalho | `Ctrl+clique` no Windows/Linux e `Cmd+clique` no macOS — no Mac o `Ctrl+clique` é o clique secundário (menu de contexto), então o handler aceita `ctrlKey` **ou** `metaKey` |
+| Efeito colateral | Nenhum: é seleção/foco, **não** dispara transação — a nota **não** fica suja nem agenda save |
+
+- **Por que não duplo-clique:** numa `textarea` o duplo-clique seleciona a palavra; usá-lo como navegação atrapalharia a edição normal do TOC.
+- **Por que não uma `<ul>` clicável separada (índice de verdade):** duplicaria a UI e o estado do TOC (dois lugares mostrando os mesmos títulos, um editável e outro não). O Ctrl+clique dá o salto sem abandonar o modo de edição; se um dia o índice puramente navegável for desejado, `collectHeadings` já entrega os dados prontos.
+- **Fora do intervalo** (linha vazia/inexistente): o clique é ignorado (`jumpToTocLine` devolve `false`).
+
+### Validação (01/10/2026)
+
+- Frontend (Node): `node --test tests/*.unit.cjs` — 5 casos novos em `editor-toc.unit.cjs` (contagem de linhas pelo caret, grampeamento de limites, salto com `pos + 1` + `scrollIntoView`, e no-op fora do intervalo / editor ausente ou destruído) — **39/39 verde**.
+- `tsc --noEmit` limpo e bundle regenerado (`static/editor-init.js`).
+
 ## 7. Arquitetura de Busca
 
 O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
