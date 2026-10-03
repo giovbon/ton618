@@ -1024,3 +1024,73 @@ As imagens enviadas pelo editor (colar/arrastar ou botão **Imagem** → `POST /
 [Definição dos icones da aplicação](/core/internal/ui/icons/config.go)
 
 https://lucide.dev/icons/
+
+## 6.24 Correções pontuais — globais implícitas, detecção de linguagem e backlinks (03/10/2026)
+
+📍 `core/web/src/editor-slash.js` | `core/web/src/editor-init.js` | `core/internal/features/notes/note_service.go`
+
+### Globais implícitas em `editor-slash.js`
+
+`_setSlashPos` e `_setSlashFilter` eram atribuídas em `initSlash()` sem declaração `var` prévia no topo do arquivo. No build do esbuild com `format: "iife"`, variáveis não declaradas viram globais implícitas no `window`. Adicionadas as declarações:
+
+```js
+var _setSlashPos = null;
+var _setSlashFilter = null;
+```
+
+### `autoDetectCodeLanguage` parava no primeiro bloco
+
+A função usava uma flag `found` e `if (found) return` dentro do `doc.descendants`, interrompendo a varredura após detectar linguagem no **primeiro** code block. Uma nota com 3 blocos sem linguagem só detectava o primeiro.
+
+**Correção:** removida a flag; acumulados todos os `setNodeMarkup` em uma única transação (`tr`) e despachada uma só vez — evita N dispatches e preserva o comportamento sem mover o cursor.
+
+### `wikiNotes` desatualizado após rename na mesma sessão
+
+O autocomplete `[[` carregava `/api/notes` apenas no carregamento inicial da página. Após renomear uma nota sem reload, o nome antigo continuava aparecendo no autocomplete e o novo não aparecia.
+
+**Correção:** `loadWikiNotes()` é chamado ao final de `doRename()` bem-sucedido (antes do `catch`), recarregando o índice de notas em background.
+
+### `UpdateBacklinksOnRename`: fallback para `GetAllNotes` condicional
+
+A função expandia `candidateMap` para **todas as notas** incondicionalmente, anulando o benefício do índice de backlinks implementado em §10 (de ~86× mais rápido para O(N)). Com um vault de 1.000+ notas, cada rename carregava potencialmente MBs de conteúdo sem necessidade.
+
+**Correção:** `GetAllNotes()` agora só é chamado quando `len(candidateMap) == 0` (índice vazio — primeiro uso ou corrompido), preservando o comportamento de segurança sem penalizar o caso normal.
+
+### Validação (03/10/2026)
+
+- **Frontend:** `tsc --noEmit` limpo, `node --test tests/*.unit.cjs` **39/39 verde**, `node build.js --dev` OK.
+- Go: requer WSL (Go não está no PATH do Windows) — executar `go test ./internal/features/notes/... -count=1` antes de subir.
+
+## 6.25 Suporte a opções de Frontmatter no Markmap (maxWidth, etc.) (03/10/2026)
+
+📍 `core/web/src/mindmap.js` | `core/internal/features/notes/mindmap.templ` | `core/web/build.js` | `core/web/tests/mindmap-options.unit.cjs`
+
+### Contexto e Causa Raiz
+
+Opções de nós no Markmap como `maxWidth: 300` (e cores, etc.) não funcionavam por três razões:
+1. `mindmap.js` continha uma regex manual (`FRONTMATTER_REGEX`) que descartava qualquer bloco de frontmatter (`--- ... ---`) antes de enviar o Markdown para o `transformer.transform`.
+2. As opções derivadas de frontmatter (`deriveOptions(frontmatter?.markmap)`) nunca eram passadas para `Markmap.create(...)` e `mmInstance.setData(...)`.
+3. `src/mindmap.js` não constava nos `entryPoints` do `build.js`, fazendo com que alterações no arquivo fonte não fossem reconstruídas no `static/mindmap.js`.
+
+### Mudanças Implementadas
+
+1. **`core/web/src/mindmap.js`**:
+   - Importa `deriveOptions` de `markmap-view`.
+   - Remove o descarte forçado de frontmatter.
+   - Adiciona tolerância: se o usuário escrever `markmap:\n  maxWidth: 300` no topo do arquivo sem os delimitadores `---`, o código envelopa automaticamente em frontmatter válido antes da compilação.
+   - Passa `markmapOptions` (`{ maxWidth: 400, ...deriveOptions(frontmatter?.markmap) }`) para `Markmap.create` e `mmInstance.setData` (tanto no `update` quanto no hook `retransform`), garantindo 400px como largura máxima padrão caso a nota não especifique outro valor.
+2. **`core/internal/features/notes/mindmap.templ` e `handlers_mindmap.go`**:
+   - `handlers_mindmap.go`: novo mapa mental agora inicia por padrão com o bloco `markmap: maxWidth: 400` em seu frontmatter.
+   - `mindmap.templ`: `ensureMindmapFrontmatter` preserva/adiciona o bloco `markmap: maxWidth: 400` ao salvar e renomear.
+3. **`core/web/build.js`**:
+   - Adicionado `"src/mindmap.js"` aos `entryPoints` do esbuild para que o bundle `static/mindmap.js` seja sempre gerado e comprimido junto dos demais assets.
+4. **Testes (`core/web/tests/mindmap-options.unit.cjs`)**:
+   - Valida a extração e derivação de `maxWidth` no `Transformer` e `deriveOptions`.
+   - Valida a tolerância de sintaxe sem `---`.
+   - Valida a presença de `deriveOptions` e `src/mindmap.js` no `build.js`.
+
+### Validação (03/10/2026)
+
+- `npx tsc --noEmit` limpo (0 erros).
+- `node --test tests/*.unit.cjs` **42/42 verde**.
+- `node build.js` gerou com sucesso `static/mindmap.js` (737.2KB) com Gzip (238.4KB) e Brotli (182.5KB).

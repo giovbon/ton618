@@ -500,16 +500,22 @@ templ mindmapContent(data domain.EditorData) {
             }, 1200);
         }
 
+        function ensureMindmapFrontmatter(c) {
+            var trimmed = c.trim();
+            if (trimmed.startsWith("---")) return c;
+            if (/^\s*markmap:\s*\n/.test(c)) {
+                return "---\ntype: markmap\n" + c.replace(/^\s*(markmap:\s*\n(?:[ \t]+[^\n]*\n?)*)/, "$1---\n");
+            }
+            return "---\ntype: markmap\nmarkmap:\n  maxWidth: 400\n---\n" + c;
+        }
+
         async function doSave() {
             if (saveInProgress) return;
             saveInProgress = true;
             savePending = false;
             setStatus("saving");
 
-            var content = jar.toString();
-            if (!content.trim().startsWith("---")) {
-                content = "---\ntype: mindmap\n---\n" + content;
-            }
+            var content = ensureMindmapFrontmatter(jar.toString());
             var currentHash = await generateHash(content);
 
             if (currentHash === lastSavedHash) {
@@ -562,9 +568,7 @@ templ mindmapContent(data domain.EditorData) {
 
         async function doRename() {
             await EditorCommon.doRenameContent(filenameInput, function() {
-                var c = jar.toString();
-                if (!c.trim().startsWith("---")) c = "---\ntype: mindmap\n---\n" + c;
-                return c;
+                return ensureMindmapFrontmatter(jar.toString());
             }, "/mindmap", {
                 setStatus: setStatus,
                 tags: "mindmap",
@@ -584,9 +588,7 @@ templ mindmapContent(data domain.EditorData) {
 
         EditorCommon.setupRenameListeners(filenameInput, {
             getContent: function () {
-                var c = jar.toString();
-                if (!c.trim().startsWith("---")) c = "---\ntype: mindmap\n---\n" + c;
-                return c;
+                return ensureMindmapFrontmatter(jar.toString());
             },
             redirectBase: "/mindmap",
             tags: "mindmap",

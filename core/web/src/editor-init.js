@@ -240,9 +240,9 @@ import { initHierarchy } from './editor-hierarchy.js';
     function autoDetectCodeLanguage() {
         if (!editor || editor.isDestroyed) return;
         var doc = editor.state.doc;
-        var found = false;
+        var tr = editor.state.tr;
+        var modified = false;
         doc.descendants(function (node, pos) {
-            if (found) return;
             if (node.type.name === "codeBlock") {
                 var lang = node.attrs.language;
                 if (lang && lang !== "auto") return;
@@ -251,19 +251,20 @@ import { initHierarchy } from './editor-hierarchy.js';
                 try {
                     var result = T.lowlight.highlightAuto(codeText);
                     if (result && result.language) {
-                        // Aplica sem mover o cursor do usuário
-                        var tr = editor.state.tr;
                         tr.setNodeMarkup(pos, null, {
                             language: result.language,
                         });
-                        editor.view.dispatch(tr);
-                        found = true;
+                        modified = true;
                     }
                 } catch (e) {
                     // Silencia erros de detecção
                 }
             }
         });
+        // Despacha uma única transação cobrindo todos os blocos
+        if (modified) {
+            editor.view.dispatch(tr);
+        }
     }
 
     // ── Organizar títulos (corrige hierarquia bagunçada de colagens de IA) ──
@@ -1459,6 +1460,9 @@ import { initHierarchy } from './editor-hierarchy.js';
                 filenameInput: filenameInput,
                 base: "/editor",
             });
+            // Mantém o autocomplete de [[wikilinks]] atualizado na sessão atual.
+            // Sem isso o nome antigo continuaria aparecendo e o novo não apareceria.
+            loadWikiNotes();
         } catch (err) {
             setStatus("dirty");
             console.error("Rename failed:", err);

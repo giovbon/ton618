@@ -259,10 +259,16 @@ func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
 		}
 	}
 
-	// Garante que todas as notas do sistema sejam testadas caso a indexação estivesse pendente
-	if allNotes, err := s.notes.GetAllNotes(); err == nil {
-		for f := range allNotes {
-			candidateMap[f] = true
+	// Garante que todas as notas do sistema sejam testadas caso a indexação
+	// de backlinks estivesse pendente (ex: primeiro uso ou índice corrompido).
+	// Só expande se o índice não retornou nenhum candidato — preserva o
+	// comportamento de segurança sem cancelar o benefício da otimização
+	// para vaults grandes (ver §10 DECISIONS.md: ~86× mais rápido).
+	if len(candidateMap) == 0 {
+		if allNotes, err := s.notes.GetAllNotes(); err == nil {
+			for f := range allNotes {
+				candidateMap[f] = true
+			}
 		}
 	}
 

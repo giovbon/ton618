@@ -44,7 +44,8 @@ await esbuild.build({
     "src/editor-init.js",
     "src/drawing.jsx",
     "src/database.js",
-    "src/semantic.js"
+    "src/semantic.js",
+    "src/mindmap.js"
   ],
   bundle: true,
   minify: true,

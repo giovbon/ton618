@@ -1,7 +1,7 @@
 // @ts-check
 import { Transformer } from "markmap-lib";
 import * as markmap from "markmap-view";
-const { Markmap, loadCSS, loadJS } = markmap;
+const { Markmap, loadCSS, loadJS, deriveOptions } = markmap;
 
 // Expose markmap globally for plugins
 window.markmap = markmap;
@@ -179,16 +179,20 @@ window.initMindmap = function (svgEl, initialMarkdown) {
   async function update(markdown) {
     try {
       let compileBody = markdown;
-      const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-      const fmMatch = markdown.match(FRONTMATTER_REGEX);
-      if (fmMatch) {
-        compileBody = fmMatch[2];
+      // Tolerância: se o usuário começar com `markmap:` no topo sem os delimitadores `---`,
+      // envelopamos em frontmatter para que o transformer processe corretamente.
+      if (!compileBody.trim().startsWith("---") && /^\s*markmap:\s*\n/.test(compileBody)) {
+        compileBody = "---\n" + compileBody.replace(/^\s*(markmap:\s*\n(?:[ \t]+[^\n]*\n?)*)/, "$1---\n");
       }
 
       // Track for retransform (hljs loading)
       lastCompileBody = compileBody;
 
-      const { root, features } = transformer.transform(compileBody);
+      const { root, features, frontmatter } = transformer.transform(compileBody);
+      const markmapOptions = {
+        maxWidth: 400,
+        ...deriveOptions(frontmatter?.markmap),
+      };
       
       // Load assets dynamically for features (like Prism for syntax highlighting or KaTeX for math)
       const { styles, scripts } = transformer.getUsedAssets(features);
@@ -202,6 +206,7 @@ window.initMindmap = function (svgEl, initialMarkdown) {
         console.log("[Markmap] Creating mmInstance");
         mmInstance = Markmap.create(svgEl, {
           autoFit: true,
+          ...markmapOptions,
         }, root);
 
         // Intercept fold changes
@@ -214,7 +219,7 @@ window.initMindmap = function (svgEl, initialMarkdown) {
         };
       } else {
         console.log("[Markmap] Updating data in existing mmInstance");
-        mmInstance.setData(root);
+        mmInstance.setData(root, markmapOptions);
         mmInstance.fit();
       }
 
@@ -233,9 +238,13 @@ window.initMindmap = function (svgEl, initialMarkdown) {
     if (mmInstance && lastCompileBody) {
       console.log("[Markmap] retransform hook fired — re-rendering with hljs");
       try {
-        const { root, features } = transformer.transform(lastCompileBody);
+        const { root, features, frontmatter } = transformer.transform(lastCompileBody);
+        const markmapOptions = {
+          maxWidth: 400,
+          ...deriveOptions(frontmatter?.markmap),
+        };
         applyFoldState(root);
-        mmInstance.setData(root);
+        mmInstance.setData(root, markmapOptions);
         mmInstance.fit();
         if (features && features.hljs) {
           ensureHljsStyleInSvg();

@@ -19,7 +19,9 @@
 
 var _editorRef = null;
 var _slashPosRef = null;
+var _setSlashPos = null;
 var _slashFilterRef = null;
+var _setSlashFilter = null;
 var _hideSlashMenuFn = null;
 
 /**
