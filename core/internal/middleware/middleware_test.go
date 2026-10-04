@@ -12,38 +12,38 @@ import (
 // ── checkCredentials ────────────────────────────────────────────
 
 func TestCheckCredentials_BasicAuthHeader(t *testing.T) {
-	// Via r.BasicAuth() (browser nativo / fetch com Authorization)
+	// Via r.BasicAuth() — qualquer usuário, senha correta
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 
-	if !checkCredentials(req, "admin", "ton618") {
-		t.Error("credenciais validas via BasicAuth() deveriam retornar true")
+	if !checkCredentials(req, "ton618") {
+		t.Error("senha correta via BasicAuth() deveria retornar true")
 	}
 }
 
 func TestCheckCredentials_BasicAuthHeader_SenhaErrada(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("admin", "senha-errada")
+	req.SetBasicAuth("ton618", "senha-errada")
 
-	if checkCredentials(req, "admin", "ton618") {
+	if checkCredentials(req, "ton618") {
 		t.Error("senha errada deveria retornar false")
 	}
 }
 
-func TestCheckCredentials_BasicAuthHeader_UsuarioErrado(t *testing.T) {
+func TestCheckCredentials_UsuarioDiferenteIgnorado(t *testing.T) {
+	// Usuário diferente mas senha correta — deve ser aceito (username é ignorado)
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("hacker", "ton618")
+	req.SetBasicAuth("qualquer-usuario", "ton618")
 
-	if checkCredentials(req, "admin", "ton618") {
-		t.Error("usuario errado deveria retornar false")
+	if !checkCredentials(req, "ton618") {
+		t.Error("username é ignorado: senha correta com qualquer usuário deveria retornar true")
 	}
 }
 
 func TestCheckCredentials_SemAuthHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	// Nenhum header de auth
 
-	if checkCredentials(req, "admin", "ton618") {
+	if checkCredentials(req, "ton618") {
 		t.Error("sem auth header deveria retornar false")
 	}
 }
@@ -51,21 +51,21 @@ func TestCheckCredentials_SemAuthHeader(t *testing.T) {
 func TestCheckCredentials_AuthorizationHeaderManual(t *testing.T) {
 	// Header Authorization setado manualmente (como o JS faz)
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	req.Header.Set("Authorization", "Basic "+raw)
 
-	if !checkCredentials(req, "admin", "ton618") {
-		t.Error("credenciais via Authorization header manual deveriam retornar true")
+	if !checkCredentials(req, "ton618") {
+		t.Error("senha correta via Authorization header manual deveria retornar true")
 	}
 }
 
 func TestCheckCredentials_CookieBase64Bruto(t *testing.T) {
 	// Cookie com base64 bruto (formato atual)
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: raw})
 
-	if !checkCredentials(req, "admin", "ton618") {
+	if !checkCredentials(req, "ton618") {
 		t.Error("cookie com base64 bruto deveria retornar true")
 	}
 }
@@ -73,11 +73,11 @@ func TestCheckCredentials_CookieBase64Bruto(t *testing.T) {
 func TestCheckCredentials_CookieUrlEncoded(t *testing.T) {
 	// Cookie URL-encoded (ex: se encodeURIComponent foi usado)
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	urlEncoded := url.QueryEscape(raw)
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: urlEncoded})
 
-	if !checkCredentials(req, "admin", "ton618") {
+	if !checkCredentials(req, "ton618") {
 		t.Error("cookie URL-encoded deveria retornar true")
 	}
 }
@@ -85,10 +85,10 @@ func TestCheckCredentials_CookieUrlEncoded(t *testing.T) {
 func TestCheckCredentials_CookieComPrefixoBasic(t *testing.T) {
 	// Cookie no formato legado: "Basic " + base64 (sem URL-encode)
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: "Basic " + raw})
 
-	if !checkCredentials(req, "admin", "ton618") {
+	if !checkCredentials(req, "ton618") {
 		t.Error("cookie com prefixo 'Basic ' legado deveria retornar true")
 	}
 }
@@ -96,21 +96,21 @@ func TestCheckCredentials_CookieComPrefixoBasic(t *testing.T) {
 func TestCheckCredentials_CookieComPrefixoBasicUrlEncoded(t *testing.T) {
 	// Cookie legado com URL-encoding: "Basic%20" + base64
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	urlEncoded := strings.ReplaceAll("Basic "+raw, " ", "%20")
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: urlEncoded})
 
-	if !checkCredentials(req, "admin", "ton618") {
+	if !checkCredentials(req, "ton618") {
 		t.Error("cookie com prefixo 'Basic%20' URL-encoded deveria retornar true")
 	}
 }
 
 func TestCheckCredentials_CookieSenhaErrada(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:senha-errada"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:senha-errada"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: raw})
 
-	if checkCredentials(req, "admin", "ton618") {
+	if checkCredentials(req, "ton618") {
 		t.Error("cookie com senha errada deveria retornar false")
 	}
 }
@@ -119,19 +119,18 @@ func TestCheckCredentials_CookieInvalido(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: "nao-e-base64!!!@@@"})
 
-	if checkCredentials(req, "admin", "ton618") {
+	if checkCredentials(req, "ton618") {
 		t.Error("cookie com valor invalido deveria retornar false")
 	}
 }
 
-func TestCheckCredentials_UserPassVazio_RetornaFalse(t *testing.T) {
-	// Se user/pass estao vazios, o middleware nem chama checkCredentials,
-	// mas mesmo se chamar, deve retornar false
+func TestCheckCredentials_SenhaVazia_RetornaFalse(t *testing.T) {
+	// Se pass está vazio, checkCredentials deve retornar false mesmo com header
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 
-	if checkCredentials(req, "", "") {
-		t.Error("com user/pass vazios, checkCredentials deveria retornar false")
+	if checkCredentials(req, "") {
+		t.Error("com pass vazio, checkCredentials deveria retornar false")
 	}
 }
 
@@ -192,16 +191,16 @@ func TestMiddleware_RotaProtegida_SemAuth_Redireciona(t *testing.T) {
 
 func TestMiddleware_RotaProtegida_ComAuthHeader_Permite(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 	code := checkMiddlewareResult(t, req, "admin", "ton618")
 	if code != http.StatusOK {
-		t.Errorf("com auth valido deveria retornar 200, got %d", code)
+		t.Errorf("com senha valida deveria retornar 200, got %d", code)
 	}
 }
 
 func TestMiddleware_RotaProtegida_ComCookie_Permite(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: raw})
 	code := checkMiddlewareResult(t, req, "admin", "ton618")
 	if code != http.StatusOK {
@@ -219,10 +218,10 @@ func TestMiddleware_ApiStatus_SemAuth_Retorna401(t *testing.T) {
 
 func TestMiddleware_ApiStatus_ComAuth_Permite(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/status", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 	code := checkMiddlewareResult(t, req, "admin", "ton618")
 	if code != http.StatusOK {
-		t.Errorf("/api/status com auth valido deveria retornar 200, got %d", code)
+		t.Errorf("/api/status com senha valida deveria retornar 200, got %d", code)
 	}
 }
 
@@ -246,19 +245,19 @@ func TestMiddleware_POST_SemAuth_Retorna401(t *testing.T) {
 
 func TestMiddleware_POST_ComAuth_Permite(t *testing.T) {
 	req := httptest.NewRequest("POST", "/file/save", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 	code := checkMiddlewareResult(t, req, "admin", "ton618")
 	if code != http.StatusOK {
-		t.Errorf("POST com auth valido deveria retornar 200, got %d", code)
+		t.Errorf("POST com senha valida deveria retornar 200, got %d", code)
 	}
 }
 
 func TestMiddleware_MultiplasFontes_Prioridade(t *testing.T) {
 	// Cookie com senha invalida + header valido → deve permitir (header tem prioridade)
 	req := httptest.NewRequest("GET", "/", nil)
-	req.SetBasicAuth("admin", "ton618")
+	req.SetBasicAuth("ton618", "ton618")
 
-	wrongRaw := base64.StdEncoding.EncodeToString([]byte("admin:senha-errada"))
+	wrongRaw := base64.StdEncoding.EncodeToString([]byte("ton618:senha-errada"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: wrongRaw})
 
 	code := checkMiddlewareResult(t, req, "admin", "ton618")
@@ -270,7 +269,7 @@ func TestMiddleware_MultiplasFontes_Prioridade(t *testing.T) {
 func TestMiddleware_CookieSobrepoeHeaderVazio(t *testing.T) {
 	// Sem header mas com cookie valido
 	req := httptest.NewRequest("GET", "/", nil)
-	raw := base64.StdEncoding.EncodeToString([]byte("admin:ton618"))
+	raw := base64.StdEncoding.EncodeToString([]byte("ton618:ton618"))
 	req.AddCookie(&http.Cookie{Name: "ton_auth", Value: raw})
 
 	code := checkMiddlewareResult(t, req, "admin", "ton618")

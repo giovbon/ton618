@@ -9,23 +9,34 @@ import (
 	"strings"
 )
 
-// checkCredentials valida user:pass contra as credenciais configuradas.
-func checkCredentials(r *http.Request, user, pass string) bool {
+// checkCredentials valida apenas a senha contra as credenciais configuradas.
+// O usuário no token Basic Auth é ignorado — o login é feito exclusivamente por senha.
+func checkCredentials(r *http.Request, pass string) bool {
+	if pass == "" {
+		return false
+	}
+
+	// extrai a senha de uma string "user:pass" decodificada de base64
+	extractPass := func(decoded string) string {
+		parts := strings.SplitN(decoded, ":", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+		return ""
+	}
+
 	// 1. Tenta Basic Auth header nativo (browser, fetch)
-	u, p, ok := r.BasicAuth()
-	if ok && u == user && p == pass {
+	_, p, ok := r.BasicAuth()
+	if ok && p == pass {
 		return true
 	}
 
-	// 2. Tenta Authorization header manual (sessionStorage JS)
+	// 2. Tenta Authorization header manual (localStorage JS)
 	authHeader := r.Header.Get("Authorization")
 	if strings.HasPrefix(authHeader, "Basic ") {
 		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
-		if err == nil {
-			parts := strings.SplitN(string(decoded), ":", 2)
-			if len(parts) == 2 && parts[0] == user && parts[1] == pass {
-				return true
-			}
+		if err == nil && extractPass(string(decoded)) == pass {
+			return true
 		}
 	}
 
@@ -43,8 +54,7 @@ func checkCredentials(r *http.Request, user, pass string) bool {
 			val = strings.TrimPrefix(val, "Basic ")
 		}
 		if decoded, decErr := base64.StdEncoding.DecodeString(val); decErr == nil {
-			parts := strings.SplitN(string(decoded), ":", 2)
-			if len(parts) == 2 && parts[0] == user && parts[1] == pass {
+			if extractPass(string(decoded)) == pass {
 				return true
 			}
 		}
@@ -53,8 +63,9 @@ func checkCredentials(r *http.Request, user, pass string) bool {
 	return false
 }
 
-// BasicAuthMiddleware retorna um middleware HTTP Basic Auth.
-// Se user e pass forem vazios, permite acesso sem autenticação.
+// BasicAuthMiddleware retorna um middleware de autenticação por senha.
+// Se pass for vazio (e user vazio), permite acesso sem autenticação.
+// O username no token Basic Auth é ignorado — apenas a senha é validada.
 func BasicAuthMiddleware(next http.Handler, user, pass string) http.Handler {
 	if user == "" && pass == "" {
 		return next
@@ -67,7 +78,7 @@ func BasicAuthMiddleware(next http.Handler, user, pass string) http.Handler {
 			return
 		}
 
-		if checkCredentials(r, user, pass) {
+		if checkCredentials(r, pass) {
 			next.ServeHTTP(w, r)
 			return
 		}
