@@ -184,6 +184,9 @@ func (s *Store) DeleteAllFileRecords(filename string) error {
 	if _, err := tx.Exec("DELETE FROM popularity WHERE arquivo = ?", filename); err != nil {
 		return err
 	}
+	if _, err := tx.Exec("DELETE FROM file_metadata WHERE arquivo = ?", filename); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM notes WHERE filename = ?", filename); err != nil {
 		return err
 	}

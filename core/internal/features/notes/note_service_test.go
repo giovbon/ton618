@@ -21,6 +21,8 @@ type mockFileOps struct {
 	getNotesNeedingMarkmapTagFn func() ([]string, error)
 	getActiveTodoMarkersFn      func() ([]db.TodoMarker, error)
 	replaceFileIndexesFn        func(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, todos []processor.TodoItem, modTime time.Time) error
+	getAllFileMetadataFn        func() (map[string]map[string]string, error)
+	setFileMetadataFn           func(arquivo, key, value string) error
 }
 
 func (m *mockFileOps) DeleteAllFileRecords(filename string) error {
@@ -50,6 +52,18 @@ func (m *mockFileOps) GetActiveTodoMarkers() ([]db.TodoMarker, error) {
 func (m *mockFileOps) ReplaceFileIndexes(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, todos []processor.TodoItem, modTime time.Time) error {
 	if m.replaceFileIndexesFn != nil {
 		return m.replaceFileIndexesFn(ctx, filename, docs, links, tags, todos, modTime)
+	}
+	return nil
+}
+func (m *mockFileOps) GetAllFileMetadata() (map[string]map[string]string, error) {
+	if m.getAllFileMetadataFn != nil {
+		return m.getAllFileMetadataFn()
+	}
+	return nil, nil
+}
+func (m *mockFileOps) SetFileMetadata(arquivo, key, value string) error {
+	if m.setFileMetadataFn != nil {
+		return m.setFileMetadataFn(arquivo, key, value)
 	}
 	return nil
 }

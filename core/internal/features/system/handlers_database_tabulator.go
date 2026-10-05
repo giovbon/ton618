@@ -43,6 +43,14 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		notesContent = make(map[string]string)
 	}
 
+	// Metadados externos de arquivos (ex: `pai` de PDF/EPUB/ZIP). Arquivos não
+	// têm frontmatter — ver DECISIONS §6.24.
+	fileMeta, err := ctx.Store.GetAllFileMetadata()
+	if err != nil {
+		slog.Warn("erro ao obter metadados de arquivos", "error", err)
+		fileMeta = nil
+	}
+
 	newCacheEntries := make(map[string]dbCacheEntry)
 	var data []map[string]interface{}
 	columnSet := make(map[string]bool)
@@ -109,6 +117,25 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		}
 
+		// Arquivos não têm frontmatter: os metadados da tabela são a ÚNICA fonte
+		// das propriedades deles. A linha pode vir do cache (cuja chave é o mtime,
+		// que não muda ao editar um metadado nem ao renomear o pai), então além de
+		// aplicar os valores atuais é preciso REMOVER as chaves que não existem
+		// mais — senão um `pai` antigo ficaria preso na linha cacheada.
+		if !isNoteFile(n.Arquivo) {
+			for k := range row {
+				if strings.HasPrefix(k, "_") || isFileRowBuiltin(k) {
+					continue
+				}
+				if _, ok := fileMeta[n.Arquivo][k]; !ok {
+					delete(row, k)
+				}
+			}
+			for k, v := range fileMeta[n.Arquivo] {
+				row[k] = v
+			}
+		}
+
 		row["embeded"] = embeddedFiles[n.Arquivo]
 
 		normalizeParentKey(row)
@@ -140,7 +167,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
-	columns = append(columns, map[string]interface{}{"title": "Embeded", "field": "embeded", "editor": false, "width": 110, "hozAlign": "center"})
+	columns = append(columns, map[string]interface{}{"title": "Indexada", "field": "embeded", "editor": false, "width": 95, "hozAlign": "center", "headerTooltip": "Nota indexada na busca semântica"})
 
 	for col := range columnSet {
 		lowerCol := strings.ToLower(col)
@@ -265,6 +292,10 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 				}
 			}
 
+			// Metadados externos (ex: `pai`) — lidos ANTES do rename porque
+			// DeleteAllFileRecords os remove; restaurados sob o novo caminho.
+			oldMeta, _ := ctx.Store.GetFileMetadata(oldName)
+
 			if err := os.Rename(oldPath, newPath); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -279,6 +310,12 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 				watcher.ProcessFile(ctx.Store, watcher.FileEvent{
 					Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
 				})
+			}
+
+			for k, v := range oldMeta {
+				if err := ctx.Store.SetFileMetadata(newName, k, v); err != nil {
+					slog.Error("restore file metadata on rename", "file", newName, "key", k, "error", err)
+				}
 			}
 			if ctx.Notes != nil {
 				if err := ctx.Notes.UpdateBacklinksOnRename(oldName, newName); err != nil {
@@ -311,9 +348,12 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(req.File))
-	if ext == ".zip" || ext == ".pdf" || ext == ".epub" {
-		if req.Key == "tags" {
+	// Arquivos (PDF/EPUB/ZIP/...): não são notas. Só `tags` e metadados
+	// (`pai`) se aplicam — e o `pai` vive na tabela file_metadata (DECISIONS
+	// §6.24), não no frontmatter (que não existe).
+	if !isNoteFile(req.File) {
+		switch {
+		case strings.EqualFold(req.Key, "tags"):
 			rawVal, _ := req.Value.(string)
 			var tagList []string
 			for _, t := range strings.Split(rawVal, ",") {
@@ -325,6 +365,22 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 			}
 			if err := ctx.Store.SetFileTags(req.File, tagList); err != nil {
 				http.Error(w, "error updating tags", http.StatusInternalServerError)
+				return
+			}
+		case isParentKey(req.Key):
+			ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
+			if strings.Contains(ref, ",") {
+				http.Error(w, "um arquivo só pode ter UM pai — remova a vírgula do campo 'Pai'", http.StatusBadRequest)
+				return
+			}
+			// Arquivos são apenas FILHAS: valida que o pai é uma nota e que não
+			// há ciclo (o alvo é resolvido só entre notas — ver §6.24).
+			if err := ctx.validateParentAssignment(req.File, ref); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := ctx.Notes.SetFileParent(req.File, ref); err != nil {
+				http.Error(w, "error saving file parent", http.StatusInternalServerError)
 				return
 			}
 		}

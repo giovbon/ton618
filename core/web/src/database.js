@@ -68,6 +68,27 @@
         return `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/></svg>`;
     }
 
+    // Escapa texto que vai para HTML (nomes de arquivo podem ter <, >, &).
+    function escapeHtml(s) {
+        return String(s == null ? "" : s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    // Rótulos legíveis por tipo (o servidor manda o código, ex: "pdf").
+    var TYPE_LABELS = {
+        nota: "Nota", pdf: "PDF", epub: "EPUB", anexo: "Anexo", arquivo: "Arquivo",
+        desenho: "Desenho", markmap: "Mapa mental", youtube: "YouTube",
+        artigo: "Artigo", captura: "Captura", semanal: "Semanal", imagem: "Imagem"
+    };
+
+    function typeLabel(t) {
+        var key = String(t || "").toLowerCase();
+        return TYPE_LABELS[key] || (key ? key : "—");
+    }
+
     // ── Hierarquia de notas (propriedade "pai" do frontmatter) ──
     // O estado de expansão é guardado por arquivo no localStorage: sem isso a
     // árvore voltaria toda fechada a cada recarga da página.
@@ -109,6 +130,72 @@
             loadExpandedRows()[row.getData().arquivo] = false;
             saveExpandedRows();
         });
+    }
+
+    // Anota cada nó com o nível EXIBIDO (0 = raiz). Alimenta as guias verticais
+    // de indentação (--lvl). É recalculado a cada setData porque a busca promove
+    // e omite nós — o nível exibido não é o mesmo da árvore completa.
+    function annotateLevels(rows, depth) {
+        for (var i = 0; i < rows.length; i++) {
+            rows[i]._level = depth;
+            var kids = rows[i][childrenKey];
+            if (kids && kids.length) annotateLevels(kids, depth + 1);
+        }
+    }
+
+    // Marca as ÓRFÃS: nota com `pai:` declarado que não resolveu e ficou na
+    // raiz. Calculado UMA vez sobre os dados completos — o filtro de busca
+    // promove filhos à raiz e não pode marcar órfã falsa.
+    function markOrphans(rows, depth) {
+        for (var i = 0; i < rows.length; i++) {
+            if (depth === 0 && rows[i].pai) rows[i]._orphan = true;
+            var kids = rows[i][childrenKey];
+            if (kids && kids.length) markOrphans(kids, depth + 1);
+        }
+    }
+
+    // Percorre a floresta em pré-ordem (pai antes dos filhos).
+    function walkTree(rows, fn) {
+        for (var i = 0; i < rows.length; i++) {
+            fn(rows[i]);
+            var kids = rows[i][childrenKey];
+            if (kids && kids.length) walkTree(kids, fn);
+        }
+    }
+
+    // Expande TODOS os níveis. getTreeChildren só enxerga os filhos DEPOIS que
+    // o pai foi expandido, por isso a recursão desce expandindo cada nó.
+    function expandRowDeep(row) {
+        if (!row || !row.getTreeChildren || !row.treeExpand) return;
+        var kids = row.getTreeChildren();
+        if (!kids || !kids.length) return;
+        row.treeExpand();
+        kids = row.getTreeChildren();
+        for (var i = 0; i < kids.length; i++) expandRowDeep(kids[i]);
+    }
+
+    // Expandir/recolher tudo (botões da toolbar). Atualiza o estado persistido
+    // por nota para que a escolha sobreviva ao reload.
+    function setAllRowsExpanded(expand) {
+        if (!table || !hasTree) return;
+        var saved = loadExpandedRows();
+        walkTree(baseRows, function (node) {
+            if (node && node.arquivo) saved[node.arquivo] = expand;
+        });
+        saveExpandedRows();
+
+        var roots = table.getRows();
+        for (var i = 0; i < roots.length; i++) {
+            if (expand) expandRowDeep(roots[i]);
+            else if (roots[i].treeCollapse) roots[i].treeCollapse();
+        }
+    }
+
+    function setupTreeButtons() {
+        var expandBtn = document.getElementById("db-expand-all");
+        var collapseBtn = document.getElementById("db-collapse-all");
+        if (expandBtn) expandBtn.addEventListener("click", function () { setAllRowsExpanded(true); });
+        if (collapseBtn) collapseBtn.addEventListener("click", function () { setAllRowsExpanded(false); });
     }
 
     // ── Parser de busca avançada ──
@@ -455,6 +542,7 @@
         // completos: nada a recarregar (evita um render extra no boot).
         if (searchActive || filterApplied) {
             filterApplied = searchActive;
+            annotateLevels(nodes, 0);
             table.setData(nodes);
         }
     }
@@ -470,6 +558,9 @@
                 // applySearch (mostra quantas notas estão sendo exibidas agora).
                 baseRows = data.data || [];
                 filterApplied = false;
+                // Órfãs primeiro (base completa) e depois os níveis exibidos.
+                markOrphans(baseRows, 0);
+                annotateLevels(baseRows, 0);
 
                 var savedVisibility = {};
                 try {
@@ -486,17 +577,23 @@
                     // ela fica travada visível.
                     if (hasTree && c.field === "titulo") {
                         c.visible = true;
+                        // Impede a coluna encolher a ponto de espremer o
+                        // controle +/- e o ícone.
+                        c.minWidth = 240;
                     }
 
-                    // embedded column
+                    // embedded column → "Indexada": ✔ quando há embedding, —
+                    // quando ainda não, e — neutro para tipos não indexáveis.
                     if (c.field === "embeded") {
                         c.formatter = function (cell) {
                             var rowData = cell.getRow().getData();
                             var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                            if (typeStr === "desenho" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub") {
-                                return "N/A";
+                            if (typeStr === "desenho" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub" || typeStr === "imagem") {
+                                return "<span class='text-zinc-600' title='Tipo não indexável'>—</span>";
                             }
-                            return cell.getValue() ? "true" : "false";
+                            return cell.getValue()
+                                ? "<span class='text-emerald-500 font-bold' title='Indexada na busca semântica'>✔</span>"
+                                : "<span class='text-zinc-600' title='Ainda não indexada'>—</span>";
                         };
                         return c;
                     }
@@ -521,11 +618,34 @@
                         return c;
                     }
 
-                    // titulo column
+                    // titulo column: ícone do tipo (SSOT do servidor) + marca de
+                    // órfã + contador de filhas. É a coluna âncora da árvore.
                     if (c.field === "titulo") {
                         c.formatter = function (cell) {
-                            return "<strong class='text-sky-400'>" + cell.getValue() + "</strong>";
+                            var rowData = cell.getRow().getData();
+                            var icon = rowData._icon || noteIconFallback();
+                            var kids = rowData[childrenKey];
+                            var chip = kids && kids.length
+                                ? "<span class='db-child-count' title='" + kids.length + " filha(s)'>" + kids.length + "</span>"
+                                : "";
+                            var orphan = rowData._orphan
+                                ? "<span class='db-orphan-dot' title='Nota-mãe não encontrada: " + escapeHtml(rowData.pai) + "'></span>"
+                                : "";
+                            return "<span class='db-title'><span class='db-title-icon'>" + icon + "</span>" + orphan +
+                                "<strong class='text-sky-400'>" + escapeHtml(cell.getValue()) + "</strong>" + chip + "</span>";
                         };
+                        return c;
+                    }
+
+                    // type column: ícone + rótulo legível (em vez do código cru).
+                    if (c.field === "type") {
+                        c.formatter = function (cell) {
+                            var rowData = cell.getRow().getData();
+                            var icon = rowData._icon || noteIconFallback();
+                            return "<span class='db-type'><span class='db-title-icon'>" + icon + "</span>" +
+                                escapeHtml(typeLabel(cell.getValue())) + "</span>";
+                        };
+                        c.minWidth = 110;
                         return c;
                     }
 
@@ -558,7 +678,19 @@
                     layout: "fitColumns",
                     responsiveLayout: "collapse",
                     columnResizeGuide: true,
+                    movableColumns: true,
                     index: "arquivo",
+                    // Guias verticais de indentação: cada linha recebe --lvl com
+                    // o seu nível exibido (ver annotateLevels). O CSS do
+                    // database.templ usa a variável para desenhar as linhas nos
+                    // níveis ancestrais.
+                    rowFormatter: function (row) {
+                        var el = row.getElement();
+                        if (!el) return;
+                        var lvl = row.getData()._level || 0;
+                        if (lvl > 0) el.style.setProperty("--lvl", String(lvl));
+                        else el.style.removeProperty("--lvl");
+                    },
                     // ── Hierarquia (propriedade "pai" do frontmatter) ──
                     // As notas vêm do servidor já agrupadas em "_children"
                     // quando existe algum vínculo válido (meta.hasTree).
@@ -585,6 +717,10 @@
                 });
 
                 if (hasTree) setupTreeState(table);
+
+                // Botões de expandir/recolher tudo só fazem sentido com árvore.
+                var treeActions = document.getElementById("db-tree-actions");
+                if (treeActions) treeActions.style.display = hasTree ? "" : "none";
 
                 // Populate column selector checkboxes (a coluna do toggle da
                 // árvore não pode ser ocultada — ver populateColumnCheckboxes)
@@ -860,6 +996,7 @@
         setupSearch();
         setupSearchModeButton();
         setupColumnSelector();
+        setupTreeButtons();
         initTabulator();
     }
 

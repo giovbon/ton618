@@ -37,14 +37,15 @@ import (
 // O Tabulator exibe a hierarquia com o módulo Data Tree, que espera os filhos
 // no campo "_children" de cada linha — ver buildNoteTree.
 const (
-	// parentKey é a chave canônica do frontmatter que declara a nota-mãe.
+	// parentKey é a chave canônica que declara a nota-mãe. Em notas markdown
+	// vive no frontmatter; em ARQUIVOS, na tabela file_metadata (ver §6.24).
 	// Também é o campo/coluna que o Tabulator exibe e edita (rótulo "Pai").
-	parentKey = "pai"
+	parentKey = domain.ParentKey
 
 	// parentKeyLegacy é o nome antigo da chave. Aceito apenas na LEITURA: existe
 	// para que notas gravadas antes da renomeação continuem aninhadas. Toda
 	// gravação usa parentKey.
-	parentKeyLegacy = "parent"
+	parentKeyLegacy = domain.ParentKeyLegacy
 
 	// childrenKey é o campo que o módulo Data Tree do Tabulator lê para montar
 	// os níveis. O prefixo "_" garante que ele nunca vire uma coluna visível
@@ -73,6 +74,11 @@ type noteTreeIndex struct {
 // newNoteTreeIndex indexa as notas para resolução por nome (caso típico) e por
 // caminho (desambiguação).
 //
+// Só NOTAS entram no índice: arquivos (PDF/EPUB/ZIP/...) podem ser FILHAS, mas
+// nunca PAI — por isso o alvo de `pai:` é resolvido exclusivamente entre notas
+// (ver DECISIONS §6.24). Um `pai: manual` apontando para `pdfs/manual.pdf` não
+// resolve: a nota permanece na raiz.
+//
 // A escolha do dono de cada nome-base é 100% determinística: a varredura é feita
 // na ordem da slice de entrada e a preferência (notes/ primeiro, depois mtime
 // mais recente) é decidida por regra explícita — nunca pela ordem de iteração
@@ -84,14 +90,14 @@ func newNoteTreeIndex(entries []noteEntry) *noteTreeIndex {
 	}
 
 	for _, e := range entries {
-		if e.File != "" {
+		if e.File != "" && isNoteFile(e.File) {
 			ix.files[strings.ToLower(e.File)] = e.File
 		}
 	}
 
 	winners := make(map[string]noteEntry, len(entries))
 	for _, e := range entries {
-		if e.File == "" {
+		if e.File == "" || !isNoteFile(e.File) {
 			continue
 		}
 		base := baseNameKey(e.File)
@@ -203,6 +209,24 @@ func baseNameKey(file string) string {
 		base = base[i+1:]
 	}
 	return strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
+}
+
+// isNoteFile informa se o arquivo é uma NOTA (markdown, com conteúdo no banco).
+// Arquivos (PDF/EPUB/ZIP/...) são apenas FILHAS na hierarquia: nunca podem ser
+// pai de ninguém — regra central do §6.24.
+func isNoteFile(file string) bool {
+	return strings.HasSuffix(strings.ToLower(file), ".md")
+}
+
+// isFileRowBuiltin informa se a chave é uma coluna montada pelo próprio handler
+// (não vem de metadado externo). Usado ao limpar, da linha de um arquivo, os
+// metadados que não existem mais — ver HandleGetDatabaseData (§6.24).
+func isFileRowBuiltin(key string) bool {
+	switch key {
+	case "arquivo", "mtime", "titulo", "tags", "type", "Type", "embeded":
+		return true
+	}
+	return false
 }
 
 // preferAsParent decide qual candidata vence quando duas notas compartilham o

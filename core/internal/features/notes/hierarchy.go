@@ -77,7 +77,7 @@ func ParentRefOfContent(content string) string {
 	if err != nil || fm == nil {
 		return ""
 	}
-	for _, key := range []string{"pai", "parent"} {
+	for _, key := range []string{domain.ParentKey, domain.ParentKeyLegacy} {
 		for k, v := range fm {
 			if !strings.EqualFold(k, key) || v == nil {
 				continue
@@ -119,6 +119,22 @@ func (s *NoteService) GetHierarchy(filename string) (parent string, children []d
 		}
 	}
 
+	// Arquivos (PDF/EPUB/ZIP/...) também podem ser filhas: o `pai` deles vive
+	// na tabela file_metadata, não no frontmatter (ver DECISIONS §6.24).
+	if fileMeta, fmErr := s.store.GetAllFileMetadata(); fmErr == nil {
+		for file, meta := range fileMeta {
+			if file == filename {
+				continue
+			}
+			if ParentCompareKey(meta[domain.ParentKey]) == self {
+				children = append(children, domain.NoteRef{
+					Filename:    file,
+					DisplayName: domain.DisplayName(file),
+				})
+			}
+		}
+	}
+
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].DisplayName < children[j].DisplayName
 	})
@@ -156,6 +172,16 @@ func (s *NoteService) GetChildrenCounts() (map[string]int, error) {
 		}
 	}
 
+	// Filhas que são ARQUIVOS (PDF/EPUB/ZIP/...) não têm frontmatter; o `pai`
+	// delas vive na tabela file_metadata (ver DECISIONS §6.24).
+	if fileMeta, fmErr := s.store.GetAllFileMetadata(); fmErr == nil {
+		for _, meta := range fileMeta {
+			if ref := ParentCompareKey(meta[domain.ParentKey]); ref != "" {
+				counts[ref]++
+			}
+		}
+	}
+
 	s.childrenMu.Lock()
 	s.childrenMap = counts
 	s.childrenAt = time.Now()
@@ -170,4 +196,16 @@ func (s *NoteService) invalidateChildrenCounts() {
 	s.childrenMu.Lock()
 	s.childrenMap = nil
 	s.childrenMu.Unlock()
+}
+
+// SetFileParent define (ou remove, quando ref == "") o `pai` de um ARQUIVO
+// (PDF/EPUB/ZIP/...). Arquivos não têm frontmatter: o vínculo vive na tabela
+// file_metadata (ver DECISIONS §6.24). Invalida o cache de contagens de filhas,
+// já que o badge da sidebar precisa refletir a mudança.
+func (s *NoteService) SetFileParent(file, ref string) error {
+	if err := s.store.SetFileMetadata(file, domain.ParentKey, ref); err != nil {
+		return fmt.Errorf("SetFileParent: %w", err)
+	}
+	s.invalidateChildrenCounts()
+	return nil
 }

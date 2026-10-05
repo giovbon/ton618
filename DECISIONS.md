@@ -1094,3 +1094,68 @@ Opções de nós no Markmap como `maxWidth: 300` (e cores, etc.) não funcionava
 - `npx tsc --noEmit` limpo (0 erros).
 - `node --test tests/*.unit.cjs` **42/42 verde**.
 - `node build.js` gerou com sucesso `static/mindmap.js` (737.2KB) com Gzip (238.4KB) e Brotli (182.5KB).
+
+## 6.24 Hierarquia com ARQUIVOS (PDF/EPUB/ZIP) como filhas — `file_metadata` (05/10/2026)
+
+📍 `core/internal/core/db/{db.go,file_metadata.go,reindex.go}` | `core/internal/core/domain/data.go` | `core/internal/features/notes/{hierarchy.go,note_service.go}` | `core/internal/features/system/{note_tree.go,handlers_database_tabulator.go}`
+
+**Problema:** a hierarquia (§6.17/§6.19/§6.21) vive no frontmatter da própria nota (`pai:`). PDF/EPUB/ZIP são binários no disco — não têm onde ler/escrever frontmatter — então editar a coluna "Pai" de um arquivo no Tabulator **retornava 200 sem gravar nada**.
+
+**Decisão:** arquivos podem ser **FILHAS** (declaram `pai`), nunca **PAI**. O vínculo vive numa tabela de metadados externos por arquivo, o mesmo padrão já usado pela tabela `tags` para esses mesmos arquivos.
+
+| Peça | Decisão |
+|---|---|
+| Tabela | `file_metadata (arquivo, key, value, PRIMARY KEY(arquivo,key))` — chave/valor genéricos (hoje só `pai` é gravado; futuros metadados reusam) |
+| Chave | `domain.ParentKey` (`pai`) — a mesma do frontmatter; `ParentKeyLegacy` (`parent`) segue só na leitura |
+| Notas | continuam no frontmatter (`notes.content`), como antes — a tabela existe só para arquivos |
+| Arquivo como pai | **proibido**: o índice de resolução de pais (`newNoteTreeIndex`) considera **apenas notas** (`.md`). Um `pai: manual` apontando para `pdfs/manual.pdf` não resolve e a nota fica na raiz |
+| Pai único / ciclo | mesmas regras: guarda de vírgula + `validateParentAssignment` (o alvo é resolvido só entre notas, então a cadeia é sempre de notas) |
+| Gravação | `POST /api/notes/update-property` com `key=pai` em arquivo → `NoteService.SetFileParent` → `file_metadata` (valor vazio remove) |
+| Leitura | `HandleGetDatabaseData` injeta os metadados nas linhas de arquivo; `buildNoteTree` monta a árvore sem mudança |
+| Rename | o `pai` do arquivo é repontado por `UpdateParentOnRename` (frontmatter das notas + `file_metadata`); renomear o arquivo preserva os metadados sob o novo caminho |
+| Delete | `DeleteAllFileRecords` limpa `file_metadata` (fonte única de limpeza) |
+| Sidebar | `GetChildrenCounts` soma as filhas-arquivo → badge correto; `GetHierarchy` lista arquivos como filhas no popover do editor |
+
+### Detalhes que evitaram bugs reais
+
+- ⚠️ **Cache do Tabulator (bug encontrado no E2E):** a linha é cacheada por **mtime**, que não muda ao editar metadado nem ao renomear a nota-mãe. Se a injeção só preenchesse chaves ausentes, o `pai` antigo ficaria **preso** na linha. Agora, para arquivos, a injeção **remove as chaves que não existem mais** (toda chave sem prefixo `_` que não seja coluna nativa é metadado) e então aplica os valores atuais.
+- SQL direto nos métodos do `Store` (como `BatchGetNotesContent`), em vez de sqlc: mantém a feature autocontida e não exige regenerar o pacote `dbgen`.
+- ⚠️ Em `db.go` o schema é uma raw string Go delimitada por crase: **comentário SQL não pode conter crase** (fecha a string).
+- `SetFileParent` invalida o cache de contagens de filhas (`invalidateChildrenCounts`), como qualquer outra gravação.
+
+### Validação (05/10/2026)
+
+- **Go** (WSL, Go 1.26): `gofmt -l` limpo, `go vet -tags sqlite_fts5 ./...` limpo, `go build -tags sqlite_fts5` OK e `go test -tags sqlite_fts5 ./...` **100% verde**.
+- **Testes novos:** `db/file_metadata_test.go` (CRUD, valor vazio remove, múltiplas chaves, `DeleteAllFileRecords` limpa) | `system/file_hierarchy_test.go` (arquivo como filha, **arquivo nunca é pai**, injeção da coluna Pai, gravação/remoção via endpoint, múltiplos pais 400, **regressão do cache após rename**) | `notes/hierarchy_file_test.go` (contagens com filhas-arquivo, `GetHierarchy` com filhas-arquivo, rename propaga o `pai` do arquivo, `SetFileParent` grava/remove).
+- **E2E no app real** (sandbox isolado, porta 6199, binário `-tags sqlite_fts5`): PDF como filha (`pai: [[PROJETO]]` normalizado), coluna Pai injetada, aninhamento e `hasTree`, badge de 1 filha na sidebar, arquivo **nunca** como pai, rename da nota repontando o `pai` do arquivo, remoção devolvendo à raiz e múltiplos pais recusados com 400 — **tudo OK**.
+
+## 6.25 Tabulator — leitura visual da hierarquia e colunas (05/10/2026)
+
+📍 `core/internal/features/notes/database.templ` | `core/web/src/database.js` | `core/internal/features/system/handlers_database_tabulator.go`
+
+Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança de dados).
+
+| Item | O que mudou |
+|---|---|
+| Ícone no Título | o formatter passa a usar o `_icon` (SVG do servidor, SSOT §6.9) que **já vinha no payload**, mas só era usado na coluna "Abrir" (oculta) |
+| Coluna "Tipo" | ícone + rótulo legível (mapa `TYPE_LABELS`) em vez do código cru (`pdf`, `anexo`) |
+| "Embeded" → "Indexada" | corrige o typo do rótulo e mostra **✔ / —** com tooltip (em vez de `true`/`false`/`N/A`) |
+| Guias de indentação | uma linha vertical por nível ancestral (ver abaixo) |
+| Contador de filhas | chip no nó que tem `_children` (ex.: `projeto · 3`) |
+| Marca de órfã | ponto âmbar quando a nota declara um `pai:` que não resolve |
+| Expandir/Recolher tudo | botões na toolbar (aparecem só no modo árvore) |
+| Colunas móveis | `movableColumns: true` + `minWidth` no Título (não espremer o controle +/-) |
+
+### Guias verticais — como funciona (e a armadilha)
+
+- O Tabulator **não expõe o nível** da linha (`getTreeLevel` não existe no 6.3.1). Solução: `annotateLevels()` calcula `_level` na floresta **exibida** e o `rowFormatter` publica `--lvl` na linha.
+- O CSS da célula Título desenha `--lvl` linhas com `repeating-linear-gradient` + `background-size: calc(var(--lvl) * 18px)`, alinhadas ao **centro do controle +/-** (offset 20px = padding 12px + 8px).
+- 🔴 **Armadilha real** (medida no navegador): com `dataTreeBranchElement: false` o Tabulator **ainda cria** um `.tabulator-data-tree-branch-empty` de **7px**. O `marginLeft` acumula o nível (18×L), mas a largura de 7px entra **uma vez** → do 2º nível em diante o controle ficava **desalinhado** das guias. Corrigido com `#notes-table .tabulator-data-tree-branch-empty { width: 0 }` (passo uniforme de 18px).
+- ⚠️ `movableRows` (arrastar linhas) é **incompatível com `dataTree`** — o próprio Tabulator emite warning e desabilita. Não usar (`movableColumns` é outra coisa e é seguro).
+- `_orphan` é calculado **uma vez** sobre os dados completos: o filtro de busca promove filhos à raiz e marcaria órfã falsa se fosse recalculado depois.
+
+### Validação (05/10/2026)
+
+- `tsc --noEmit` limpo, `node build.js` (produção) OK, `npm test` **42/42**.
+- Go: `templ generate`, `gofmt -l` limpo, `go vet`, `go build` e `go test ./...` verdes.
+- **E2E no navegador** (sandbox isolado, porta 6199): ícones nas colunas Título/Tipo, chip de filhas (`projeto` 3, `backend` 1), ponto de órfã, guias alinhadas em 3 níveis (centros medidos em 20/38/56px), "Expandir" (7 linhas) ↔ "Recolher" (3 raízes) e estado persistido.

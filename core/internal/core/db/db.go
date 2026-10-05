@@ -204,6 +204,17 @@ func initSchema(database *sql.DB) error {
 		mtime   TEXT DEFAULT ''
 	);
 
+	-- Metadados externos por arquivo (ex: pai de PDF/EPUB/ZIP). Arquivos
+	-- binarios nao tem frontmatter, entao o vinculo de hierarquia vive aqui.
+	-- Chave/valor genericos para reusar em futuros metadados (ver DECISIONS 6.24).
+	CREATE TABLE IF NOT EXISTS file_metadata (
+		arquivo TEXT NOT NULL,
+		key     TEXT NOT NULL,
+		value   TEXT DEFAULT '',
+		PRIMARY KEY (arquivo, key)
+	);
+	CREATE INDEX IF NOT EXISTS idx_file_metadata_key ON file_metadata(key);
+
 	CREATE TABLE IF NOT EXISTS notes (
 		filename  TEXT PRIMARY KEY,
 		mtime     TEXT DEFAULT '',

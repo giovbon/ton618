@@ -250,6 +250,17 @@ func FilterUserTags(tags []string) []string {
 	return result
 }
 
+// ── Hierarquia de notas ──
+//
+// ParentKey é a chave canônica da "nota-mãe". Em notas markdown ela vive no
+// frontmatter; em ARQUIVOS (PDF/EPUB/ZIP/...) vive na tabela file_metadata,
+// já que binários não têm frontmatter (ver DECISIONS §6.24). ParentKeyLegacy é
+// o nome antigo, aceito apenas na leitura.
+const (
+	ParentKey       = "pai"
+	ParentKeyLegacy = "parent"
+)
+
 // ── EditorData ──
 
 type EditorData struct {

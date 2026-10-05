@@ -21,7 +21,23 @@ templ databaseContent() {
                 <!-- Contador: apenas QUANTAS notas estão sendo exibidas agora
                      (muda com a busca — ver setStats em database.js) -->
                 <div class="text-sm font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
-                
+
+                <!-- Expandir/recolher tudo (só no modo árvore; o JS mostra) -->
+                <div id="db-tree-actions" class="flex items-center gap-1.5" style="display:none">
+                    <button id="db-expand-all" type="button"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        title="Expandir todos os níveis da hierarquia">
+                        @icons.Icon("chevron-down", "w-3.5 h-3.5")
+                        Expandir
+                    </button>
+                    <button id="db-collapse-all" type="button"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        title="Recolher todos os níveis da hierarquia">
+                        @icons.Icon("chevron-right", "w-3.5 h-3.5")
+                        Recolher
+                    </button>
+                </div>
+
                 <!-- Column Visibility Selector -->
                 <div class="relative" id="column-selector-container">
                     <button id="column-selector-btn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden">
@@ -253,6 +269,71 @@ templ databaseContent() {
         background-color: transparent !important;
         border-color: transparent !important;
         cursor: not-allowed;
+    }
+
+    /* ── Leitura da hierarquia (Fase 1) ──
+       Guias verticais: cada linha desenha 1 px por nível ANCESTRAL. O nível
+       vem de --lvl (rowFormatter); o passo (18px) é o dataTreeChildIndent e o
+       offset base (20px) é o centro do controle +/- do 1º nível
+       (padding-left 12px + 8px de meia largura).
+       O espaçador da árvore precisa ter largura ZERO: a largura padrão do tema
+       (7px) desalinhava as guias dos níveis mais fundos. */
+    #notes-table .tabulator-data-tree-branch-empty {
+        width: 0 !important;
+    }
+    #notes-table .tabulator-cell[tabulator-field="titulo"] {
+        background-image: repeating-linear-gradient(
+            to right,
+            #71717a 0 1px,
+            transparent 1px 18px
+        );
+        background-repeat: no-repeat;
+        background-size: calc(var(--lvl, 0) * 18px) 100%;
+        background-position: 20px 0;
+    }
+    .db-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+    .db-type {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .db-title-icon {
+        display: inline-flex;
+        align-items: center;
+        /* Neutro de propósito: a cor por tipo é definida pelo servidor (SSOT) —
+           não duplicar a paleta no cliente (ver DECISIONS §6.9). */
+        color: #71717a;
+        flex-shrink: 0;
+    }
+    .db-title-icon svg {
+        display: block;
+    }
+    .db-child-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        font-family: var(--font-mono);
+        color: #a5b4fc; /* indigo-300 */
+        background: rgba(49, 46, 129, 0.35);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: 999px;
+    }
+    .db-orphan-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: #f59e0b; /* amber-500 */
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+        flex-shrink: 0;
     }
 </style>
 

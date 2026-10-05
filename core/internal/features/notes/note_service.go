@@ -25,6 +25,8 @@ type fileOps interface {
 	GetNotesNeedingMarkmapTag() ([]string, error)
 	GetActiveTodoMarkers() ([]db.TodoMarker, error)
 	ReplaceFileIndexes(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, todos []processor.TodoItem, modTime time.Time) error
+	GetAllFileMetadata() (map[string]map[string]string, error)
+	SetFileMetadata(arquivo, key, value string) error
 }
 
 // NoteService gerencia o ciclo de vida de notas markdown.
@@ -416,15 +418,15 @@ func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
 		}
 
 		// Grava sempre a forma canônica (nome curto, sem extensão, sem pasta)
-		updated, updErr := UpdateFrontmatterProperty(refContent, "pai", newShort)
+		updated, updErr := UpdateFrontmatterProperty(refContent, domain.ParentKey, newShort)
 		if updErr != nil {
 			slog.Error("UpdateParentOnRename: update frontmatter", "file", refFile, "error", updErr)
 			continue
 		}
 
 		// Remove chave legada `parent:` se existir
-		if _, hasLegacy := fm["parent"]; hasLegacy {
-			updated, updErr = UpdateFrontmatterProperty(updated, "parent", "")
+		if _, hasLegacy := fm[domain.ParentKeyLegacy]; hasLegacy {
+			updated, updErr = UpdateFrontmatterProperty(updated, domain.ParentKeyLegacy, "")
 			if updErr != nil {
 				slog.Error("UpdateParentOnRename: remove legacy parent key", "file", refFile, "error", updErr)
 			}
@@ -436,6 +438,25 @@ func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
 			slog.Info("UpdateParentOnRename: pai atualizado", "file", refFile, "old", oldShort, "new", newShort)
 		}
 	}
+
+	// Arquivos (PDF/EPUB/ZIP/...) que declaram este pai vivem na tabela
+	// file_metadata: não têm frontmatter. Regrava o `pai` para o novo nome curto,
+	// senão viram filhas órfãs de um nome que não existe mais (DECISIONS §6.24).
+	if fileMeta, fmErr := s.store.GetAllFileMetadata(); fmErr == nil {
+		for file, meta := range fileMeta {
+			if ParentCompareKey(meta[domain.ParentKey]) != strings.ToLower(oldShort) {
+				continue
+			}
+			if err := s.store.SetFileMetadata(file, domain.ParentKey, newShort); err != nil {
+				slog.Error("UpdateParentOnRename: update file metadata", "file", file, "error", err)
+			} else {
+				slog.Info("UpdateParentOnRename: pai de arquivo atualizado", "file", file, "old", oldShort, "new", newShort)
+			}
+		}
+	}
+
+	// O cache de contagens da sidebar pode ter contado filhas-arquivo.
+	s.invalidateChildrenCounts()
 
 	return nil
 }
