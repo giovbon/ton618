@@ -170,6 +170,9 @@ templ databaseContent() {
         margin-right: 7px !important;
         position: relative !important;
         overflow: hidden !important;
+        /* A célula do Título é um flex container (§6.28): sem flex-shrink: 0 o
+           controle é espremido (18px → 8-11px) pelas linhas de título longo. */
+        flex-shrink: 0 !important;
         align-items: center;
         justify-content: center;
     }
@@ -286,6 +289,14 @@ templ databaseContent() {
         width: 0 !important;
     }
     #notes-table .tabulator-cell[tabulator-field="titulo"] {
+        /* A célula é um flex container de UMA linha: o espaçador da árvore
+           (width 0 + margin-left do nível), o controle +/- e o título dividem
+           a largura. Sem isso o título é uma caixa ATÔMICA (inline-flex) que,
+           sendo maior que a largura disponível, transborda a célula e o
+           `text-overflow: ellipsis` do tema troca TODO o conteúdo por um
+           único "..." — ver DECISIONS §6.28. */
+        display: inline-flex;
+        align-items: center;
         background-image: repeating-linear-gradient(
             to right,
             #71717a 0 1px,
@@ -299,6 +310,22 @@ templ databaseContent() {
         display: inline-flex;
         align-items: center;
         gap: 7px;
+        /* Ocupa a sobra da linha e pode encolher (min-width: 0) para o texto
+           ser cortado com "…" em vez de vazar da célula.
+           ⚠️ flex-basis EXPLÍCITO em 0: com `auto` (== max-content do título) a
+           soma das bases estoura a célula nas linhas de título longo e o
+           encolhimento proporcional espreme os IRMÃOS flex — foi assim que o
+           controle +/- ficou com 8-11px em vez de 18px (ver DECISIONS §6.28). */
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    /* Só o texto do título encolhe — o ícone (flex-shrink: 0) e o chip de
+       filhas continuam visíveis mesmo com o título truncado. */
+    .db-title > strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .db-type {
         display: inline-flex;

@@ -727,8 +727,14 @@
                             var orphan = rowData._orphan
                                 ? "<span class='db-orphan-dot' title='Nota-mãe não encontrada: " + escapeHtml(rowData.pai) + "'></span>"
                                 : "";
+                            // O título longo é cortado com "…" pelo CSS. O title=
+                            // devolve o texto COMPLETO no hover — sem ele o nome
+                            // truncado (típico de PDF/EPUB aninhados) fica
+                            // irrecuperável na tabela.
+                            var titulo = cell.getValue();
+                            var full = escapeHtml(titulo);
                             return "<span class='db-title'><span class='db-title-icon'>" + icon + "</span>" + orphan +
-                                "<strong class='text-sky-400'>" + escapeHtml(cell.getValue()) + "</strong>" + chip + "</span>";
+                                "<strong class='text-sky-400' title='" + full + "'>" + full + "</strong>" + chip + "</span>";
                         };
                         return c;
                     }

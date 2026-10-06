@@ -1186,3 +1186,37 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 - No boot, `applySearch` passou a rodar **sempre** no `tableBuilt` (antes só rodava se houvesse `db_last_query`), para o filtro de hierarquia persistido ser honrado mesmo sem busca.
 
 **Validação:** `templ generate`, `tsc --noEmit`, `go build -tags sqlite_fts5` OK. `npm test`: as 2 falhas são pré-existentes (falta `markmap-common` no `node_modules`, não relacionadas).
+
+## 6.28 Título aninhado virando "..." no Tabulator (06/10/2026)
+
+📍 `core/internal/features/notes/database.templ` | `core/web/src/database.js` (+ `static/database.js`)
+
+**Problema:** uma linha **aninhada** com título mais largo que a coluna exibia **apenas `...`** — nem um caractere do nome. Reproduzido em harness isolado (bundle v6.3.1 real + o `<style>` do `database.templ`, Chromium): com `layout: fitColumns` a coluna Título media 315px e o título, 582px. Não tem relação com hierarquia nem com o `displayTitle` (§6.26) — o valor nos dados estava correto.
+
+**Causa raiz (CSS):** o formatter embrulha ícone + título + chip em `.db-title { display: inline-flex }`, que é uma **caixa atômica**. Como `.tabulator-cell` impõe `white-space: nowrap`, o **min-content** do `<strong>` é o texto INTEIRO — então a caixa `inline-flex` se dimensiona pelo *max-content* (582px), em vez de encolher para a largura disponível (shrink-to-fit = `max(min-content, available)`). A caixa **transborda** a célula e o `text-overflow: ellipsis` do tema (`.tabulator-cell`), em vez de cortar o texto, **descarta o conteúdo transbordado e desenha um único `...`** (a caixa atômica não é divisível).
+
+**Decisão (só CSS, sem `dataTreeExpandElement` — ver §6.17):**
+- A célula do Título passou a ser **`display: inline-flex; align-items: center`** — continua *inline-level*, então o layout de colunas do Tabulator (células inline-block lado a lado) não muda. Agora o **espaçador da árvore** (width 0 + `margin-left` do nível), o **controle +/-** e o título dividem a linha como flex items.
+- `.db-title` recebeu **`flex: 1 1 0; min-width: 0`**: ocupa a sobra da linha e pode encolher. ⚠️ O `flex-basis` é **explícito em `0`** de propósito — com `auto` (== max-content do título) a soma das bases estoura a célula nas linhas de título longo e o encolhimento proporcional espreme os **irmãos** flex (ver “Efeito colateral” abaixo).
+- **`.db-title > strong`** é o ÚNICO que encolhe: `min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`. O ícone (`flex-shrink: 0`) e o **chip de filhas** seguem visíveis mesmo com o título truncado.
+- O formatter agora publica **`title="<título completo>"`** no `<strong>`: o nome inteiro (típico de PDF/EPUB aninhados) continua recuperável no hover. Passa pelo mesmo `escapeHtml` (que já escapa aspas).
+
+**Alternativa descartada:** resolver só com `.db-title { display: inline }` (caixa inline não-atômica) também corta o texto corretamente, mas o **chip de filhas**, que vem DEPOIS do texto no HTML, desaparece junto com o transbordo. A célula flex preserva os dois.
+
+### Efeito colateral da célula flex: controle +/- espremido (corrigido no mesmo dia)
+
+**Sintoma (relatado pelo usuário):** o controle `+/-` da árvore ficou **estreito** (uma pílula fina em vez do quadrado de 16px) nas linhas de título longo.
+
+**Causa:** com `.db-title { flex: 1 1 auto }`, o `flex-basis: auto` vale o **max-content do título** (ex.: 582px). A soma das bases (espaçador 0 + controle 16 + título 582 = 598px) estoura os ~291px da célula ⇒ sobra **negativa**, e o flexbox a distribui **proporcionalmente entre TODOS os itens** (não só no que deveria encolher). O controle, com `flex-shrink: 1` (padrão), perdia a sua cota: medido no harness, **18px → 11px**; com os slugs longos do banco real, ainda menos.
+
+**Correção (2 linhas):**
+- `.db-title` passou a **`flex: 1 1 0`** — base 0, então a soma das bases = 16px (só o controle), nunca há sobra negativa por causa do título, e o título ocupa a sobra pelo `flex-grow`.
+- `#notes-table .tabulator-data-tree-control` recebeu **`flex-shrink: 0 !important`** (defensivo: o controle nunca é espremido).
+
+**Lição:** ao transformar um container do Tabulator em flex, **todo item que não deve encolher precisa de `flex-shrink: 0`** e o item elástico precisa de **base explícita (`flex: 1 1 0`)** — `flex: 1 1 auto` faz o *min-content/max-content* do texto longo virar base e “vazar” o encolhimento para os irmãos.
+
+**Validação:**
+- Harness isolado (antes/depois, mesma largura): `...` → `Placa-Mãe SOYO X99 com CPU Xeon E5…`; chip preservado em título longo COM filhas; guias de `--lvl` intactas.
+- **Controle `+/-` medido:** antes `18px → 11px` na linha de título longo (o encolhimento é proporcional à largura da base de cada item); depois **18px em todas as linhas**.
+- Edição da célula (`editor: "input"` do servidor) segue OK: o input vira flex item e ocupa a sobra da linha (289px de 315px).
+- `templ generate`, `node build.js`, `tsc --noEmit` (limpo), `node --test tests/*.unit.cjs` (**42/42**), `go vet` e `go build -tags sqlite_fts5` OK — reexecutados após a correção do controle.
