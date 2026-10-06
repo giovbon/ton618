@@ -22,19 +22,23 @@ templ databaseContent() {
                      (muda com a busca — ver setStats em database.js) -->
                 <div class="text-sm font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
 
-                <!-- Expandir/recolher tudo (só no modo árvore; o JS mostra) -->
+                <!-- Expandir/recolher (botão único) + filtro de hierarquia
+                     (só no modo árvore; o JS mostra). O rótulo/ícone reflete a
+                     AÇÃO disponível e o estado é persistido no localStorage. -->
                 <div id="db-tree-actions" class="flex items-center gap-1.5" style="display:none">
-                    <button id="db-expand-all" type="button"
-                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
-                        title="Expandir todos os níveis da hierarquia">
-                        @icons.Icon("chevron-down", "w-3.5 h-3.5")
-                        Expandir
-                    </button>
-                    <button id="db-collapse-all" type="button"
+                    <button id="db-expand-toggle" type="button" aria-pressed="false"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
                         title="Recolher todos os níveis da hierarquia">
-                        @icons.Icon("chevron-right", "w-3.5 h-3.5")
-                        Recolher
+                        <span id="db-expand-icon-expand" class="hidden">@icons.Icon("chevron-down", "w-3.5 h-3.5")</span>
+                        <span id="db-expand-icon-collapse">@icons.Icon("chevron-right", "w-3.5 h-3.5")</span>
+                        <span id="db-expand-label">Recolher</span>
+                    </button>
+                    <button id="db-hierarchy-toggle" type="button" aria-pressed="false"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        title="Mostrando todas as notas — clique para exibir só as que participam da hierarquia">
+                        <span id="db-hierarchy-icon-all">@icons.Icon("layers", "w-3.5 h-3.5")</span>
+                        <span id="db-hierarchy-icon-only" class="hidden">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
+                        <span id="db-hierarchy-label">Todas as notas</span>
                     </button>
                 </div>
 

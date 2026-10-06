@@ -79,10 +79,24 @@ cd "$BASE_DIR"
 # Otimização do Build Web (TipTap)
 if [ -f "$BASE_DIR/web/package.json" ]; then
     cd "$BASE_DIR/web"
-    # Só roda npm ci se a pasta node_modules não existir (Ganho imenso de velocidade)
-    # npm ci garante instalação determinística a partir do lockfile
+    # Só roda npm ci se a pasta node_modules não existir (ganho imenso de
+    # velocidade). ⚠️ A pasta pode existir INCOMPLETA (install interrompido ou
+    # ferramenta que não instalou tudo) — nesse caso o build do esbuild quebra
+    # com "Could not resolve ...". Por isso validamos alguns pacotes que o
+    # bundle usa de verdade antes de pular a instalação.
+    web_deps_ok=1
     if [ ! -d "node_modules" ]; then
-        echo -e "${GREEN}🌐 Instalando dependências do módulo Web...${NC}"
+        web_deps_ok=0
+    else
+        for dep in esbuild markmap-common markmap-lib markmap-view; do
+            if [ ! -d "node_modules/$dep" ]; then
+                web_deps_ok=0
+                break
+            fi
+        done
+    fi
+    if [ "$web_deps_ok" -eq 0 ]; then
+        echo -e "${GREEN}🌐 Instalando dependências do módulo Web (node_modules ausente/incompleto)...${NC}"
         npm ci --legacy-peer-deps --silent
     fi
     echo -e "${BLUE}🌐 Compilando bundle web (TipTap)...${NC}"

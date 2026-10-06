@@ -11,9 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"ton618/core/internal/core/domain"
 	"ton618/core/internal/features/notes"
+	"ton618/core/internal/processor"
 	"ton618/core/internal/ui/icons"
 	"ton618/core/internal/watcher"
 )
@@ -95,7 +97,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				}
 			}
 
-			row["titulo"] = domain.DisplayName(n.Arquivo)
+			row["titulo"] = displayTitle(n.Arquivo, content, fm)
 
 			if len(n.Tags) > 0 {
 				row["tags"] = strings.Join(n.Tags, ", ")
@@ -202,6 +204,61 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	}
 }
 
+// ── Título exibido na coluna "Título" do Tabulator ──
+
+// displayTitle escolhe o rótulo da coluna Título. O padrão continua sendo o
+// nome do arquivo (domain.DisplayName) — é a SSOT da exibição. Mas um nome que
+// não tem NENHUM caractere alfanumérico (ex: "...", "…", "- - -") não comunica
+// nada e é justamente o sintoma de um rename acidental; nesse caso caímos para
+// o título real da nota, na ordem:
+//
+//  1. primeiro heading markdown (`# Título`) — processor.ExtractTitle;
+//  2. `titulo:` / `title:` do frontmatter.
+//
+// Arquivos (PDF/EPUB/ZIP) não têm conteúdo nem frontmatter: neles a função
+// continua devolvendo o nome do arquivo (não há outra fonte).
+func displayTitle(arquivo, content string, fm map[string]interface{}) string {
+	name := domain.DisplayName(arquivo)
+	if isMeaningfulName(name) {
+		return name
+	}
+	if h := strings.TrimSpace(processor.ExtractTitle(content, arquivo)); isMeaningfulName(h) {
+		return h
+	}
+	if t := frontmatterTitle(fm); isMeaningfulName(t) {
+		return t
+	}
+	return name
+}
+
+// isMeaningfulName informa se o texto tem ao menos uma letra ou dígito. Nomes
+// só de pontuação/espaço (ex: "...") não são considerados um título útil.
+func isMeaningfulName(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// frontmatterTitle devolve `titulo:` ou `title:` do frontmatter (a chave
+// canônica do projeto é `titulo`; `title` é aceito por compatibilidade). A
+// comparação é case-insensitive e aceita apenas valor string.
+func frontmatterTitle(fm map[string]interface{}) string {
+	for _, key := range []string{"titulo", "title"} {
+		for k, v := range fm {
+			if !strings.EqualFold(k, key) {
+				continue
+			}
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
 type UpdatePropertyRequest struct {
 	File  string      `json:"file"`
 	Key   string      `json:"key"`
@@ -237,6 +294,12 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		newValStr = strings.TrimSpace(newValStr)
 		if newValStr == "" {
 			http.Error(w, "invalid title value", http.StatusBadRequest)
+			return
+		}
+		// Um título sem nenhuma letra/dígito (ex: "...") vira um nome de arquivo
+		// inútil e some da leitura da tabela — recusa na origem (ver displayTitle).
+		if !isMeaningfulName(newValStr) {
+			http.Error(w, "o título precisa conter ao menos uma letra ou número", http.StatusBadRequest)
 			return
 		}
 

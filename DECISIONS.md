@@ -1159,3 +1159,30 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 - `tsc --noEmit` limpo, `node build.js` (produção) OK, `npm test` **42/42**.
 - Go: `templ generate`, `gofmt -l` limpo, `go vet`, `go build` e `go test ./...` verdes.
 - **E2E no navegador** (sandbox isolado, porta 6199): ícones nas colunas Título/Tipo, chip de filhas (`projeto` 3, `backend` 1), ponto de órfã, guias alinhadas em 3 níveis (centros medidos em 20/38/56px), "Expandir" (7 linhas) ↔ "Recolher" (3 raízes) e estado persistido.
+
+## 6.26 Título "..." no Tabulator — fallback e guarda de rename (06/10/2026)
+
+📍 `core/internal/features/system/handlers_database_tabulator.go`
+
+**Problema:** uma nota exibia `...` na coluna Título. O rótulo vinha de `domain.DisplayName(arquivo)`; renomear uma nota para um nome só de pontuação (ex: `...`, que vira `notes/....md`) produzia um título sem nenhum caractere útil.
+
+**Decisão:**
+- **Fallback de exibição** (`displayTitle`): o nome do arquivo continua sendo o padrão, mas se ele **não tiver nenhuma letra/dígito** (`isMeaningfulName`), a coluna Título cai para (1) o primeiro heading `# ...` da nota (`processor.ExtractTitle`) e depois (2) o `titulo:`/`title:` do frontmatter. Arquivos (PDF/EPUB/ZIP) não têm conteúdo/frontmatter → seguem mostrando o nome do arquivo.
+- **Guarda na origem:** `HandleUpdateNoteProperty` recusa (400) um título sem letra/dígito, impedindo que o estado ruim seja recriado. Usa o mesmo `isMeaningfulName`.
+- ⚠️ Não mudou o comportamento padrão: nome normal continua vencendo sobre o heading (teste de regressão).
+
+**Tests:** `system/handlers_titulo_test.go` (fallback para heading, fallback para frontmatter, nome normal inalterado, rename para `...` recusado).
+
+## 6.27 Tabulator — botões únicos de expandir/recolher e filtro "Só hierarquia" (06/10/2026)
+
+📍 `core/internal/features/notes/database.templ` | `core/web/src/database.js` (+ `static/database.js`)
+
+**Mudanças na toolbar (modo árvore):**
+- **Expandir/Recolher num só botão** (`#db-expand-toggle`): o rótulo/ícone refletem a AÇÃO disponível (`Recolher` com `chevron-right` quando expandido; `Expandir` com `chevron-down` quando recolhido). `aria-pressed` acompanha. O estado por nota continua em `localStorage[db_tree_expanded]` (ver §6.25).
+- **Novo filtro "Só hierarquia"** (`#db-hierarchy-toggle`): alterna entre "Todas as notas" (`layers`) e "Só hierarquia" (`git-fork`), persistido em `localStorage[db_hierarchy_only]`. Quando ligado, `hierarchyRows` mantém apenas as raízes que **têm filhas** ou que **declaram `pai:`** (órfãs) — as notas soltas somem. Com o filtro ligado, tudo nasce expandido (`treeStartExpanded`).
+
+**Implementação (database.js):**
+- `applySearch` agora compõe os dois filtros: parte de `hierarchyRows(baseRows)` quando o filtro está ligado e só então aplica a busca. O antigo flag `filterApplied` virou `dataFiltered` (busca **ou** hierarquia).
+- No boot, `applySearch` passou a rodar **sempre** no `tableBuilt` (antes só rodava se houvesse `db_last_query`), para o filtro de hierarquia persistido ser honrado mesmo sem busca.
+
+**Validação:** `templ generate`, `tsc --noEmit`, `go build -tags sqlite_fts5` OK. `npm test`: as 2 falhas são pré-existentes (falta `markmap-common` no `node_modules`, não relacionadas).

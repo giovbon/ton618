@@ -13,9 +13,15 @@
     // Busca ativa: as linhas nascem todas expandidas para o resultado aparecer
     // (ver dataTreeStartExpanded).
     var searchActive = false;
-    // A tabela está exibindo um subconjunto filtrado (precisa de setData para
-    // voltar ao conjunto completo quando a busca é limpa).
-    var filterApplied = false;
+    // Filtro "Só hierarquia": quando ligado, mostra apenas as notas que
+    // participam de alguma hierarquia (raízes com filhas ou órfãs que declaram
+    // `pai:`), escondendo as notas soltas.
+    var hierarchyOnly = false;
+    // Estado do botão único expandir/recolher (true = escolha atual é expandir).
+    var treeExpanded = true;
+    // A tabela está exibindo um subconjunto filtrado (busca OU filtro de
+    // hierarquia) — precisa de setData para voltar ao conjunto completo.
+    var dataFiltered = false;
 
     // Campo que o módulo Data Tree lê para montar os níveis (note_tree.go).
     var childrenKey = "_children";
@@ -112,11 +118,11 @@
     }
 
     // O 1º nível começa aberto; a escolha do usuário (por nota) tem prioridade
-    // e sobrevive ao reload. Com busca ativa TUDO nasce expandido: o caminho até
-    // o resultado (e as irmãs, no modo contexto) precisa estar visível sem o
-    // usuário ter de abrir nível por nível.
+    // e sobrevive ao reload. Com busca ativa ou no filtro de hierarquia TUDO
+    // nasce expandido: o caminho até o resultado (e as irmãs, no modo contexto)
+    // precisa estar visível sem o usuário ter de abrir nível por nível.
     function treeStartExpanded(row, level) {
-        if (searchActive) return true;
+        if (searchActive || hierarchyOnly) return true;
         var saved = loadExpandedRows()[row.getData().arquivo];
         return saved === undefined ? level === 0 : saved;
     }
@@ -174,8 +180,8 @@
         for (var i = 0; i < kids.length; i++) expandRowDeep(kids[i]);
     }
 
-    // Expandir/recolher tudo (botões da toolbar). Atualiza o estado persistido
-    // por nota para que a escolha sobreviva ao reload.
+    // Expandir/recolher tudo (botão único da toolbar). Atualiza o estado
+    // persistido por nota para que a escolha sobreviva ao reload.
     function setAllRowsExpanded(expand) {
         if (!table || !hasTree) return;
         var saved = loadExpandedRows();
@@ -191,11 +197,95 @@
         }
     }
 
+    // Sincroniza rótulo/ícone/tooltip do botão único com o estado atual.
+    // treeExpanded=true → a ação oferecida é RECOLHER (ícone chevron-right).
+    function updateExpandButton() {
+        var btn = document.getElementById("db-expand-toggle");
+        var expandIcon = document.getElementById("db-expand-icon-expand");
+        var collapseIcon = document.getElementById("db-expand-icon-collapse");
+        var label = document.getElementById("db-expand-label");
+        if (expandIcon) expandIcon.classList.toggle("hidden", treeExpanded);
+        if (collapseIcon) collapseIcon.classList.toggle("hidden", !treeExpanded);
+        if (label) label.innerText = treeExpanded ? "Recolher" : "Expandir";
+        if (btn) {
+            btn.title = treeExpanded
+                ? "Recolher todos os níveis da hierarquia"
+                : "Expandir todos os níveis da hierarquia";
+            btn.setAttribute("aria-pressed", treeExpanded ? "true" : "false");
+        }
+    }
+
+    // ── Filtro "Só hierarquia" ──
+    var HIERARCHY_ONLY_KEY = "db_hierarchy_only";
+
+    function loadHierarchyOnly() {
+        try {
+            return localStorage.getItem(HIERARCHY_ONLY_KEY) === "1";
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function saveHierarchyOnly(value) {
+        try {
+            if (value) localStorage.setItem(HIERARCHY_ONLY_KEY, "1");
+            else localStorage.removeItem(HIERARCHY_ONLY_KEY);
+        } catch (e) { }
+    }
+
+    // Só as notas que participam de hierarquia: uma raiz com filhas ou uma nota
+    // que declara `pai:` (mesmo que o pai não exista — ela é uma órfã marcada).
+    // Notas soltas (sem filhas e sem pai) ficam de fora.
+    function hierarchyRows(rows) {
+        var out = [];
+        for (var i = 0; i < rows.length; i++) {
+            var kids = rows[i][childrenKey];
+            if ((kids && kids.length) || rows[i].pai) out.push(rows[i]);
+        }
+        return out;
+    }
+
+    function updateHierarchyButton() {
+        var btn = document.getElementById("db-hierarchy-toggle");
+        var allIcon = document.getElementById("db-hierarchy-icon-all");
+        var onlyIcon = document.getElementById("db-hierarchy-icon-only");
+        var label = document.getElementById("db-hierarchy-label");
+        if (allIcon) allIcon.classList.toggle("hidden", hierarchyOnly);
+        if (onlyIcon) onlyIcon.classList.toggle("hidden", !hierarchyOnly);
+        if (label) label.innerText = hierarchyOnly ? "Só hierarquia" : "Todas as notas";
+        if (btn) {
+            btn.title = hierarchyOnly
+                ? "Mostrando só as notas que participam da hierarquia — clique para exibir todas"
+                : "Mostrando todas as notas — clique para exibir só as que participam da hierarquia";
+            btn.setAttribute("aria-pressed", hierarchyOnly ? "true" : "false");
+        }
+    }
+
     function setupTreeButtons() {
-        var expandBtn = document.getElementById("db-expand-all");
-        var collapseBtn = document.getElementById("db-collapse-all");
-        if (expandBtn) expandBtn.addEventListener("click", function () { setAllRowsExpanded(true); });
-        if (collapseBtn) collapseBtn.addEventListener("click", function () { setAllRowsExpanded(false); });
+        hierarchyOnly = loadHierarchyOnly();
+
+        var expandBtn = document.getElementById("db-expand-toggle");
+        if (expandBtn) {
+            expandBtn.addEventListener("click", function () {
+                treeExpanded = !treeExpanded;
+                setAllRowsExpanded(treeExpanded);
+                updateExpandButton();
+            });
+        }
+
+        var hierarchyBtn = document.getElementById("db-hierarchy-toggle");
+        if (hierarchyBtn) {
+            hierarchyBtn.addEventListener("click", function () {
+                hierarchyOnly = !hierarchyOnly;
+                saveHierarchyOnly(hierarchyOnly);
+                updateHierarchyButton();
+                var input = /** @type {HTMLInputElement} */ (document.getElementById("db-search"));
+                applySearch(input ? input.value : "");
+            });
+        }
+
+        updateExpandButton();
+        updateHierarchyButton();
     }
 
     // ── Parser de busca avançada ──
@@ -521,9 +611,10 @@
         return total;
     }
 
-    // Recalcula o que a tabela mostra. A busca é aplicada com setData (o
-    // Tabulator reconstrói a árvore a partir dos "_children" recalculados) e o
-    // contador do topo acompanha o que está sendo exibido.
+    // Recalcula o que a tabela mostra. A busca e o filtro de hierarquia são
+    // aplicados com setData (o Tabulator reconstrói a árvore a partir dos
+    // "_children" recalculados) e o contador do topo acompanha o que está sendo
+    // exibido.
     function applySearch(queryValue) {
         if (!table) return;
 
@@ -531,17 +622,22 @@
         var parsed = val ? parseSearchQuery(val) : null;
         searchActive = !!(parsed && (parsed.filters.length || parsed.generalTerms.length));
 
-        var nodes = baseRows;
+        // Filtro de hierarquia só faz sentido em modo árvore.
+        var hierarchyActive = hierarchyOnly && hasTree;
+        var source = hierarchyActive ? hierarchyRows(baseRows) : baseRows;
+
+        var nodes = source;
         if (searchActive) {
-            nodes = filterRows(baseRows, makeMatcher(parsed), loadSearchMode());
+            nodes = filterRows(source, makeMatcher(parsed), loadSearchMode());
         }
 
+        var filtered = searchActive || hierarchyActive;
         setStats(countRows(nodes), searchActive ? val : "");
 
-        // Sem busca e sem filtro anterior a tabela já está com os dados
-        // completos: nada a recarregar (evita um render extra no boot).
-        if (searchActive || filterApplied) {
-            filterApplied = searchActive;
+        // Sem busca e sem filtro (atual ou anterior) a tabela já está com os
+        // dados completos: nada a recarregar (evita um render extra no boot).
+        if (filtered || dataFiltered) {
+            dataFiltered = filtered;
             annotateLevels(nodes, 0);
             table.setData(nodes);
         }
@@ -557,7 +653,7 @@
                 // todas as linhas. O contador do topo é recalculado por
                 // applySearch (mostra quantas notas estão sendo exibidas agora).
                 baseRows = data.data || [];
-                filterApplied = false;
+                dataFiltered = false;
                 // Órfãs primeiro (base completa) e depois os níveis exibidos.
                 markOrphans(baseRows, 0);
                 annotateLevels(baseRows, 0);
@@ -763,24 +859,23 @@
                     else window.location.href = data._url;
                 });
 
-                // Restore last query.                // A busca só pode ser aplicada depois do evento tableBuilt —
-                // antes disso o Tabulator avisa "Table Not Initialized" e o
-                // resultado pode ficar inconsistente.
+                // Busca e filtro de hierarquia só podem ser aplicados depois do
+                // evento tableBuilt — antes disso o Tabulator avisa "Table Not
+                // Initialized" e o resultado pode ficar inconsistente.
                 var lastQuery = localStorage.getItem("db_last_query") || "";
                 var searchInput = /** @type {HTMLInputElement} */ (document.getElementById("db-search"));
                 var clearBtn = document.getElementById("db-search-clear");
                 if (lastQuery && searchInput) {
                     searchInput.value = lastQuery;
                     if (clearBtn) clearBtn.classList.remove("hidden");
-                    if (table.initialized) {
-                        applySearch(lastQuery);
-                    } else {
-                        table.on("tableBuilt", function () {
-                            applySearch(lastQuery);
-                        });
-                    }
+                }
+                var applyStoredState = function () {
+                    applySearch(searchInput ? searchInput.value : "");
+                };
+                if (table.initialized) {
+                    applyStoredState();
                 } else {
-                    setStats(countRows(baseRows), "");
+                    table.on("tableBuilt", applyStoredState);
                 }
             })
             .catch(function (err) {
