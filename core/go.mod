@@ -6,10 +6,9 @@ require (
 	cel.dev/cel-go v0.32.0
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
-	github.com/a-h/templ v0.3.1020
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.59.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.58.0
 )
@@ -29,8 +28,8 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240826202546-f6391c0de4c7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240826202546-f6391c0de4c7 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
