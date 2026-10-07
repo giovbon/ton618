@@ -107,6 +107,16 @@ templ editorContent(data domain.EditorData) {
         <div id="editor-content" class="px-1 py-2 min-h-[500px]"></div>
     </div>
 
+    <!-- Painel de Consultas (blocos ```consulta da nota) — DECISIONS §6.29.
+         O conteúdo é buscado pelo HTMX (swap innerHTML) para o container
+         sobreviver à troca e continuar escutando `query-blocks-updated`. -->
+    <div
+        id="query-panel"
+        hx-get={ "/api/query?file=" + SafeFileQueryEscape(data.Filename) }
+        hx-trigger="load, query-blocks-updated from:body"
+        hx-swap="innerHTML"
+    ></div>
+
     <div
         id="bubble-menu"
         class="fixed hidden z-50 flex items-center gap-0.5 px-1.5 py-1 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-xl shadow-xl"

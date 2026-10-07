@@ -1350,6 +1350,11 @@ import { initHierarchy } from './editor-hierarchy.js';
                 try {
                     document.body.dispatchEvent(new Event("todos-updated"));
                 } catch (e) { /* ambiente sem body/Event */ }
+                // A nota pode ter consultas ```consulta: o painel de Consultas
+                // recalcula os blocos lendo a nota já salva (DECISIONS §6.29).
+                try {
+                    document.body.dispatchEvent(new Event("query-blocks-updated"));
+                } catch (e) { /* ambiente sem body/Event */ }
             } else {
                 var errText = await resp.text().catch(function () {
                     return "";

@@ -7,7 +7,6 @@ test.beforeEach(async ({ page }) => {
   });
 
   await page.goto('/login');
-  await page.fill('#user', 'admin');
   await page.fill('#pass', 'ton618');
   await page.click('#login-btn');
   try {

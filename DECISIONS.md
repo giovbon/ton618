@@ -1220,3 +1220,86 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 - **Controle `+/-` medido:** antes `18px → 11px` na linha de título longo (o encolhimento é proporcional à largura da base de cada item); depois **18px em todas as linhas**.
 - Edição da célula (`editor: "input"` do servidor) segue OK: o input vira flex item e ocupa a sobra da linha (289px de 315px).
 - `templ generate`, `node build.js`, `tsc --noEmit` (limpo), `node --test tests/*.unit.cjs` (**42/42**), `go vet` e `go build -tags sqlite_fts5` OK — reexecutados após a correção do controle.
+
+## 6.29 Linguagem de consulta nas notas — bloco `consulta` + CEL (06/10/2026)
+
+📍 (novos) `core/internal/processor/query.go` | `core/internal/query/engine.go` | `core/internal/query/run.go` | `core/internal/features/notes/query_block.templ` | `core/internal/features/notes/handlers_query.go` · (docs) `docs/linguagem-de-consulta.md` | `docs/adr/0004-linguagem-de-consulta.md`
+
+**Problema:** o usuário pediu "uma linguagem de script dentro das notas" para montar páginas vivas (fila de leitura, painel de manutenção, revisão do mês). O app hoje **mostra** e **filtra**, mas não combina condições (E/OU/NÃO) sobre campos; o filtro do Tabulator (§6.25) é client-side e só sobre o que já está carregado; não há valores calculados ("dias sem abrir", contagens); não há regras de organização além do Auto-Tag `X dias → tag` (§6.8); e nenhum resultado "vive" dentro da nota.
+
+**Decisão (4 pontos):**
+1. **Bloco declarativo ```` ```consulta ```` em YAML** — o usuário já escreve YAML no frontmatter (§6.17), então a curva é zero, e o parser é o `gopkg.in/yaml.v3` (já no `go.mod`) com `KnownFields(true)` ⇒ **chave desconhecida vira erro** sem uma linha de validação.
+2. **Expressões em CEL** (`github.com/google/cel-go`, pura Go, sem CGO) **apenas no campo `onde:`**. CEL é não-Turing-completa: termina sempre, sem I/O nem efeitos colaterais, com *type-check* e **`cel.CostLimit`**. É a **única dependência nova**.
+3. **Avaliação 100% no servidor (Go).** Nada de avaliador no cliente: duplicar Go↔JS é exatamente o custo já pago nos ícones (§6.9) e no rename (§6.14), que hoje exigem teste de paridade. Sem tocar bundle, CSP, `staticver` ou `@source` do Tailwind.
+4. **Read-only e efêmero.** O motor depende de uma **interface somente-leitura** implementada pelo `*db.Store` (a única interface nova do projeto — justificada por testabilidade **e** por impedir escrita em tempo de compilação). ⚠️ **O resultado nunca é gravado no `.md`**: o watcher reindexaria a nota, o resultado mudaria e o processo se repetiria (loop de escrita).
+
+**Duas velocidades (a razão da eficiência):**
+- Chaves "de índice" (`tags`, `sem-tags`, `texto` (FTS5), `pasta`, `de`, `marcador`, `estado`) resolvem no SQL/FTS5/índice existente e entregam **no máximo 500 candidatos** — mesmo teto de `maxTagOnlyCandidates` (§10).
+- `onde:` (CEL) só **refina** linha a linha esses candidatos. Nunca materializar o corpus (§10).
+
+**Regra mental do contrato:** *tudo o que tem índice vira atalho; todo o resto vai no `onde:`*.
+
+**Alternativas descartadas:** **JS do usuário no browser** (modelo Obsidian) ⇒ CSP restritiva, offline, mobile, ETag/`staticver` e impossível de testar com golden tests; **Lua (`gopher-lua`) / Starlark** ⇒ linguagem de propósito geral (sandbox, limites, API curada e UX de erro) — podem entrar **depois, atrás do mesmo contrato**, sem refazer nada; **SQL exposto** ⇒ vaza o schema, encoraja query cara, acopla ao banco; **parser próprio** ⇒ manutenção eterna e sem type-check; **`expr-lang/expr`** ⇒ plano B viável e mais ergonômico, mas perde type-check forte, padrão conhecido e cost limit; **`wazero`/WASM** ⇒ só se virar plataforma de plugins de terceiros.
+
+**Contrato v1 (resumo):** `tipo` (obrigatório: `notas` | `tarefas` | `hierarquia` | `agenda` reservado) · `onde` (CEL) · `ordenar: campo [asc|desc]` · `limite: 1..200` (padrão 20) · `mostrar: lista|tabela|contagem|cartoes|arvore` · `colunas` (só com `mostrar: tabela`) · atalhos `tags`/`sem-tags`/`texto`/`pasta` (notas), `marcador`/`estado` (tarefas), `de` (hierarquia). Campos de `n.`/`t.`, macros, funções de texto e `agora`/`dias()`/`horas()` ficam na **fonte única da gramática** — 📖 [`docs/linguagem-de-consulta.md`](docs/linguagem-de-consulta.md) — para o DECISIONS **não duplicar** a gramática e não divergir dela.
+
+**UX (decisão):** painel "Consultas" **abaixo do editor**, um cartão por bloco — contagem, resultado, botão *atualizar* via HTMX e **erro inline em pt-BR**. Motivo: as notas são editadas no TipTap (client-side) e **não existe renderizador de Markdown no servidor**; inserir HTML no meio do texto exigiria reescrever o pipeline do editor. Um **modo leitura** que inline os resultados é evolução planejada (registrado no doc de sintaxe, §13).
+- Erro **é conteúdo**, nunca 500: sintaxe (com posição), campo desconhecido (com a lista de campos), tipo incompatível, custo/tempo estourado.
+- `agora` é **injetado** no motor (nunca `time.Now()` interno) ⇒ resultado e testes determinísticos.
+
+**Guardas e limites:**
+
+| Guarda | Valor |
+| :--- | :--- |
+| Somente leitura | interface read-only (§ acima) |
+| Nada persistido no `.md` | sempre |
+| Blocos por nota | 10 |
+| Candidatos pré-filtrados | 500 |
+| `limite:` | máx. 200 |
+| Tempo por bloco | 200 ms (`context.WithTimeout`) |
+| Custo da expressão | `cel.CostLimit` |
+| Cache | TTL 5 s + invalidação em qualquer escrita (padrão de `childrenCacheTTL`) |
+| Env CEL | compilado **uma vez** no boot + cache de `Program` (e do erro de compilação) |
+
+**Plano por fases (Fases 0–3 implementadas em 06/10/2026):**
+- **Fase 0 — contrato e parser.** `processor/query.go`: `Spec`, `ParseBlock`, `ExtractBlocks` (fenced `consulta`) + golden tests. Aceite: `go test ./internal/processor/` verde, zero dependência nova.
+- **Fase 1 — `tipo: notas` sem CEL.** `query/run.go` (interface read-only) + `mostrar: lista|contagem|tabela`, atalhos `tags`/`sem-tags`/`pasta`, `ordenar`, `limite`. Aceite: teste com banco real (`newTestStore`), ordenação estável (desempate por caminho), teto de 500 candidatos.
+- **Fase 2 — `onde:` (CEL).** `query/engine.go`: `cel.Env` no boot, cache de `Program`, `CostLimit`, timeout e erros em pt-BR; campos de `n.` + `agora`/`dias()`/`horas()`. Aceite: expressão inválida → mensagem com posição; campo desconhecido → lista de campos; determinismo com `agora` fixo.
+- **Fase 3 — render.** `query_block.templ` + `GET /api/query?file=…&i=…` (HTMX) + painel no editor (re-render ao salvar a nota, mesmo padrão de evento do badge de Tasks, §6.15). Aceite: E2E com 3 blocos (sucesso, erro e truncamento).
+- **Fase 4 — `tipo: tarefas` e `tipo: hierarquia`** (reusam `todos` §6.15 e `GetHierarchy` §6.24).
+- **(v2, fora do v1)** `similar:` (semântica em 2 etapas — o embedding é calculado no navegador, §3.1), `tipo: agenda` (depende de fixar os campos sobre o modelo real de `appointments`), `{{ }}` inline, modo leitura e ações com pré-visualização.
+
+**Guardas de teste:**
+- `processor/query_test.go`: golden (bloco válido → `Spec`; chave desconhecida; YAML inválido; `tipo` ausente; enum inválido) + **paridade docs↔parser**: a lista canônica de chaves vive num `var` único usado pela validação e pelo teste (mesmo espírito do SSOT de prefixos, §6.24).
+- `query/engine_test.go`: expressão válida/inválida, erro de tipo, cost limit, `agora` injetado, mesma entrada ⇒ mesma saída.
+- `query/run_test.go` (SQLite real): cada `tipo`/`mostrar`, ordenação, `limite`, teto de candidatos e nota sem bloco.
+- **"Nada escreve"**: garantido pelo tipo da interface (tempo de compilação) + teste que roda o motor e compara conteúdo/`mtime` das notas antes e depois.
+
+**Fora de escopo (explícito):** linguagem imperativa (`for`, variáveis, funções do usuário), ordenação por múltiplos campos, consulta ao conteúdo de PDF/EPUB, qualquer I/O ou rede, e qualquer escrita/ação.
+
+**Documentação:** ADR [`docs/adr/0004-linguagem-de-consulta.md`](docs/adr/0004-linguagem-de-consulta.md) (contexto, alternativas, consequências) + referência de sintaxe [`docs/linguagem-de-consulta.md`](docs/linguagem-de-consulta.md) (fonte única da verdade, com receitas prontas, armadilhas de YAML e changelog). Índice de ADRs atualizado em `docs/adr/README.md`.
+
+**Implementação — Fases 0 a 3 (06/10/2026)**
+
+📍 `core/internal/processor/query.go` (+`query_test.go`) | `core/internal/query/engine.go`, `run.go`, `display.go` (+`query_test.go`) | `core/internal/features/notes/query_reader.go`, `handlers_query.go`, `query_block.templ` (+`handlers_query_test.go`) | `core/internal/features/notes/editor.templ` | `core/cmd/server/routes.go` | `core/web/src/editor-init.js`
+
+- **Fase 0 — parser puro** (`processor`): `QuerySpec`, `ParseQuery`, `ExtractQueryBlocks`. YAML com `KnownFields(true)` ⇒ chave desconhecida vira erro nomeando as válidas; todos os erros traduzidos para pt-BR — inclusive a **dica de aspas** do `onde:`, que é a armadilha nº 1 (`onde: "x" in n.tags` precisa de aspas simples, senão o YAML quebra).
+- **Fase 1 — executor** (`query.Run`): pré-filtro por índice (`tags`, `sem-tags`, `texto`/FTS5, `pasta`, `marcador`, `estado`, `de`) com teto de **500 candidatos**; `ordenar` com direção natural + desempate por caminho; `limite`; `contagem` sobre o total (antes do limite).
+- **Fase 2 — CEL** (`query.Engine`): `cel.Env` com `n`/`t` como mapa `string→dyn`, `agora` injetado + `dias()`/`horas()`; cache de AST (e do erro de compilação); `CostLimit` e timeout de 200 ms; erros traduzidos (`campo desconhecido "x" — campos de n: …`).
+- **Fase 3 — painel**: `GET /api/query?file=…` renderiza o fragmento (`query_block.templ`) com um cartão por bloco; o editor ganhou o container `#query-panel` (`hx-trigger="load, query-blocks-updated from:body"`, swap `innerHTML`) e o `editor-init.js` dispara `query-blocks-updated` **depois do save**, ao lado do `todos-updated` (§6.15). Apresentações: `lista`, `contagem`, `tabela` (`colunas:` validado numa lista canônica), `cartoes` (usa o snippet do FTS5) e `arvore`.
+- **Tipos implementados**: `notas`, `tarefas` e `hierarquia` (com `de:` opcional e resolução por nome-base — as mesmas regras do §6.17/§6.24).
+- **Read-only por construção**: o motor só conhece `query.Reader` (interface de leitura implementada por `queryReader` sobre o `*db.Store`); o texto do bloco nunca é reescrito — guardado por `TestHandleQueryPanel_NaoEscreve`.
+- **Snapshot por requisição (correção de eficiência medida)**: o `queryReader` memoiza cada leitura com `sync.Once`, então uma nota com N blocos faz **uma leitura por tabela**, não N. Antes disso, medido com 300 notas em SQLite real: 3 blocos = **22 leituras** (7 por bloco) e **35,7 ms** no caminho real do painel; depois = **13,2 ms** (2,7× mais rápido; 1/3/10 blocos = 5,2/16,9/31,7 ms). Efeito colateral desejado: todos os cartões da página mostram a **mesma fotografia** do acervo (antes, uma escrita no meio podia fazer dois blocos discordarem). Guardado por `TestQueryReader_MemoizaLeituras` (identidade de fatia/mapa, não tempo).
+- **Listas canônicas sem terceira fonte**: `colunas:` é **derivada** da união dos campos de `n` e `t` + as calculadas (`interacao_ha_dias`, `modif_ha_dias`, `n_tags`). Antes existia uma lista própria de colunas, e ela recusava `arquivo` — nome que o próprio renderer usa como coluna padrão de `tarefas`. `TestColunas_CobremAListaCanonica` garante que toda coluna aceita tem renderização (coluna "válida" que sai vazia é erro silencioso para o usuário).
+- **`n.peso` saiu do v1**: estava anunciado na documentação e na lista de campos, mas o motor não o fornecia (daria "campo desconhecido" só em runtime). Voltou para a v2 junto de `n.tamanho`/`n.palavras` — o motor v1 lê **somente o banco**.
+- **Paridade parser ↔ documentação**: `TestQueryLists_DocParity` lê `docs/linguagem-de-consulta.md` e exige que as chaves, os campos de `n`/`t` e a lista de `colunas:` do documento sejam **exatamente** as do parser (mesmo espírito do SSOT de prefixos, §6.24).
+- **E2E no navegador** (`core/web/tests/query-panel.spec.ts`): prova o que nenhum teste de HTML gerado alcança — o fragmento é buscado pelo HTMX no load, o botão "atualizar" dispara uma requisição NOVA, **salvar a nota dispara `query-blocks-updated` e o painel se recarrega sozinho** (e o container sobrevive ao swap, senão o listener morreria), e bloco inválido vira texto no cartão com **HTTP 200**. As notas do teste usam etiqueta/nome únicos (`zz-e2e-<timestamp>`) e são apagadas no `finally`, porque o spec roda contra o vault de verdade.
+  - ⚠️ **Achado no caminho**: os specs antigos preenchem `#user` no login, que **não existe** — o formulário atual pede só a senha (app de usuário único, "admin" implícito). O spec novo entra com `#pass` e serve de referência para consertar os antigos.
+
+**Validação:**
+- `go build -tags sqlite_fts5 ./...` OK; `gofmt -l` vazio e `go vet -tags sqlite_fts5 ./internal/...` limpo.
+- `go test -tags sqlite_fts5 ./internal/processor/ ./internal/query/ ./internal/features/notes/` verde — parser (golden + paridade com o doc), motor (filtro/ordenação/limite/teto de candidatos/custo/determinismo com `agora` fixo) e painel com **SQLite real** (`newTestContext`).
+- `templ generate` (v0.3.1020) + `node build.js` (Tailwind 4 + esbuild) aplicados: as classes novas estão em `web/static/app.css` e `query-blocks-updated` em `web/static/editor-init.js`. ⚠️ **Reiniciar o servidor** para o `staticver` servir os estáticos novos.
+- **E2E**: `npx playwright test tests/query-panel.spec.ts` → **3/3** (Chromium headless, contra o servidor real). Exigiu `npx playwright install chromium` (o cache de browsers é por versão do Playwright).
+- **Frontend**: `tsc --noEmit` limpo e `node --test tests/*.unit.cjs` **47/47** (5 guardas novas do painel).
+- Cobertura negativa conferida à mão durante o desenvolvimento: campo desconhecido, erro de sintaxe, tipo incompatível, expressão não-booleana, coluna desconhecida, `de:` inexistente e expressão acima do teto de custo — todos aparecem como texto dentro do cartão, nunca como 500.

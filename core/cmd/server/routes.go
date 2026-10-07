@@ -71,6 +71,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/notes", sysCtx.HandleGetAllNotes)
 	mux.Get("/api/sidebar", sysCtx.HandleGetSidebar)
 	mux.Get("/api/notes/database", sysCtx.HandleGetDatabaseData)
+	mux.Get("/api/query", notesCtx.HandleQueryPanel)
 	mux.Post("/api/notes/update-property", sysCtx.HandleUpdateNoteProperty)
 	mux.Post("/api/sync", sysCtx.HandleManualSync)
 	mux.Post("/api/bulk-delete", searchCtx.HandleBulkDelete)
