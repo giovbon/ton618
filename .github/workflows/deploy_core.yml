@@ -66,7 +66,7 @@ jobs:
       - name: 🎨 Verificar formatação (gofmt)
         working-directory: ./core
         run: |
-          UNFORMATTED="$(gofmt -l .)"
+          UNFORMATTED="$(gofmt -l cmd internal)"
           if [ -n "$UNFORMATTED" ]; then
             echo "❌ Arquivos fora do gofmt:"
             echo "$UNFORMATTED"

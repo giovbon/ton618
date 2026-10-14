@@ -30,12 +30,12 @@ type askRequest struct {
 type askSource struct {
 	Filename string  `json:"filename"`
 	Tipo     string  `json:"type"`
-	Name     string  `json:"name"`     // nome legível (sem path/extensão)
-	Excerpt  string  `json:"excerpt"`  // parágrafo(s) mais relevante(s) da nota
-	Score    float64 `json:"score"`    // score de relevância (0-1)
-	IsSem    bool    `json:"is_sem"`   // veio da busca semântica?
-	IsFTS    bool    `json:"is_fts"`   // veio da busca textual?
-	SemSim   float64 `json:"sem_sim"`  // similaridade semântica (0-1), se disponível
+	Name     string  `json:"name"`    // nome legível (sem path/extensão)
+	Excerpt  string  `json:"excerpt"` // parágrafo(s) mais relevante(s) da nota
+	Score    float64 `json:"score"`   // score de relevância (0-1)
+	IsSem    bool    `json:"is_sem"`  // veio da busca semântica?
+	IsFTS    bool    `json:"is_fts"`  // veio da busca textual?
+	SemSim   float64 `json:"sem_sim"` // similaridade semântica (0-1), se disponível
 }
 
 // askResponse é o payload devolvido para o browser.
