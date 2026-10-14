@@ -79,6 +79,9 @@ jobs:
 
       - name: 🟢 Instalar deps do web
         working-directory: ./core/web
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NODE_OPTIONS: "--no-network-family-autoselection"
         run: npm ci --legacy-peer-deps
 
       - name: 🧪 Typecheck do frontend (tsc --noEmit)
@@ -169,6 +172,9 @@ jobs:
 
       - name: 🧪 Rodar testes unitários JS
         working-directory: ./core/web
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NODE_OPTIONS: "--no-network-family-autoselection"
         run: |
           npm ci --legacy-peer-deps
           npm test
@@ -203,8 +209,7 @@ jobs:
           file: ./core/Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.bump-version.outputs.tag }}
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ needs.bump-version.outputs.tag }}${{ env.IMAGE_NAME }}:latest
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
@@ -217,8 +222,8 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Imagem** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${{ needs.bump-version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Modo** | ${{ steps.platforms.outputs.mode }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} \vert{}" >> $GITHUB_STEP_SUMMARY
+          echo "| **Modo** | ${{ steps.platforms.outputs.mode }} \vert{}" >> $GITHUB_STEP_SUMMARY
 
   android-apk:
     name: Build Android APK & Release
@@ -257,6 +262,9 @@ jobs:
 
       - name: 🌐 Compilar bundle web
         working-directory: ./core/web
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NODE_OPTIONS: "--no-network-family-autoselection"
         run: |
           npm ci --legacy-peer-deps
           node build.js
@@ -277,7 +285,7 @@ jobs:
           mkdir -p ../android/app/src/main/assets/web/static
           mkdir -p ../android/app/src/main/jniLibs/arm64-v8a
           NDK_DIR="${ANDROID_NDK_ROOT:-}"
-          if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
+          if [ -z "$NDK_DIR" ] \vert{}\vert{} [ ! -d "$NDK_DIR" ]; then
             NDK_DIR="$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/ndk" -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n1 || true)"
           fi
 

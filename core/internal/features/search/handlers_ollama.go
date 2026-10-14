@@ -14,15 +14,27 @@ import (
 	"ton618/core/internal/httputil"
 )
 
-// ── Configuração Ollama ───────────────────────────────────────────────────────
+// ── Configuração IA Local (Ollama / KoboldCPP / LM Studio / OpenAI) ───────────
 
-// HandleGetOllamaSettings retorna a URL e o modelo Ollama configurados.
+// normalizeURL força IPv4 em substituição a localhost para evitar que conexões
+// caiam em [::1] (IPv6) onde servidores locais como KoboldCPP normalmente não escutam.
+func normalizeURL(u string) string {
+	u = strings.TrimRight(strings.TrimSpace(u), "/")
+	if strings.Contains(u, "://localhost:") {
+		u = strings.Replace(u, "://localhost:", "://127.0.0.1:", 1)
+	} else if strings.HasSuffix(u, "://localhost") {
+		u = strings.Replace(u, "://localhost", "://127.0.0.1", 1)
+	}
+	return u
+}
+
+// HandleGetOllamaSettings retorna a URL e o modelo configurados.
 // GET /api/settings/ollama
 func (ctx *HandlerContext) HandleGetOllamaSettings(w http.ResponseWriter, r *http.Request) {
 	url, _ := ctx.Store.GetSetting("ollama_url")
 	model, _ := ctx.Store.GetSetting("ollama_model")
 	if url == "" {
-		url = "http://localhost:11434"
+		url = "http://127.0.0.1:11434"
 	}
 	if model == "" {
 		model = "llama3.2"
@@ -33,7 +45,7 @@ func (ctx *HandlerContext) HandleGetOllamaSettings(w http.ResponseWriter, r *htt
 	})
 }
 
-// HandlePostOllamaSettings salva URL e modelo Ollama e testa a conexão.
+// HandlePostOllamaSettings salva URL e modelo e testa a conexão (suporta Ollama e KoboldCPP).
 // POST /api/settings/ollama   (JSON: {"url":"...", "model":"..."})
 func (ctx *HandlerContext) HandlePostOllamaSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -44,19 +56,26 @@ func (ctx *HandlerContext) HandlePostOllamaSettings(w http.ResponseWriter, r *ht
 		http.Error(w, "json inválido", http.StatusBadRequest)
 		return
 	}
-	body.URL = strings.TrimRight(strings.TrimSpace(body.URL), "/")
+	body.URL = normalizeURL(body.URL)
 	body.Model = strings.TrimSpace(body.Model)
-	if body.URL == "" || body.Model == "" {
-		http.Error(w, "url e model são obrigatórios", http.StatusBadRequest)
+	if body.URL == "" {
+		http.Error(w, "url é obrigatória", http.StatusBadRequest)
 		return
 	}
 
-	// Persiste imediatamente para que testes subsequentes já leiam
+	// Testa a conexão (detecta automaticamente Ollama, KoboldCPP ou OpenAI-compatible)
+	ok, detectedModel, errMsg := pingAI(body.URL, body.Model)
+	if ok && body.Model == "" && detectedModel != "" {
+		body.Model = detectedModel
+	}
+	if body.Model == "" {
+		body.Model = "default"
+	}
+
+	// Persiste as configurações
 	ctx.Store.SetSetting("ollama_url", body.URL)
 	ctx.Store.SetSetting("ollama_model", body.Model)
 
-	// Testa a conexão fazendo uma chamada mínima ao Ollama
-	ok, errMsg := pingOllama(body.URL, body.Model)
 	httputil.WriteJSON(w, map[string]interface{}{
 		"ok":    ok,
 		"error": errMsg,
@@ -65,10 +84,41 @@ func (ctx *HandlerContext) HandlePostOllamaSettings(w http.ResponseWriter, r *ht
 	})
 }
 
-// pingOllama verifica se o Ollama está acessível e o modelo está disponível.
-func pingOllama(baseURL, model string) (bool, string) {
-	client := &http.Client{Timeout: 8 * time.Second}
+// pingAI verifica se o servidor local está acessível (suporta KoboldCPP, Ollama e LM Studio/OpenAI).
+func pingAI(baseURL, model string) (bool, string, string) {
+	client := &http.Client{Timeout: 6 * time.Second}
 
+	// 1. Tenta API nativa do KoboldCPP (GET /api/v1/model)
+	if resp, err := client.Get(baseURL + "/api/v1/model"); err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			var kModel struct {
+				Result string `json:"result"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&kModel) == nil && kModel.Result != "" {
+				return true, kModel.Result, ""
+			}
+			return true, model, ""
+		}
+	}
+
+	// 2. Tenta API do Ollama (GET /api/tags)
+	if resp, err := client.Get(baseURL + "/api/tags"); err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return true, model, ""
+		}
+	}
+
+	// 3. Tenta API compatível OpenAI (GET /v1/models)
+	if resp, err := client.Get(baseURL + "/v1/models"); err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return true, model, ""
+		}
+	}
+
+	// 4. Fallback: chamada mínima de teste ao Ollama /api/generate
 	payload := map[string]interface{}{
 		"model":  model,
 		"prompt": "ok",
@@ -79,24 +129,24 @@ func pingOllama(baseURL, model string) (bool, string) {
 	}
 	b, _ := json.Marshal(payload)
 	resp, err := client.Post(baseURL+"/api/generate", "application/json", bytes.NewReader(b))
-	if err != nil {
-		return false, fmt.Sprintf("Não foi possível conectar ao Ollama em %s: %v", baseURL, err)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return true, model, ""
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Sprintf("Ollama retornou HTTP %d — verifique se o modelo '%s' está instalado (ollama pull %s)", resp.StatusCode, model, model)
-	}
-	return true, ""
+
+	return false, "", fmt.Sprintf("Não foi possível conectar ao servidor em %s (verifique se está rodando e se a porta está correta)", baseURL)
 }
 
-// ── Síntese via Ollama (SSE streaming) ───────────────────────────────────────
+// ── Síntese via IA Local (SSE streaming) ───────────────────────────────────────
 
 type synthesizeRequest struct {
 	Query   string      `json:"query"`
 	Sources []askSource `json:"sources"`
 }
 
-// HandleAskSynthesize chama o Ollama com os trechos do /api/ask e faz stream
+// HandleAskSynthesize chama o modelo local (Ollama ou KoboldCPP/OpenAI) e faz stream
 // da resposta gerada para o browser via Server-Sent Events.
 // POST /api/ask/synthesize
 func (ctx *HandlerContext) HandleAskSynthesize(w http.ResponseWriter, r *http.Request) {
@@ -116,13 +166,13 @@ func (ctx *HandlerContext) HandleAskSynthesize(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ollamaURL, _ := ctx.Store.GetSetting("ollama_url")
+	baseURL, _ := ctx.Store.GetSetting("ollama_url")
 	model, _ := ctx.Store.GetSetting("ollama_model")
-	if ollamaURL == "" || model == "" {
-		http.Error(w, "Ollama não configurado. Configure em Configurações → IA.", http.StatusServiceUnavailable)
+	if baseURL == "" {
+		http.Error(w, "Servidor de IA não configurado. Configure em Configurações → IA.", http.StatusServiceUnavailable)
 		return
 	}
-	ollamaURL = strings.TrimRight(ollamaURL, "/")
+	baseURL = normalizeURL(baseURL)
 
 	// Monta o contexto com os trechos das notas
 	var contextParts []string
@@ -157,19 +207,104 @@ Pergunta: %s
 
 Resposta:`, contextText, req.Query)
 
+	// Detecta se o backend é KoboldCPP / OpenAI ou Ollama
+	client := &http.Client{Timeout: 90 * time.Second}
+	isKoboldOrOpenAI := false
+
+	// Checa se o endpoint OpenAI /v1/chat/completions ou Kobold existe
+	if checkResp, err := client.Get(baseURL + "/api/v1/model"); err == nil && checkResp.StatusCode == http.StatusOK {
+		checkResp.Body.Close()
+		isKoboldOrOpenAI = true
+	} else if checkResp, err := client.Get(baseURL + "/v1/models"); err == nil && checkResp.StatusCode == http.StatusOK {
+		checkResp.Body.Close()
+		isKoboldOrOpenAI = true
+	}
+
+	// Configura Headers para Server-Sent Events (SSE)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, hasFlusher := w.(http.Flusher)
+
+	if isKoboldOrOpenAI {
+		// ── Formato OpenAI / KoboldCPP (/v1/chat/completions) ──
+		openAIPayload := map[string]interface{}{
+			"model": model,
+			"messages": []map[string]string{
+				{"role": "system", "content": "Você é o assistente inteligente de notas do TON-618. Responda estritamente com base nas notas fornecidas em português brasileiro."},
+				{"role": "user", "content": prompt},
+			},
+			"stream":      true,
+			"max_tokens":  250,
+			"temperature": 0.3,
+		}
+		payloadBytes, _ := json.Marshal(openAIPayload)
+		resp, err := client.Post(baseURL+"/v1/chat/completions", "application/json", bytes.NewReader(payloadBytes))
+		if err != nil {
+			slog.Error("ia: erro ao conectar ao kobold/openai", "error", err)
+			http.Error(w, "Erro ao conectar à IA: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			http.Error(w, fmt.Sprintf("Servidor retornou HTTP %d: %s", resp.StatusCode, string(body)), http.StatusBadGateway)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				fmt.Fprintf(w, "event: done\ndata: {}\n\n")
+				if hasFlusher {
+					flusher.Flush()
+				}
+				break
+			}
+
+			var chunk struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
+				token := chunk.Choices[0].Delta.Content
+				if token != "" {
+					bToken, _ := json.Marshal(token)
+					fmt.Fprintf(w, "data: %s\n\n", bToken)
+					if hasFlusher {
+						flusher.Flush()
+					}
+				}
+			}
+		}
+		return
+	}
+
+	// ── Formato Ollama (/api/generate) ──
 	ollamaPayload := map[string]interface{}{
 		"model":  model,
 		"prompt": prompt,
 		"stream": true,
 		"options": map[string]interface{}{
 			"temperature": 0.3,
-			"num_predict": 200,
+			"num_predict": 250,
 		},
 	}
 	payloadBytes, _ := json.Marshal(ollamaPayload)
 
-	client := &http.Client{Timeout: 60 * time.Second}
-	ollamaResp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(payloadBytes))
+	ollamaResp, err := client.Post(baseURL+"/api/generate", "application/json", bytes.NewReader(payloadBytes))
 	if err != nil {
 		slog.Error("ollama: falha na conexão", "error", err)
 		http.Error(w, "Erro ao conectar ao Ollama: "+err.Error(), http.StatusBadGateway)
@@ -183,16 +318,8 @@ Resposta:`, contextText, req.Query)
 		return
 	}
 
-	// Configura SSE no response
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no") // desativa buffer do nginx/proxy
-	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 
-	flusher, hasFlusher := w.(http.Flusher)
-
-	// Lê a resposta do Ollama linha por linha e faz stream para o browser
 	scanner := bufio.NewScanner(ollamaResp.Body)
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -207,7 +334,6 @@ Resposta:`, contextText, req.Query)
 			continue
 		}
 		if chunk.Response != "" {
-			// Envia token como SSE data
 			token, _ := json.Marshal(chunk.Response)
 			fmt.Fprintf(w, "data: %s\n\n", token)
 			if hasFlusher {
@@ -221,8 +347,5 @@ Resposta:`, contextText, req.Query)
 			}
 			break
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		slog.Warn("ollama: erro no scanner da resposta", "error", err)
 	}
 }
