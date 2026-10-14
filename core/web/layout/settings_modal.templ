@@ -59,6 +59,11 @@ templ SettingsModal() {
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
                         @icons.Icon(icons.GetIcon("semantica"), "w-4 h-4 " + icons.GetColor("semantica")) Semântica
                     </button>
+                    <button @click="$store.settings.openTab('ollama')"
+                        :class="$store.settings.activeTab === 'ollama' ? 'text-white border-amber-500 bg-amber-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
+                        @icons.Icon(icons.GetIcon("settings-ntfy"), "w-4 h-4 text-amber-400") IA (Ollama)
+                    </button>
                 </div>
 
             <!-- Tab Content -->
@@ -399,6 +404,55 @@ templ SettingsModal() {
                     </div>
                 </div>
             </div>
+
+                <!-- IA (Ollama) Tab -->
+                <div x-show="$store.settings.activeTab === 'ollama'" class="space-y-5" x-data="ollamaSettings()">
+                    <p class="text-sm text-zinc-400">
+                        Configure o Ollama para síntese generativa local das suas notas no Modo Pergunta.
+                        O modelo roda 100% na sua máquina, sem enviar dados para a nuvem.
+                    </p>
+
+                    <!-- Status badge -->
+                    <div id="ollama-status-badge" class="hidden rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-2"></div>
+
+                    <div class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-300 mb-1.5">URL do Ollama</label>
+                            <input type="text" x-model="url" placeholder="http://localhost:11434"
+                                class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition-colors" />
+                            <p class="text-[10px] text-zinc-600 mt-1">Endereço onde o Ollama está rodando. Padrão: http://localhost:11434</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-300 mb-1.5">Modelo</label>
+                            <input type="text" x-model="model" placeholder="llama3.2"
+                                class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition-colors" />
+                            <p class="text-[10px] text-zinc-600 mt-1">Nome do modelo instalado no Ollama (ex: llama3.2, mistral, gemma3). Use <code class="bg-zinc-800 px-1 rounded">ollama list</code> para ver os disponíveis.</p>
+                        </div>
+                        <div class="flex items-center gap-2 pt-1">
+                            <button type="button" @click="save()" :disabled="saving"
+                                class="flex-1 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 text-sm font-bold transition-all flex items-center justify-center gap-2"
+                                :class="{'opacity-50 cursor-not-allowed': saving}">
+                                <span x-show="!saving">💾 Salvar e Testar Conexão</span>
+                                <span x-show="saving" class="inline-flex items-center gap-2">
+                                    <span class="animate-spin h-3.5 w-3.5 border-2 border-amber-400 border-t-transparent rounded-full"></span>
+                                    Testando...
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Instrução de instalação -->
+                    <div class="bg-zinc-900/60 rounded-xl p-4 border border-zinc-800 space-y-2">
+                        <p class="text-xs font-bold text-zinc-300">Como instalar o Ollama</p>
+                        <ol class="text-[11px] text-zinc-500 space-y-1 list-decimal list-inside">
+                            <li>Acesse <a href="https://ollama.com" target="_blank" class="text-amber-400 hover:underline">ollama.com</a> e baixe para o seu sistema operacional</li>
+                            <li>Instale e inicie o serviço (roda em <code class="bg-zinc-800 px-1 rounded">localhost:11434</code> por padrão)</li>
+                            <li>Baixe um modelo: <code class="bg-zinc-800 px-1 rounded">ollama pull llama3.2</code></li>
+                            <li>Configure a URL e o modelo acima e clique em "Salvar e Testar Conexão"</li>
+                        </ol>
+                        <p class="text-[10px] text-zinc-600 pt-1">💡 Modelos recomendados: <strong class="text-zinc-400">llama3.2</strong> (3B · rápido), <strong class="text-zinc-400">mistral</strong> (7B · melhor qualidade), <strong class="text-zinc-400">gemma3:4b</strong></p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -499,6 +553,62 @@ templ SettingsModal() {
                     }
                 })
                 .catch(function (e) { console.error('Erro ao carregar lead time:', e); });
+        });
+
+        // ── Ollama Settings Alpine Component ──
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('ollamaSettings', () => ({
+                url: 'http://localhost:11434',
+                model: 'llama3.2',
+                saving: false,
+                init() {
+                    fetch('/api/settings/ollama')
+                        .then(r => r.ok ? r.json() : null)
+                        .then(d => {
+                            if (d) {
+                                if (d.url) this.url = d.url;
+                                if (d.model) this.model = d.model;
+                            }
+                        })
+                        .catch(() => {});
+                },
+                async save() {
+                    this.saving = true;
+                    const badge = document.getElementById('ollama-status-badge');
+                    if (badge) { badge.className = 'hidden'; badge.innerHTML = ''; }
+                    try {
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (window.getAuthHeader) Object.assign(headers, window.getAuthHeader());
+                        const r = await fetch('/api/settings/ollama', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({ url: this.url.trim(), model: this.model.trim() })
+                        });
+                        const data = await r.json().catch(() => ({}));
+                        if (badge) {
+                            badge.classList.remove('hidden');
+                            if (data.ok) {
+                                badge.className = 'rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-300';
+                                badge.innerHTML = '✅ Conexão estabelecida! Ollama pronto para uso no Modo Pergunta.';
+                                // Notifica o Modo Pergunta que o Ollama está configurado
+                                window._ollamaConfigured = true;
+                                document.dispatchEvent(new CustomEvent('ollama-configured', { detail: { url: data.url, model: data.model } }));
+                            } else {
+                                badge.className = 'rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-2 bg-red-950/40 border border-red-500/30 text-red-300';
+                                badge.innerHTML = '❌ ' + (data.error || 'Erro desconhecido ao conectar ao Ollama.');
+                            }
+                        }
+                    } catch (e) {
+                        if (badge) {
+                            badge.classList.remove('hidden');
+                            badge.className = 'rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-2 bg-red-950/40 border border-red-500/30 text-red-300';
+                            badge.innerHTML = '❌ ' + e.message;
+                        }
+                    } finally {
+                        this.saving = false;
+                    }
+                }
+            }));
         });
     </script>
 }

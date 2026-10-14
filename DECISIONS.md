@@ -1303,3 +1303,32 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 - **E2E**: `npx playwright test tests/query-panel.spec.ts` → **3/3** (Chromium headless, contra o servidor real). Exigiu `npx playwright install chromium` (o cache de browsers é por versão do Playwright).
 - **Frontend**: `tsc --noEmit` limpo e `node --test tests/*.unit.cjs` **47/47** (5 guardas novas do painel).
 - Cobertura negativa conferida à mão durante o desenvolvimento: campo desconhecido, erro de sintaxe, tipo incompatível, expressão não-booleana, coluna desconhecida, `de:` inexistente e expressão acima do teto de custo — todos aparecem como texto dentro do cartão, nunca como 500.
+
+---
+
+## 7. Modo Perguntar & Síntese RAG via Ollama (14/10/2026)
+
+### 7.1 Arquitetura
+
+O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **síntese generativa local via Ollama**:
+
+1. **Pipeline Extrativo Rápido (Backend Go - `/api/ask`)**:
+   - `handlers_ask.go`: Executa busca em linguagem natural eliminando stopwords de perguntas (`como`, `qual`, `onde`, etc.) e gerando consulta FTS5 flexível com OR e delimitadores `containsWord`.
+   - Fusão RRF com busca vetorial (`sqlite-vec`).
+   - Extrai os 3 a 5 melhores blocos lógicos das notas com ranking de densidade semântica e contextual.
+   - Responde em < 50ms com alucinação zero e links diretos para as notas.
+
+2. **Pipeline Generativo RAG via Ollama (`POST /api/ask/synthesize`)**:
+   - Substituição total do modelo in-browser (SmolLM2/Transformers.js) por chamada direta ao **Ollama local** via HTTP SSE (Server-Sent Events).
+   - O modelo roda nativamente na GPU do host (ex: `llama3.2`, `qwen2.5:7b`), sem baixar pesos no navegador e sem travar a interface web.
+   - Configuração de URL e modelo em **Configurações → IA (Ollama)** persistida no SQLite (`ollama_url`, `ollama_model`).
+   - Se o Ollama não estiver configurado, a busca exibe apenas os cards das notas diretamente, sem tentar síntese generativa.
+
+---
+
+## 8. Módulo Mobile Android (`android/`) (14/10/2026)
+
+- Estrutura autônoma na pasta `android/` com arquitetura em Kotlin + Jetpack/AndroidX.
+- O executável do `core` compilado para ARM64 (`ton618-arm64`) é embarcado como asset.
+- `TonServerService` gerencia o ciclo de vida do processo Go como um `ForegroundService` com notificação ativa.
+- `MainActivity` exibe uma barra de controle superior (mostrando o IP da rede Wi-Fi para acesso de outros dispositivos) e carrega a aplicação via `WebView` em `localhost:6180`.

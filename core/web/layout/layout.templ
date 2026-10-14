@@ -335,7 +335,8 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
     </style>
 </head>
 
-<body class="font-sans antialiased overflow-x-hidden" data-semantic-worker={ staticver.URL("/static/semantic-worker.js") }>
+<body class="font-sans antialiased overflow-x-hidden"
+    data-semantic-worker={ staticver.URL("/static/semantic-worker.js") }>
     @Navbar()
     <main class={ getLayoutClass(ctx) }>
 

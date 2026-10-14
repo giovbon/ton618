@@ -74,24 +74,30 @@ templ indexContent() {
                 class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-emerald-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition-all hidden"
             />
             <!-- Input do modo Perguntar -->
-            <div id="ask-input-wrap" class="hidden w-full flex gap-2">
-                <input
-                    id="search-ask"
-                    type="text"
-                    placeholder="Faça uma pergunta sobre suas notas..."
-                    name="q"
-                    autocomplete="off"
-                    class="flex-1 px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-amber-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40 transition-all"
-                />
-                <button
-                    id="ask-submit-btn"
-                    type="button"
-                    onclick="triggerAsk()"
-                    class="shrink-0 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[13px] font-semibold hover:bg-amber-500/30 transition-all flex items-center gap-1.5"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    Perguntar
-                </button>
+            <div id="ask-input-wrap" class="hidden w-full flex-col gap-1.5">
+                <div class="flex gap-2">
+                    <input
+                        id="search-ask"
+                        type="text"
+                        placeholder="Faça uma pergunta sobre suas notas..."
+                        name="q"
+                        autocomplete="off"
+                        class="flex-1 px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-amber-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40 transition-all"
+                    />
+                    <button
+                        id="ask-submit-btn"
+                        type="button"
+                        onclick="triggerAsk()"
+                        class="shrink-0 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[13px] font-semibold hover:bg-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        Perguntar
+                    </button>
+                </div>
+                <div id="ask-ollama-hint" class="hidden px-1 text-[11px] text-amber-500/70 flex items-center gap-1.5">
+                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Configure o <button type="button" onclick="window.$store && $store.settings && $store.settings.open ? $store.settings.openTab('ollama') : null" class="underline hover:text-amber-300 cursor-pointer">Ollama em Configurações → IA</button> para obter respostas geradas por IA.
+                </div>
             </div>
             <div
                 id="spinner"
@@ -251,6 +257,7 @@ templ indexContent() {
 
             initSemanticUI();
             loadIndexStatus();
+            updateOllamaHint();
         }
     }
 
@@ -609,8 +616,38 @@ templ indexContent() {
         }
     });
 
-    // ── Modo Perguntar ──
+    // ── Modo Perguntar & Síntese RAG via Ollama ──
     var askSearchTimeout = null;
+    var currentAskData = null;
+    var currentAskQuery = "";
+    var _ollamaConfigured = null; // null=unknown, true/false
+    var _currentSynthAbort = null;
+
+    // Verifica se Ollama está configurado (cache de sessão)
+    function checkOllamaConfigured(cb) {
+        if (_ollamaConfigured !== null) { cb(_ollamaConfigured); return; }
+        fetch("/api/settings/ollama")
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                _ollamaConfigured = !!(d && d.url && d.url !== "" && d.model && d.model !== "");
+                cb(_ollamaConfigured);
+            })
+            .catch(function() { _ollamaConfigured = false; cb(false); });
+    }
+
+    // Atualiza dica de Ollama na UI baseado na configuração
+    function updateOllamaHint() {
+        checkOllamaConfigured(function(configured) {
+            var hint = document.getElementById("ask-ollama-hint");
+            if (hint) hint.classList.toggle("hidden", configured);
+        });
+    }
+
+    // Escuta evento emitido quando o usuário salva configuração Ollama
+    document.addEventListener("ollama-configured", function(e) {
+        _ollamaConfigured = true;
+        updateOllamaHint();
+    });
 
     document.getElementById("search-ask").addEventListener("keydown", function(e) {
         if (e.key === "Enter") { e.preventDefault(); triggerAsk(); }
@@ -619,9 +656,7 @@ templ indexContent() {
     document.getElementById("search-ask").addEventListener("input", function() {
         clearTimeout(askSearchTimeout);
         askSearchTimeout = setTimeout(function() {
-            // Auto-dispara apenas se o usuário parar de digitar por 1.2s (a pergunta
-            // é diferente da busca — queremos evitar requisições a cada tecla).
-            // Se preferir clique explícito, basta remover este bloco.
+            // Pequeno debounce se preferir digitar
         }, 1200);
     });
 
@@ -633,9 +668,10 @@ templ indexContent() {
     }
 
     function runAsk(query) {
+        currentAskQuery = query;
         var resultsEl = document.getElementById("ask-results");
         resultsEl.innerHTML = '<div class="flex items-center gap-2 py-8 justify-center text-zinc-500 text-sm animate-pulse">' +
-            '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>' +
+            '<svg class="w-4 h-4 animate-spin text-amber-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>' +
             'Buscando nas suas notas...</div>';
 
         var btn = document.getElementById("ask-submit-btn");
@@ -656,12 +692,71 @@ templ indexContent() {
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
         }).then(function(data) {
+            currentAskData = data;
             renderAskResults(data, query);
         }).catch(function(err) {
             resultsEl.innerHTML = '<p class="text-red-400 text-sm text-center py-8">Erro: ' + escapeHtml(err.message) + '</p>';
         }).finally(function() {
             if (btn) { btn.disabled = false; btn.classList.remove("opacity-50"); }
         });
+    }
+
+    // Extrai palavras-chave da query para highlighting nos trechos
+    function extractKeywordsForHighlight(query) {
+        var clean = (query || "").toLowerCase()
+            .replace(/[^\w\sáàâãéèêíïóôõöúçñ-]/gi, ' ');
+        var stopwords = {
+            "qual": true, "quais": true, "como": true, "onde": true, "quando": true, "quem": true,
+            "porque": true, "para": true, "com": true, "sem": true, "criar": true, "fazer": true,
+            "usar": true, "de": true, "do": true, "da": true, "dos": true, "das": true, "em": true,
+            "no": true, "na": true, "um": true, "uma": true, "que": true, "what": true, "how": true
+        };
+        return clean.split(/\s+/).filter(function(w) {
+            return w.length > 2 && !stopwords[w];
+        });
+    }
+
+    // Formata markdown de forma segura e grifa termos
+    function formatMarkdownRich(text, keywordsToHighlight) {
+        if (!text) return "";
+        var s = escapeHtml(text);
+
+        // Blocos de código multilinhas ```
+        s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, function(match, lang, code) {
+            return '<pre class="my-2 p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs font-mono text-amber-200 overflow-x-auto select-all"><code>' + code.trim() + '</code></pre>';
+        });
+
+        // Código inline `código`
+        s = s.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-zinc-800/80 border border-zinc-700/50 rounded text-[11px] font-mono text-amber-300">$1</code>');
+
+        // Negrito **texto**
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>');
+
+        // Itálico *texto*
+        s = s.replace(/\*([^*]+)\*/g, '<em class="text-zinc-300 italic">$1</em>');
+
+        // Listas com marcadores
+        s = s.replace(/(?:^|\n)[-*]\s+([^\n]+)/g, '<li class="ml-4 list-disc text-zinc-300 my-0.5">$1</li>');
+
+        // Quebras de parágrafo
+        s = s.replace(/\n\n+/g, '</p><p class="mt-2 leading-relaxed">');
+        s = s.replace(/\n/g, '<br>');
+        s = '<p class="leading-relaxed">' + s + '</p>';
+        s = s.replace(/<p class="leading-relaxed"><\/p>/g, '');
+
+        // Destaque visual dos termos da pergunta fora de tags HTML
+        if (keywordsToHighlight && keywordsToHighlight.length > 0) {
+            keywordsToHighlight.forEach(function(kw) {
+                if (kw.length <= 1) return;
+                var cleanKw = cleanJSOperators(kw);
+                var pat = makeAccentInsensitivePattern(cleanKw);
+                var re = new RegExp("\\b(" + pat + "[a-zA-Z0-9À-ÿ_]*)\\b(?![^<]*>|[^<>]*<\/)", "gi");
+                s = s.replace(re, function(m) {
+                    return '<mark class="bg-amber-500/20 text-amber-300 font-medium rounded-xs px-0.5 border border-amber-500/30">' + m + '</mark>';
+                });
+            });
+        }
+        return s;
     }
 
     function renderAskResults(data, query) {
@@ -678,17 +773,29 @@ templ indexContent() {
             return;
         }
 
+        var keywords = extractKeywordsForHighlight(query);
         var html = '';
 
         // Cabeçalho da resposta
-        html += '<div class="mb-5 pb-4 border-b border-zinc-800/60">' +
+        html += '<div class="mb-5 pb-4 border-b border-zinc-800/60 flex flex-wrap items-center justify-between gap-3">' +
+            '<div>' +
             '<div class="flex items-center gap-2 mb-1">' +
             '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>' +
             '<span class="text-[11px] font-semibold text-amber-400 tracking-wide uppercase">Encontrei nas suas notas</span>' +
-            '<span class="ml-auto text-[10px] text-zinc-600">' + sources.length + ' fonte' + (sources.length === 1 ? '' : 's') + '</span>' +
+            '<span class="text-[10px] text-zinc-500">(' + sources.length + ' fonte' + (sources.length === 1 ? '' : 's') + ')</span>' +
             '</div>' +
-            '<p class="text-[12px] text-zinc-500 italic">&ldquo;' + escapeHtml(query) + '&rdquo;</p>' +
+            '<p class="text-[12px] text-zinc-400 italic">&ldquo;' + escapeHtml(query) + '&rdquo;</p>' +
+            '</div>' +
+            '<div id="ask-header-actions">' +
+            '<button id="ask-synth-btn" type="button" onclick="startSynthesizer(currentAskQuery, currentAskData ? currentAskData.sources : [])" class="hidden px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 text-[11px] font-medium flex items-center gap-1.5 transition-all shadow-xs">' +
+            '<svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2h7.6l-6.1 4.5 2.3 7.3-6.2-4.6-6.2 4.6 2.3-7.3-6.1-4.5h7.6z"/></svg>' +
+            'Sintetizar com Ollama' +
+            '</button>' +
+            '</div>' +
             '</div>';
+
+        // Slot para o Card de Síntese (Ollama)
+        html += '<div id="ask-synth-slot" class="mb-6"></div>';
 
         // Cards das fontes
         html += '<div class="space-y-4">';
@@ -696,14 +803,7 @@ templ indexContent() {
             var route = editorRouteForTipo(src.type || "");
             var fileUrl = route + '?file=' + encodeURIComponent(src.filename || "");
 
-            // Formata o trecho: converte newlines em <br>, remove markdown pesado
-            var excerptHtml = escapeHtml(src.excerpt || "")
-                .replace(/\n\n/g, '<br><br>')
-                .replace(/\n/g, '<br>')
-                .replace(/^#{1,6}\s+/gm, '') // remove # de headings
-                .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-zinc-200">$1</strong>')
-                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-                .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-zinc-800 rounded text-[11px] font-mono text-amber-300">$1</code>');
+            var excerptHtml = formatMarkdownRich(src.excerpt || "", keywords);
 
             // Badges
             var badges = '';
@@ -727,7 +827,7 @@ templ indexContent() {
                 '</a>' +
                 '<div class="flex items-center gap-1 shrink-0">' + badges + '</div>' +
                 '</div>' +
-                // Trecho extraído
+                // Trecho extraído formatado
                 '<div class="text-[13px] leading-relaxed text-zinc-300 font-sans border-l-2 border-amber-500/30 pl-3">' +
                 excerptHtml +
                 '</div>' +
@@ -746,6 +846,145 @@ templ indexContent() {
         html += '<p class="text-[10px] text-zinc-700 text-center mt-6 pb-2">Resposta gerada a partir do conteúdo das suas notas · nenhum dado externo foi usado</p>';
 
         el.innerHTML = html;
+
+        // Mostra o botão "Sintetizar" apenas se Ollama estiver configurado
+        checkOllamaConfigured(function(configured) {
+            var btn = document.getElementById("ask-synth-btn");
+            if (btn) btn.classList.toggle("hidden", !configured);
+        });
+    }
+
+    // ── Síntese via Ollama (SSE streaming) ──
+    function startSynthesizer(query, sources) {
+        var slot = document.getElementById("ask-synth-slot");
+        if (!slot || !sources || !sources.length) return;
+
+        // Cancela síntese anterior se ainda estiver em andamento
+        if (_currentSynthAbort) { _currentSynthAbort(); _currentSynthAbort = null; }
+
+        // Monta o card de síntese
+        slot.innerHTML =
+            '<div id="ask-synth-card" class="relative bg-gradient-to-b from-amber-950/20 to-zinc-900/60 border border-amber-500/40 rounded-xl p-5 shadow-lg shadow-amber-500/5">' +
+            '<div class="flex items-center justify-between mb-3 pb-2.5 border-b border-amber-500/20">' +
+            '<div class="flex items-center gap-2">' +
+            '<svg class="w-4 h-4 text-amber-400 animate-pulse" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2h7.6l-6.1 4.5 2.3 7.3-6.2-4.6-6.2 4.6 2.3-7.3-6.1-4.5h7.6z"/></svg>' +
+            '<span class="text-[12px] font-bold text-amber-300 tracking-wide uppercase">Resposta IA · Ollama</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-2">' +
+            '<span id="synth-status-badge" class="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-[10px] font-semibold text-amber-300 flex items-center gap-1.5">' +
+            '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> Gerando...' +
+            '</span>' +
+            '<button id="synth-copy-btn" type="button" onclick="copySynthText()" class="hidden px-2 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-amber-300 hover:bg-zinc-800/80 rounded transition-all">Copiar</button>' +
+            '</div>' +
+            '</div>' +
+            '<div id="synth-content" class="text-[13.5px] leading-relaxed text-zinc-200 font-sans min-h-[48px]">' +
+            '<span class="inline-block w-1.5 h-3.5 bg-amber-400 animate-pulse"></span>' +
+            '</div>' +
+            '</div>';
+
+        var synthContentEl = document.getElementById("synth-content");
+        var statusBadge = document.getElementById("synth-status-badge");
+        var copyBtn = document.getElementById("synth-copy-btn");
+        var accumulated = "";
+        var done = false;
+        window.currentSynthesizedText = "";
+
+        var authHeaders = { "Content-Type": "application/json" };
+        if (window.getAuthHeader) Object.assign(authHeaders, window.getAuthHeader());
+
+        fetch("/api/ask/synthesize", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ query: query, sources: sources })
+        }).then(function(r) {
+            if (!r.ok) {
+                return r.text().then(function(t) { throw new Error(t || "HTTP " + r.status); });
+            }
+            var reader = r.body.getReader();
+            var decoder = new TextDecoder();
+            var buffer = "";
+
+            _currentSynthAbort = function() {
+                done = true;
+                try { reader.cancel(); } catch(e) {}
+            };
+
+            function pump() {
+                if (done) return;
+                reader.read().then(function(result) {
+                    if (result.done || done) {
+                        if (!done) {
+                            done = true;
+                            window.currentSynthesizedText = accumulated;
+                            if (synthContentEl) synthContentEl.innerHTML = formatMarkdownRich(accumulated, []);
+                            if (statusBadge) {
+                                statusBadge.innerHTML = '✨ Concluído (Ollama)';
+                                statusBadge.className = "px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-[10px] font-semibold text-amber-300";
+                            }
+                            if (copyBtn) copyBtn.classList.remove("hidden");
+                        }
+                        return;
+                    }
+                    buffer += decoder.decode(result.value, { stream: true });
+                    var lines = buffer.split("\n");
+                    buffer = lines.pop();
+                    lines.forEach(function(line) {
+                        if (line.startsWith("event: done")) { return; }
+                        if (line.startsWith("data: ")) {
+                            var raw = line.slice(6).trim();
+                            if (!raw || raw === "{}") return;
+                            try {
+                                var token = JSON.parse(raw);
+                                if (typeof token === "string") {
+                                    accumulated += token;
+                                    window.currentSynthesizedText = accumulated;
+                                    if (synthContentEl) {
+                                        synthContentEl.innerHTML = formatMarkdownRich(accumulated, []) +
+                                            '<span class="inline-block w-1.5 h-3.5 bg-amber-400 ml-1 translate-y-0.5 animate-pulse"></span>';
+                                    }
+                                    if (statusBadge && statusBadge.querySelector('.animate-ping')) {
+                                        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Gerando (Ollama)...';
+                                        statusBadge.className = "px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300 flex items-center gap-1.5";
+                                    }
+                                }
+                            } catch(e) {}
+                        }
+                    });
+                    pump();
+                }).catch(function(e) {
+                    if (!done) {
+                        if (synthContentEl) synthContentEl.innerHTML += '<span class="text-red-400 text-xs block mt-2">Conexão interrompida.</span>';
+                    }
+                });
+            }
+            pump();
+        }).catch(function(err) {
+            if (synthContentEl) {
+                synthContentEl.innerHTML =
+                    '<div class="text-xs text-red-400 bg-red-950/20 border border-red-900/40 rounded-lg p-2.5">' +
+                    escapeHtml(err.message || "Erro desconhecido") +
+                    '<br><span class="text-zinc-500 mt-1 inline-block">Verifique se o Ollama está rodando e configurado em Configurações → IA.</span>' +
+                    '</div>';
+            }
+            if (statusBadge) {
+                statusBadge.innerHTML = 'Falha';
+                statusBadge.className = "px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/30 text-[10px] font-semibold text-red-300";
+            }
+        });
+    }
+
+    function copySynthText() {
+        var text = window.currentSynthesizedText || "";
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(function() {
+            var btn = document.getElementById("synth-copy-btn");
+            if (btn) {
+                var prev = btn.textContent;
+                btn.textContent = "Copiado!";
+                btn.classList.add("text-emerald-400");
+                setTimeout(function() { btn.textContent = prev; btn.classList.remove("text-emerald-400"); }, 2000);
+            }
+        });
     }
 </script>
 }

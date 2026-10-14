@@ -1,20 +1,20 @@
-name: Deploy do Core no Docker Hub
+name: Deploy do Core no Docker Hub e APK Android
 
 on:
   push:
-    tags:
-      - "v*"
     branches:
       - main
+    tags:
+      - "v*"
 
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag da imagem Docker"
+        description: "Tag manual (opcional, deixe vazio para auto-incrementar)"
         required: false
-        default: "latest"
+        default: ""
       mode:
-        description: "Modo de build: 1 = ARM64, 2 = AMD64 + ARM64"
+        description: "Modo de build Docker: 1 = ARM64, 2 = AMD64 + ARM64"
         required: false
         default: "2"
 
@@ -52,7 +52,7 @@ jobs:
       - name: 🔨 Gerar templates Templ
         working-directory: ./core
         run: |
-          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1)"
+          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
           if [ -n "$TEMPL_REQ" ]; then
             go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
           else
@@ -85,29 +85,95 @@ jobs:
         working-directory: ./core/web
         run: npm run typecheck
 
-  deploy:
-    name: Build & Push
+  bump-version:
+    name: 🏷️ Auto Version Bump
     needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: 📥 Checkout com histórico de tags
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 🔢 Calcular Próxima Versão
+        id: version
+        run: |
+          # 1. Se foi informado manualmente via workflow_dispatch
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "Usando tag manual informada: ${{ inputs.tag }}"
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 2. Se o push já foi uma tag git (ex: git push origin v2.1.0)
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+            echo "Usando tag do evento push: $CURRENT_TAG"
+            echo "tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 3. Auto-incremento para pushes na branch main
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v2.0.0")
+          echo "Última versão encontrada: $LAST_TAG"
+
+          CLEAN_VER="${LAST_TAG#v}"
+          MAJOR=$(echo "$CLEAN_VER" | cut -d. -f1)
+          MINOR=$(echo "$CLEAN_VER" | cut -d. -f2)
+          PATCH=$(echo "$CLEAN_VER" | cut -d. -f3)
+
+          # Trata caso a tag não siga exatamente major.minor.patch
+          MAJOR="${MAJOR:-2}"
+          MINOR="${MINOR:-0}"
+          PATCH="${PATCH:-0}"
+
+          # Incrementa o número do patch
+          PATCH=$((PATCH + 1))
+
+          # Se o PATCH atingir 30 commits, incrementa o MINOR e zera o PATCH
+          if [ "$PATCH" -ge 30 ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          fi
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Nova versão calculada: $NEW_TAG"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+          # Configura autor e cria tag no repositório
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG [skip ci]"
+          git push origin "$NEW_TAG"
+
+  deploy:
+    name: Build & Push Docker
+    needs: [test, bump-version]
     runs-on: ubuntu-latest
 
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v7
 
-      - name: � Setup Node
+      - name: 🟢 Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: core/web/package-lock.json
 
-      - name: 🧪 Rodar testes unitários JS (auth headers, editor-common)
+      - name: 🧪 Rodar testes unitários JS
         working-directory: ./core/web
         run: |
           npm ci --legacy-peer-deps
           npm test
 
-      - name: �🔧 Setup QEMU (binfmt)
+      - name: 🔧 Setup QEMU (binfmt)
         uses: docker/setup-qemu-action@v4
 
       - name: 🔧 Setup Docker Buildx
@@ -118,17 +184,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: 🏷️ Definir tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          fi
 
       - name: 🏷️ Definir plataformas
         id: platforms
@@ -148,7 +203,7 @@ jobs:
           file: ./core/Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:${{ needs.bump-version.outputs.tag }}
             ${{ env.IMAGE_NAME }}:latest
           push: true
           cache-from: type=gha
@@ -156,11 +211,126 @@ jobs:
 
       - name: ✅ Summary
         run: |
-          echo "## 🐳 Deploy concluído" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Deploy Docker concluído" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Valor |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Imagem** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Tag** | \`${{ steps.tag.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${{ needs.bump-version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Modo** | ${{ steps.platforms.outputs.mode }} |" >> $GITHUB_STEP_SUMMARY
+
+  android-apk:
+    name: Build Android APK & Release
+    needs: [test, bump-version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: core/go.sum
+
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: core/web/package-lock.json
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: 🐘 Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: 🌐 Compilar bundle web
+        working-directory: ./core/web
+        run: |
+          npm ci --legacy-peer-deps
+          node build.js
+
+      - name: 🔨 Gerar templates Templ
+        working-directory: ./core
+        run: |
+          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
+          if [ -n "$TEMPL_REQ" ]; then
+            go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
+          else
+            go run github.com/a-h/templ/cmd/templ@latest generate
+          fi
+
+      - name: 🤖 Compilar Core Go para Android ARM64
+        working-directory: ./core
+        run: |
+          mkdir -p ../android/app/src/main/assets
+          NDK_DIR="${ANDROID_NDK_ROOT:-}"
+          if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
+            NDK_DIR="$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/ndk" -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n1 || true)"
+          fi
+
+          CLANG_BIN=""
+          if [ -n "$NDK_DIR" ] && [ -d "$NDK_DIR" ]; then
+            CLANG_BIN="$(find "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" -name "aarch64-linux-android*-clang" 2>/dev/null | head -n1 || true)"
+          fi
+
+          if [ -n "$CLANG_BIN" ] && [ -x "$CLANG_BIN" ]; then
+            echo "✅ Usando NDK Clang: $CLANG_BIN"
+            CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC="$CLANG_BIN" go build -tags sqlite_fts5 -ldflags="-s -w" -o ../android/app/src/main/assets/ton618-arm64 ./cmd/server
+          else
+            echo "🐧 Fallback: instalando cross-compiler GNU aarch64"
+            sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+            CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -tags sqlite_fts5 -ldflags="-s -w" -o ../android/app/src/main/assets/ton618-arm64 ./cmd/server
+          fi
+          ls -lh ../android/app/src/main/assets/ton618-arm64
+
+      - name: 📱 Compilar APK com Gradle
+        working-directory: ./android
+        run: gradle assembleDebug
+
+      - name: 📦 Preparar nome do APK
+        id: apk_info
+        run: |
+          TAG_VAL="${{ needs.bump-version.outputs.tag }}"
+          APK_FILE="ton618-${TAG_VAL}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$APK_FILE"
+          echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+          echo "apk_name=$APK_FILE" >> $GITHUB_OUTPUT
+
+      - name: 📤 Disponibilizar APK como Artifact da Action
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk_info.outputs.apk_name }}
+          path: ${{ steps.apk_info.outputs.apk_path }}
+          retention-days: 30
+
+      - name: 🚀 Criar / Atualizar Release no GitHub com APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.bump-version.outputs.tag }}
+          name: "TON-618 ${{ needs.bump-version.outputs.tag }}"
+          files: ${{ steps.apk_info.outputs.apk_path }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ✅ Summary APK
+        run: |
+          echo "## 📱 Android APK & Release Publicados!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Versão** | \`${{ needs.bump-version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Arquivo APK** | \`${{ steps.apk_info.outputs.apk_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Download direto** | Disponível na aba **Releases** do repositório |" >> $GITHUB_STEP_SUMMARY

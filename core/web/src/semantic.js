@@ -543,6 +543,8 @@ SemanticIndex.prototype.dispose = function() {
 // ── Singleton exposto no window para acesso global ──
 window.semanticIndex = new SemanticIndex();
 
+
+
 // ── Mobile detection ──
 (function() {
   var isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent)
