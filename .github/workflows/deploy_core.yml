@@ -284,7 +284,7 @@ jobs:
           mkdir -p ../android/app/src/main/assets/web/static
           mkdir -p ../android/app/src/main/jniLibs/arm64-v8a
           NDK_DIR="${ANDROID_NDK_ROOT:-}"
-          if [ -z "$NDK_DIR" ] \vert{}\vert{} [ ! -d "$NDK_DIR" ]; then
+          if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
             NDK_DIR="$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/ndk" -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n1 || true)"
           fi
 
@@ -307,6 +307,7 @@ jobs:
           chmod +x "$TARGET_SO"
           cp "$TARGET_SO" ../android/app/src/main/assets/ton618-arm64
           cp -r web/static/* ../android/app/src/main/assets/web/static/ || true
+          find ../android/app/src/main/assets/web/static -name "*.gz" -delete
           ls -lh "$TARGET_SO"
 
       - name: 📱 Compilar APK com Gradle
