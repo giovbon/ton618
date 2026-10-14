@@ -44,9 +44,10 @@ android {
         viewBinding = true
     }
 
-    // Não compactar o executável Go embutido nos assets
-    aaptOptions {
-        noCompress.addAll(listOf("ton618-arm64", "ton618-x86_64"))
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

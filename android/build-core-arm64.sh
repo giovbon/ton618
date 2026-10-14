@@ -8,8 +8,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 CORE_DIR="$ROOT_DIR/core"
 ASSETS_DIR="$SCRIPT_DIR/app/src/main/assets"
+JNILIBS_DIR="$SCRIPT_DIR/app/src/main/jniLibs/arm64-v8a"
 
-mkdir -p "$ASSETS_DIR"
+mkdir -p "$ASSETS_DIR" "$JNILIBS_DIR"
 
 echo "🌌 Compilando TON-618 Core para Android (ARM64)..."
 
@@ -30,7 +31,7 @@ if [ -n "${ANDROID_NDK_HOME:-}" ] || [ -n "${ANDROID_NDK_ROOT:-}" ]; then
     fi
 fi
 
-TARGET_OUT="$ASSETS_DIR/ton618-arm64"
+TARGET_SO="$JNILIBS_DIR/libton618.so"
 
 if [ -n "$NDK_CC" ]; then
     echo "🤖 Usando Android NDK Clang: $NDK_CC"
@@ -38,7 +39,7 @@ if [ -n "$NDK_CC" ]; then
     GOOS=android \
     GOARCH=arm64 \
     CC="$NDK_CC" \
-    go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_OUT" ./cmd/server
+    go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_SO" ./cmd/server
 else
     # Fallback caso NDK não esteja no path direto: tenta aarch64-linux-gnu-gcc
     if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
@@ -47,19 +48,26 @@ else
         GOOS=linux \
         GOARCH=arm64 \
         CC=aarch64-linux-gnu-gcc \
-        go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_OUT" ./cmd/server
+        go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_SO" ./cmd/server
     else
         echo "⚠️  Android NDK não detectado (variável ANDROID_NDK_HOME vazia)."
-        echo "   Para compilar com SQLite FTS5 nativo, instale o Android NDK ou o pacote gcc-aarch64-linux-gnu."
-        echo "   Tentando build puro sem CGO como fallback de validação..."
-        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o "$TARGET_OUT" ./cmd/server
+        echo "   Tentando build sem CGO..."
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o "$TARGET_SO" ./cmd/server
     fi
 fi
 
-if [ -f "$TARGET_OUT" ]; then
-    chmod +x "$TARGET_OUT"
-    echo "✅ Binário gerado com sucesso em: $TARGET_OUT ($(du -h "$TARGET_OUT" | cut -f1))"
+if [ -f "$TARGET_SO" ]; then
+    chmod +x "$TARGET_SO"
+    # Também mantém cópia em assets para fallback
+    cp "$TARGET_SO" "$ASSETS_DIR/ton618-arm64"
+    echo "✅ Binário gerado em: $TARGET_SO ($(du -h "$TARGET_SO" | cut -f1))"
 else
     echo "❌ Erro ao gerar o binário."
     exit 1
 fi
+
+# 3. Copia assets estáticos para serem embutidos no APK
+echo "🌐 Copiando assets web/static para o APK..."
+mkdir -p "$ASSETS_DIR/web/static"
+cp -r "$CORE_DIR/web/static/"* "$ASSETS_DIR/web/static/" || true
+echo "✅ Assets web sincronizados."

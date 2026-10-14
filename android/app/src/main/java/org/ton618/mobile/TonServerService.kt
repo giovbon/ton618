@@ -16,10 +16,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+
+enum class ServerState {
+    STOPPED,
+    STARTING,
+    RUNNING,
+    ERROR
+}
 
 class TonServerService : Service() {
 
@@ -34,10 +45,23 @@ class TonServerService : Service() {
 
         const val ACTION_START = "org.ton618.mobile.action.START"
         const val ACTION_STOP = "org.ton618.mobile.action.STOP"
+        const val ACTION_RESTART = "org.ton618.mobile.action.RESTART"
 
-        @Volatile
-        var isRunning: Boolean = false
-            private set
+        private val _serverState = MutableStateFlow(ServerState.STOPPED)
+        val serverState = _serverState.asStateFlow()
+
+        private val _logFlow = MutableSharedFlow<String>(replay = 50)
+        val logFlow = _logFlow.asSharedFlow()
+
+        val recentLogs = mutableListOf<String>()
+
+        fun appendLog(msg: String) {
+            synchronized(recentLogs) {
+                if (recentLogs.size > 150) recentLogs.removeAt(0)
+                recentLogs.add(msg)
+            }
+            _logFlow.tryEmit(msg)
+        }
     }
 
     override fun onCreate() {
@@ -48,8 +72,19 @@ class TonServerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                appendLog("[App] Parando servidor...")
+                stopServerProcess()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_RESTART -> {
+                appendLog("[App] Reiniciando servidor...")
+                serviceScope.launch {
+                    stopServerProcess()
+                    delay(800)
+                    startServerProcess()
+                }
             }
             else -> {
                 val notification = buildNotification("Iniciando servidor TON-618...")
@@ -66,25 +101,36 @@ class TonServerService : Service() {
         super.onDestroy()
         stopServerProcess()
         serviceScope.cancel()
-        isRunning = false
     }
 
     private fun startServerProcess() {
-        if (serverProcess != null && isRunning) return
+        if (serverProcess != null && _serverState.value == ServerState.RUNNING) return
+
+        _serverState.value = ServerState.STARTING
+        appendLog("[App] Procurando executável nativo...")
 
         serviceScope.launch {
             try {
-                val binFile = prepareBinary()
+                val binFile = resolveBinary()
                 if (binFile == null || !binFile.exists()) {
-                    Log.e(TAG, "Binário TON-618 não encontrado nos assets.")
-                    updateNotification("Erro: Binário não encontrado.")
+                    val err = "Erro: Binário não encontrado em nativeLibraryDir ou assets."
+                    appendLog("❌ $err")
+                    _serverState.value = ServerState.ERROR
+                    updateNotification(err)
                     return@launch
                 }
 
-                // Diretórios de trabalho do TON-618 no armazenamento interno do app
+                appendLog("[App] Executável localizado: ${binFile.absolutePath}")
+
+                // Garante estrutura de pastas em filesDir
                 val dataDir = File(filesDir, "data").apply { mkdirs() }
                 val docsDir = File(filesDir, "docs").apply { mkdirs() }
+                val webDir = File(filesDir, "web").apply { mkdirs() }
+                val staticDir = File(webDir, "static").apply { mkdirs() }
                 val dbPath = File(dataDir, "ton618.db").absolutePath
+
+                // Extrai assets web caso existam no APK
+                extractWebAssets(staticDir)
 
                 val processBuilder = ProcessBuilder(binFile.absolutePath)
                 processBuilder.directory(filesDir)
@@ -92,49 +138,82 @@ class TonServerService : Service() {
                 val env = processBuilder.environment()
                 env["PORT"] = DEFAULT_PORT.toString()
                 env["DATA_DIR"] = dataDir.absolutePath
+                env["STATE_DIR"] = dataDir.absolutePath
                 env["DOCS_DIR"] = docsDir.absolutePath
                 env["DB_PATH"] = dbPath
+                env["WEB_DIR"] = webDir.absolutePath
                 env["EMBEDDING_ALL"] = "false"
+                env["AUTH_USER"] = "admin"
+                env["AUTH_PASS"] = "ton618"
 
-                Log.i(TAG, "Iniciando processo Go: ${binFile.absolutePath} na porta $DEFAULT_PORT")
+                appendLog("[App] Iniciando processo Go na porta $DEFAULT_PORT...")
                 serverProcess = processBuilder.start()
-                isRunning = true
 
-                // Leitor assíncrono de logs do stdout/stderr
+                // Leitor do stdout
                 launch {
-                    serverProcess?.inputStream?.bufferedReader()?.useLines { lines ->
-                        lines.forEach { Log.d(TAG, "[Go] $it") }
+                    try {
+                        serverProcess?.inputStream?.bufferedReader()?.useLines { lines ->
+                            lines.forEach { line ->
+                                Log.d(TAG, "[Go] $line")
+                                appendLog("[Go] $line")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        appendLog("[Go err read] ${e.message}")
                     }
                 }
+
+                // Leitor do stderr
                 launch {
-                    serverProcess?.errorStream?.bufferedReader()?.useLines { lines ->
-                        lines.forEach { Log.e(TAG, "[Go Err] $it") }
+                    try {
+                        serverProcess?.errorStream?.bufferedReader()?.useLines { lines ->
+                            lines.forEach { line ->
+                                Log.e(TAG, "[Go Err] $line")
+                                appendLog("⚠️ [Go Err] $line")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        appendLog("[Go err read] ${e.message}")
                     }
                 }
 
                 // Aguarda a porta abrir
                 var tries = 0
-                while (isActive && tries < 20) {
+                var portOpen = false
+                while (isActive && tries < 25) {
                     if (NetworkUtils.isServerPortOpen(DEFAULT_PORT)) {
-                        val ip = NetworkUtils.getLocalIpAddress(this@TonServerService)
-                        val url = "http://$ip:$DEFAULT_PORT"
-                        Log.i(TAG, "Servidor TON-618 pronto em: $url")
-                        updateNotification("Ativo em $url")
+                        portOpen = true
                         break
                     }
-                    delay(300)
+                    delay(350)
                     tries++
                 }
 
-                // Monitora o término do processo caso ele caia
+                if (portOpen) {
+                    _serverState.value = ServerState.RUNNING
+                    val ip = NetworkUtils.getLocalIpAddress(this@TonServerService)
+                    val url = "http://$ip:$DEFAULT_PORT"
+                    appendLog("✅ Servidor pronto e escutando em $url")
+                    updateNotification("Ativo em $url")
+                } else {
+                    _serverState.value = ServerState.ERROR
+                    appendLog("❌ Timeout: a porta $DEFAULT_PORT não respondeu.")
+                    updateNotification("Falha ao abrir porta $DEFAULT_PORT")
+                }
+
+                // Monitora encerramento caso o processo caia
                 val exitCode = serverProcess?.waitFor() ?: -1
-                Log.w(TAG, "Processo TON-618 encerrou com código $exitCode")
-                isRunning = false
+                appendLog("[App] Processo do servidor encerrou (código $exitCode)")
+                if (_serverState.value == ServerState.RUNNING) {
+                    _serverState.value = ServerState.STOPPED
+                }
                 updateNotification("Servidor parado (código $exitCode)")
             } catch (e: Exception) {
-                Log.e(TAG, "Falha ao executar TON-618: ${e.message}", e)
-                isRunning = false
-                updateNotification("Erro ao rodar servidor: ${e.localizedMessage}")
+                val err = "Falha ao iniciar processo: ${e.message}"
+                Log.e(TAG, err, e)
+                appendLog("❌ $err")
+                _serverState.value = ServerState.ERROR
+                updateNotification(err)
             }
         }
     }
@@ -143,42 +222,65 @@ class TonServerService : Service() {
         try {
             serverProcess?.destroy()
             serverProcess = null
-            isRunning = false
-            Log.i(TAG, "Processo do servidor encerrado.")
+            _serverState.value = ServerState.STOPPED
+            appendLog("[App] Servidor finalizado com sucesso.")
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao parar processo: ${e.message}")
+            appendLog("⚠️ Erro ao encerrar processo: ${e.message}")
         }
     }
 
     /**
-     * Extrai o executável Go dos assets do APK para filesDir/bin/ton618 e aplica chmod +x.
+     * Resolve o binário nativo com prioridade para a pasta oficial jniLibs (nativeLibraryDir),
+     * que tem permissão de execução nativa do SELinux no Android 10+.
      */
-    private fun prepareBinary(): File? {
-        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-        val assetName = if (abi.contains("x86")) "ton618-x86_64" else "ton618-arm64"
-
-        val binDir = File(filesDir, "bin").apply { mkdirs() }
-        val targetFile = File(binDir, "ton618")
-
-        // Se o arquivo já existe e o APK não foi atualizado, pode reutilizar
-        if (targetFile.exists() && targetFile.length() > 0) {
-            targetFile.setExecutable(true)
-            return targetFile
+    private fun resolveBinary(): File? {
+        // 1. Tenta a biblioteca nativa instalada pelo Android Package Manager
+        val nativeDir = applicationInfo.nativeLibraryDir
+        val soFiles = listOf("libton618.so", "ton618", "libserver.so")
+        for (name in soFiles) {
+            val f = File(nativeDir, name)
+            if (f.exists() && f.canExecute()) {
+                appendLog("[App] Usando binário nativo do sistema: ${f.name}")
+                return f
+            }
         }
 
+        // 2. Fallback: extração a partir de assets
+        val binDir = File(filesDir, "bin").apply { mkdirs() }
+        val target = File(binDir, "ton618")
+
+        val assetCandidates = listOf("libton618.so", "ton618-arm64", "ton618")
+        for (candidate in assetCandidates) {
+            try {
+                assets.open(candidate).use { input ->
+                    FileOutputStream(target).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                target.setExecutable(true, false)
+                appendLog("[App] Extraído de assets/$candidate para ${target.absolutePath}")
+                return target
+            } catch (_: Exception) {}
+        }
+
+        return if (target.exists()) target else null
+    }
+
+    /**
+     * Extrai arquivos estáticos embutidos caso estejam em assets/web.
+     */
+    private fun extractWebAssets(staticDir: File) {
         try {
-            assets.open(assetName).use { input ->
-                FileOutputStream(targetFile).use { output ->
-                    input.copyTo(output)
+            val list = assets.list("web/static") ?: return
+            for (filename in list) {
+                val dest = File(staticDir, filename)
+                if (!dest.exists()) {
+                    assets.open("web/static/$filename").use { inp ->
+                        FileOutputStream(dest).use { out -> inp.copyTo(out) }
+                    }
                 }
             }
-            targetFile.setExecutable(true, false)
-            Log.i(TAG, "Binário extraído com sucesso: ${targetFile.absolutePath} (${targetFile.length()} bytes)")
-            return targetFile
-        } catch (e: Exception) {
-            Log.w(TAG, "Asset $assetName não encontrado ou falhou ao extrair: ${e.message}")
-            return null
-        }
+        } catch (_: Exception) {}
     }
 
     private fun createNotificationChannel() {

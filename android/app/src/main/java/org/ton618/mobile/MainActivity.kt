@@ -1,126 +1,116 @@
 package org.ton618.mobile
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var webView: WebView
-    private lateinit var loadingSpinner: ProgressBar
-    private lateinit var tvStatusTitle: TextView
+    private lateinit var tvStatusText: TextView
+    private lateinit var statusDot: View
     private lateinit var tvServerUrl: TextView
-    private lateinit var statusIndicator: View
     private lateinit var btnCopyUrl: Button
-    private lateinit var btnReload: Button
+    private lateinit var btnOpenWeb: Button
+    private lateinit var btnStart: Button
+    private lateinit var btnStop: Button
+    private lateinit var btnRestart: Button
+    private lateinit var tvLogs: TextView
+    private lateinit var btnClearLogs: TextView
+    private lateinit var logScrollView: ScrollView
 
-    private var currentUrlToShare: String = "http://127.0.0.1:6180"
+    private var currentUrl: String = "http://127.0.0.1:6180"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         initViews()
-        setupWebView()
-        setupBackNavigation()
+        setupListeners()
         requestNotificationPermission()
 
-        // Inicia o ForegroundService do servidor TON-618
-        startTonServerService()
+        observeServerState()
+        observeLogs()
 
-        // Inicia o monitoramento de inicialização do servidor
-        monitorServerReady()
+        // Inicia o serviço do servidor no boot inicial da Activity
+        sendServiceAction(TonServerService.ACTION_START)
     }
 
     private fun initViews() {
-        webView = findViewById(R.id.webView)
-        loadingSpinner = findViewById(R.id.loadingSpinner)
-        tvStatusTitle = findViewById(R.id.tvStatusTitle)
+        tvStatusText = findViewById(R.id.tvStatusText)
+        statusDot = findViewById(R.id.statusDot)
         tvServerUrl = findViewById(R.id.tvServerUrl)
-        statusIndicator = findViewById(R.id.statusIndicator)
         btnCopyUrl = findViewById(R.id.btnCopyUrl)
-        btnReload = findViewById(R.id.btnReload)
+        btnOpenWeb = findViewById(R.id.btnOpenWeb)
+        btnStart = findViewById(R.id.btnStart)
+        btnStop = findViewById(R.id.btnStop)
+        btnRestart = findViewById(R.id.btnRestart)
+        tvLogs = findViewById(R.id.tvLogs)
+        btnClearLogs = findViewById(R.id.btnClearLogs)
+        logScrollView = findViewById(R.id.logScrollView)
 
-        updateIndicatorColor("#f59e0b") // Âmbar (iniciando)
+        // Preenche com os logs recentes já existentes
+        synchronized(TonServerService.recentLogs) {
+            if (TonServerService.recentLogs.isNotEmpty()) {
+                tvLogs.text = TonServerService.recentLogs.joinToString("\n")
+            }
+        }
+    }
 
+    private fun setupListeners() {
         btnCopyUrl.setOnClickListener {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("TON-618 URL", currentUrlToShare)
+            val clip = ClipData.newPlainText("TON-618 URL", currentUrl)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, R.string.url_copied, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "URL copiada: $currentUrl", Toast.LENGTH_SHORT).show()
         }
 
-        btnReload.setOnClickListener {
-            webView.reload()
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            cacheMode = WebSettings.LOAD_DEFAULT
-            allowFileAccess = false
-            allowContentAccess = false
+        btnOpenWeb.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl))
+            startActivity(intent)
         }
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                loadingSpinner.visibility = View.GONE
+        btnStart.setOnClickListener {
+            sendServiceAction(TonServerService.ACTION_START)
+        }
+
+        btnStop.setOnClickListener {
+            sendServiceAction(TonServerService.ACTION_STOP)
+        }
+
+        btnRestart.setOnClickListener {
+            sendServiceAction(TonServerService.ACTION_RESTART)
+        }
+
+        btnClearLogs.setOnClickListener {
+            synchronized(TonServerService.recentLogs) {
+                TonServerService.recentLogs.clear()
             }
+            tvLogs.text = "Logs limpos.\n"
         }
-
-        webView.webChromeClient = WebChromeClient()
     }
 
-    private fun setupBackNavigation() {
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    // Minimiza o app em vez de fechar, mantendo o servidor rodando
-                    moveTaskToBack(true)
-                }
-            }
-        })
-    }
-
-    private fun startTonServerService() {
+    private fun sendServiceAction(action: String) {
         val intent = Intent(this, TonServerService::class.java).apply {
-            action = TonServerService.ACTION_START
+            this.action = action
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -129,46 +119,75 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun monitorServerReady() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            var ready = false
-            var tries = 0
-            while (isActive && tries < 30) {
-                if (NetworkUtils.isServerPortOpen(TonServerService.DEFAULT_PORT)) {
-                    ready = true
-                    break
-                }
-                delay(400)
-                tries++
-            }
+    private fun observeServerState() {
+        lifecycleScope.launch {
+            TonServerService.serverState.collectLatest { state ->
+                withContext(Dispatchers.Main) {
+                    when (state) {
+                        ServerState.RUNNING -> {
+                            val ip = NetworkUtils.getLocalIpAddress(this@MainActivity)
+                            currentUrl = "http://$ip:${TonServerService.DEFAULT_PORT}"
+                            tvServerUrl.text = currentUrl
+                            tvStatusText.text = "Servidor Ativo"
+                            tvStatusText.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_green))
+                            statusDot.setBackgroundResource(R.drawable.bg_dot_green)
 
-            withContext(Dispatchers.Main) {
-                if (ready) {
-                    val localIp = NetworkUtils.getLocalIpAddress(this@MainActivity)
-                    currentUrlToShare = "http://$localIp:${TonServerService.DEFAULT_PORT}"
+                            btnStart.isEnabled = false
+                            btnStop.isEnabled = true
+                            btnRestart.isEnabled = true
+                            btnOpenWeb.isEnabled = true
+                        }
+                        ServerState.STARTING -> {
+                            tvStatusText.text = "Iniciando servidor..."
+                            tvStatusText.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_amber))
+                            statusDot.setBackgroundResource(R.drawable.bg_dot_amber)
 
-                    tvStatusTitle.text = getString(R.string.server_running)
-                    tvServerUrl.text = currentUrlToShare
-                    updateIndicatorColor("#10b981") // Verde
+                            btnStart.isEnabled = false
+                            btnStop.isEnabled = true
+                            btnRestart.isEnabled = false
+                            btnOpenWeb.isEnabled = false
+                        }
+                        ServerState.STOPPED -> {
+                            tvStatusText.text = "Servidor Parado"
+                            tvStatusText.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+                            statusDot.setBackgroundResource(R.drawable.bg_dot_amber)
 
-                    // Carrega localmente via 127.0.0.1 com latência zero
-                    webView.loadUrl("http://127.0.0.1:${TonServerService.DEFAULT_PORT}")
-                } else {
-                    tvStatusTitle.text = getString(R.string.server_stopped)
-                    tvServerUrl.text = "Falha ao iniciar na porta ${TonServerService.DEFAULT_PORT}"
-                    updateIndicatorColor("#ef4444") // Vermelho
-                    loadingSpinner.visibility = View.GONE
+                            btnStart.isEnabled = true
+                            btnStop.isEnabled = false
+                            btnRestart.isEnabled = false
+                            btnOpenWeb.isEnabled = false
+                        }
+                        ServerState.ERROR -> {
+                            tvStatusText.text = "Erro ao iniciar"
+                            tvStatusText.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_red))
+                            statusDot.setBackgroundResource(R.drawable.bg_dot_red)
+
+                            btnStart.isEnabled = true
+                            btnStop.isEnabled = false
+                            btnRestart.isEnabled = true
+                            btnOpenWeb.isEnabled = false
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun updateIndicatorColor(hexColor: String) {
-        val shape = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(Color.parseColor(hexColor))
+    private fun observeLogs() {
+        lifecycleScope.launch {
+            TonServerService.logFlow.collect { line ->
+                withContext(Dispatchers.Main) {
+                    if (tvLogs.text.toString() == "Aguardando inicialização...") {
+                        tvLogs.text = line + "\n"
+                    } else {
+                        tvLogs.append(line + "\n")
+                    }
+                    logScrollView.post {
+                        logScrollView.fullScroll(View.FOCUS_DOWN)
+                    }
+                }
+            }
         }
-        statusIndicator.background = shape
     }
 
     private fun requestNotificationPermission() {

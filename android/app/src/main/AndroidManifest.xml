@@ -20,6 +20,7 @@
         android:label="TON-618"
         android:supportsRtl="true"
         android:theme="@style/Theme.Ton618"
+        android:extractNativeLibs="true"
         android:usesCleartextTraffic="true"
         tools:targetApi="34">
 
