@@ -208,8 +208,7 @@ jobs:
           context: ./core
           file: ./core/Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.bump-version.outputs.tag }}${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE_NAME }}:${{ needs.bump-version.outputs.tag }},${{ env.IMAGE_NAME }}:latest
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
