@@ -63,6 +63,12 @@ ANDROID_ABI=x86_64 ./build-core-arm64.sh     # emulador
 ANDROID_SEMANTIC=1 ./build-core-arm64.sh     # inclui onnxruntime-web (+22 MB)
 ```
 
+> `ANDROID_SEMANTIC=1` embarca os ~22 MB do onnxruntime-web (runtime WebAssembly usado
+> pela busca semântica), permitindo carregá-lo do próprio aparelho. Sem a flag o APK fica
+> menor e o worker carrega o runtime do CDN do jsdelivr no 1º uso — a busca semântica
+> continua funcionando (o modelo de embeddings também vem do CDN nesse caso).
+> Ver `core/web/src/ort-wasm.js`.
+
 > ⚠️ Os assets vivem fora do Git (`.gitignore` da pasta). Sempre rode este passo antes de gerar o APK.
 
 ### Passo 2: Gerar o APK
@@ -149,7 +155,10 @@ O que pesava no APK e o que foi feito:
 | `models/ort/` (onnxruntime-web) | 22 MB | fora por padrão (`ANDROID_SEMANTIC=1` para incluir) |
 
 > A busca semântica no celular exige baixar um modelo de ~120 MB e rodar inferência ONNX em CPU;
-> por isso o `onnxruntime-web` fica de fora por padrão. A busca textual (FTS5) continua completa.
+> por isso o `onnxruntime-web` fica de fora por padrão. Sem ele, o worker **testa** o caminho local
+> e carrega o runtime do CDN do jsdelivr (`core/web/src/ort-wasm.js` + CSP com `connect-src`
+> liberado) — fixar o caminho local sem essa sonda quebrava a busca semântica com
+> `no available backend found`. A busca textual (FTS5) continua completa e offline.
 
 ---
 

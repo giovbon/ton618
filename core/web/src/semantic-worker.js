@@ -38,6 +38,7 @@
  */
 
 import { pipeline, env } from "@huggingface/transformers";
+import { resolveOrtWasmPath } from "./ort-wasm.js";
 
 // Configuração do Transformers.js
 // O servidor Go baixa o modelo do HuggingFace no 1º boot (STATE_DIR/models) e o
@@ -50,7 +51,13 @@ env.allowRemoteModels = true; // fallback: CDN do HuggingFace se o local não es
 // O CacheStorage API (self.caches) só é disponível em contextos seguros (HTTPS ou localhost).
 // Em contextos HTTP não seguros (ex: acessando via IP http://192.168.15.6:6180), self.caches é undefined.
 env.useBrowserCache = typeof self !== "undefined" && typeof self.caches !== "undefined";
-env.backends.onnx.wasm.wasmPaths = "/static/models/ort/";
+// O CAMINHO DO RUNTIME ORT (ort-wasm*) NÃO é fixado aqui: um caminho base que não
+// existe aborta o backend ("no available backend found") sem cair para o CDN.
+// Ver ort-wasm.js / configureOrtWasmPaths(): local se os arquivos existirem,
+// senão o padrão do Transformers.js (CDN do onnxruntime-web).
+
+/** @type {boolean} Se o caminho do runtime ORT já foi resolvido (uma vez por worker) */
+let ortWasmResolved = false;
 
 /** @type {string} Nome do modelo HuggingFace para embeddings multilingues */
 const MODEL_NAME = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
@@ -97,6 +104,59 @@ async function processEmbedQueue() {
 }
 
 /**
+ * Cria a pipeline de feature-extraction.
+ *
+ * O caminho do runtime ORT é resolvido ANTES de carregar o modelo: o base path
+ * precisa estar decidido quando o backend WASM é criado.
+ *
+ * @returns {Promise<any>} Pipeline carregada
+ */
+async function createPipeline() {
+  await configureOrtWasmPaths();
+
+  return pipeline("feature-extraction", MODEL_NAME, {
+    dtype: "q8",
+    device: DEVICE,
+    progress_callback: (progress) => {
+      var p = /** @type {any} */ (progress);
+      if (p.status === "downloading" || p.status === "loading") {
+        self.postMessage({
+          type: "progress",
+          status: p.status,
+          file: p.file || "",
+          loaded: p.loaded || 0,
+          total: p.total || 0,
+        });
+      }
+    },
+  });
+}
+
+/**
+ * Resolve o caminho base do runtime WebAssembly do ORT — **uma vez por worker**.
+ *
+ * Local (`/static/models/ort/`) quando os arquivos estão no servidor (desktop/Docker
+ * e APK com `ANDROID_SEMANTIC=1`); sem eles (APK padrão — ver
+ * android/build-core-arm64.sh) o caminho local NÃO é fixado e o ORT usa o padrão do
+ * Transformers.js (CDN do onnxruntime-web, já liberado na CSP).
+ *
+ * @returns {Promise<void>}
+ */
+async function configureOrtWasmPaths() {
+  if (ortWasmResolved) return;
+  ortWasmResolved = true;
+
+  const localPath = await resolveOrtWasmPath();
+  if (localPath) {
+    env.backends.onnx.wasm.wasmPaths = localPath;
+  }
+  console.info(
+    "[SemanticWorker] runtime do ONNX:",
+    localPath ? "local (" + localPath + ")" : "CDN (arquivos locais indisponíveis)"
+  );
+}
+
+/**
  * Obtém (ou inicializa) a pipeline de feature-extraction do Transformers.js.
  * Lazy init: só carrega o modelo na primeira chamada.
  * Emite "progress" durante download, "ready" ao concluir, "error" se falhar.
@@ -105,22 +165,7 @@ async function processEmbedQueue() {
  */
 async function getModel() {
   if (!pipelinePromise) {
-    pipelinePromise = pipeline("feature-extraction", MODEL_NAME, {
-      dtype: "q8",
-      device: DEVICE,
-      progress_callback: (progress) => {
-        var p = /** @type {any} */ (progress);
-        if (p.status === "downloading" || p.status === "loading") {
-          self.postMessage({
-            type: "progress",
-            status: p.status,
-            file: p.file || "",
-            loaded: p.loaded || 0,
-            total: p.total || 0,
-          });
-        }
-      },
-    });
+    pipelinePromise = createPipeline();
 
     try {
       await pipelinePromise;

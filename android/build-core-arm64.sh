@@ -14,6 +14,7 @@
 #   ./build-core-arm64.sh                       # arm64-v8a (celular real)
 #   ANDROID_ABI=x86_64 ./build-core-arm64.sh     # emulador
 #   ANDROID_SEMANTIC=1 ./build-core-arm64.sh     # inclui onnxruntime (+22 MB)
+#                                                 # (sem a flag o runtime do ORT vem do CDN)
 #
 # Requer o Android NDK (cgo é obrigatório — ver seção 2 do script).
 # ==============================================================================
@@ -126,6 +127,8 @@ fi
 #      os assets de qualquer forma — manter os dois é desperdício puro.
 #    - models/ort: 22 MB do onnxruntime-web, usado só pela busca semântica
 #      (que exige baixar ~120 MB de modelo). Ver ANDROID_SEMANTIC.
+#      Sem a flag o app NÃO fica sem busca semântica: o worker testa o caminho
+#      local e, quando não existe, carrega o runtime do CDN (web/src/ort-wasm.js).
 echo "🌐 Sincronizando assets web (web/static → assets/web/static)..."
 rm -rf "$STATIC_ASSETS"
 mkdir -p "$STATIC_ASSETS"
@@ -153,7 +156,7 @@ if [ "${ANDROID_SEMANTIC:-0}" = "1" ]; then
         echo "   Rode: cd core/web && node static/models/download-ort.js"
     fi
 else
-    echo "🧠 onnxruntime-web omitido (busca semântica indisponível no app)."
+    echo "🧠 onnxruntime-web omitido — o runtime será carregado do CDN no 1º uso da busca semântica."
 fi
 
 # 4. Verificação: sem estes arquivos a UI abre mas não funciona

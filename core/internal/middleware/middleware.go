@@ -132,8 +132,15 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 				"img-src 'self' data: blob: http: https: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
 				// worker-src necessário para Web Workers (Transformers.js/ONNX) no HTTPS
 				"worker-src 'self' blob:; "+
-				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa
-				"connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co https://*.hf.co https://*.cdn.hf.co https://cdn-lfs.huggingface.co")
+				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa.
+				// ⚠️ `cdn.jsdelivr.net` aparece AQUI e em script-src de propósito: quando o
+				// servidor não tem os arquivos do ONNX Runtime em `/static/models/ort/` (é o
+				// caso do APK padrão do Android, que os omite para poupar 22 MB), o Web Worker
+				// de embeddings carrega o runtime do CDN. O `.mjs` é um import dinâmico
+				// (script-src) e o `.wasm` é buscado via fetch (connect-src) — sem as duas
+				// origens o fallback é bloqueado e a busca semântica falha com
+				// "no available backend found". Ver web/src/ort-wasm.js.
+				"connect-src 'self' https://cdn.jsdelivr.net https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co https://*.hf.co https://*.cdn.hf.co https://cdn-lfs.huggingface.co")
 		next.ServeHTTP(w, r)
 	})
 }
