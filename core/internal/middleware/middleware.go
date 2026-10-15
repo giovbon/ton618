@@ -134,8 +134,8 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 				"worker-src 'self' blob:; "+
 				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa.
 				// ⚠️ `cdn.jsdelivr.net` aparece AQUI e em script-src de propósito: quando o
-				// servidor não tem os arquivos do ONNX Runtime em `/static/models/ort/` (é o
-				// caso do APK padrão do Android, que os omite para poupar 22 MB), o Web Worker
+				// servidor não tem os arquivos do ONNX Runtime em `/static/models/ort/` (um
+				// deploy pode omiti-los para poupar ~22 MB), o Web Worker
 				// de embeddings carrega o runtime do CDN. O `.mjs` é um import dinâmico
 				// (script-src) e o `.wasm` é buscado via fetch (connect-src) — sem as duas
 				// origens o fallback é bloqueado e a busca semântica falha com

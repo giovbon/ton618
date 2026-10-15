@@ -45,8 +45,8 @@ func TestSecurityHeadersMiddleware_HeadersBasicos(t *testing.T) {
 	}
 }
 
-// Guarda de regressão (bug real, 15/10/2026): o APK padrão do Android NÃO embarca
-// `web/static/models/ort/` (22 MB omitidos por padrão). Sem esses arquivos, o Web
+// Guarda de regressão (bug real, 15/10/2026): um deploy pode NÃO embarcar
+// `web/static/models/ort/` (~22 MB omitidos). Sem esses arquivos, o Web
 // Worker de embeddings carrega o runtime do ONNX Runtime do CDN do jsdelivr — o
 // `.mjs` por import dinâmico (script-src) e o `.wasm` por fetch (connect-src).
 // Faltando qualquer uma das duas origens, o fallback é bloqueado pelo browser e a
@@ -67,7 +67,7 @@ func TestSecurityHeadersMiddleware_CSPLiberaCDNdoORT(t *testing.T) {
 }
 
 // O modelo de embeddings continua vindo do HuggingFace (CDN) quando não há cópia
-// local — o mesmo caminho usado no Android (MODEL_DOWNLOAD=false).
+// local — o mesmo caminho usado quando MODEL_DOWNLOAD=false.
 func TestSecurityHeadersMiddleware_CSPLiberaHuggingFace(t *testing.T) {
 	rec := aplicarSecurityHeaders()
 	connect := cspDirective(rec.Header().Get("Content-Security-Policy"), "connect-src")

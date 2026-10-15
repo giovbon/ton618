@@ -42,7 +42,7 @@ func (ctx *HandlerContext) HandleFullBackup(w http.ResponseWriter, r *http.Reque
 //
 // Responde um fragmento HTML (HTMX). No sucesso o processo se encerra logo depois:
 // o banco aberto é o arquivo antigo, então é preciso reabrir — o supervisor
-// (ForegroundService no Android, `restart: unless-stopped` no Docker) reinicia.
+// (`restart: unless-stopped` no Docker) reinicia.
 func (ctx *HandlerContext) HandleRestore(w http.ResponseWriter, r *http.Request) {
 	// Streaming manual em vez de ParseMultipartForm: o arquivo pode ter GBs e não
 	// deve passar pela memória nem pelo /tmp do sistema.

@@ -8,18 +8,18 @@
  * Dois caminhos base são possíveis:
  *
  *  1. **LOCAL** (`/static/models/ort/`) — servido pelo próprio core. É o caminho do
- *     desktop/Docker e do APK compilado com `ANDROID_SEMANTIC=1`: funciona offline.
+ *     desktop/Docker quando os arquivos estão presentes: funciona offline.
  *  2. **CDN** (padrão do Transformers.js: `cdn.jsdelivr.net/npm/onnxruntime-web@<versão>/dist/`)
- *     — usado quando o servidor não tem os arquivos. É o caso do **APK padrão**, que
- *     omite `web/static/models/ort/` para não somar 22 MB (android/build-core-arm64.sh).
+ *     — usado quando o servidor não tem os arquivos. É o caso de deploys que
+ *     omitem `web/static/models/ort/` para não somar ~22 MB.
  *     Mesmo espírito do fallback já existente para o modelo de embeddings
  *     (`allowRemoteModels`): o CDN é o plano B quando o local não está disponível.
  *
  * ⚠️ **Por que a sonda é obrigatória (bug real, 15/10/2026):** o ORT não cai para o CDN
  * se o caminho base estiver fixado e não existir — ele aborta a criação do backend com
  * `no available backend found. ERR: [wasm] TypeError: error loading dynamically imported
- * module: .../static/models/ort/ort-wasm-simd-threaded.asyncify.mjs`. No Android (assets
- * sem `models/ort/`) isso deixava a busca semântica 100% indisponível, em silêncio.
+ * module: .../static/models/ort/ort-wasm-simd-threaded.asyncify.mjs`. Quando os arquivos
+ * locais não existem (deploy sem `models/ort/`) a busca semântica fica 100% indisponível.
  * Por isso o caminho local SÓ é fixado depois de confirmado por um HEAD.
  */
 

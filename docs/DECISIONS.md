@@ -1350,7 +1350,17 @@ O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **
 
 ---
 
-## 8. Módulo Mobile Android (`android/`) — 14/10/2026
+## 8. Módulo Mobile Android (`android/`) — 14/10/2026 — ❌ REMOVIDO (15/10/2026)
+
+> ⚠️ **Removido em 15/10/2026.** A pasta `android/` e o job `android-apk` do
+> `.github/workflows/deploy_core.yml` foram **deletados**. A manutenção do módulo mobile
+> (NDK/cgo, extração de assets, assinatura de APK, Android Studio) atrasava o desenvolvimento
+> do app principal sem retorno proporcional. O TON-618 passa a ser distribuído apenas via
+> **Docker** (web). Os secrets `ANDROID_KEYSTORE_*` no GitHub podem ser removidos.
+>
+> A flag de config `MODEL_DOWNLOAD` (§8.7) **permanece no core** (é genérica e sem efeito
+> colateral), mas o app que a usava não existe mais. O conteúdo abaixo fica como **registro
+> histórico** da decisão original.
 
 ### 8.1 Arquitetura
 
@@ -1507,8 +1517,7 @@ ZIP com três partes:
 - **Por que reiniciar:** o processo mantém o banco aberto; trocar o arquivo em disco sob a conexão
   viva exigiria invalidar caches (índice de hierarquia, status de indexação, mapa semântico). O
   encerramento é pedido por `services.RequestRestart()` e o `main` faz shutdown graciosamente — o
-  supervisor traz o servidor de volta (`ForegroundService` no Android, `restart: unless-stopped` no
-  Docker).
+  supervisor traz o servidor de volta (`restart: unless-stopped` no Docker).
 - **Zip slip:** todo caminho de entrada é validado (`safeZipRel`); um ZIP com `../../x` é recusado.
 - **Modo único (substituir):** decisão explícita. Mesclar exigiria semântica por entidade (dedupe,
   conflito de mtime, hierarquia de arquivos) — bem mais código e mais risco de dado inconsistente.

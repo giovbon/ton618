@@ -89,7 +89,7 @@ func TestPublicRoutes_ModeloSemAuth(t *testing.T) {
 	}
 }
 
-// TestPublicRoutes_SemModelo cobre o app Android (MODEL_DOWNLOAD=false): com o
+// TestPublicRoutes_SemModelo cobre MODEL_DOWNLOAD=false: com o
 // download desligado a rota não é montada — e não pode haver panic por handler
 // nil, só 404 (o browser então usa o CDN).
 func TestPublicRoutes_SemModelo(t *testing.T) {

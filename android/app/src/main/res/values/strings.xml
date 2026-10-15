@@ -1,9 +1,0 @@
-<resources>
-    <string name="app_name">TON-618</string>
-    <string name="server_running">Servidor TON-618 Ativo</string>
-    <string name="server_stopped">Servidor Parado</string>
-    <string name="server_starting">Iniciando servidor...</string>
-    <string name="restart_server">Reiniciar</string>
-    <string name="copy_url">Copiar URL</string>
-    <string name="url_copied">URL copiada para a área de transferência!</string>
-</resources>

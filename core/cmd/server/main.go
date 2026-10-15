@@ -47,9 +47,9 @@ func main() {
 	// volume persistente (STATE_DIR/models) e servido em /models/*. Enquanto o
 	// download não termina, o browser usa o CDN como fallback (allowRemoteModels).
 	//
-	// No app Android o download é desligado (MODEL_DOWNLOAD=false): são ~120MB no
-	// armazenamento do aparelho e o WebView busca o modelo do CDN — exatamente o
-	// mesmo caminho que o desktop usa enquanto o download não termina.
+	// Com MODEL_DOWNLOAD=false o download local é desligado: são ~120MB que não vão
+	// para o disco e o browser busca o modelo do CDN — exatamente o mesmo caminho
+	// que o desktop usa enquanto o download não termina.
 	var modelStore *embeddings.LocalModel
 	if cfg.ModelDownload {
 		localModel := embeddings.NewLocalModel(cfg.ModelDir)

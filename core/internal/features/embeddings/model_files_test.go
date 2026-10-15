@@ -397,8 +397,8 @@ func TestHandleModelStatus_SemModeloLocal(t *testing.T) {
 	}
 }
 
-// TestHandleModelStatus_DownloadDesligado cobre o caminho do app Android
-// (MODEL_DOWNLOAD=false → o HandlerContext fica sem modelo local): a resposta
+// TestHandleModelStatus_DownloadDesligado cobre MODEL_DOWNLOAD=false
+// (o HandlerContext fica sem modelo local): a resposta
 // precisa ser ready=true e SEM last_error — é isso que faz a UI esconder o painel
 // "Servidor X%" em vez de exibir o erro do download.
 func TestHandleModelStatus_DownloadDesligado(t *testing.T) {

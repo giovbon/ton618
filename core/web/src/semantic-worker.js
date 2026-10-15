@@ -135,9 +135,8 @@ async function createPipeline() {
 /**
  * Resolve o caminho base do runtime WebAssembly do ORT — **uma vez por worker**.
  *
- * Local (`/static/models/ort/`) quando os arquivos estão no servidor (desktop/Docker
- * e APK com `ANDROID_SEMANTIC=1`); sem eles (APK padrão — ver
- * android/build-core-arm64.sh) o caminho local NÃO é fixado e o ORT usa o padrão do
+ * Local (`/static/models/ort/`) quando os arquivos estão no servidor (desktop/Docker);
+ * sem eles o caminho local NÃO é fixado e o ORT usa o padrão do
  * Transformers.js (CDN do onnxruntime-web, já liberado na CSP).
  *
  * @returns {Promise<void>}

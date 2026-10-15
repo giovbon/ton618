@@ -224,8 +224,8 @@ func TestLoad_ModelDir_RespeitaVariavel(t *testing.T) {
 }
 
 // TestLoad_ModelDownload garante a flag que desliga o download local do modelo de
-// embeddings — usada pelo app Android, onde os ~120MB iriam para o armazenamento
-// do aparelho sem necessidade (o WebView busca do CDN como fallback).
+// embeddings — quando os ~120MB não devem ir para o disco local (o browser busca
+// do CDN como fallback).
 func TestLoad_ModelDownload(t *testing.T) {
 	os.Unsetenv("MODEL_DOWNLOAD")
 	if cfg := Load(); !cfg.ModelDownload {
