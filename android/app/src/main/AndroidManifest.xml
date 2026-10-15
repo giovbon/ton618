@@ -20,9 +20,11 @@
         android:label="TON-618"
         android:supportsRtl="true"
         android:theme="@style/Theme.Ton618"
-        android:extractNativeLibs="true"
         android:usesCleartextTraffic="true"
         tools:targetApi="34">
+        <!-- extractNativeLibs não é declarado aqui: é controlado por
+             packaging { jniLibs { useLegacyPackaging = true } } no build.gradle.kts,
+             que gera o atributo no manifesto final. -->
 
         <!-- Activity Principal (Painel de Controle) -->
         <activity

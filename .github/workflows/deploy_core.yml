@@ -281,34 +281,13 @@ jobs:
       - name: 🤖 Compilar Core Go para Android ARM64
         working-directory: ./core
         run: |
-          mkdir -p ../android/app/src/main/assets/web/static
-          mkdir -p ../android/app/src/main/jniLibs/arm64-v8a
-          NDK_DIR="${ANDROID_NDK_ROOT:-}"
-          if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
-            NDK_DIR="$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/ndk" -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n1 || true)"
-          fi
-
-          CLANG_BIN=""
-          if [ -n "$NDK_DIR" ] && [ -d "$NDK_DIR" ]; then
-            CLANG_BIN="$(find "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" -name "aarch64-linux-android*-clang" 2>/dev/null | head -n1 || true)"
-          fi
-
-          TARGET_SO="../android/app/src/main/jniLibs/arm64-v8a/libton618.so"
-
-          if [ -n "$CLANG_BIN" ] && [ -x "$CLANG_BIN" ]; then
-            echo "✅ Usando NDK Clang: $CLANG_BIN"
-            CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC="$CLANG_BIN" go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_SO" ./cmd/server
-          else
-            echo "🐧 Fallback: instalando cross-compiler GNU aarch64"
-            sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-            CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -tags sqlite_fts5 -ldflags="-s -w" -o "$TARGET_SO" ./cmd/server
-          fi
-
-          chmod +x "$TARGET_SO"
-          cp "$TARGET_SO" ../android/app/src/main/assets/ton618-arm64
-          cp -r web/static/* ../android/app/src/main/assets/web/static/ || true
-          find ../android/app/src/main/assets/web/static -name "*.gz" -delete
-          ls -lh "$TARGET_SO"
+          # build-core-arm64.sh é a fonte única de verdade do empacotamento Android:
+          # binário só em jniLibs (não duplica em assets/), assets copiados
+          # RECURSIVAMENTE (js/, fonts/) sem .gz/.br e sem onnxruntime, e falha
+          # explícita se algum asset essencial faltar.
+          bash ../android/build-core-arm64.sh
+          ls -lh ../android/app/src/main/jniLibs/arm64-v8a/libton618.so
+          du -sh ../android/app/src/main/assets/web/static
 
       - name: 📱 Compilar APK com Gradle
         working-directory: ./android

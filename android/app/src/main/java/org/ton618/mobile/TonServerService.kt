@@ -293,7 +293,8 @@ class TonServerService : Service() {
     }
 
     /**
-     * Extrai `assets/web/static/**` do APK para o armazenamento interno.
+     * Extrai os assets web do APK para o armazenamento interno, mantendo a
+     * estrutura de pastas de `assets/web/static` (inclui js, fonts, models).
      *
      * ⚠️ A extração DEVE ser recursiva. O bundle web depende de subpastas
      * (`js/`, `js/vendor/`, `fonts/`, `models/`). Uma versão anterior copiava

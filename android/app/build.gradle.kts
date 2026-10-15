@@ -49,7 +49,12 @@ android {
 
     packaging {
         jniLibs {
+            // Executar o binário Go como arquivo exige extração no install
+            // (equivale a android:extractNativeLibs="true" no manifesto).
             useLegacyPackaging = true
+            // libton618.so é um executável Go, não uma lib com símbolos que o AGP
+            // reconheça: sem isso o build tenta o strip, falha e polui o log.
+            keepDebugSymbols += "**/libton618.so"
         }
     }
 }
