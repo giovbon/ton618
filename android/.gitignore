@@ -7,3 +7,10 @@ local.properties
 .idea/
 app/src/main/assets/
 app/src/main/jniLibs/
+
+# Chaves de assinatura — NUNCA versionar. Quem tem a chave consegue assinar um
+# APK que o aparelho aceita instalar por cima do TON-618 e ler a senha e as
+# notas (ver README › "Assinatura do APK").
+*.jks
+*.keystore
+keystore.properties

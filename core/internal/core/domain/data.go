@@ -286,6 +286,30 @@ type NoteRef struct {
 	DisplayName string
 }
 
+// OpenURL devolve o destino do clique nesta referência.
+//
+// A lista de filhas mistura NOTAS e ARQUIVOS (PDF/EPUB/ZIP/...), então o destino
+// precisa passar pela regra canônica do app (NoteOpenTarget) — e não por um
+// "/editor?file=..." fixo. Um PDF filho montado assim abria o EDITOR, que não
+// tem conteúdo para um binário e mostrava uma nota vazia.
+func (n NoteRef) OpenURL() string {
+	url, _ := NoteOpenTarget(n.NoteType(), n.Filename)
+	return url
+}
+
+// OpenInNewTab diz se o destino deve abrir em outra aba (binários/visualizadores).
+func (n NoteRef) OpenInNewTab() bool {
+	_, blank := NoteOpenTarget(n.NoteType(), n.Filename)
+	return blank
+}
+
+// NoteType deriva o tipo apenas do caminho/nome do arquivo. As filhas chegam
+// aqui sem as tags persistidas (a hierarquia é lida por conteúdo + file_metadata),
+// e a detecção por caminho é determinística — a mesma usada pela sidebar.
+func (n NoteRef) NoteType() NoteType {
+	return DetectNoteType(nil, n.Filename)
+}
+
 // DisplayName extrai o nome do arquivo da rota ou caminho.
 // Remove o prefixo interno "captura-" (usado apenas na geração do nome da
 // captura) e a extensão ".md" de notas para que a exibição seja uniforme em

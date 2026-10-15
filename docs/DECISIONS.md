@@ -1306,6 +1306,30 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 
 ---
 
+## 6.30 Filha que é ARQUIVO no popover "Abaixo desta" — destino pela regra canônica (15/10/2026)
+
+📍 `core/internal/core/domain/data.go` (`NoteRef.OpenURL`/`OpenInNewTab`/`NoteType`) | `core/internal/features/notes/hierarchy_bar.templ` (`ChildrenBadge`) · testes: `core/internal/core/domain/noteref_open_test.go` | `core/internal/features/notes/hierarchy_bar_render_test.go`
+
+**Sintoma:** abrir um PDF listado no popover **"Abaixo desta:"** (o contador de filhas da barra de hierarquia) mostrava uma **nota vazia** em vez do PDF.
+
+**Causa:** o `<a>` do popover tinha o destino **fixo**: `templ.SafeURL("/editor?file=" + SafeFileQueryEscape(c.Filename))`. Mas a lista de filhas **mistura notas e arquivos** — o `pai` de um PDF/EPUB/ZIP vive na tabela `file_metadata`, não no frontmatter (§6.24). Para um binário o editor não tem conteúdo nenhum, e o resultado era uma nota em branco (pior que um 404: parecia perda de dado).
+
+**Decisão:** o destino de uma referência de navegação **nunca** é montado à mão. `NoteRef` ganhou `OpenURL()`/`OpenInNewTab()`, que derivam o tipo do caminho (`DetectNoteType(nil, filename)` — o `NoteRef` não carrega as tags persistidas, e a detecção por caminho é determinística) e delegam para `domain.NoteOpenTarget`. É a **mesma** regra já usada pela sidebar (`getNoteLink`), pelo Tabulator (`handlers_database_tabulator.go`) e pelo painel de Consultas (`query.Row.OpenURL`).
+
+| Filha | Destino | Aba |
+| :--- | :--- | :--- |
+| `notes/x.md` | `/editor?file=…` | mesma |
+| `notes/meu-desenho.md` | `/drawing?file=…` | mesma |
+| `pdfs/x.pdf` | `/file?name=…` | nova |
+| `epubs/livro.epub` | `/epub/reader?file=…` | mesma |
+| `attachments/x.zip` | `/file/download?name=…` | nova |
+
+**Alternativa descartada:** repetir o `switch` de prefixos (`pdfs/`, `attachments/`, `.epub`) dentro do template — é exatamente o caminho que criou o bug (a sidebar já tinha a cópia dela) e que já foi motivo de divergência nos ícones (§6.9) e no rename (§6.14).
+
+**Guardas:** `TestNoteRef_OpenURLSegueNoteOpenTarget` amarra o `NoteRef` ao `NoteOpenTarget` (qualquer tipo/caminho tem que dar o mesmo destino — trava contra um `switch` paralelo futuro) e `TestChildrenBadge_RotaDeCadaFilha` renderiza o componente **de verdade** e confere `href`/`target` de cada filha, incluindo a asserção negativa de que nenhum arquivo cai em `/editor?file=`.
+
+---
+
 ## 7. Modo Perguntar & Síntese RAG via Ollama (14/10/2026)
 
 ### 7.1 Arquitetura
@@ -1421,6 +1445,27 @@ O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **
   `allowRemoteModels = true`, então busca o modelo no CDN do HuggingFace — o mesmo caminho já usado
   no desktop enquanto o download não termina.
 - Desktop/Docker **não** mudam: o download segue ligado (o volume persistente evita rebaixar).
+
+### 8.8 Assinatura estável do APK — atualizar não pode exigir desinstalar (15/10/2026)
+
+📍 `android/app/build.gradle.kts` | `.github/workflows/deploy_core.yml` (job `android-apk`) · doc: `android/README.md` › "Assinatura do APK"
+
+**Problema:** era preciso **desinstalar** o app para instalar qualquer versão nova, e desinstalar **apaga todo o dado** (`filesDir` com `ton618.db` + `docs/`, `shared_prefs` com a senha, `app_webview` com o cache do WebView/modelo ONNX).
+
+**Causa:** o CI rodava `gradle assembleDebug` **sem nenhuma `signingConfig`**. Sem configuração, o AGP assina com o *debug keystore* que ele mesmo cria em `~/.android/debug.keystore` — e essa chave é **gerada aleatoriamente** na primeira vez que o arquivo não existe. Cada runner do GitHub Actions começa limpo, então **cada build saía com uma chave diferente**; o Android recusa instalar por cima quando a assinatura muda (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). O mesmo valia para o APK gerado no Android Studio local, cuja chave de debug é de outra máquina.
+
+**Decisão (3 pontos):**
+1. **O APK de release passa a ser assinado por um keystore FIXO**, guardado **fora do repositório** e injetado pelo ambiente (`TON618_KEYSTORE_PATH`/`_PASSWORD`, `TON618_KEY_ALIAS`, `TON618_KEY_PASSWORD`). No CI os valores vêm dos GitHub Secrets `ANDROID_KEYSTORE_BASE64`/`_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD`, com o `.jks` decodificado para `$RUNNER_TEMP`. O `android/.gitignore` ignora `*.jks`/`*.keystore`.
+2. **`versionCode` deriva da tag** (`vX.Y.Z` → `MAJOR*10000 + MINOR*100 + PATCH`), passado como `-PappVersionCode=…`. É o outro requisito do Android (o código não pode diminuir) e evita um contador paralelo ao do `bump-version`.
+3. **O CI nunca publica um APK inútil**: `assembleRelease` sem keystore produz `app-release-unsigned.apk`, que **não instala**. Quando o secret não existe, o workflow cai para `assembleDebug` e emite `::warning::` + a linha *Assinatura* no Job Summary — o APK continua válido, mas a chave é volátil e a atualização por cima volta a exigir desinstalar.
+
+**Sem `signingConfig` no variant `debug`:** mexer nele quebraria o build local de quem não tem o keystore, e o `debug` já é o default do AGP. O `release` só recebe `signingConfig` **quando** o keystore existe — com isso a configuração não pode falhar por causa de variável ausente.
+
+**Alternativa descartada:** *commitar* o keystore no repositório. Seria mais simples (zero secrets), mas o repositório é público: qualquer um assinaria um APK que o aparelho aceita como atualização do TON-618 — e o app guarda a senha e todas as notas. Também descartado depender do Auto Backup do Android (`allowBackup="false"`, §9): a restauração pós-reinstalação é opcional, não determinística e pode trazer estado velho.
+
+**Validação:** `gradle assembleRelease -PappVersionCode=… -PappVersionName=…` produzindo `app-release.apk` assinado (e falha explícita no passo "Preparar nome do APK" se o arquivo não existir); instalação por cima (`adb install -r` / tocar no APK) preservando `ton618.db` e `docs/`; e o *stamp* de assets (`versionCode` + `lastUpdateTime`, §8.3) continuando a re-extrair o bundle a cada versão.
+
+**Migração:** a chave do APK instalado hoje não existe mais, então a **primeira** instalação do release exige desinstalar uma última vez — coberta pelo Backup Total (§9): exportar → desinstalar → instalar → restaurar.
 
 ---
 

@@ -73,16 +73,22 @@ ANDROID_SEMANTIC=1 ./build-core-arm64.sh     # inclui onnxruntime-web (+22 MB)
 
 ### Passo 2: Gerar o APK
 
-Você pode abrir esta pasta `android/` diretamente no **Android Studio**, ou compilar via linha de comando:
+Abra esta pasta `android/` no **Android Studio**, ou compile pela linha de comando (não há
+`gradlew`/wrapper versionado neste repositório — use o Gradle instalado):
 
 ```bash
-# Gerar APK de desenvolvimento (Debug)
-./gradlew assembleDebug
+# APK de release ASSINADO — é o que instala por cima sem perder dados
+gradle assembleRelease
+
+# APK de desenvolvimento (debug)
+gradle assembleDebug
 ```
 
-O arquivo `.apk` gerado estará em:
+Saída:
+
 ```
-android/app/build/outputs/apk/debug/app-debug.apk
+android/app/build/outputs/apk/release/app-release.apk   # release
+android/app/build/outputs/apk/debug/app-debug.apk       # debug
 ```
 
 ### Passo 3: Instalar no Smartphone
@@ -90,8 +96,93 @@ android/app/build/outputs/apk/debug/app-debug.apk
 Conecte seu celular com a depuração USB ativada ou transfira o APK:
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
+
+O `-r` reinstala **mantendo os dados**. Ele só funciona quando o APK novo está assinado com a
+**mesma** chave do instalado — ver a seção seguinte.
+
+---
+
+## 🔐 Assinatura do APK — por que a atualização não pode exigir desinstalar
+
+**Regra do Android:** um APK só é instalado por cima de outro se a **assinatura for a mesma**.
+Quando difere, o instalador aborta com `INSTALL_FAILED_UPDATE_INCOMPATIBLE` e a única saída é
+desinstalar — e **desinstalar apaga todo o dado do app** (`filesDir` com `ton618.db` + `docs/`,
+`shared_prefs` com a senha e o cache do WebView em `app_webview`).
+
+**A causa:** o CI gerava o APK com `assembleDebug` e **nenhuma** configuração de assinatura; nesse
+caso o AGP assina com o *debug keystore* que ele mesmo cria em `~/.android/debug.keystore`, e essa
+chave é **gerada aleatoriamente** quando o arquivo não existe. Cada runner do GitHub Actions começa
+limpo ⇒ **cada build saía com uma chave diferente** ⇒ nenhum APK novo conseguia atualizar o anterior.
+
+**A correção:** um keystore **fixo** de release, mantido fora do repositório.
+
+### Configuração (uma única vez)
+
+1. Gere o keystore — **guarde bem**: sem ele não há como publicar atualizações do app já instalado
+   (o `keytool` vem no JDK do Android Studio; os comandos abaixo valem no WSL):
+
+```bash
+keytool -genkeypair -v \
+  -keystore ton618-release.jks -storetype JKS \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias ton618 -storepass 'SENHA_FORTE' -keypass 'SENHA_FORTE' \
+  -dname "CN=TON-618, O=TON-618, C=BR"
+```
+
+2. Gere a versão base64 (no Linux/WSL):
+
+```bash
+base64 -w0 ton618-release.jks
+```
+
+3. Crie os 4 secrets em **GitHub → Settings → Secrets and variables → Actions**:
+
+| Secret | Valor |
+| :--- | :--- |
+| `ANDROID_KEYSTORE_BASE64` | saída do `base64` acima |
+| `ANDROID_KEYSTORE_PASSWORD` | a `storepass` usada |
+| `ANDROID_KEY_ALIAS` | `ton618` |
+| `ANDROID_KEY_PASSWORD` | a `keypass` usada |
+
+Sem esses secrets o CI continua entregando APK (variant *debug*) e escreve um **aviso** no run — mas
+aí a atualização por cima volta a exigir desinstalar.
+
+> ⚠️ **Nunca commite o `.jks`.** Quem tiver a chave consegue assinar um APK que o seu celular aceita
+> instalar por cima do TON-618 — e daí ler a senha e as notas. O `android/.gitignore` já ignora
+> `*.jks` / `*.keystore`.
+
+### Compilar localmente com a mesma chave
+
+```bash
+cd android
+TON618_KEYSTORE_PATH=/caminho/ton618-release.jks \
+TON618_KEYSTORE_PASSWORD='SENHA_FORTE' \
+TON618_KEY_ALIAS=ton618 \
+TON618_KEY_PASSWORD='SENHA_FORTE' \
+gradle assembleRelease
+```
+
+Sem essas variáveis o `assembleRelease` sai **sem assinatura** e o AGP gera
+`app-release-unsigned.apk`, que **não instala** (por isso o CI escolhe `assembleDebug` quando o
+secret não existe, em vez de publicar um APK inútil). O `assembleDebug` do dia a dia usa a chave de
+debug da sua máquina: estável ali, mas **diferente** da do CI.
+
+### Migrando do APK antigo (uma última desinstalação, de propósito)
+
+O APK instalado hoje foi assinado por uma chave aleatória que **não existe mais**, então a primeira
+instalação do APK de release vai exigir desinstalar. Para não perder nada:
+
+1. **Configurações → Backup → Baixar (Backup Total)** — o ZIP vai para a pasta *Downloads*;
+2. confira o arquivo (copie para o PC, de preferência);
+3. desinstale o TON-618;
+4. instale o `ton618-<versão>.apk` novo;
+5. **Configurações → Backup → Restaurar** e escolha o ZIP (o app avisa que substitui tudo).
+
+Daí em diante toda atualização é instalar por cima, **sem desinstalar e sem perder dado**. O outro
+requisito do Android é o `versionCode` não diminuir: ele agora vem da tag
+(`vX.Y.Z` → `MAJOR*10000 + MINOR*100 + PATCH`), que cresce a cada release.
 
 ---
 
@@ -180,6 +271,14 @@ servidor Go, mas `/static/js/vendor/htmx.min.js`, `js/vendor/alpine.min.js` e `j
 
 **`❌ Timeout: a porta 6180 não respondeu`** — veja as linhas `[Go]` / `[Go Err]` nos logs; a causa
 mais comum é o banco não conseguir abrir em `filesDir/data/ton618.db`.
+
+**Preciso desinstalar o app para instalar a versão nova (e perco todos os dados)**
+
+A assinatura do APK novo é diferente da do instalado, então o Android recusa a atualização
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) e a única saída é desinstalar — o que apaga o banco e os
+arquivos. Veja **“Assinatura do APK”** acima: configure o keystore fixo e faça a última migração com
+o Backup Total (exportar → desinstalar → instalar → restaurar). Depois disso a atualização passa a
+ser por cima, com os dados preservados.
 
 **Na busca semântica aparece `Servidor 0% · erro: lookup huggingface.co on [::1]:53: ... connection refused`**
 

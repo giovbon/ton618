@@ -97,7 +97,8 @@ templ ChildrenBadge(children []domain.NoteRef) {
 				<div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
 					for _, c := range children {
 						<a
-							href={ templ.SafeURL("/editor?file=" + SafeFileQueryEscape(c.Filename)) }
+							href={ templ.SafeURL(c.OpenURL()) }
+							target={ childLinkTarget(c) }
 							class="block text-sky-400 hover:text-sky-300 hover:underline transition-all truncate font-medium"
 						>{ c.DisplayName }</a>
 					}
@@ -105,6 +106,16 @@ templ ChildrenBadge(children []domain.NoteRef) {
 			</div>
 		}
 	</div>
+}
+
+// childLinkTarget: arquivos (PDF/EPUB/ZIP/imagens) abrem em outra aba — a mesma
+// regra da sidebar e do painel de Consultas — para o usuário não perder a nota
+// aberta. O destino em si vem de domain.NoteRef.OpenURL.
+func childLinkTarget(c domain.NoteRef) string {
+	if c.OpenInNewTab() {
+		return "_blank"
+	}
+	return ""
 }
 
 // parentNameLabel/parentNameClass: rótulo e cor do chip conforme haja (ou não) pai.
