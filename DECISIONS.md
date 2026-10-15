@@ -1326,9 +1326,64 @@ O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **
 
 ---
 
-## 8. Módulo Mobile Android (`android/`) (14/10/2026)
+## 8. Módulo Mobile Android (`android/`) — 14/10/2026
 
-- Estrutura autônoma na pasta `android/` com arquitetura em Kotlin + Jetpack/AndroidX.
-- O executável do `core` compilado para ARM64 (`ton618-arm64`) é embarcado como asset.
-- `TonServerService` gerencia o ciclo de vida do processo Go como um `ForegroundService` com notificação ativa.
-- `MainActivity` exibe uma barra de controle superior (mostrando o IP da rede Wi-Fi para acesso de outros dispositivos) e carrega a aplicação via `WebView` em `localhost:6180`.
+### 8.1 Arquitetura
+
+- Estrutura autônoma na pasta `android/` (Kotlin + AndroidX/Material).
+- `TonServerService` (`ForegroundService`) extrai e executa o binário Go do `core`, servindo em
+  `0.0.0.0:6180` (loopback para o app + rede local Wi-Fi para o PC).
+- `MainActivity` = painel de controle: status, IP na Wi-Fi, copiar link, iniciar/parar/reiniciar e logs ao vivo.
+- `WebActivity` = `WebView` que carrega `http://127.0.0.1:6180` (botão "Abrir Notas") e responde ao
+  BasicAuth do core em `onReceivedHttpAuthRequest` com as credenciais fixas
+  (`AUTH_USER`/`AUTH_PASS` em `TonServerService`) — sem prompt ao usuário.
+
+### 8.2 Distribuição dos artefatos
+
+- **Binário Go**: `app/src/main/jniLibs/<abi>/libton618.so` — vive no `nativeLibraryDir`, que é
+  executável (o Android 10+ bloqueia exec de arquivos em `filesDir`). **Não** há cópia em `assets/`
+  (era o mesmo binário duas vezes dentro do APK).
+- **Assets web**: `app/src/main/assets/web/static/**`, extraídos na primeira execução para
+  `filesDir/web/static` (o `WEB_DIR` do core).
+- `android/build-core-arm64.sh` produz os dois. `ANDROID_ABI` escolhe a ABI (arm64-v8a, x86_64,
+  armeabi-v7a) e `ANDROID_SEMANTIC=1` inclui o onnxruntime-web.
+
+### 8.3 ⚠️ Extração de assets precisa ser RECURSIVA
+
+- **Sintoma**: a página abria (HTML renderizado pelo servidor, `app.css` presente), mas **nenhum
+  recurso funcionava** — não criava nem pesquisava notas, parecia tudo "morto".
+- **Causa**: `extractWebAssets()` usava `assets.list("web/static")`, que devolve apenas o **primeiro
+  nível**, e ignorava subdiretórios. Resultado: 404 em `/static/js/vendor/htmx.min.js`,
+  `/static/js/vendor/alpine.min.js`, `/static/js/app.js` e `/static/fonts/fonts.css`. O frontend é
+  HTMX + Alpine desde a base — sem esses três arquivos nada responde.
+- **Correção**: cópia recursiva (`copyAssetTree`), stamp de versão (`versionCode` + `lastUpdateTime`)
+  para re-extrair quando o APK muda, e verificação de `REQUIRED_WEB_ASSETS`, cuja ausência agora
+  aparece como erro explícito no painel de logs do app.
+- **Regra**: todo arquivo novo em `web/static/**` (inclusive em subpastas) deve continuar sendo
+  copiado pelo script de build; `REQUIRED_WEB_ASSETS` deve acompanhar o `layout.templ`.
+
+### 8.4 Redução de tamanho do APK
+
+- Removida a cópia duplicada do binário em `assets/` (~20 MB crus).
+- `.gz`/`.br` não vão mais para o APK: o core já comprime as respostas em runtime (chi `Compress`),
+  então os pré-comprimidos eram bytes pagos duas vezes.
+- `web/static/models/ort/` (22 MB do onnxruntime-web) fica **fora por padrão**: a busca semântica no
+  celular exige baixar ~120 MB de modelo + inferência ONNX em CPU. Reativável com `ANDROID_SEMANTIC=1`.
+- Build do core sem CGO (`CGO_ENABLED=0`, `-buildmode=pie`): o SQLite é o `modernc.org/sqlite`
+  (Go puro), logo o Android NDK era desnecessário; o fallback antigo (`GOOS=linux`) foi removido
+  por poder gerar um binário não executável no Android.
+
+### 8.5 Senha configurável no app
+
+- A senha do core era **fixa no código** (`admin`/`ton618`). Agora vem de `TonSettings`
+  (`SharedPreferences` privado do app) e é editável na `MainActivity`.
+- O core valida **somente a senha**: `middleware.checkCredentials` ignora o username do token Basic
+  Auth, e a tela `/login` também usa usuário interno fixo. `config.Load()` cai no default `ton618`
+  quando `AUTH_PASS` é vazio — por isso a validação do app recusa senha em branco.
+- Ao salvar: `AUTH_PASS` do processo Go é atualizado (vale também para o acesso pelo PC em
+  `http://<ip>:6180`), o serviço é reiniciado e cookies + localStorage do WebView são descartados
+  (o token `ton_auth` antigo ficaria cacheado). O localStorage do TON-618 guarda só estado de UI
+  (linhas expandidas, colunas, última consulta) — nenhum conteúdo de nota é perdido.
+- O `WebActivity` semeia `ton_auth=base64("admin:<senha>")` via `CookieManager` **antes** de
+  navegar. Necessário porque o core **não** responde 401 em navegação de página: ele redireciona
+  para `/login`. Sem o cookie, o usuário cairia na tela de login dentro do app.
