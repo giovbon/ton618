@@ -1387,3 +1387,22 @@ O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **
 - O `WebActivity` semeia `ton_auth=base64("admin:<senha>")` via `CookieManager` **antes** de
   navegar. Necessário porque o core **não** responde 401 em navegação de página: ele redireciona
   para `/login`. Sem o cookie, o usuário cairia na tela de login dentro do app.
+
+### 8.6 cgo é OBRIGATÓRIO no build Android (DNS) — nunca compilar com CGO_ENABLED=0
+
+- O SQLite é `modernc.org/sqlite` (Go puro), o que sugeriu que daria para dispensar o NDK. **Não dá**:
+  no Android o Go **precisa** de cgo para resolver DNS. O sistema resolve via `netd` (socket Unix)
+  e não publica um `/etc/resolv.conf` utilizável — por isso `net/conf.go` força o resolver cgo no
+  Android (`goosPrefersCgo` → `case "android"`, [golang/go#10714](https://github.com/golang/go/issues/10714)),
+  e `mustUseGoResolver` devolve `true` quando o binário foi compilado sem cgo (`!cgoAvailable`).
+- **Sintoma** (ocorreu em 14/10/2026): `lookup huggingface.co on [::1]:53: read udp [::1]:…:
+  connection refused`. Esse formato (`lookup … on <servidor>:53`) é exclusivo do resolver **Go puro** —
+  é a assinatura que identifica o build sem cgo. Quebra: download do modelo de embeddings, legendas
+  do YouTube, clip de artigos (readability) e notificações ntfy.
+- **Build correto**: `CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC=<ndk clang> -buildmode=pie`.
+  O `build-core-arm64.sh` exige o NDK (falha com mensagem clara se não achar; sem fallback para
+  `GOOS=linux`, que geraria binário glibc inexequível no Android). No APK isso aparece como
+  `🤖 NDK: …/aarch64-linux-android<NN>-clang`.
+- **Validação automática**: o script confere o buildinfo do binário (`grep -aq "CGO_ENABLED=1"`), que
+  sobrevive a `-ldflags="-s -w"`. ⚠️ Não usar `cgoLookupIP` nem `/system/bin/linker64` como
+  heurística — ambos foram verificados **presentes** num build sem cgo (dariam falso OK).

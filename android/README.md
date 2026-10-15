@@ -40,13 +40,21 @@ chmod +x build-core-arm64.sh
 
 O script:
 1. gera os templates `templ` (versão fixada em `core/go.mod`);
-2. compila o `core` para Android com `CGO_ENABLED=0` + `-buildmode=pie`
-   (o SQLite é o `modernc.org/sqlite`, Go puro — **não é necessário Android NDK**) e grava
-   `app/src/main/jniLibs/arm64-v8a/libton618.so`;
+2. compila o `core` para Android com o **Android NDK** (`CGO_ENABLED=1`) e `-buildmode=pie`,
+   gravando `app/src/main/jniLibs/arm64-v8a/libton618.so`;
 3. copia `core/web/static/**` para `app/src/main/assets/web/static/` **recursivamente**, sem
    `.gz`/`.br` e sem o `models/ort/`;
 4. falha se algum asset essencial (`js/app.js`, `js/vendor/htmx.min.js`, `js/vendor/alpine.min.js`,
    `fonts/fonts.css`) estiver faltando — é exatamente isso que faz a interface abrir "morta".
+
+> ⚠️ **O NDK é obrigatório mesmo não havendo código cgo.** O SQLite é Go puro
+> (`modernc.org/sqlite`), mas o Android resolve DNS via `netd` (socket Unix), não por
+> `/etc/resolv.conf` — por isso o Go só tem resolver funcional no Android com cgo
+> ([golang/go#10714](https://github.com/golang/go/issues/10714)). Com `CGO_ENABLED=0` o binário
+> falha com `lookup huggingface.co on [::1]:53: connection refused`, e junto vão embora o
+> download do modelo de embeddings, as legendas do YouTube, o clip de artigos e o ntfy.
+> O script procura o NDK (`ANDROID_NDK_HOME`, `ANDROID_SDK_ROOT/ndk/*`, …) e **valida** o
+> binário pelo buildinfo, abortando com mensagem clara se não encontrar.
 
 Variáveis opcionais:
 
@@ -143,3 +151,11 @@ servidor Go, mas `/static/js/vendor/htmx.min.js`, `js/vendor/alpine.min.js` e `j
 
 **`❌ Timeout: a porta 6180 não respondeu`** — veja as linhas `[Go]` / `[Go Err]` nos logs; a causa
 mais comum é o banco não conseguir abrir em `filesDir/data/ton618.db`.
+
+**Na busca semântica aparece `Servidor 0% · erro: lookup huggingface.co on [::1]:53: ... connection refused`**
+
+O processo Go não consegue resolver DNS. Esse formato de erro (`on [::1]:53`) é exclusivo do
+resolver **Go puro**, ou seja: o binário foi compilado **sem cgo**. Rode `./build-core-arm64.sh`
+(ele exige o NDK e valida o binário no final) e gere o APK de novo. A busca textual e a interface
+não são afetadas — o navegador baixa o modelo do CDN do HuggingFace como fallback (o painel
+"Servidor X%" é só informativo).
