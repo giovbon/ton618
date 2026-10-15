@@ -69,7 +69,9 @@ if [ -z "$NDK_DIR" ] || [ ! -d "$NDK_DIR" ]; then
                "$HOME/Android/Sdk" "$HOME/Library/Android/sdk" \
                "/usr/local/lib/android/sdk"; do
         [ -n "$sdk" ] && [ -d "$sdk/ndk" ] || continue
-        NDK_DIR="$(find "$sdk/ndk" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n1)"
+        # '|| true': sem isso o 'set -e' + 'pipefail' aborta o script quando o find
+        # não acha nada (o status da pipeline viraria o status da atribuição).
+        NDK_DIR="$(find "$sdk/ndk" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n1 || true)"
         [ -n "$NDK_DIR" ] && break
     done
 fi
@@ -77,7 +79,7 @@ fi
 CLANG_BIN="${TON618_CC:-}"
 if [ -z "$CLANG_BIN" ] && [ -n "$NDK_DIR" ] && [ -d "$NDK_DIR" ]; then
     # Ex.: <ndk>/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-    CLANG_BIN="$(find "$NDK_DIR/toolchains/llvm/prebuilt" -type f -name "${CLANG_TRIPLE}*-clang" 2>/dev/null | sort -V | tail -n1)"
+    CLANG_BIN="$(find "$NDK_DIR/toolchains/llvm/prebuilt" -type f -name "${CLANG_TRIPLE}*-clang" 2>/dev/null | sort -V | tail -n1 || true)"
 fi
 
 if [ -z "$CLANG_BIN" ] || [ ! -x "$CLANG_BIN" ]; then

@@ -94,7 +94,7 @@ func TestGetEnvAsBool_Fallback(t *testing.T) {
 func TestLoad_Defaults(t *testing.T) {
 	// Garante que nenhuma variavel polua o teste
 	for _, k := range []string{"DOCS_DIR", "DB_PATH", "PORT", "WEB_DIR", "STATE_DIR",
-		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL", "SCAN_WORKERS", "MODEL_DIR"} {
+		"AUTH_USER", "AUTH_PASS", "EMBEDDING_PROVIDER", "EMBEDDING_DIM", "EMBEDDING_ALL", "SCAN_WORKERS", "MODEL_DIR", "MODEL_DOWNLOAD"} {
 		os.Unsetenv(k)
 	}
 
@@ -114,6 +114,9 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.ScanWorkers != 0 {
 		t.Fatalf("esperado ScanWorkers 0 (automático), got %d", cfg.ScanWorkers)
+	}
+	if !cfg.ModelDownload {
+		t.Fatal("por padrão o modelo de embeddings local deve ser baixado (ModelDownload=true)")
 	}
 }
 
@@ -217,6 +220,22 @@ func TestLoad_ModelDir_RespeitaVariavel(t *testing.T) {
 
 	if cfg.ModelDir != "/var/custom/models" {
 		t.Fatalf("esperado MODEL_DIR explícito /var/custom/models, got %q", cfg.ModelDir)
+	}
+}
+
+// TestLoad_ModelDownload garante a flag que desliga o download local do modelo de
+// embeddings — usada pelo app Android, onde os ~120MB iriam para o armazenamento
+// do aparelho sem necessidade (o WebView busca do CDN como fallback).
+func TestLoad_ModelDownload(t *testing.T) {
+	os.Unsetenv("MODEL_DOWNLOAD")
+	if cfg := Load(); !cfg.ModelDownload {
+		t.Fatal("padrão deveria ser baixar o modelo local (ModelDownload=true)")
+	}
+
+	os.Setenv("MODEL_DOWNLOAD", "false")
+	defer os.Unsetenv("MODEL_DOWNLOAD")
+	if cfg := Load(); cfg.ModelDownload {
+		t.Fatal("MODEL_DOWNLOAD=false deveria desligar o download local")
 	}
 }
 

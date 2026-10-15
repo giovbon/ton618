@@ -93,6 +93,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 * O banco de dados (`ton618.db`) e os arquivos das notas (`docs/`) são mantidos no armazenamento interno e seguro do aplicativo (`/data/user/0/org.ton618.mobile/files/`).
 * Não há envio de dados para servidores externos ou nuvem.
+* O modelo de embeddings (~120 MB) **não** é baixado no aparelho: o app sobe o core com
+  `MODEL_DOWNLOAD=false` e o WebView busca o modelo no CDN do HuggingFace — o mesmo caminho que o
+  desktop usa enquanto o download não termina. Sem isso, +120 MB iriam para o armazenamento do app.
 
 ---
 

@@ -46,14 +46,24 @@ func main() {
 	// 1.1. Modelo de embeddings local — baixado do HuggingFace no 1º boot para o
 	// volume persistente (STATE_DIR/models) e servido em /models/*. Enquanto o
 	// download não termina, o browser usa o CDN como fallback (allowRemoteModels).
-	modelStore := embeddings.NewLocalModel(cfg.ModelDir)
-	go func() {
-		if err := modelStore.Ensure(context.Background()); err != nil {
-			slog.Warn("modelo de embeddings: download incompleto — browser usará o CDN como fallback", "error", err)
-			return
-		}
-		slog.Info("Modelo de embeddings disponível localmente", "dir", cfg.ModelDir)
-	}()
+	//
+	// No app Android o download é desligado (MODEL_DOWNLOAD=false): são ~120MB no
+	// armazenamento do aparelho e o WebView busca o modelo do CDN — exatamente o
+	// mesmo caminho que o desktop usa enquanto o download não termina.
+	var modelStore *embeddings.LocalModel
+	if cfg.ModelDownload {
+		localModel := embeddings.NewLocalModel(cfg.ModelDir)
+		modelStore = localModel
+		go func() {
+			if err := localModel.Ensure(context.Background()); err != nil {
+				slog.Warn("modelo de embeddings: download incompleto — browser usará o CDN como fallback", "error", err)
+				return
+			}
+			slog.Info("Modelo de embeddings disponível localmente", "dir", cfg.ModelDir)
+		}()
+	} else {
+		slog.Info("Download local do modelo de embeddings desativado (MODEL_DOWNLOAD=false) — o browser usará o CDN")
+	}
 
 	// 2. Database
 	store, err := db.NewStore(cfg.DBPath)
@@ -118,7 +128,10 @@ func main() {
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
-	embeddingsCtx := embeddings.NewHandlerContext(cfg, store).WithModel(modelStore)
+	embeddingsCtx := embeddings.NewHandlerContext(cfg, store)
+	if modelStore != nil {
+		embeddingsCtx = embeddingsCtx.WithModel(modelStore)
+	}
 
 	go func() {
 		slog.Info("Sincronizando notas do banco de dados em segundo plano...")
@@ -136,19 +149,10 @@ func main() {
 	r.Use(middleware.WithRequestContext) // propaga contexto HTTP para cancelamento de queries
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
-	// Arquivos estáticos com ETag automático (cache-buster via hash do conteúdo)
-	staticDir := filepath.Join(cfg.WebDir, "static")
-	staticCache, err := staticver.NewCache(staticDir)
-	if err != nil {
-		slog.Warn("staticver: erro ao inicializar cache (usando fallback)", "error", err)
-	}
-	// Monta o handler com ETags automáticos
-	r.Handle("/static/*", http.StripPrefix("/static/", staticCache.Handler(staticDir)))
-	staticver.SetDefault(staticCache) // disponibiliza URL() para os templates
+	// Rotas públicas (estáticos + modelo de embeddings) e, em seguida, as rotas
+	// dinâmicas protegidas por BasicAuth (com pprof em /debug/pprof).
+	registerPublicRoutes(r, cfg, modelStore)
 
-	// Arquivos do modelo de embeddings (baixados no boot) — públicos, sem auth,
-	// pois o Web Worker busca /models/... sem credenciais.
-	// Protege as rotas dinâmicas com BasicAuth e habilita pprof (/debug/pprof)
 	r.Group(func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler {
 			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
@@ -181,4 +185,34 @@ func main() {
 	srv.Shutdown(shutdownCtx)
 
 	slog.Info("TON-618 encerrado")
+}
+
+// registerPublicRoutes monta as rotas servidas SEM autenticação:
+//
+//   - /static/* — bundle web (CSS/JS/fontes);
+//   - /models/* — arquivos do modelo de embeddings, buscados pelo Web Worker do
+//     Transformers.js antes de cair no CDN do HuggingFace.
+//
+// ⚠️ A rota do modelo precisa ficar FORA do grupo com BasicAuth: se ela cair no
+// grupo autenticado o worker recebe 401/302, cai no CDN e a cópia local (~120MB
+// baixados no boot) nunca é usada.
+//
+// Só é montada quando o download local está ligado (ver MODEL_DOWNLOAD); com
+// model == nil não existe arquivo para servir — e registrar um handler nil
+// daria panic a cada request.
+func registerPublicRoutes(r chi.Router, cfg *config.AppConfig, model *embeddings.LocalModel) {
+	// Arquivos estáticos com ETag automático (cache-buster via hash do conteúdo)
+	staticDir := filepath.Join(cfg.WebDir, "static")
+	staticCache, err := staticver.NewCache(staticDir)
+	if err != nil {
+		slog.Warn("staticver: erro ao inicializar cache (usando fallback)", "error", err)
+	}
+	// Monta o handler com ETags automáticos
+	r.Handle("/static/*", http.StripPrefix("/static/", staticCache.Handler(staticDir)))
+	staticver.SetDefault(staticCache) // disponibiliza URL() para os templates
+
+	if model != nil {
+		// O handler espera chegar sem o prefixo (/models/<repo>/<arquivo>).
+		r.Handle("/models/*", http.StripPrefix("/models/", model))
+	}
 }

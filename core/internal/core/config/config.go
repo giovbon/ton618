@@ -18,6 +18,7 @@ type AppConfig struct {
 	WebDir           string
 	StateDir         string
 	ModelDir         string // dir persistente do modelo de embeddings (baixado no 1º boot)
+	ModelDownload    bool   // baixa o modelo de embeddings no boot (false = só CDN no browser)
 	AuthUser         string
 	AuthPass         string
 }
@@ -33,6 +34,7 @@ func Load() *AppConfig {
 		WebDir:           getEnv("WEB_DIR", "./web"),
 		StateDir:         getEnv("STATE_DIR", "./data"),
 		ModelDir:         getEnv("MODEL_DIR", ""),
+		ModelDownload:    getEnvAsBool("MODEL_DOWNLOAD", true),
 		AuthUser:         getEnv("AUTH_USER", "admin"),
 		AuthPass:         getEnv("AUTH_PASS", "ton618"),
 	}

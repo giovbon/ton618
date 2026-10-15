@@ -163,6 +163,10 @@ class TonServerService : Service() {
                 env["WEB_DIR"] = webDir.absolutePath
                 env["AUTH_USER"] = TonSettings.AUTH_USER
                 env["AUTH_PASS"] = TonSettings.password(this@TonServerService)
+                // O modelo de embeddings (~120MB) não é baixado no aparelho: o
+                // WebView busca do CDN do HuggingFace, como o desktop já faz
+                // enquanto o download não termina (allowRemoteModels).
+                env["MODEL_DOWNLOAD"] = "false"
                 appendLog("[App] Senha de acesso: ${authLabel()}")
 
                 appendLog("[App] Iniciando processo Go na porta $DEFAULT_PORT...")

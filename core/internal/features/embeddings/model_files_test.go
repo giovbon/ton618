@@ -397,6 +397,26 @@ func TestHandleModelStatus_SemModeloLocal(t *testing.T) {
 	}
 }
 
+// TestHandleModelStatus_DownloadDesligado cobre o caminho do app Android
+// (MODEL_DOWNLOAD=false → o HandlerContext fica sem modelo local): a resposta
+// precisa ser ready=true e SEM last_error — é isso que faz a UI esconder o painel
+// "Servidor X%" em vez de exibir o erro do download.
+func TestHandleModelStatus_DownloadDesligado(t *testing.T) {
+	ctx := newTestHandlerContext(t)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/embeddings/model-status", nil)
+	ctx.HandleModelStatus(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, `"ready":true`) {
+		t.Errorf("download desligado deve reportar ready=true, got %s", body)
+	}
+	if strings.Contains(body, "last_error") {
+		t.Errorf("download desligado não deve expor erro para a UI, got %s", body)
+	}
+}
+
 func TestHandleModelStatus_ComModelo(t *testing.T) {
 	m := NewLocalModel(t.TempDir())
 	ctx := newTestHandlerContext(t).WithModel(m)

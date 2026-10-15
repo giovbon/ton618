@@ -2,4 +2,4 @@
 
 ## Documentação Obrigatória
 
-Antes de modificar qualquer arquivo, **leia o `DECISIONS.md`** na raiz do projeto.
+Antes de modificar qualquer arquivo, **leia o `docs/DECISIONS.md`**.
