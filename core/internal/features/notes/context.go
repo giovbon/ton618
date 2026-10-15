@@ -12,6 +12,10 @@ type HandlerContext struct {
 	Notes   *NoteService
 	Backup  *services.BackupService
 	Capture *CaptureService
+
+	// BackupFull exporta/restaura o estado COMPLETO (banco + arquivos) — a única
+	// opção de backup restaurável. Ver services.FullBackupService.
+	BackupFull *services.FullBackupService
 }
 
 func NewHandlerContext(cfg *config.AppConfig, store *db.Store, notes *NoteService, backup *services.BackupService, capture *CaptureService) *HandlerContext {
@@ -21,5 +25,8 @@ func NewHandlerContext(cfg *config.AppConfig, store *db.Store, notes *NoteServic
 		Notes:   notes,
 		Backup:  backup,
 		Capture: capture,
+		// Construído aqui (só precisa de store + config) para não mexer na
+		// assinatura e nos chamadores de NewHandlerContext.
+		BackupFull: services.NewFullBackupService(store, cfg.DBPath, cfg.DocsDir, cfg.StateDir),
 	}
 }

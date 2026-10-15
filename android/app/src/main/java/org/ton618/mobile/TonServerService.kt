@@ -37,6 +37,12 @@ class TonServerService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var serverProcess: Process? = null
 
+    /** true quando o encerramento partiu do app (Parar/Reiniciar), não do processo. */
+    private var stopRequested = false
+
+    /** Tentativas seguidas de subir o servidor de novo depois de uma queda. */
+    private var restartAttempts = 0
+
     companion object {
         const val TAG = "TonServerService"
         const val CHANNEL_ID = "ton618_service_channel"
@@ -46,6 +52,9 @@ class TonServerService : Service() {
         const val ACTION_START = "org.ton618.mobile.action.START"
         const val ACTION_STOP = "org.ton618.mobile.action.STOP"
         const val ACTION_RESTART = "org.ton618.mobile.action.RESTART"
+
+        /** Quantas vezes seguidas o app tenta subir o servidor de novo após uma queda. */
+        private const val MAX_AUTO_RESTARTS = 3
 
         // Credenciais do core. A senha vem de TonSettings (editável na
         // MainActivity); o username é ignorado pelo core (ver basicToken).
@@ -123,8 +132,9 @@ class TonServerService : Service() {
     }
 
     private fun startServerProcess() {
-        if (serverProcess != null && _serverState.value == ServerState.RUNNING) return
+        if (serverProcess?.isAlive == true && _serverState.value == ServerState.RUNNING) return
 
+        stopRequested = false
         _serverState.value = ServerState.STARTING
         appendLog("[App] Procurando executável nativo...")
 
@@ -214,6 +224,7 @@ class TonServerService : Service() {
 
                 if (portOpen) {
                     _serverState.value = ServerState.RUNNING
+                    restartAttempts = 0 // servidor saudável: zera o contador de quedas
                     val ip = NetworkUtils.getLocalIpAddress(this@TonServerService)
                     val url = "http://$ip:$DEFAULT_PORT"
                     appendLog("✅ Servidor pronto e escutando em $url")
@@ -224,13 +235,33 @@ class TonServerService : Service() {
                     updateNotification("Falha ao abrir porta $DEFAULT_PORT")
                 }
 
-                // Monitora encerramento caso o processo caia
+                // Monitora o encerramento do processo. Se ele cair sozinho, o app sobe
+                // de novo: o caso comum é a restauração de backup, em que o core encerra
+                // de propósito para reabrir o banco restaurado.
                 val exitCode = serverProcess?.waitFor() ?: -1
+                serverProcess = null
                 appendLog("[App] Processo do servidor encerrou (código $exitCode)")
-                if (_serverState.value == ServerState.RUNNING) {
-                    _serverState.value = ServerState.STOPPED
+
+                if (stopRequested || !isActive) {
+                    if (_serverState.value == ServerState.RUNNING) {
+                        _serverState.value = ServerState.STOPPED
+                    }
+                    updateNotification("Servidor parado (código $exitCode)")
+                    return@launch
                 }
-                updateNotification("Servidor parado (código $exitCode)")
+
+                if (restartAttempts >= MAX_AUTO_RESTARTS) {
+                    _serverState.value = ServerState.STOPPED
+                    appendLog("❌ O servidor encerrou $MAX_AUTO_RESTARTS vezes seguidas — use ▶ Iniciar.")
+                    updateNotification("Servidor parado (código $exitCode)")
+                    return@launch
+                }
+
+                restartAttempts++
+                appendLog("[App] Subindo o servidor de novo ($restartAttempts/$MAX_AUTO_RESTARTS)...")
+                updateNotification("Reiniciando servidor TON-618...")
+                delay(1500)
+                startServerProcess()
             } catch (e: Exception) {
                 val err = "Falha ao iniciar processo: ${e.message}"
                 Log.e(TAG, err, e)
@@ -250,6 +281,7 @@ class TonServerService : Service() {
 
     private fun stopServerProcess() {
         try {
+            stopRequested = true
             serverProcess?.destroy()
             serverProcess = null
             _serverState.value = ServerState.STOPPED

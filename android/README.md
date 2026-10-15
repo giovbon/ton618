@@ -99,7 +99,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## � Senha de acesso
+## 🔑 Senha de acesso
 
 O TON-618 é protegido por **senha** (o usuário é fixo e ignorado pelo core — só a senha importa,
 como na tela `/login`). A senha sai de fábrica como `ton618`.
@@ -120,8 +120,25 @@ A mesma senha protege:
 > dos dados das notas). Não use uma senha que você reutiliza em outros serviços.
 
 ---
+## 💾 Backup e restauração pelo app
 
-## �📦 Tamanho do APK
+A aba **Configurações → Backup** tem três opções; apenas o **Backup Total** pode ser importado.
+
+- **Baixar** (Rápido, Completo ou Total): o `WebActivity` tem um `DownloadListener` que entrega o
+  arquivo ao `DownloadManager`, repassando o cookie de autenticação (`ton_auth`) — sem ele o
+  servidor responderia 302 para `/login` e o "backup" seria a página de login. O ZIP vai para a
+  pasta **Downloads** do aparelho (em Android ≤ 28 é pedida a permissão de armazenamento).
+- **Restaurar**: o seletor de arquivo é atendido por `onShowFileChooser` (sem ele o
+  `<input type="file">` não abre nada). A restauração **substitui tudo**, então o app responde com
+  um aviso de confirmação antes de enviar.
+- Ao terminar, o core encerra de propósito (o banco aberto é o arquivo antigo) e o
+  `TonServerService` **sobe o servidor de novo automaticamente** — o mesmo mecanismo cobre quedas
+  inesperadas do processo (até 3 tentativas seguidas).
+- `android:allowBackup="false"`: o Auto Backup do Android não copia mais o banco para o Google
+  Drive; o caminho oficial de cópia é o Backup Total.
+
+---
+## 📦 Tamanho do APK
 
 O que pesava no APK e o que foi feito:
 

@@ -1421,3 +1421,49 @@ O Modo Perguntar combina **busca híbrida local (FTS5 + KNN semântico)** com **
   `allowRemoteModels = true`, então busca o modelo no CDN do HuggingFace — o mesmo caminho já usado
   no desktop enquanto o download não termina.
 - Desktop/Docker **não** mudam: o download segue ligado (o volume persistente evita rebaixar).
+
+---
+
+## 9. Backup Total — exportar e restaurar (15/10/2026)
+
+A aba Configurações → Backup passa a ter 3 opções. As duas primeiras (Rápido e Completo) continuam
+**somente de download**; a terceira é a única que pode ser **importada** de volta.
+
+### 9.1 Formato
+
+ZIP com três partes:
+
+| Entrada | Conteúdo |
+|---------|----------|
+| `manifest.json` | formato/versão, data, contagens, tamanho e SHA-256 do banco |
+| `db/ton618.db` | snapshot consistente do SQLite (`VACUUM INTO`) |
+| `docs/**` | todos os arquivos do disco, **inclusive `archives/`** |
+
+- **Snapshot do banco, não export por entidade.** Fidelidade total (configurações, agenda,
+  marcadores de tarefas, hierarquia de arquivos em `file_metadata`) com muito menos código e sem o
+  risco de esquecer um campo novo. A contrapartida é acoplar ao schema — aceitável porque
+  `db.NewStore` roda as migrações no boot: um backup antigo é migrado ao restaurar.
+- **Dados derivados ficam de fora** (`note_embeddings`, `note_chunks`): ocupam a maior parte do banco
+  e o browser os regenera sozinho quando a busca semântica é aberta (indexação lazy, §3.8). O banco
+  vivo nunca é alterado — a limpeza acontece na cópia (`db.Store.Snapshot`).
+- `VACUUM INTO` em vez de copiar o arquivo: aplica o WAL pendente e nunca produz cópia rasgada de um
+  banco em uso.
+
+### 9.2 Restauração (`POST /api/restore`) — sempre SUBSTITUIÇÃO TOTAL
+
+1. o ZIP é recebido em **streaming** para um arquivo temporário em `STATE_DIR` (nunca pela memória;
+   teto de 4 GiB);
+2. tudo é extraído para um staging **fora** de `docs/` e o banco é validado
+   (`PRAGMA integrity_check` + presença da tabela `notes`) — **antes de tocar no estado atual**;
+3. o estado atual vai para quarentena (`STATE_DIR/.pre-restore-<timestamp>/`: banco + `docs/`);
+4. o backup é aplicado (rename, mesmo filesystem) e o processo **encerra graciosamente**.
+
+- Falha nos passos 1–2 deixa o app exatamente como estava (coberto por teste).
+- **Por que reiniciar:** o processo mantém o banco aberto; trocar o arquivo em disco sob a conexão
+  viva exigiria invalidar caches (índice de hierarquia, status de indexação, mapa semântico). O
+  encerramento é pedido por `services.RequestRestart()` e o `main` faz shutdown graciosamente — o
+  supervisor traz o servidor de volta (`ForegroundService` no Android, `restart: unless-stopped` no
+  Docker).
+- **Zip slip:** todo caminho de entrada é validado (`safeZipRel`); um ZIP com `../../x` é recusado.
+- **Modo único (substituir):** decisão explícita. Mesclar exigiria semântica por entidade (dedupe,
+  conflito de mtime, hierarquia de arquivos) — bem mais código e mais risco de dado inconsistente.

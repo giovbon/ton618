@@ -2,6 +2,8 @@ services:
   ton618-pkm:
     image: giovbon/ton618plus:latest
     container_name: ton618
+    # unless-stopped também cobre a restauração de backup: o core encerra de propósito
+    # para reabrir o banco restaurado e o Docker sobe o container de novo.
     restart: unless-stopped
     user: root
     ports:

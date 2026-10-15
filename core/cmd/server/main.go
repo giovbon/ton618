@@ -177,7 +177,13 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	// Encerra no Ctrl+C/SIGTERM ou quando uma operação pede reinício (restauração
+	// de backup troca o arquivo do banco: é preciso reabrir com o novo arquivo).
+	select {
+	case <-ctx.Done():
+	case <-services.RestartRequested:
+		slog.Info("Reinício solicitado (restauração de backup) — encerrando para reabrir o banco")
+	}
 	slog.Info("Encerrando servidor...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

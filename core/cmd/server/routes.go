@@ -81,6 +81,9 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/archives", searchCtx.HandleListArchives)
 	mux.Post("/api/archive/restore", searchCtx.HandleRestoreArchive)
 	mux.Get("/api/backup", notesCtx.HandleBackup)
+	// Backup TOTAL: exporta banco + arquivos e pode ser restaurado por /api/restore.
+	mux.Get("/api/backup/total", notesCtx.HandleFullBackup)
+	mux.Post("/api/restore", notesCtx.HandleRestore)
 
 	// TODOS (Markers)
 	mux.Get("/api/todo-markers", todosCtx.HandleGetTodoMarkers)

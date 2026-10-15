@@ -177,6 +177,8 @@ templ SettingsModal() {
                         Arquivos da pasta
                         <code class="text-zinc-500">archives/</code> não são
                         incluídos.
+                        Já o <strong class="text-amber-400">Backup Total</strong> guarda o banco inteiro
+                        (configurações, agenda, marcadores) e é o único que pode ser <strong class="text-amber-400">restaurado</strong>.
                     </p>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -231,6 +233,56 @@ templ SettingsModal() {
                                 ⬇️ Baixar Completo
                             </a>
                         </div>
+
+                        <!-- Backup Total: exportável E restaurável -->
+                        <div class="sm:col-span-2 bg-zinc-800/50 rounded-xl p-5 border border-amber-500/40 flex flex-col justify-between text-center">
+                            <div>
+                                <div class="text-4xl mb-3">🧩</div>
+                                <p class="text-sm text-zinc-300 font-bold mb-1">
+                                    Backup Total (exportar e restaurar)
+                                </p>
+                                <p class="text-xs text-zinc-500 mb-4">
+                                    Tudo: notas, configurações, agenda, marcadores e <strong class="text-zinc-400">todos</strong> os arquivos
+                                    (inclusive <code class="text-zinc-500">archives/</code>). É o único que pode ser importado de volta.
+                                </p>
+                            </div>
+                            <a id="backup-download-total-btn" href="/api/backup/total" download
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold transition-colors w-full mt-2"
+                                onclick="
+                                        this.classList.add('opacity-50');
+                                        let originalText = this.innerHTML;
+                                        this.innerHTML = '⏳ Gerando...';
+                                        setTimeout(() => {
+                                            this.classList.remove('opacity-50');
+                                            this.innerHTML = originalText;
+                                        }, 10000);
+                                    ">
+                                ⬇️ Baixar Backup Total
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Restaurar: substituição total a partir de um Backup Total -->
+                    <div class="rounded-xl border border-red-500/30 bg-red-500/5 p-5">
+                        <p class="text-sm font-bold text-red-300 mb-1">♻️ Restaurar um Backup Total</p>
+                        <p class="text-xs text-red-200/80 leading-relaxed mb-4">
+                            <strong>Substitui tudo</strong> pelo conteúdo do arquivo: notas, configurações, agenda,
+                            marcadores e arquivos. O estado atual é movido para uma quarentena (por segurança) antes de aplicar.
+                            Ao terminar, o servidor reinicia sozinho — aguarde alguns segundos e recarregue a página.
+                        </p>
+                        <form hx-post="/api/restore" hx-encoding="multipart/form-data"
+                            hx-target="#restore-result-area" hx-swap="innerHTML"
+                            hx-confirm="Isso SUBSTITUI todas as notas, arquivos e configurações atuais pelo conteúdo do backup. Continuar?"
+                            class="flex flex-col sm:flex-row gap-3 sm:items-center"
+                            onsubmit="var b = this.querySelector('button[type=submit]'); b.textContent = '⏳ Restaurando...';">
+                            <input type="file" name="file" accept=".zip,application/zip" required
+                                class="block w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-amber-600 file:text-white file:text-xs file:font-bold hover:file:bg-amber-700 cursor-pointer" />
+                            <button type="submit"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors shrink-0">
+                                ♻️ Restaurar
+                            </button>
+                        </form>
+                        <div id="restore-result-area" class="mt-3"></div>
                     </div>
 
                     <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
