@@ -146,6 +146,22 @@ type synthesizeRequest struct {
 	Sources []askSource `json:"sources"`
 }
 
+// Parâmetros de geração da síntese.
+//
+// synthesizeNumCtx importa: o default do Ollama é 2048 tokens e, quando o prompt
+// não cabe, ele descarta o começo SILENCIOSAMENTE — o modelo responderia sem ver
+// as primeiras notas. 4096 cobre o contexto montado em handlers_ask.go
+// (askMaxSources × askExcerptChars ≈ 1.500 tokens) sem exagerar no KV cache.
+//
+// synthesizeNumPredict era 250: o modelo recebia instrução de responder em
+// "2 a 4 frases" e tinha teto de ~250 tokens, então respostas mais longas eram
+// cortadas no meio.
+const (
+	synthesizeNumPredict = 800
+	synthesizeNumCtx     = 4096
+	synthesizeTimeout    = 180 * time.Second
+)
+
 // HandleAskSynthesize chama o modelo local (Ollama ou KoboldCPP/OpenAI) e faz stream
 // da resposta gerada para o browser via Server-Sent Events.
 // POST /api/ask/synthesize
@@ -177,7 +193,7 @@ func (ctx *HandlerContext) HandleAskSynthesize(w http.ResponseWriter, r *http.Re
 	// Monta o contexto com os trechos das notas
 	var contextParts []string
 	for i, src := range req.Sources {
-		if i >= 5 {
+		if i >= askMaxSources {
 			break
 		}
 		name := src.Name
@@ -196,19 +212,18 @@ func (ctx *HandlerContext) HandleAskSynthesize(w http.ResponseWriter, r *http.Re
 	}
 	contextText := strings.Join(contextParts, "\n\n")
 
-	prompt := fmt.Sprintf(`Você é o assistente inteligente de notas do TON-618.
-Responda à pergunta do usuário em 2 a 4 frases claras e diretas em português brasileiro, baseando-se estritamente nas notas fornecidas abaixo.
-Não invente informações que não estejam nas notas.
+	// Uma única definição de comportamento, usada pelos dois backends: o formato de
+	// chat (KoboldCPP/OpenAI) recebe isto como mensagem de sistema e o Ollama no
+	// campo `system` (que passa pela template do modelo).
+	systemPrompt := `Você é o assistente de notas do TON-618.
+Responda em português brasileiro, de forma direta e organizada.
+Use SOMENTE as notas fornecidas; se a resposta não estiver nelas, diga que não encontrou nas notas.
+Não invente fatos, nomes ou números. Prefira de 4 a 8 frases (ou uma lista curta quando fizer sentido).`
 
-Notas:
-%s
-
-Pergunta: %s
-
-Resposta:`, contextText, req.Query)
+	userContent := fmt.Sprintf("Notas:\n%s\n\nPergunta: %s", contextText, req.Query)
 
 	// Detecta se o backend é KoboldCPP / OpenAI ou Ollama
-	client := &http.Client{Timeout: 90 * time.Second}
+	client := &http.Client{Timeout: synthesizeTimeout}
 	isKoboldOrOpenAI := false
 
 	// Checa se o endpoint OpenAI /v1/chat/completions ou Kobold existe
@@ -228,16 +243,37 @@ Resposta:`, contextText, req.Query)
 
 	flusher, hasFlusher := w.(http.Flusher)
 
+	// Primeiro frame: a UI mostra qual backend/modelo está respondendo (o usuário
+	// pode ter os dois configurados e não tem como saber qual foi usado).
+	provider := "Ollama"
+	if isKoboldOrOpenAI {
+		provider = "OpenAI compatível"
+	}
+	sseWrite(w, hasFlusher, flusher, "meta", mustJSON(map[string]string{
+		"provider": provider,
+		"model":    model,
+		"sources":  fmt.Sprintf("%d", len(contextParts)),
+	}))
+
+	sentDone := false
+	emitDone := func() {
+		if sentDone {
+			return
+		}
+		sentDone = true
+		sseWrite(w, hasFlusher, flusher, "done", "{}")
+	}
+
 	if isKoboldOrOpenAI {
 		// ── Formato OpenAI / KoboldCPP (/v1/chat/completions) ──
 		openAIPayload := map[string]interface{}{
 			"model": model,
 			"messages": []map[string]string{
-				{"role": "system", "content": "Você é o assistente inteligente de notas do TON-618. Responda estritamente com base nas notas fornecidas em português brasileiro."},
-				{"role": "user", "content": prompt},
+				{"role": "system", "content": systemPrompt},
+				{"role": "user", "content": userContent},
 			},
 			"stream":      true,
-			"max_tokens":  250,
+			"max_tokens":  synthesizeNumPredict,
 			"temperature": 0.3,
 		}
 		payloadBytes, _ := json.Marshal(openAIPayload)
@@ -264,10 +300,7 @@ Resposta:`, contextText, req.Query)
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
-				fmt.Fprintf(w, "event: done\ndata: {}\n\n")
-				if hasFlusher {
-					flusher.Flush()
-				}
+				emitDone()
 				break
 			}
 
@@ -277,29 +310,38 @@ Resposta:`, contextText, req.Query)
 						Content string `json:"content"`
 					} `json:"delta"`
 				} `json:"choices"`
+				Error json.RawMessage `json:"error"`
 			}
-			if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
-				token := chunk.Choices[0].Delta.Content
-				if token != "" {
-					bToken, _ := json.Marshal(token)
-					fmt.Fprintf(w, "data: %s\n\n", bToken)
-					if hasFlusher {
-						flusher.Flush()
-					}
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				continue
+			}
+			if msg := jsonErrorMessage(chunk.Error); msg != "" {
+				slog.Warn("ia: erro no stream", "error", msg)
+				sseWrite(w, hasFlusher, flusher, "error", mustJSON(map[string]string{"message": msg}))
+				break
+			}
+			if len(chunk.Choices) > 0 {
+				if token := chunk.Choices[0].Delta.Content; token != "" {
+					sseToken(w, hasFlusher, flusher, token)
 				}
 			}
 		}
+		emitDone()
 		return
 	}
 
 	// ── Formato Ollama (/api/generate) ──
+	// `system` passa pela template do modelo (llama3.2 tem chat template própria);
+	// `num_ctx` precisa cobrir o prompt inteiro (ver constantes no topo).
 	ollamaPayload := map[string]interface{}{
 		"model":  model,
-		"prompt": prompt,
+		"system": systemPrompt,
+		"prompt": userContent,
 		"stream": true,
 		"options": map[string]interface{}{
 			"temperature": 0.3,
-			"num_predict": 250,
+			"num_predict": synthesizeNumPredict,
+			"num_ctx":     synthesizeNumCtx,
 		},
 	}
 	payloadBytes, _ := json.Marshal(ollamaPayload)
@@ -327,25 +369,84 @@ Resposta:`, contextText, req.Query)
 			continue
 		}
 		var chunk struct {
-			Response string `json:"response"`
-			Done     bool   `json:"done"`
+			Response string          `json:"response"`
+			Error    json.RawMessage `json:"error"`
+			Done     bool            `json:"done"`
 		}
 		if err := json.Unmarshal(line, &chunk); err != nil {
 			continue
 		}
+		// O Ollama devolve erros (modelo inexistente, falta de memória…) com HTTP 200
+		// no meio do stream; sem tratar isso a UI ficava em "Gerando..." para sempre.
+		if msg := jsonErrorMessage(chunk.Error); msg != "" {
+			slog.Warn("ollama: erro no stream", "error", msg)
+			sseWrite(w, hasFlusher, flusher, "error", mustJSON(map[string]string{"message": msg}))
+			break
+		}
 		if chunk.Response != "" {
-			token, _ := json.Marshal(chunk.Response)
-			fmt.Fprintf(w, "data: %s\n\n", token)
-			if hasFlusher {
-				flusher.Flush()
-			}
+			sseToken(w, hasFlusher, flusher, chunk.Response)
 		}
 		if chunk.Done {
-			fmt.Fprintf(w, "event: done\ndata: {}\n\n")
-			if hasFlusher {
-				flusher.Flush()
-			}
 			break
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		slog.Warn("ollama: stream interrompido", "error", err)
+	}
+	emitDone()
+}
+
+// ── Utilidades de Server-Sent Events ──
+
+// sseWrite escreve um frame de SSE (evento opcional + data) e libera o buffer.
+func sseWrite(w io.Writer, hasFlusher bool, flusher http.Flusher, event, data string) {
+	if event != "" {
+		fmt.Fprintf(w, "event: %s\n", event)
+	}
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	if hasFlusher {
+		flusher.Flush()
+	}
+}
+
+// sseToken escreve um pedaço do texto gerado. O JSON evita que aspas ou quebras de
+// linha no token quebrem o frame.
+func sseToken(w io.Writer, hasFlusher bool, flusher http.Flusher, token string) {
+	b, err := json.Marshal(token)
+	if err != nil {
+		return
+	}
+	sseWrite(w, hasFlusher, flusher, "", string(b))
+}
+
+// mustJSON serializa para JSON (usado nos frames de controle).
+func mustJSON(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// jsonErrorMessage extrai uma mensagem legível do campo `error` de uma resposta,
+// que aparece como string, {"message": "..."} ou {"error": {"message": "..."}}.
+func jsonErrorMessage(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		for _, key := range []string{"message", "error", "detail"} {
+			if v, ok := obj[key]; ok {
+				if msg := jsonErrorMessage(v); msg != "" {
+					return msg
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(string(raw))
 }

@@ -16,6 +16,17 @@ import (
 	"ton618/core/internal/search"
 )
 
+// askMaxSources é quantas notas-fonte a resposta traz (e o que o browser envia
+// para a síntese por IA). askExcerptChars é o tamanho do trecho por nota.
+//
+// Juntos definem o contexto que o modelo local recebe (~4.800 caracteres no
+// padrão). Era 5 × 500 = 2.500 caracteres, o que sufocava perguntas amplas do
+// tipo "resuma tudo sobre X" — o modelo tinha pouco material para resumir.
+const (
+	askMaxSources   = 6
+	askExcerptChars = 800
+)
+
 // askRequest é o payload recebido do browser para a funcionalidade "Perguntar".
 // O browser embeda a query com o mesmo worker usado na busca híbrida e envia o
 // vetor junto com o texto da pergunta.
@@ -71,7 +82,7 @@ func (ctx *HandlerContext) HandleAsk(w http.ResponseWriter, r *http.Request) {
 
 	limit := req.Limit
 	if limit <= 0 || limit > 10 {
-		limit = 5
+		limit = askMaxSources
 	}
 
 	rCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -308,14 +319,14 @@ func (ctx *HandlerContext) HandleAsk(w http.ResponseWriter, r *http.Request) {
 			sim = s
 		}
 
-		excerpt, matchScore, distinct := extractBestExcerpt(noteContent, req.Query, 500)
+		excerpt, matchScore, distinct := extractBestExcerpt(noteContent, req.Query, askExcerptChars)
 		// Se a nota não tem nenhum trecho que case com os termos e não tem alta similaridade semântica, ignora
 		if excerpt == "" {
 			if sim < 0.65 {
 				continue
 			}
 			// Se a similaridade é alta, extrai o início substancial
-			excerpt = extractFallbackExcerpt(noteContent, 500)
+			excerpt = extractFallbackExcerpt(noteContent, askExcerptChars)
 			if excerpt == "" {
 				continue
 			}
