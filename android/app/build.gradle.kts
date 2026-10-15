@@ -15,7 +15,10 @@ android {
         versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        
+
+        // O binário do core só existe para as ABIs geradas por
+        // android/build-core-arm64.sh (padrão: arm64-v8a).
+        //   ANDROID_ABI=x86_64 ./build-core-arm64.sh   → habilita emulador
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
         }

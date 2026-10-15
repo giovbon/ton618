@@ -47,6 +47,21 @@ class TonServerService : Service() {
         const val ACTION_STOP = "org.ton618.mobile.action.STOP"
         const val ACTION_RESTART = "org.ton618.mobile.action.RESTART"
 
+        // Credenciais do core. A senha vem de TonSettings (editável na
+        // MainActivity); o username é ignorado pelo core (ver basicToken).
+
+        /**
+         * Assets sem os quais a interface abre mas não funciona (nenhum recurso
+         * responde). Verificados após a extração para falhar de forma visível.
+         */
+        val REQUIRED_WEB_ASSETS = listOf(
+            "app.css",
+            "js/app.js",
+            "js/vendor/htmx.min.js",
+            "js/vendor/alpine.min.js",
+            "fonts/fonts.css",
+        )
+
         private val _serverState = MutableStateFlow(ServerState.STOPPED)
         val serverState = _serverState.asStateFlow()
 
@@ -80,6 +95,10 @@ class TonServerService : Service() {
             }
             ACTION_RESTART -> {
                 appendLog("[App] Reiniciando servidor...")
+                // startForegroundService() exige um startForeground() em poucos
+                // segundos — inclusive quando o serviço já está rodando (ex.:
+                // troca de senha na tela inicial).
+                startForeground(NOTIFICATION_ID, buildNotification("Reiniciando servidor TON-618..."))
                 serviceScope.launch {
                     stopServerProcess()
                     delay(800)
@@ -129,7 +148,7 @@ class TonServerService : Service() {
                 val staticDir = File(webDir, "static").apply { mkdirs() }
                 val dbPath = File(dataDir, "ton618.db").absolutePath
 
-                // Extrai assets web caso existam no APK
+                // Extrai assets web do APK (recursivo: js/, fonts/, ...)
                 extractWebAssets(staticDir)
 
                 val processBuilder = ProcessBuilder(binFile.absolutePath)
@@ -142,9 +161,9 @@ class TonServerService : Service() {
                 env["DOCS_DIR"] = docsDir.absolutePath
                 env["DB_PATH"] = dbPath
                 env["WEB_DIR"] = webDir.absolutePath
-                env["EMBEDDING_ALL"] = "false"
-                env["AUTH_USER"] = "admin"
-                env["AUTH_PASS"] = "ton618"
+                env["AUTH_USER"] = TonSettings.AUTH_USER
+                env["AUTH_PASS"] = TonSettings.password(this@TonServerService)
+                appendLog("[App] Senha de acesso: ${authLabel()}")
 
                 appendLog("[App] Iniciando processo Go na porta $DEFAULT_PORT...")
                 serverProcess = processBuilder.start()
@@ -218,6 +237,13 @@ class TonServerService : Service() {
         }
     }
 
+    /**
+     * Descrição da senha em uso para o painel de logs — nunca a senha em si.
+     */
+    private fun authLabel(): String =
+        if (TonSettings.isDefaultPassword(this)) "padrão (ton618) — altere na tela inicial"
+        else "personalizada"
+
     private fun stopServerProcess() {
         try {
             serverProcess?.destroy()
@@ -267,20 +293,89 @@ class TonServerService : Service() {
     }
 
     /**
-     * Extrai arquivos estáticos embutidos caso estejam em assets/web.
+     * Extrai `assets/web/static/**` do APK para o armazenamento interno.
+     *
+     * ⚠️ A extração DEVE ser recursiva. O bundle web depende de subpastas
+     * (`js/`, `js/vendor/`, `fonts/`, `models/`). Uma versão anterior copiava
+     * apenas o primeiro nível de `assets/web/static`, então `htmx.min.js`,
+     * `alpine.min.js` e `js/app.js` respondiam 404: a página abria (o HTML é
+     * renderizado pelo servidor), mas nenhum recurso funcionava.
+     *
+     * A extração só se repete quando o APK muda (stamp = versionCode +
+     * lastUpdateTime); nos boots seguintes é um no-op.
      */
     private fun extractWebAssets(staticDir: File) {
-        try {
-            val list = assets.list("web/static") ?: return
-            for (filename in list) {
-                val dest = File(staticDir, filename)
-                if (!dest.exists()) {
-                    assets.open("web/static/$filename").use { inp ->
-                        FileOutputStream(dest).use { out -> inp.copyTo(out) }
-                    }
-                }
+        val stampFile = File(filesDir, "web/.assets-stamp")
+        val stamp = currentAppStamp()
+        val complete = REQUIRED_WEB_ASSETS.all { File(staticDir, it).isFile }
+
+        if (!complete || stampFile.readTextOrNull()?.trim() != stamp) {
+            appendLog("[App] Extraindo assets web do APK (versão $stamp)...")
+            try {
+                staticDir.deleteRecursively()
+                staticDir.mkdirs()
+                val count = copyAssetTree("web/static", staticDir)
+                stampFile.parentFile?.mkdirs()
+                stampFile.writeText(stamp)
+                appendLog("[App] Assets web extraídos: $count arquivo(s).")
+            } catch (e: Exception) {
+                appendLog("❌ Falha ao extrair assets web: ${e.message}")
             }
-        } catch (_: Exception) {}
+        } else {
+            appendLog("[App] Assets web já extraídos (versão $stamp).")
+        }
+
+        val missing = REQUIRED_WEB_ASSETS.filterNot { File(staticDir, it).isFile }
+        if (missing.isNotEmpty()) {
+            appendLog("❌ Assets essenciais ausentes no APK: ${missing.joinToString(", ")}")
+            appendLog("   → rode android/build-core-arm64.sh e gere o APK de novo.")
+        }
+    }
+
+    /**
+     * Copia recursivamente um diretório de assets — ou um único arquivo — para [dest].
+     *
+     * `assets.list()` devolve os filhos de um diretório e um array vazio para um
+     * arquivo (ou pasta vazia), que é o caso tratado abaixo.
+     */
+    private fun copyAssetTree(assetPath: String, dest: File): Int {
+        val children = try {
+            assets.list(assetPath)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (children.isNullOrEmpty()) {
+            return try {
+                dest.parentFile?.mkdirs()
+                assets.open(assetPath).use { input ->
+                    FileOutputStream(dest).use { output -> input.copyTo(output) }
+                }
+                1
+            } catch (_: java.io.IOException) {
+                0 // pasta vazia ou asset ilegível — não é fatal
+            }
+        }
+
+        dest.mkdirs()
+        var count = 0
+        for (child in children) {
+            count += copyAssetTree("$assetPath/$child", File(dest, child))
+        }
+        return count
+    }
+
+    private fun currentAppStamp(): String = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        "${info.versionCode}-${info.lastUpdateTime}"
+    } catch (_: Exception) {
+        "0"
+    }
+
+    private fun File.readTextOrNull(): String? = try {
+        if (isFile) readText() else null
+    } catch (_: Exception) {
+        null
     }
 
     private fun createNotificationChannel() {

@@ -1,0 +1,9 @@
+# Artefatos de build — o binário Go e os assets web são gerados por
+# `android/build-core-arm64.sh` antes de gerar o APK (não versionar).
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+app/src/main/assets/
+app/src/main/jniLibs/

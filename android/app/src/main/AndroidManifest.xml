@@ -24,7 +24,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="34">
 
-        <!-- Activity Principal (WebView + Controle) -->
+        <!-- Activity Principal (Painel de Controle) -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
@@ -35,6 +35,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Interface web (WebView) carregando o servidor local -->
+        <activity
+            android:name=".WebActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Foreground Service que mantém o binário Go rodando -->
         <service
