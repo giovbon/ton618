@@ -9,11 +9,13 @@ import (
 )
 
 // snapshotDroppedTables são tabelas DERIVADAS — reconstruíveis a partir das notas —
-// que ficam de fora do snapshot de backup. `note_embeddings` (vec0, 384 floats por
-// chunk) é de longe a maior parte do banco, e o browser a regenera sozinho quando a
-// busca semântica é aberta (indexação lazy, DECISIONS §3.8). Sem isso o arquivo de
-// backup carregaria centenas de MB de dados que se recriam.
-var snapshotDroppedTables = []string{"note_embeddings", "note_chunks"}
+// que ficam de fora do snapshot de backup.
+//
+// Ficou vazia em 16/10/2026: a única tabela derivada era o índice semântico
+// (`note_embeddings` + `note_chunks`), removido junto com o recurso de embeddings
+// (DECISIONS §7). A lista é mantida porque o mecanismo continua sendo o lugar certo
+// para acomodar futuras tabelas derivadas.
+var snapshotDroppedTables = []string{}
 
 // Snapshot grava uma cópia consistente do banco em dest, sem as tabelas derivadas.
 //

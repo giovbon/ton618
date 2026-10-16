@@ -12,31 +12,17 @@ import (
 	"ton618/core/internal/processor"
 
 	_ "modernc.org/sqlite"
-	_ "modernc.org/sqlite/vec"
 )
 
 // defaultQueryTimeout é o timeout padrão para queries SQL individuais.
 // Previne que operações no SQLite travaram indefinidamente.
 const defaultQueryTimeout = 30 * time.Second
 
-// embeddingStatusCacheTTL é a validade máxima do cache de GetEmbeddingStatus.
-// É uma rede de segurança: o cache é invalidado explicitamente nas escritas;
-// o TTL só evita que um caminho de escrita esquecido deixe o status obsoleto.
-const embeddingStatusCacheTTL = 10 * time.Second
-
 // Store gerencia a conexão com o banco SQLite e todas as operações.
 type Store struct {
 	DB      *sql.DB
 	Q       *dbgen.Queries
 	WriteMu sync.Mutex
-
-	// statusCache memoiza GetEmbeddingStatus (rota /api/embeddings/status é
-	// pollada). As 3 contagens agregadas custam ~400ms num vault de 3k notas.
-	// Invalidado por invalidateEmbeddingStatus() nas escritas.
-	statusMu    sync.Mutex
-	statusVal   EmbeddingStatus
-	statusAt    time.Time
-	statusValid bool
 
 	// cancelMu + queryPending registram os cancel() dos contextos criados por
 	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;
@@ -267,22 +253,6 @@ func initSchema(database *sql.DB) error {
 		type TEXT,
 		sent_at TEXT
 	);
-
-	-- Tabela de chunks de notas para busca semântica
-	CREATE TABLE IF NOT EXISTS note_chunks (
-		chunk_id    TEXT PRIMARY KEY,
-		filename    TEXT NOT NULL,
-		chunk_index INTEGER NOT NULL,
-		content     TEXT NOT NULL
-	);
-	CREATE INDEX IF NOT EXISTS idx_note_chunks_filename ON note_chunks(filename);
-
-	-- sqlite-vec: tabela virtual para busca semântica por similaridade de vetores
-	-- Cada chunk tem seu próprio embedding, referenciado por chunk_id (ex: "notes/foo.md#0")
-	CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
-		chunk_id TEXT PRIMARY KEY,
-		embedding FLOAT[384]
-	);
 	`
 
 	_, err := database.Exec(schema)
@@ -347,82 +317,9 @@ func migrate(database *sql.DB) {
 		markApplied(2)
 	}
 
-	// v3: cria tabela virtual sqlite-vec para embeddings semânticos
-	if !isApplied(3) {
-		database.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
-			filename TEXT PRIMARY KEY,
-			embedding FLOAT[384]
-		)`)
-		// Cria tabela note_chunks
-		database.Exec(`CREATE TABLE IF NOT EXISTS note_chunks (
-			chunk_id    TEXT PRIMARY KEY,
-			filename    TEXT NOT NULL,
-			chunk_index INTEGER NOT NULL,
-			content     TEXT NOT NULL
-		)`)
-		database.Exec("CREATE INDEX IF NOT EXISTS idx_note_chunks_filename ON note_chunks(filename)")
-		markApplied(3)
-	}
-
-	// v4: limpa embeddings legados de notas não-indexáveis
-	if !isApplied(4) {
-		database.Exec(`
-			DELETE FROM note_embeddings
-			WHERE filename IN (
-			       SELECT arquivo FROM tags 
-			       WHERE tag IN ('desenho', 'drawing')
-			   )
-		`)
-		markApplied(4)
-	}
-
-	// v5: remove duplicatas de embeddings
-	if !isApplied(5) {
-		if rows, err := database.Query("SELECT filename, COUNT(*) as c FROM note_embeddings GROUP BY filename HAVING c > 1"); err == nil {
-			var dupFiles []string
-			for rows.Next() {
-				var filename string
-				var count int
-				if err := rows.Scan(&filename, &count); err == nil {
-					dupFiles = append(dupFiles, filename)
-				}
-			}
-			rows.Close()
-			for _, filename := range dupFiles {
-				database.Exec("DELETE FROM note_embeddings WHERE filename = ?", filename)
-			}
-		}
-		markApplied(5)
-	}
-
-	// v6: migra note_embeddings de filename PK para chunk_id PK
-	if !isApplied(6) {
-		database.Exec("DROP TABLE IF EXISTS note_embeddings")
-		database.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
-			chunk_id TEXT PRIMARY KEY,
-			embedding FLOAT[384]
-		)`)
-		markApplied(6)
-	}
-
-	// v7: adiciona coluna indexed_mtime à tabela note_chunks
-	if !isApplied(7) {
-		database.Exec("ALTER TABLE note_chunks ADD COLUMN indexed_mtime TEXT DEFAULT ''")
-		markApplied(7)
-	}
-
-	// v8: remove chunks e embeddings orfãos (de notas que foram deletadas)
-	if !isApplied(8) {
-		database.Exec(`
-			DELETE FROM note_chunks
-			WHERE filename NOT IN (SELECT filename FROM notes)
-		`)
-		database.Exec(`
-			DELETE FROM note_embeddings
-			WHERE chunk_id NOT IN (SELECT chunk_id FROM note_chunks)
-		`)
-		markApplied(8)
-	}
+	// v3–v8 (REMOVIDAS em 16/10/2026): criavam e migravam `note_embeddings`
+	// (vec0) e `note_chunks`. O recurso de embeddings foi removido do app — ver
+	// migração v23 (limpeza) e DECISIONS §7.
 
 	// v9: recria tabela virtual fts5 para incluir texto_stemmed e limpa file_mods para forçar reindexação completa
 	if !isApplied(9) {
@@ -490,6 +387,23 @@ func migrate(database *sql.DB) {
 	if !isApplied(12) {
 		database.Exec("ALTER TABLE todo_markers ADD COLUMN count_in_badge INTEGER DEFAULT 1")
 		markApplied(12)
+	}
+
+	// v23: remove o índice semântico (note_chunks + vec0 note_embeddings) e as
+	// configurações órfãs do recurso de IA — o "modo Perguntar", a síntese via
+	// Ollama e os embeddings foram removidos do app em 16/10/2026 (DECISIONS §7).
+	if !isApplied(23) {
+		dropLegacyEmbeddingTables(database)
+		database.Exec(`DELETE FROM settings WHERE key IN (
+			'embedding_model_version',
+			'semantic_search_threshold',
+			'hybrid_semantic_threshold',
+			'rrf_k',
+			'semantic_device',
+			'ollama_url',
+			'ollama_model'
+		)`)
+		markApplied(23)
 	}
 }
 

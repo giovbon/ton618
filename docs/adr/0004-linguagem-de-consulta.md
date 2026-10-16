@@ -61,8 +61,8 @@ O usuário pediu uma "linguagem de script dentro das notas".
      leitura" que inline os resultados é evolução natural (registrado como pendência).
   2. Blocos custam CPU a cada abertura de nota ⇒ **cache com invalidação na escrita**, tetos de
      linhas/tempo e no máximo **10 blocos por nota**.
-  3. `similar:` (busca semântica) **não roda no servidor** — o embedding só existe no navegador
-     (§3.1). Fica para a **v2**, em duas etapas, como já acontece na busca híbrida (§8).
+  3. `similar:` (busca semântica) **saiu de escopo**: o índice de embeddings foi removido do app
+     em 16/10/2026 (`DECISIONS.md` §13). A busca semântica não existe mais em nenhuma camada.
   4. A gramática passa a ser **contrato público**: mudanças exigem atualização do documento de
      sintaxe e do changelog dele.
 

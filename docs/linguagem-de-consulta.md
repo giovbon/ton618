@@ -1,6 +1,6 @@
 # Linguagem de Consulta do TON-618 — referência completa
 
-> **Status:** v1 **implementada** (Fases 0–3: `tipo: notas`, `tarefas` e `hierarquia`, todas as apresentações e o painel no editor). Pendentes para a v2: `tipo: agenda`, `similar:`, `n.tamanho`/`n.palavras`, `{{ }}` inline e modo leitura.
+> **Status:** v1 **implementada** (Fases 0–3: `tipo: notas`, `tarefas` e `hierarquia`, todas as apresentações e o painel no editor). Pendentes para a v2: `tipo: agenda`, `n.tamanho`/`n.palavras`, `{{ }}` inline e modo leitura. (`similar:` saiu de escopo: a busca semântica foi removida do app em 16/10/2026 — `DECISIONS.md` §13.)
 > **Decisão arquitetural:** [`ADR 0004`](adr/0004-linguagem-de-consulta.md) · `DECISIONS.md` §6.29.
 > **Este documento é a fonte única da verdade da sintaxe.** O código referencia estes nomes; se a
 > gramática mudar, este arquivo muda junto (e o changelog, no fim).
@@ -676,7 +676,7 @@ Erros de YAML aparecem como: `bloco: YAML inválido (linha 4) — …`.
 
 | Recurso | Situação | Motivo |
 |---|---|---|
-| `similar:` — semântico no bloco | v2 | o embedding é calculado **no navegador**; exige duas etapas (como a busca híbrida, §8) |
+| `similar:` — semântico no bloco | ~~v2~~ **fora de escopo** | dependia do índice de embeddings, removido do app em 16/10/2026 (`DECISIONS.md` §13) |
 | `tipo: agenda` | v2 | precisa fixar os campos sobre o modelo real de `appointments` (`descricao`, `data`, `ano`, `mes`, `semana` — ainda sem nome-canônico na spec) |
 | `n.tamanho`, `n.palavras` e `n.peso` | v2 | custam I/O por linha (o motor v1 lê **somente o banco**); `n.peso` exigiria uma query nova de `popularity.weight` |
 | `janela:` | v2 | só faz sentido com `tipo: agenda` |

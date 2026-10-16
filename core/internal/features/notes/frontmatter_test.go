@@ -343,47 +343,6 @@ func TestNoteService_Rename_NonExistentSource(t *testing.T) {
 	}
 }
 
-func TestNoteService_Rename_PreservesChunksAndEmbeddings(t *testing.T) {
-	svc, _, store, cleanup := newTestService(t)
-	defer cleanup()
-
-	origName := "notes/nota-semantica.md"
-	newName := "notes/nota-semantica-renomeada.md"
-
-	svc.Save(origName, "conteudo com busca semantica", nil)
-
-	// Insere chunks e embeddings para simular indexacao semantica prévia
-	_, err := store.DB.Exec("INSERT INTO note_chunks(chunk_id, filename, chunk_index, content) VALUES (?, ?, ?, ?)", origName+"#0", origName, 0, "conteudo com busca semantica")
-	if err != nil {
-		t.Fatalf("insert chunk: %v", err)
-	}
-
-	blob := make([]byte, 384*4) // 384 float32s
-	_, err = store.DB.Exec("INSERT INTO note_embeddings(chunk_id, embedding) VALUES (?, ?)", origName+"#0", blob)
-	if err != nil {
-		t.Fatalf("insert embedding: %v", err)
-	}
-
-	err = svc.Rename(origName, newName)
-	if err != nil {
-		t.Fatalf("Rename falhou: %v", err)
-	}
-
-	// Verifica se os chunks foram atualizados para o novo nome
-	var chunkCount int
-	store.DB.QueryRow("SELECT COUNT(*) FROM note_chunks WHERE filename = ? AND chunk_id = ?", newName, newName+"#0").Scan(&chunkCount)
-	if chunkCount != 1 {
-		t.Errorf("esperado 1 chunk atualizado com o novo nome, got %d", chunkCount)
-	}
-
-	// Verifica se os embeddings foram atualizados para o novo chunk_id
-	var embCount int
-	store.DB.QueryRow("SELECT COUNT(*) FROM note_embeddings WHERE chunk_id = ?", newName+"#0").Scan(&embCount)
-	if embCount != 1 {
-		t.Errorf("esperado 1 embedding atualizado com o novo chunk_id, got %d", embCount)
-	}
-}
-
 func TestNoteService_GetMany(t *testing.T) {
 	svc, _, _, cleanup := newTestService(t)
 	defer cleanup()

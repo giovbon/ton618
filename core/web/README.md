@@ -10,9 +10,8 @@ npm run build
 
 O que o build faz:
 1. **Tailwind CSS**: compila `src/input.css` → `static/app.css` (minificado)
-2. **esbuild (IIFE)**: `src/editor.js`, `src/drawing.jsx`, `src/database.js`, `src/semantic.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
-3. **esbuild (ESM)**: `src/semantic-worker.js` → `static/semantic-worker.js` (bundle + minify, ESM para Web Worker `type: "module"`)
-4. **Compressão**: Gera `.js.gz` (gzip) e `.js.br` (brotli) para cada `.js`/`.css`
+2. **esbuild (IIFE)**: `src/editor.js`, `src/drawing.jsx`, `src/database.js`, `src/mindmap.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
+3. **Compressão**: Gera `.js.gz` (gzip) e `.js.br` (brotli) para cada `.js`/`.css`
 
 ## Ambientes
 
@@ -29,4 +28,3 @@ npm run build -- --dev
 - **Edite sempre em `src/`**, nunca em `static/`
 - `static/` é diretório de saída — tudo lá é gerado pelo build
 - O server Go faz file server de `static/` e serve `.br` com prioridade
-- O Web Worker `semantic-worker.js` usa `type: "module"` — por isso o build separado com `format: "esm"`

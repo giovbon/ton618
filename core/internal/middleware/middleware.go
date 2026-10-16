@@ -125,22 +125,11 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
 				// Adicionado https://static.cloudflareinsights.com para liberar o script do Cloudflare Beacon
-				// Adicionado blob: para suportar Web Workers criados via blob URL (Transformers.js/ONNX)
-				"script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "+
-				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "+
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 				"font-src 'self' https://fonts.gstatic.com; "+
 				"img-src 'self' data: blob: http: https: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "+
-				// worker-src necessário para Web Workers (Transformers.js/ONNX) no HTTPS
-				"worker-src 'self' blob:; "+
-				// Permitir HuggingFace API, CDNs de modelos (AWS, LFS, XetHub) e serviços de mapa.
-				// ⚠️ `cdn.jsdelivr.net` aparece AQUI e em script-src de propósito: quando o
-				// servidor não tem os arquivos do ONNX Runtime em `/static/models/ort/` (um
-				// deploy pode omiti-los para poupar ~22 MB), o Web Worker
-				// de embeddings carrega o runtime do CDN. O `.mjs` é um import dinâmico
-				// (script-src) e o `.wasm` é buscado via fetch (connect-src) — sem as duas
-				// origens o fallback é bloqueado e a busca semântica falha com
-				// "no available backend found". Ver web/src/ort-wasm.js.
-				"connect-src 'self' https://cdn.jsdelivr.net https://nominatim.openstreetmap.org https://router.project-osrm.org https://huggingface.co https://*.huggingface.co https://*.xethub.hf.co https://*.hf.co https://*.cdn.hf.co https://cdn-lfs.huggingface.co")
+				"connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org")
 		next.ServeHTTP(w, r)
 	})
 }

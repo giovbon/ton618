@@ -58,10 +58,9 @@ func TestValidateDatabaseFile(t *testing.T) {
 	})
 }
 
-// TestSnapshot_OmiteDerivadasEServeDeBackup garante as duas propriedades do
-// snapshot: sai consistente (reabrível com as notas) e sem as tabelas derivadas —
-// sem tocar no banco vivo.
-func TestSnapshot_OmiteDerivadasEServeDeBackup(t *testing.T) {
+// TestSnapshot_ServeDeBackup garante que o snapshot sai consistente (reabrível
+// com as notas) e sem tocar no banco vivo.
+func TestSnapshot_ServeDeBackup(t *testing.T) {
 	dir := t.TempDir()
 	livePath := filepath.Join(dir, "live.db")
 
@@ -73,13 +72,6 @@ func TestSnapshot_OmiteDerivadasEServeDeBackup(t *testing.T) {
 
 	if err := store.SaveNote("notes/a.md", "# A\nconteudo", "2026-01-02T03:04:05Z"); err != nil {
 		t.Fatalf("SaveNote: %v", err)
-	}
-	// Chunk de embedding — dado DERIVADO, não deve ir para o snapshot.
-	if _, err := store.DB.Exec(
-		`INSERT INTO note_chunks (chunk_id, filename, chunk_index, content) VALUES (?, ?, ?, ?)`,
-		"notes/a.md#0", "notes/a.md", 0, "conteudo",
-	); err != nil {
-		t.Fatalf("insert note_chunks: %v", err)
 	}
 
 	snapPath := filepath.Join(dir, "snapshot.db")
@@ -103,22 +95,5 @@ func TestSnapshot_OmiteDerivadasEServeDeBackup(t *testing.T) {
 	}
 	if _, ok := notes["notes/a.md"]; !ok {
 		t.Errorf("snapshot sem a nota: %v", notes)
-	}
-
-	var snapChunks int
-	if err := snap.DB.QueryRow(`SELECT count(*) FROM note_chunks`).Scan(&snapChunks); err != nil {
-		t.Fatalf("contar chunks no snapshot: %v", err)
-	}
-	if snapChunks != 0 {
-		t.Errorf("snapshot deveria omitir note_chunks, tem %d linha(s)", snapChunks)
-	}
-
-	// O banco vivo permanece intacto (as limpezas são na cópia).
-	var liveChunks int
-	if err := store.DB.QueryRow(`SELECT count(*) FROM note_chunks`).Scan(&liveChunks); err != nil {
-		t.Fatalf("contar chunks no banco vivo: %v", err)
-	}
-	if liveChunks != 1 {
-		t.Errorf("o snapshot não pode alterar o banco vivo (note_chunks=%d, esperado 1)", liveChunks)
 	}
 }

@@ -12,7 +12,6 @@ services:
       - DOCS_DIR=/app/docs
       - DB_PATH=/app/data/ton618.db
       - STATE_DIR=/app/data
-      - MODEL_DIR=/app/data/models  # modelo de embeddings baixado 1x no boot
       - WEB_DIR=/app/web
       - PORT=6180
       - TZ=America/Sao_Paulo

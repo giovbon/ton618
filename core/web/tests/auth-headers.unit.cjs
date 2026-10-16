@@ -29,7 +29,6 @@ const AUTH_ENDPOINTS = [
   '/api/notes/rename',
   '/api/note/duplicate',
   '/api/upload-image',
-  '/api/embeddings/save',
   '/api/sync',
 ];
 
@@ -42,8 +41,6 @@ const SKIP_PATTERNS = [
   '/api/sidebar',        // GET
   '/api/archives',       // GET
   '/api/todos',          // GET
-  '/api/embeddings/status', // GET
-  '/api/embeddings/pending', // GET
   '/api/settings/',      // GET
   '/api/epub/position',  // GET
   'htmx:',               // HTMX

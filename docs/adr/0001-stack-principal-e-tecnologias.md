@@ -5,7 +5,7 @@
 
 ## Contexto e Problema
 
-O TON-618 é um sistema de gerenciamento de conhecimento pessoal e notas em Markdown que exige alta performance na busca, baixa latência de renderização, suporte a busca por texto completo (FTS5) e busca semântica, operando como um executável binário único sem dependências externas complexas.
+O TON-618 é um sistema de gerenciamento de conhecimento pessoal e notas em Markdown que exige alta performance na busca, baixa latência de renderização e suporte a busca por texto completo (FTS5), operando como um executável binário único sem dependências externas complexas.
 
 ## Decisão
 

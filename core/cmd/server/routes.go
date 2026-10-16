@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"ton618/core/internal/features/appointments"
-	"ton618/core/internal/features/embeddings"
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/features/search"
 	"ton618/core/internal/features/system"
@@ -15,10 +14,9 @@ import (
 )
 
 // SetupRoutes registra todas as rotas no chi.Router.
-func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext, embeddingsCtx *embeddings.HandlerContext) {
+func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext) {
 	// Rate limiters para endpoints pesados
 	searchLimiter := middleware.NewRateLimiter(30, time.Minute)
-	embLimiter := middleware.NewRateLimiter(30, time.Minute)
 
 	// Páginas HTML (server-side rendered) - SYSTEM
 	mux.Get("/", sysCtx.HandleIndex)
@@ -35,15 +33,9 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/settings/ntfy", sysCtx.HandlePostNtfySettings)
 	mux.Get("/api/settings/agenda-notify", sysCtx.HandleGetAgendaNotifyHours)
 	mux.Post("/api/settings/agenda-notify", sysCtx.HandlePostAgendaNotifyHours)
-	mux.Get("/api/settings/semantic-device", sysCtx.HandleGetSemanticDevice)
-	mux.Post("/api/settings/semantic-device", sysCtx.HandlePostSemanticDevice)
-	mux.Get("/api/settings/semantic-thresholds", sysCtx.HandleGetSemanticThresholds)
-	mux.Post("/api/settings/semantic-thresholds", sysCtx.HandlePostSemanticThresholds)
 	mux.Get("/api/settings/auto-tag", sysCtx.HandleGetAutoTagSettings)
 	mux.Post("/api/settings/auto-tag", sysCtx.HandlePostAutoTagSettings)
 	mux.Post("/api/settings/auto-tag/apply", sysCtx.HandleApplyAutoTag)
-	mux.Get("/api/settings/ollama", searchCtx.HandleGetOllamaSettings)
-	mux.Post("/api/settings/ollama", searchCtx.HandlePostOllamaSettings)
 
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)
@@ -96,16 +88,6 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	// SEARCH (Global Search e Stopwords)
 	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)
 	mux.With(searchLimiter.Middleware).Get("/search", searchCtx.HandleSearch)
-	mux.With(searchLimiter.Middleware).Post("/api/search/hybrid", searchCtx.HandleHybridSearch)
-	mux.With(searchLimiter.Middleware).Post("/api/ask", searchCtx.HandleAsk)
-	mux.Post("/api/ask/synthesize", searchCtx.HandleAskSynthesize)
-	// SEMANTIC EMBEDDINGS (gerados no browser via Transformers.js — apenas desktop)
-	mux.With(embLimiter.Middleware).Post("/api/embeddings/search", embeddingsCtx.HandleEmbeddingSearch)
-	mux.Post("/api/embeddings/save", embeddingsCtx.HandleEmbeddingSave)
-	mux.Get("/api/embeddings/status", embeddingsCtx.HandleEmbeddingStatus)
-	mux.Get("/api/embeddings/model-status", embeddingsCtx.HandleModelStatus)
-	mux.Get("/api/embeddings/pending", embeddingsCtx.HandleEmbeddingPending)
-	mux.Post("/api/embeddings/reset", embeddingsCtx.HandleEmbeddingReset)
 
 	// APPOINTMENTS
 	mux.Get("/agenda", appointmentsCtx.HandleAgendaPage)

@@ -38,10 +38,8 @@ interface Window {
   duplicateCurrentNote: () => void;
 }
 
-// ── Semantic Index (tipos complementares ao JSDoc em semantic.js) ──
+// ── Globals de terceiros ──
 interface Window {
-  semanticIndex: any;
-  _semanticDesktopOnly: boolean;
   markmap: any;
   hljs: any;
 }
@@ -51,8 +49,6 @@ interface Window {
   loadMarcadores?: () => void;
   loadStopwords?: () => void;
   loadArchives?: () => void;
-  onOpenSemanticaTab?: () => void;
-  resetAndReindexSemantic?: () => void;
 }
 
 // ── Alpine.js store ──

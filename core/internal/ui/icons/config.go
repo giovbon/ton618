@@ -36,25 +36,17 @@ var Config = map[string]IconSpec{
 	"weekly":     {Icon: "calendar-days", Color: "#14B8A6"},
 
 	// ── NAVEGAÇÃO & HEADER ──
-	"agenda":         {Icon: "calendar", Color: "text-sky-400"},
-	"task":           {Icon: "construction", Color: "text-amber-400"},
-	"todos":          {Icon: "construction", Color: "text-amber-400"},
-	"tabulator":      {Icon: "container", Color: "#10C809"},
-	"captura":        {Icon: "link", Color: "text-zinc-400"},
-	"mapa-semantico": {Icon: "map", Color: "text-violet-400"},
-	"semantic-map":   {Icon: "map", Color: "text-violet-400"},
-	"compass":        {Icon: "map", Color: "text-violet-400"},
-	"galaxy":         {Icon: "map", Color: "text-violet-400"},
+	"agenda":    {Icon: "calendar", Color: "text-sky-400"},
+	"task":      {Icon: "construction", Color: "text-amber-400"},
+	"todos":     {Icon: "construction", Color: "text-amber-400"},
+	"tabulator": {Icon: "container", Color: "#10C809"},
+	"captura":   {Icon: "link", Color: "text-zinc-400"},
 
 	// ── BUSCA E FILTROS ──
-	"busca-notas":     {Icon: "type-outline", Color: "text-sky-400"},
-	"search-notes":    {Icon: "type-outline", Color: "text-sky-400"},
-	"busca-global":    {Icon: "search", Color: "text-emerald-400"},
-	"search-global":   {Icon: "search", Color: "text-emerald-400"},
-	"busca-semantica": {Icon: "bot", Color: "text-violet-400"},
-	"search-semantic": {Icon: "bot", Color: "text-violet-400"},
-	"busca-hybrid":    {Icon: "sparkles", Color: "text-teal-400"},
-	"search-hybrid":   {Icon: "sparkles", Color: "text-teal-400"},
+	"busca-notas":   {Icon: "type-outline", Color: "text-sky-400"},
+	"search-notes":  {Icon: "type-outline", Color: "text-sky-400"},
+	"busca-global":  {Icon: "search", Color: "text-emerald-400"},
+	"search-global": {Icon: "search", Color: "text-emerald-400"},
 
 	// ── UTILIDADES & MENUS ──
 	"config":   {Icon: "settings", Color: "#696969"},

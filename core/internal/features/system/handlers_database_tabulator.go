@@ -33,12 +33,6 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		return
 	}
 
-	embeddedFiles, err := ctx.Store.GetEmbeddedFiles()
-	if err != nil {
-		slog.Warn("erro ao obter arquivos com embedding", "error", err)
-		embeddedFiles = make(map[string]bool)
-	}
-
 	notesContent, err := ctx.Store.GetAllNotesContent()
 	if err != nil {
 		slog.Error("erro ao pré-carregar conteúdo das notas", "error", err)
@@ -138,12 +132,10 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		}
 
-		row["embeded"] = embeddedFiles[n.Arquivo]
-
 		normalizeParentKey(row)
 
 		for k := range row {
-			if k != "tags" && k != "title" && k != "titulo" && k != "embeded" && !strings.HasPrefix(k, "_") {
+			if k != "tags" && k != "title" && k != "titulo" && !strings.HasPrefix(k, "_") {
 				columnSet[k] = true
 			}
 		}
@@ -169,7 +161,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
-	columns = append(columns, map[string]interface{}{"title": "Indexada", "field": "embeded", "editor": false, "width": 95, "hozAlign": "center", "headerTooltip": "Nota indexada na busca semântica"})
+	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "editor": false, "width": 80, "hozAlign": "center"})
 
 	for col := range columnSet {
 		lowerCol := strings.ToLower(col)

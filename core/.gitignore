@@ -23,9 +23,6 @@ node_modules/
 .env.local
 .env.prod
 
-# --- AI Models ---
-ollama_data/
-
 # --- IDEs / OS ---
 .vscode/
 .idea/

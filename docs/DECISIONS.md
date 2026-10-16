@@ -14,7 +14,6 @@ Serve como referência para manter consistência em contribuições futuras.
 | Backend | Go 1.22+ com chi router | Performance, single binary, tipagem forte |
 | Banco | SQLite (modernc.org/sqlite + sqlc) | Sem dependência externa, WAL para concorrência |
 | Busca textual | FTS5 (sqlite built-in) | Zero setup, stemming em português via unicode61 |
-| Busca semântica | sqlite-vec (vizinhos próximos) | Embeddings no próprio SQLite, sem serviço externo |
 | Templates | templ (github.com/a-h/templ) | Type-safe, compilado, substitui html/template |
 | Frontend build | esbuild + Tailwind CSS | Zero config, rápido, tree-shaking nativo |
 | Type checking (JS) | TypeScript via `tsc --noEmit` (checkJs) | Type checking incremental sobre JSDoc, sem transpilação separada |
@@ -29,7 +28,6 @@ Serve como referência para manter consistência em contribuições futuras.
 | chi router | Roteador HTTP | https://github.com/go-chi/chi |
 | modernc.org/sqlite | SQLite puro Go (sem CGo) | https://modernc.org/sqlite |
 | sqlc | Geração de código Go a partir de SQL | https://sqlc.dev |
-| sqlite-vec | Busca por similaridade de vetores (vec0) | https://github.com/asg017/sqlite-vec |
 | a-h/templ | Engine de templates type-safe | https://github.com/a-h/templ |
 | fsnotify | Watcher de sistema de arquivos | https://github.com/fsnotify/fsnotify |
 | gopkg.in/yaml.v3 | Parse de frontmatter YAML | https://pkg.go.dev/gopkg.in/yaml.v3 |
@@ -46,7 +44,6 @@ Serve como referência para manter consistência em contribuições futuras.
 | CodeJar | Editor de código leve | https://medv.io/codejar/ |
 | vis-timeline | Timeline para agenda | https://visjs.github.io/vis-timeline/ |
 | chrono | Parser de datas em linguagem natural | https://github.com/wanasit/chrono |
-| Transformers.js | Modelos ONNX no navegador (embeddings) | https://huggingface.co/docs/transformers.js |
 | marked | Parse markdown para HTML | https://marked.js.org/ |
 | lowlight | Syntax highlight de código | https://github.com/wooorm/lowlight |
 | epub.js | Leitor de arquivos EPUB no navegador | https://github.com/futurepress/epub.js |
@@ -90,11 +87,16 @@ Serve como referência para manter consistência em contribuições futuras.
 
 - **Go**: Testes no mesmo package (`package db`, não `package db_test`) para acesso a funções não exportadas.
 - **JS (Node)**: Arquivos `.mjs` com `async/await`, sem frameworks de teste. `node web/<teste>.mjs` executa direto.
-- **JS (Browser)**: Teste de chunking (`chunk_test.js`) roda em Node puro por ser função pura.
 
-## 3. Embeddings Semânticos
+## 3. Embeddings Semânticos — ❌ REMOVIDO (16/10/2026)
 
-### 3.1 Arquitetura
+> ⚠️ **Este capítulo é HISTÓRICO.** Todo o sistema de embeddings (Transformers.js no browser,
+> tabelas `note_chunks`/`note_embeddings`, busca semântica, busca híbrida e o "modo Perguntar")
+> foi **removido do app** em 16/10/2026 — ver §12 (Remoção definitiva).
+> Nada aqui descreve o comportamento atual do TON-618. O app hoje tem **dois** modos de busca:
+> Busca de Notas (nome de arquivo) e Busca Global (FTS5 sobre o conteúdo).
+
+### 3.1 Arquitetura (histórica)
 
 ```
 Browser (Transformers.js) → POST /api/embeddings/save → SQLite (vec0)
@@ -144,6 +146,10 @@ Usa o modelo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
 
 📍 `internal/features/notes/handlers_common.go` — função `loadNoteData`
 
+> ❌ **REMOVIDO (16/10/2026).** Esta seção já estava **desatualizada mesmo antes da remoção**:
+> nenhuma feature de "Notas Semelhantes" existia no código na data da remoção (a lógica
+> descrita aqui não estava em `handlers_common.go`). Fica como registro histórico. Ver §12.
+
 O recurso **"Notas Semelhantes"** no editor usa os embeddings armazenados para recomendar notas relacionadas. A lógica implementa:
 
 - **Dois campos**: `minDistMap` (menor distância L2 por candidato) e `matchCounts` (em quantos chunks diferentes o candidato apareceu).
@@ -152,9 +158,13 @@ O recurso **"Notas Semelhantes"** no editor usa os embeddings armazenados para r
 - **Ordenação**: Primária por frequência de matches (decrescente), secundária por distância L2 (crescente). Top 5 resultados exibidos.
 - **Parâmetros**: `similarExcellent = 0.60`, `longNoteMinChunks = 3`, `minMatchLongNote = 2`. O limite `similarThreshold` é obtido dinamicamente das configurações.
 
-### 3.7 Configurações Dinâmicas de Limite Semântico (Threshold)
+### 3.7 Configurações Dinâmicas de Limite Semântico (Threshold) — ❌ REMOVIDO (16/10/2026)
 
 📍 Rota `/api/settings/semantic-thresholds` | `internal/features/system/handlers.go`
+
+> ❌ A rota, os handlers, os sliders e as settings (`semantic_search_threshold`,
+> `hybrid_semantic_threshold`, `rrf_k`, `semantic_device`) foram **removidos** — a migração
+> v23 apaga essas chaves do banco. Ver §12.
 
 Para dar controle sobre a precisão da IA, adicionou-se sliders de configuração na aba **Semântica**:
 - **Busca Semântica Global**: Define a similaridade mínima exigida na busca geral (padrão 35%). Controla a tolerância de resultados em `internal/features/embeddings/handlers.go`.
@@ -167,16 +177,22 @@ Para dar controle sobre a precisão da IA, adicionou-se sliders de configuraçã
 
 > ⚠️ A busca global (FTS5 + semântica via `POST /api/embeddings/search`) é independente e não foi afetada.
 
-### 3.8 Momento da Indexação Semântica
+### 3.8 Momento da Indexação Semântica — ❌ REMOVIDO (16/10/2026)
+
+> ❌ Não existe mais indexação de embeddings (nem lazy, nem no save). Ver §12.
 
 - A indexação de embeddings é **lazy** e ocorre somente quando o usuário abre a aba de busca híbrida.
 - Salvar ou editar uma nota não deve iniciar geração de embeddings nem requisições para `/api/embeddings/save`.
 - Ao abrir a busca híbrida, `indexPending` identifica notas pendentes ou desatualizadas e indexa o conteúdo mais recente antes da busca.
 - **Decidido em**: 10/09/2026 — evita consumo de CPU e travamentos durante a edição; o salvamento da nota permanece independente da indexação semântica.
 
-### 3.9 Mapa Semântico (Galáxia de Notas) — PCA 2D
+### 3.9 Mapa Semântico (Galáxia de Notas) — PCA 2D — ❌ REMOVIDO (16/10/2026)
 
 📍 `internal/core/db/semantic_map.go` | `internal/features/embeddings/semantic_map_handler.go` | `web/src/semantic-map.js`
+
+> ❌ **Já não existia no código antes desta data** (nenhum `semantic_map.go`, nenhum
+> `semantic-map.js`, nenhuma rota `/api/embeddings/map` ou `/mapa-semantico`).
+> Os ícones órfãos (`mapa-semantico`, `semantic-map`) também foram removidos. Ver §12.
 
 **Adicionada em**: 22/07/2026
 
@@ -238,8 +254,6 @@ Go (PCA 384D→2D) → JSON /api/embeddings/map → Browser (SVG + Alpine.js)
 | Tabela | Função |
 |--------|--------|
 | `notes` | Conteúdo markdown + mtime |
-| `note_chunks` | Chunks de texto para busca semântica |
-| `note_embeddings` | Tabela virtual vec0 — vetores FLOAT[384] |
 | `documents` | Fragmentos de documentos indexados (FTS5) |
 | `docs_fts` | Índice FTS5 para busca textual |
 | `tags` | Tags por arquivo |
@@ -258,24 +272,26 @@ Go (PCA 384D→2D) → JSON /api/embeddings/map → Browser (SVG + Alpine.js)
 ### 5.1 Rotas
 
 - **chi router** com agrupamento por domínio.
-- Rate limiters para endpoints pesados: `searchLimiter` (30/min), `embLimiter` (30/min).
+- Rate limiters para endpoints pesados: `searchLimiter` (30/min) — aplicado em `/search` e `/api/search/*`.
 - Prefixo `/api/` para rotas JSON, sem prefixo para páginas HTML.
 
 ### 5.2 Respostas
 
 - JSON com `Content-Type: application/json`.
-- Cache-Control: `no-cache, max-age=10` para status de embeddings (dados dinâmicos).
 - Erros: `http.Error(w, mensagem, statusCode)` — mensagens descritivas em português.
 
 ## 6. Observações Técnicas
 
-### 6.1 `chunkText` com `maxChars=0`
+### 6.1 `chunkText` com `maxChars=0` — ❌ HISTÓRICO (16/10/2026)
 
-`chunkText(text, 0, 0)` causa loop infinito porque `start` nunca avança (`end - overlap = 0`). **Não usar.** Os parâmetros reais (700, 100) são seguros.
+> ❌ A função `chunkText` (e todo o pipeline de chunking) foi removida junto com o índice
+> semântico. Registro histórico: `chunkText(text, 0, 0)` causava loop infinito porque `start`
+> nunca avançava (`end - overlap = 0`).
 
-### 6.2 WebGPU vs WebNN
+### 6.2 WebGPU vs WebNN — ❌ HISTÓRICO (16/10/2026)
 
-O runtime ONNX tenta WebGPU primeiro (se disponível), depois cai para CPU (WASM). WebNN não é usado atualmente.
+> ❌ Não há mais runtime ONNX no app. Registro histórico: o runtime tentava WebGPU primeiro
+> (se disponível) e caía para CPU (WASM); WebNN nunca foi usado.
 
 ### 6.3 `process.on('unhandledRejection')`
 
@@ -293,7 +309,10 @@ Arquivos estáticos (`web/static/`) são servidos com **ETags automáticos** (SH
 - Chamar `staticver.SetDefault(cache)` no `main.go` para registrar o cache global
 - Exceções (strings JS dentro de `<script>`): `codejar.js` ainda usa `?v=N` manual
 
-## 6.6 Download e Distribuição do Modelo de IA (atualizado em 09/09/2026)
+## 6.6 Download e Distribuição do Modelo de IA — ❌ REMOVIDO (16/10/2026)
+
+> ❌ Toda esta seção não vale mais: o download do modelo no boot, a rota pública `/models/*`,
+> `MODEL_DIR`/`MODEL_DOWNLOAD` e o `LocalModel` foram removidos. Ver §12.
 
 ### Modelo baixado no boot e servido pelo backend (Opção B — navegador offline do CDN)
 
@@ -908,22 +927,23 @@ As listas viviam em `allowedPrefixes` (handlers_file), `NoteFilename`, `IsNoteOr
 
 ## 7. Arquitetura de Busca
 
-O sistema consagra três modalidades complementares de pesquisa textual e semântica, integrando tecnologias específicas para cada propósito.
+O sistema consagra **duas** modalidades complementares de pesquisa textual.
 
-### 7.1 Os Três Modos de Busca
+### 7.1 Os Dois Modos de Busca
 
 | Modo | Descrição | Tecnologia | Destaque Visual |
 | --- | --- | --- | --- |
 | **Busca de Notas** | Filtro instantâneo no menu focado exclusivamente no nome/título dos arquivos Markdown. | Busca local indexada por correspondência parcial (`LIKE %q%`). | Azul (Sky) |
 | **Busca Global** | Busca textual de termos no conteúdo interno de todas as notas do sistema. | SQLite FTS5 (tabela virtual) + Lematização (Stemming) em pt-BR. | Azul (Exato) e Roxo (Lematizado) |
-| **Busca Semântica** | Pesquisa por aproximação conceitual e sentido (IA), lidando com sinônimos e contextos distantes. | Embeddings vetoriais locais gerados por IA (`MiniLM-L12-v2` via Transformers.js no browser). | Sem realce textual direto (exibe % de similaridade) |
 
+> ❌ **Busca Semântica** e **Busca Híbrida (RRF)** foram removidas em 16/10/2026 — junto com
+> o índice de embeddings, a UI e os endpoints. Ver §12 (Remoção definitiva).
 
-## Como Funciona a Busca Semântica
+## Como Funciona a Busca Semântica — ❌ HISTÓRICO (removida em 16/10/2026)
 Vetorização (Embeddings): Cada nota markdown tem seu texto limpo e dividido em pedaços (chunks) de ~700 caracteres (com o título da nota injetado em cada pedaço para manter o contexto). O navegador gera um vetor matemático de 384 dimensões para cada chunk usando o modelo de IA local MiniLM-L12-v2.
 Pesquisa KNN: Quando você digita uma busca semântica, o navegador gera o vetor da sua pergunta e o envia ao banco de dados SQLite. O banco usa a extensão vetorial sqlite-vec para rodar um cálculo KNN (Vizinhos Mais Próximos) e encontrar quais chunks de notas no banco têm a direção vetorial mais parecida (similaridade de cosseno).
 
-## Como Funcionam as Notas Relacionadas (Critérios)
+## Como Funcionavam as Notas Relacionadas (Critérios) — ❌ HISTÓRICO
 Para a nota que você está editando no momento, o sistema faz o seguinte:
 
 Busca por Chunk: Ele envia cada um dos chunks da nota aberta para buscar vizinhos no banco.
@@ -933,9 +953,12 @@ Regra para Notas Longas: Se a nota que você está editando for longa (≥ 3 chu
 Ordenação: As top 5 notas relacionadas são ordenadas por frequência de matches (notas mais consistentes ao longo do texto vêm primeiro) e depois por proximidade vetorial (distância).
 Nota de Corte (Threshold): Descarta qualquer resultado abaixo do percentual configurado por você (padrão de 72%).
 
-## 8. Busca Híbrida — Reciprocal Rank Fusion (RRF, 10/08/2026)
+## 8. Busca Híbrida — Reciprocal Rank Fusion (RRF, 10/08/2026) — ❌ REMOVIDO (16/10/2026)
 
 📍 `internal/search/rrf.go` | `internal/features/search/handlers_hybrid.go` | `internal/features/search/index.templ`
+
+> ❌ **Arquivos e rota (`POST /api/search/hybrid`) removidos** — a fusão dependia do motor
+> vetorial, que não existe mais. Ver §12.
 
 Novo **4º modo de busca "🔀 Híbrido"** que funde os resultados do FTS5 (textual) com a busca semântica via **Reciprocal Rank Fusion**, para melhorar precisão e recall (reduz o ruído de um único motor).
 
@@ -974,10 +997,9 @@ Migração dos updates major do dependabot (PRs #5 e #7) com o app validado de p
 Correções guiadas por benchmarks (`perf_bench_test.go` em `internal/search` e `internal/core/db`). Números medidos num vault sintético de 3.000 notas (~21k docs) / 2 vCPU:
 
 - **Busca "só por tag"** (`#tag`): o `LIMIT` era `99999` e materializava o corpus inteiro. Agora é limitado (máx. `maxTagOnlyCandidates = 500`); o `total` continua exato (vem do COUNT). **290ms → ~39ms e 182MB → ~8MB**.
-- **Limpeza de embeddings (tabela virtual `vec0`)**: `chunk_id LIKE 'arquivo#%'` não usa índice (full scan). Agora resolve-se os `chunk_id` pelo índice `idx_note_chunks_filename` e apaga-se por igualdade (`chunk_id = ?`), que usa o índice da vec0. Helper único `deleteEmbeddingsForFile` usado em `SaveNoteChunks`, `DeleteEmbedding`, `DeleteNote`, `RenameNote`, `ReplaceFileIndexes` e `DeleteAllFileRecords`. **~18,5ms → ~1,1ms (~16×)**. ⚠️ Deve rodar **antes** de apagar as linhas de `note_chunks`.
+- ❌ **Limpeza de embeddings (tabela virtual `vec0`)** — *histórico*: `chunk_id LIKE 'arquivo#%'` não usava índice; o helper `deleteEmbeddingsForFile` resolvia os `chunk_id` por índice e apagava por igualdade. **~18,5ms → ~1,1ms**. Removido com o índice semântico (§12).
 - **Rename de backlinks (`UpdateBacklinksOnRename`)**: era N+1 (`GetNote` por candidato). Agora usa `GetAllNotesContent()` em uma query (método adicionado ao `NoteStore`). **~171ms → ~2ms (~86×)**.
-- **`GetEmbeddingStatus`** (rota pollada): as 3 contagens agregadas custavam ~410ms em 3k notas. Resultado passou a ser **memoizado** no `Store` (`embeddingStatusCacheTTL = 10s`), **invalidado em toda escrita** que altere notes/chunks/embeddings/tags (SaveNote, DeleteNote, RenameNote, SaveNoteChunks, SaveEmbedding, DeleteEmbedding, ResetAllEmbeddings, ReplaceFileIndexes, DeleteAllFileRecords, Set/Add/RemoveTag). HTTP `Cache-Control: private, max-age=10` (antes `no-cache` forçava ida ao servidor). **~410ms → ~62ns no hit**.
-- **`extractTerms`**: o regexp era recompilado a cada chamada (roda em loop no gate da híbrida). Agora é `var` de pacote.
+- **`extractTerms`**: o regexp era recompilado a cada chamada (rodava em loop no gate da híbrida). Agora é `var` de pacote.
 - **`HandleManualSync`**: removido o dead code (N+1 `GetNote` + `time.Parse` descartado + `if false`); agora conta notas com conteúdo em uma query. Comportamento observável inalterado.
 - **Frontend**: `database.js` parseia a query de busca **uma vez** (antes rodava por linha a cada tecla); `timeline.js` guarda o `redLineInterval` em escopo de **módulo** (corrige leak de timer/canvas a cada re-render) e coalesce o redraw do `wheel` via `requestAnimationFrame`; `editor-common.js` coalesce `updateHighlight` (click/keyup/scroll/selectionchange/resize) via rAF (evita layout thrashing).
 
@@ -1330,7 +1352,12 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 
 ---
 
-## 7. Modo Perguntar & Síntese RAG via Ollama (14/10/2026)
+## 7. Modo Perguntar & Síntese RAG via Ollama (14/10/2026) — ❌ REMOVIDO (16/10/2026)
+
+> ❌ **Tudo removido:** as rotas `POST /api/ask` e `POST /api/ask/synthesize`, os handlers
+> (`handlers_ask.go`, `handlers_ollama.go`), o botão/inputs/JS na página de busca, a aba
+> "IA (Ollama)" das Configurações e as settings `ollama_url`/`ollama_model`.
+> O que restou deste capítulo é **registro histórico**. Ver §12 (Remoção definitiva).
 
 ### 7.1 Arquitetura
 
@@ -1498,9 +1525,10 @@ ZIP com três partes:
   marcadores de tarefas, hierarquia de arquivos em `file_metadata`) com muito menos código e sem o
   risco de esquecer um campo novo. A contrapartida é acoplar ao schema — aceitável porque
   `db.NewStore` roda as migrações no boot: um backup antigo é migrado ao restaurar.
-- **Dados derivados ficam de fora** (`note_embeddings`, `note_chunks`): ocupam a maior parte do banco
-  e o browser os regenera sozinho quando a busca semântica é aberta (indexação lazy, §3.8). O banco
-  vivo nunca é alterado — a limpeza acontece na cópia (`db.Store.Snapshot`).
+- **Dados derivados ficam de fora**: a lista `snapshotDroppedTables` ficou **vazia** em 16/10/2026
+  (a única entrada era o índice semântico, que não existe mais — §12). O mecanismo continua
+  disponível para futuras tabelas derivadas. O banco vivo nunca é alterado — a limpeza acontece
+  na cópia (`db.Store.Snapshot`).
 - `VACUUM INTO` em vez de copiar o arquivo: aplica o WAL pendente e nunca produz cópia rasgada de um
   banco em uso.
 
@@ -1515,9 +1543,68 @@ ZIP com três partes:
 
 - Falha nos passos 1–2 deixa o app exatamente como estava (coberto por teste).
 - **Por que reiniciar:** o processo mantém o banco aberto; trocar o arquivo em disco sob a conexão
-  viva exigiria invalidar caches (índice de hierarquia, status de indexação, mapa semântico). O
+  viva exigiria invalidar caches (índice de hierarquia, status de indexação). O
   encerramento é pedido por `services.RequestRestart()` e o `main` faz shutdown graciosamente — o
   supervisor traz o servidor de volta (`restart: unless-stopped` no Docker).
 - **Zip slip:** todo caminho de entrada é validado (`safeZipRel`); um ZIP com `../../x` é recusado.
 - **Modo único (substituir):** decisão explícita. Mesclar exigiria semântica por entidade (dedupe,
   conflito de mtime, hierarquia de arquivos) — bem mais código e mais risco de dado inconsistente.
+
+---
+
+## 13. Remoção definitiva do Modo Perguntar, da síntese por IA e do índice de embeddings (16/10/2026)
+
+**Decisão:** o TON-618 **não tem mais** IA de recuperação/síntese. Foram removidos o "modo
+Perguntar", a busca semântica, a busca híbrida (RRF), o índice de embeddings, o download do modelo
+ONNX e toda a configuração de Ollama. O app volta a ter **dois** modos de busca (Notas e Global) e
+toda a recuperação é FTS5/`LIKE`, calculada no servidor.
+
+**Por quê:** o custo/benefício não se pagava. Os embeddings eram gerados no browser
+(Transformers.js, ~120 MB de modelo carregado a cada sessão e indexação lazy só ao abrir a busca),
+o que fazia o índice valer menos do que o esperado; a qualidade dependia de heurísticas de
+compensação (voto majoritário por nota, thresholds em %); e o modo Perguntar precisava de um
+servidor LLM externo (Ollama) configurado à mão para entregar a parte "generativa" — sem ele,
+sobrava um extrator de trechos.
+
+### 13.1 O que foi removido (código)
+
+| Área | Removido |
+| --- | --- |
+| Feature | `internal/features/embeddings/` (handlers, model_files, context) |
+| Handlers | `search/handlers_ask.go`, `search/handlers_ollama.go`, `search/handlers_hybrid.go` (+ testes) |
+| Fusão RRF | `internal/search/rrf.go` (+ teste) |
+| DB | `db/embeddings.go` (vec0/chunks/status), as queries sqlc de chunks/embeddings e o modelo `NoteChunk` |
+| Server | rotas `/api/ask`, `/api/ask/synthesize`, `/api/embeddings/*`, `/api/search/hybrid`, `/api/settings/{ollama,semantic-thresholds,semantic-device}` e a rota pública `/models/*` |
+| Config | `ModelDir`/`ModelDownload` (`MODEL_DIR`, `MODEL_DOWNLOAD`) e `EMBEDDING_ALL` |
+| Frontend | `web/src/semantic.js`, `semantic-worker.js`, `ort-wasm.js`, `download_model.js`; aba **Semântica** e aba **IA (Ollama)** das Configurações; botão/inputs do modo Perguntar; coluna "Indexada" do Tabulator |
+| Assets | `web/static/models/` (ORT + modelo), `static/semantic*.js`, dep `@huggingface/transformers` (web e scripts) |
+| CSP | origens do HuggingFace e do jsdelivr (existiam só para o worker ONNX/`ort-wasm.js`) |
+
+### 13.2 Banco de dados — migração v23
+
+- As migrações **v3–v8** (criação/migração de `note_chunks` e da vec0 `note_embeddings`) foram
+  **removidas do código**: bancos novos não criam mais essas tabelas.
+- A nova migração **v23** limpa bancos já existentes: `DROP TABLE note_embeddings`,
+  `DROP TABLE note_chunks` e `DELETE` das settings órfãs (`embedding_model_version`,
+  `semantic_search_threshold`, `hybrid_semantic_threshold`, `rrf_k`, `semantic_device`,
+  `ollama_url`, `ollama_model`).
+- ⚠️ **`internal/core/db/vec_cleanup.go` é TRANSITÓRIO**: ele importa `modernc.org/sqlite/vec`
+  apenas porque o SQLite recusa `DROP TABLE` de uma tabela virtual cujo módulo não está registrado —
+  sem isso, a vec0 ficaria órfã no banco para sempre. Pode ser apagado (junto com o import) quando
+  todos os bancos já tiverem passado pela v23.
+
+### 13.3 O que NÃO foi removido
+
+- **Busca Global (FTS5) e Busca de Notas (`LIKE`)**: intactas — são o motor de recuperação do app.
+- `internal/search/*` (ranker, snippets, gates), o rate limiter de busca e o Tabulator.
+- **Auto-Tag por inatividade** (`auto_tag_service.go`): nunca dependeu de IA.
+- `modernc.org/sqlite` continua no `go.mod`; só o import do pacote `vec` sai com o
+  `vec_cleanup.go`.
+
+### 13.4 Validação
+
+- `templ generate`, `gofmt`, `go vet ./...` e `go test ./...` — verdes.
+- Frontend: `npm run build`, `npm run typecheck` e `npm test` (50 testes) — verdes.
+- Testes removidos junto com o recurso: embeddings (unit/integração), hibrida, ask/synthesize,
+  thresholds/device das settings, snapshot de tabelas derivadas, rename preservando chunks e os
+  guardas de CSP do CDN do ONNX/HuggingFace.

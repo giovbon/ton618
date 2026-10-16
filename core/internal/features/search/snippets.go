@@ -106,23 +106,6 @@ func buildSnippet(hit search.SearchHit, query string) string {
 	return safeSnippet
 }
 
-func buildPlainSnippet(content string, limit int) string {
-	text := strings.TrimSpace(content)
-	if text == "" {
-		return ""
-	}
-	if strings.HasPrefix(text, "---") {
-		if idx := strings.Index(text[4:], "\n---"); idx != -1 {
-			text = strings.TrimSpace(text[idx+7:])
-		}
-	}
-	text = strings.Join(strings.Fields(text), " ")
-	if limit > 0 && len(text) > limit {
-		text = text[:limit] + "…"
-	}
-	return html.EscapeString(text)
-}
-
 func findQueryLineInText(text, query string) int {
 	if query == "" || text == "" {
 		return 0

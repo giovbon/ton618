@@ -544,11 +544,6 @@ templ mindmapContent(data domain.EditorData) {
                 lastSavedHash = currentHash;
                 filenameInput.dataset.filename = filename;
 
-                // Auto-indexação semântica com chunking (fire-and-forget)
-                if (window._semanticIndexNote) {
-                    window._semanticIndexNote(filename, content);
-                }
-                
                 var params = new URLSearchParams(window.location.search);
                 params.set("file", filename);
                 window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());

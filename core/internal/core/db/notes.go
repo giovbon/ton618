@@ -57,7 +57,6 @@ func (s *Store) BatchGetNotesContent(filenames []string) (map[string]string, err
 func (s *Store) SaveNote(filename, content, mtime string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	s.invalidateEmbeddingStatus()
 	return s.Q.SaveNote(s.queryCtx(), dbgen.SaveNoteParams{
 		Filename: filename,
 		Content:  sql.NullString{String: content, Valid: true},
@@ -65,20 +64,15 @@ func (s *Store) SaveNote(filename, content, mtime string) error {
 	})
 }
 
-// DeleteNote removes a note by filename and cleans up its FTS documents, chunks and embeddings.
+// DeleteNote removes a note by filename and cleans up its FTS documents.
 func (s *Store) DeleteNote(filename string) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	s.invalidateEmbeddingStatus()
 
-	// Remove os embeddings antes dos chunks (a lista de chunk_ids vem de note_chunks).
-	if err := deleteEmbeddingsForFile(s.DB, filename); err != nil {
-		return err
-	}
 	if err := s.Q.DeleteNote(s.queryCtx(), filename); err != nil {
 		return err
 	}
-	return s.Q.DeleteNoteChunks(s.queryCtx(), filename)
+	return nil
 }
 
 // RenameNote renames a note from old to new filename.
@@ -89,7 +83,6 @@ func (s *Store) RenameNote(old, new string) error {
 	if old == new {
 		return nil
 	}
-	s.invalidateEmbeddingStatus()
 
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -97,62 +90,8 @@ func (s *Store) RenameNote(old, new string) error {
 	}
 	defer tx.Rollback()
 
-	// Coleta os chunk_ids antigos ANTES de renomear as linhas de note_chunks.
-	// (Usamos igualdade no índice da vec0 em vez de LIKE, que é full scan.)
-	rows, err := tx.Query(`SELECT chunk_id FROM note_chunks WHERE filename = ?`, old)
-	if err != nil {
-		return err
-	}
-	var oldChunkIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		oldChunkIDs = append(oldChunkIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-
 	if _, err := tx.Exec("UPDATE notes SET filename = ? WHERE filename = ?", new, old); err != nil {
 		return err
-	}
-	if _, err := tx.Exec("UPDATE note_chunks SET filename = ?, chunk_id = ? || SUBSTR(chunk_id, LENGTH(?) + 1) WHERE filename = ?", new, new, old, old); err != nil {
-		return err
-	}
-
-	if len(oldChunkIDs) > 0 {
-		insStmt, err := tx.Prepare(`INSERT INTO note_embeddings(chunk_id, embedding) SELECT ?, embedding FROM note_embeddings WHERE chunk_id = ?`)
-		if err != nil {
-			return err
-		}
-		defer insStmt.Close()
-		delStmt, err := tx.Prepare(`DELETE FROM note_embeddings WHERE chunk_id = ?`)
-		if err != nil {
-			return err
-		}
-		defer delStmt.Close()
-
-		for _, oldID := range oldChunkIDs {
-			newID := new + strings.TrimPrefix(oldID, old)
-			if newID == oldID {
-				continue
-			}
-			// Defensivo: remove eventual colisão no destino antes de copiar.
-			if _, err := delStmt.Exec(newID); err != nil {
-				return err
-			}
-			if _, err := insStmt.Exec(newID, oldID); err != nil {
-				return err
-			}
-			if _, err := delStmt.Exec(oldID); err != nil {
-				return err
-			}
-		}
 	}
 
 	return tx.Commit()

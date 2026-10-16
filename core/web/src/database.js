@@ -678,22 +678,6 @@
                         c.minWidth = 240;
                     }
 
-                    // embedded column → "Indexada": ✔ quando há embedding, —
-                    // quando ainda não, e — neutro para tipos não indexáveis.
-                    if (c.field === "embeded") {
-                        c.formatter = function (cell) {
-                            var rowData = cell.getRow().getData();
-                            var typeStr = String(rowData.type || rowData.Type || "").toLowerCase();
-                            if (typeStr === "desenho" || typeStr === "pdf" || typeStr === "anexo" || typeStr === "arquivo" || typeStr === "epub" || typeStr === "imagem") {
-                                return "<span class='text-zinc-600' title='Tipo não indexável'>—</span>";
-                            }
-                            return cell.getValue()
-                                ? "<span class='text-emerald-500 font-bold' title='Indexada na busca semântica'>✔</span>"
-                                : "<span class='text-zinc-600' title='Ainda não indexada'>—</span>";
-                        };
-                        return c;
-                    }
-
                     // abrir_link column
                     if (c.field === "abrir_link") {
                         c.formatter = function (cell) {

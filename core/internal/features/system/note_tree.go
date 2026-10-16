@@ -223,7 +223,7 @@ func isNoteFile(file string) bool {
 // metadados que não existem mais — ver HandleGetDatabaseData (§6.24).
 func isFileRowBuiltin(key string) bool {
 	switch key {
-	case "arquivo", "mtime", "titulo", "tags", "type", "Type", "embeded":
+	case "arquivo", "mtime", "titulo", "tags", "type", "Type":
 		return true
 	}
 	return false
