@@ -156,16 +156,14 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	data, hasTree := buildNoteTree(data)
 
 	var columns []map[string]interface{}
-	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "visible": false, "headerSort": false, "width": 80, "hozAlign": "center"})
 	columns = append(columns, map[string]interface{}{"title": "Arquivo", "field": "arquivo", "visible": false})
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
-	columns = append(columns, map[string]interface{}{"title": "Abrir", "field": "abrir_link", "editor": false, "width": 80, "hozAlign": "center"})
 
 	for col := range columnSet {
 		lowerCol := strings.ToLower(col)
-		if lowerCol != "arquivo" && lowerCol != "titulo" && lowerCol != "tags" && lowerCol != "mtime" && lowerCol != "type" {
+		if lowerCol != "arquivo" && lowerCol != "titulo" && lowerCol != "tags" && lowerCol != "mtime" && lowerCol != "type" && lowerCol != "markmap" {
 			title := strings.ToUpper(col[:1]) + col[1:]
 			columns = append(columns, map[string]interface{}{
 				"title":  title,

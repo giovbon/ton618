@@ -120,7 +120,7 @@ tags: [golang]
 		}
 	}
 
-	// Mas devem continuar presentes nos dados das linhas (usados pelo formatter abrir_link).
+	// Mas devem continuar presentes nos dados das linhas (usados pelo duplo clique para abrir a nota).
 	if len(response.Data) == 0 {
 		t.Fatal("expected at least 1 row")
 	}

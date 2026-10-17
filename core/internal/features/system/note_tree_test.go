@@ -390,8 +390,8 @@ func TestHandleGetDatabaseData_Tree(t *testing.T) {
 	if !hasParentCol {
 		t.Errorf("esperava a coluna %q no Tabulator", parentKey)
 	}
-	if _, ok := treeColumn(resp.Columns, "abrir_link"); !ok {
-		t.Error("a coluna abrir_link deveria continuar existindo (oculta por padrão)")
+	if _, ok := treeColumn(resp.Columns, "abrir_link"); ok {
+		t.Error("a coluna abrir_link não deveria mais existir (foi removida)")
 	}
 
 	// Regressão do cache: o segundo request (cache hit) não pode acumular filhos.
@@ -414,19 +414,16 @@ func treeColumn(columns []map[string]interface{}, field string) (map[string]inte
 	return nil, false
 }
 
-// A coluna "Abrir" nasceu como link explícito e virou redundante com o duplo
-// clique na linha: ela passa a nascer oculta (mas continua no seletor).
-func TestHandleGetDatabaseData_AbrirColumnHiddenByDefault(t *testing.T) {
+// A coluna "Abrir" (link explícito) foi removida: a abertura da nota passou a
+// acontecer só pelo duplo clique na linha e pelo formatter de título, sem
+// coluna dedicada no Tabulator.
+func TestHandleGetDatabaseData_AbrirColumnRemoved(t *testing.T) {
 	ctx := newTestContext(t)
 	saveTestNote(t, ctx, "notes/a.md", "# A", "")
 
 	resp := fetchDatabase(t, ctx)
-	col, ok := treeColumn(resp.Columns, "abrir_link")
-	if !ok {
-		t.Fatal("esperava a coluna abrir_link")
-	}
-	if visible, ok := col["visible"].(bool); !ok || visible {
-		t.Errorf("abrir_link deveria nascer oculta, got visible=%v", col["visible"])
+	if _, ok := treeColumn(resp.Columns, "abrir_link"); ok {
+		t.Error("a coluna abrir_link não deveria mais existir (foi removida)")
 	}
 }
 

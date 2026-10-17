@@ -678,20 +678,6 @@
                         c.minWidth = 240;
                     }
 
-                    // abrir_link column
-                    if (c.field === "abrir_link") {
-                        c.formatter = function (cell) {
-                            var rowData = cell.getRow().getData();
-                            // URL, target e ícone já vêm prontos do servidor (SSOT) —
-                            // elimina a duplicação client-side que causava ícones divergentes.
-                            var url = rowData._url || "/editor";
-                            var target = rowData._blank ? " target='_blank'" : "";
-                            var iconHtml = rowData._icon || noteIconFallback();
-                            return "<a href='" + url + "'" + target + " class='text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 justify-center' title='Abrir'>" + iconHtml + " <span class='underline'>Abrir</span></a>";
-                        };
-                        return c;
-                    }
-
                     // tags column
                     if (c.field === "tags") {
                         c.formatter = tagsFormatter;
@@ -824,15 +810,15 @@
                     handleCellEdit(cell);
                 });
 
-                // Abrir a nota: duplo clique na linha (a coluna "Abrir" nasce
-                // oculta no payload — ver HandleGetDatabaseData). O 1º clique de
-                // uma célula editável abre o editor, então o duplo clique
-                // costuma cair DENTRO do input: nesse caso a edição é cancelada
-                // para a nota abrir.
+                // Abrir a nota: duplo clique na linha. O 1º clique de uma célula
+                // editável abre o editor, então o duplo clique costuma cair DENTRO
+                // do input: nesse caso a edição é cancelada para a nota abrir. A
+                // abertura (URL/blank) é derivada do servidor (SSOT), sem coluna
+                // própria ("Abrir" foi removida).
                 table.on("rowDblClick", function (e, row) {
                     var target = /** @type {HTMLElement} */ (e.target);
                     if (target.closest(".tabulator-data-tree-control")) return; // expandir/recolher
-                    if (target.closest("a")) return; // link da coluna "Abrir"
+                    if (target.closest("a")) return; // defensivo: qualquer link presente na linha
 
                     var data = row.getData();
                     if (!data || !data._url) return;
