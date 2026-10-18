@@ -50,6 +50,10 @@ web/static/drawing.js.gz
 # --- Documentation & Misc ---
 docs/
 *.md
+# HELP.md é servido em /help (ENV HELP_DOC) e copiado explicitamente no
+# Dockerfile (COPY --from=builder /app/HELP.md). Precisa entrar no contexto,
+# apesar do *.md acima — por isso a exceção.
+!HELP.md
 repomix-output.xml
 
 # --- Scripts & Dev Tools ---
