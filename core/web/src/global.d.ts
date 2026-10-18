@@ -27,8 +27,34 @@ interface Window {
   // mindmap.js
   initMindmap: (svgEl: SVGElement, initialMarkdown: string) => any;
 
+  // tabulator-note.js — editor de nota Tabulator
+  initTabulatorNote: (containerEl: HTMLElement | string, options: { initialData?: any; onChange?: Function; onFilter?: Function }) => {
+    getData: () => any;
+    addRow: (values?: any) => Promise<any>;
+    addColumn: (title?: string, type?: string) => Promise<any>;
+    setQuickFilter: (query: string) => void;
+    getRowCount: () => number;
+    getFilteredRowCount: () => number;
+    getColumnCount: () => number;
+    redraw: () => void;
+  };
+
   // Tabulator (static/tabulator.min.js)
   Tabulator: any;
+
+  // tabulator-note.js — helpers puros (testáveis)
+  TabulatorNoteUtils: {
+    genField: () => string;
+    editorForType: (type?: string) => string | false;
+    sorterForType: (type?: string) => string;
+    normalizeType: (raw?: string) => string;
+    typeLabel: (type?: string) => string;
+    columnTypes: Array<{ value: string; label: string; icon: string }>;
+    isFileType: (type?: string) => boolean;
+    escapeHtml: (value: any) => string;
+    fileDownloadURL: (path: string) => string;
+    fileNameFromPath: (path: string) => string;
+  };
 
   // Editor helpers (editor-common.js)
   generateHash: (data: string) => Promise<string>;

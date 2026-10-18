@@ -39,11 +39,6 @@ fi
 # Centraliza caminhos do Go para o sistema e ambiente do usuário
 export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin:$HOME/.local/bin"
 
-if ! command -v go >/dev/null 2>&1; then
-    echo -e "${RED}❌ Go não foi encontrado no PATH. Instale o Go ou ajuste o caminho do toolchain.${NC}"
-    exit 127
-fi
-
 # Carregar .env se existir
 if [ -f "$BASE_DIR/.env" ]; then
     echo -e "${BLUE}📄 Carregando variáveis de .env${NC}"
@@ -55,8 +50,103 @@ PORT="${PORT:-6180}"
 DATA_DIR="${DATA_DIR:-$BASE_DIR/data}"
 DOCS_DIR="${DOCS_DIR:-$BASE_DIR/docs}" # Fallback caso não esteja no .env
 DB_PATH="${DB_PATH:-$DATA_DIR/ton618.db}"
+PID_FILE="$DATA_DIR/ton618.pid"
 
 export DOCS_DIR DATA_DIR
+
+# ── Porta: quem está escutando (PID) ─────────────────────────────────────────
+# Motivo: instâncias antigas (ou SUSPENSAS — stat "T", típico de Ctrl+Z) seguram
+# a porta; sem isso o servidor novo morre com "address already in use" e a porta
+# fica "presa" sem explicação. `port_pids` usa o dono do socket via ss.
+# Obs.: os "|| true" existem porque o script roda com `set -e`/`pipefail` e um
+# grep sem match (porta livre) derrubaria o script.
+port_pids() {
+    ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true
+}
+
+wait_port_free() {
+    local i
+    for i in $(seq 1 25); do
+        if [ -z "$(port_pids)" ]; then
+            return 0
+        fi
+        sleep 0.2
+    done
+    return 1
+}
+
+free_port() {
+    local pids
+    pids="$(port_pids)"
+    if [ -z "$pids" ]; then
+        return 0
+    fi
+    echo -e "${YELLOW}🧹 Encerrando instância antiga na porta $PORT (pid: $(echo $pids | tr '\n' ' '))${NC}"
+    kill -TERM $pids 2>/dev/null || true
+    if wait_port_free; then return 0; fi
+    kill -KILL $pids 2>/dev/null || true
+    if wait_port_free; then return 0; fi
+    echo -e "${RED}❌ A porta $PORT continua ocupada (pid: $(port_pids | tr '\n' ' ')).${NC}"
+    echo -e "${RED}   Rode './run.sh stop' ou libere a porta manualmente.${NC}"
+    return 1
+}
+
+cmd_stop() {
+    local pids
+    pids="$(port_pids)"
+    if [ -z "$pids" ] && [ -f "$PID_FILE" ]; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            pids="$pid"
+        fi
+    fi
+    if [ -z "$pids" ]; then
+        echo -e "${YELLOW}⏸️  Nada rodando na porta $PORT.${NC}"
+        rm -f "$PID_FILE"
+        return 0
+    fi
+    echo -e "${BLUE}🛑 Parando TON-618 (pid: $(echo $pids | tr '\n' ' '))...${NC}"
+    kill -TERM $pids 2>/dev/null || true
+    if ! wait_port_free; then
+        kill -KILL $pids 2>/dev/null || true
+        wait_port_free || true
+    fi
+    rm -f "$PID_FILE"
+    echo -e "${GREEN}✅ Porta $PORT livre.${NC}"
+}
+
+cmd_status() {
+    local pids
+    pids="$(port_pids)"
+    if [ -z "$pids" ]; then
+        echo -e "${YELLOW}⏸️  TON-618 não está rodando na porta $PORT.${NC}"
+        return 0
+    fi
+    echo -e "${GREEN}✅ TON-618 rodando na porta $PORT${NC}"
+    ss -ltnpH "sport = :$PORT" 2>/dev/null || true
+    local p st
+    for p in $pids; do
+        st="$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' ' || true)"
+        case "$st" in
+            T*)
+                echo -e "${YELLOW}⚠️  pid $p está SUSPENSO (stat '$st'): a porta fica presa, sem responder.${NC}"
+                echo -e "${YELLOW}   Rode './run.sh stop' para encerrar e depois suba de novo.${NC}"
+                ;;
+        esac
+    done
+}
+
+# Subcomandos que NÃO compilam nada (não exigem Go nem Node instalados).
+if [ "${1:-}" = "stop" ] || [ "${1:-}" = "status" ]; then
+    cmd_"${1}"
+    exit $?
+fi
+
+if ! command -v go >/dev/null 2>&1; then
+    echo -e "${RED}❌ Go não foi encontrado no PATH. Instale o Go ou ajuste o caminho do toolchain.${NC}"
+    exit 127
+fi
 
 # 2. Interface e Logs Iniciais
 echo -e "${BLUE}🌌 Iniciando TON-618 v2...${NC}"
@@ -66,8 +156,8 @@ echo -e "🔌 Porta:           ${YELLOW}$PORT${NC}"
 # Garantir diretórios essenciais
 mkdir -p "$DOCS_DIR" "$DATA_DIR"
 
-# Limpar processos zumbis na porta de forma silenciosa
-fuser -k "${PORT}/tcp" &> /dev/null || true
+# Libera a porta ANTES de compilar (o build pode demorar; melhor já deixar limpo).
+free_port || exit 1
 
 LOG_FILE="$DATA_DIR/ton618.log"
 touch "$LOG_FILE"
@@ -148,5 +238,16 @@ echo -e "${GREEN}🚀 Servidor rodando em http://localhost:$PORT${NC}"
 echo -e "📄 Logs em: $LOG_FILE"
 echo -e "--------------------------------------------"
 
-# Executa e joga pro log mantendo o output limpo
-./ton618 2>&1 | tee -a "$LOG_FILE"
+# Última checagem da porta (o build pode ter levado minutos) e PID para o `stop`.
+free_port || exit 1
+echo $$ > "$PID_FILE"
+
+# Ctrl+Z passa a ser IGNORADO (disposição herdada pelo exec): suspender o
+# servidor deixaria a porta presa, aceitando conexões e respondendo nada — foi
+# a origem dos "processos fantasmas" (stat T) que apareciam depois de rodar.
+trap '' TSTP
+echo -e "${YELLOW}💡 Ctrl+C encerra o servidor. Se algo sobrar: ./run.sh stop | ./run.sh status${NC}"
+
+# `exec` substitui ESTE shell pelo servidor: não sobra processo-pai órfão e o
+# Ctrl+C vai direto para ele. O `tee` mantém o log em arquivo e a saída na tela.
+exec ./ton618 > >(tee -a "$LOG_FILE") 2>&1

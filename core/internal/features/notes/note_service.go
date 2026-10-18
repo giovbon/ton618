@@ -94,8 +94,16 @@ func (s *NoteService) SaveWithContext(ctx context.Context, filename, content str
 func (s *NoteService) Delete(filename string) error {
 	filename = NoteFilename(filename)
 
+	// Conteúdo ANTES de remover: uma nota Tabulator pode referenciar arquivos em
+	// datasets/ que precisam ser apagados (se nenhuma outra nota os usar).
+	previous, _ := s.notes.GetNote(filename)
+
 	if err := s.store.DeleteAllFileRecords(filename); err != nil {
 		slog.Error("delete all file records", "file", filename, "error", err)
+	}
+
+	if counter, ok := s.store.(datasetRefCounter); ok {
+		ReconcileTabulatorFiles(counter, s.docsDir, filename, previous, "")
 	}
 
 	// Uma nota removida não pode continuar contando como filha na sidebar.
@@ -591,6 +599,7 @@ func isTypeTaggedNoteType(t domain.NoteType) bool {
 	switch t {
 	case domain.NoteTypeDrawing,
 		domain.NoteTypeMindmap,
+		domain.NoteTypeTabulator,
 		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
 		domain.NoteTypeSemanal,
 		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:

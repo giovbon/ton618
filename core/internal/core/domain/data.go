@@ -29,6 +29,7 @@ const (
 	NoteTypeArchive    NoteType = "arquivo"
 	NoteTypeEPUB       NoteType = "epub"
 	NoteTypeImage      NoteType = "imagem"
+	NoteTypeTabulator  NoteType = "tabulator"
 )
 
 // ── Nota Semanal ──
@@ -86,9 +87,10 @@ func IsWeeklyNoteFilename(name string) bool {
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
 // que NÃO devem ser exibidas ao usuário na interface.
 var InternalTypeTags = map[string]bool{
-	"drawing": true,
-	"markmap": true,
-	"mindmap": true,
+	"drawing":   true,
+	"markmap":   true,
+	"mindmap":   true,
+	"tabulator": true,
 }
 
 // EditorRoute retorna a rota de URL do editor correto para este tipo de nota.
@@ -98,6 +100,8 @@ func (t NoteType) EditorRoute() string {
 		return "/drawing"
 	case NoteTypeMindmap:
 		return "/mindmap"
+	case NoteTypeTabulator:
+		return "/tabulator"
 	default:
 		return "/editor"
 	}
@@ -128,6 +132,8 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 			return NoteTypeCapture
 		case "semanal", "semana", "weekly":
 			return NoteTypeSemanal
+		case "tabulator":
+			return NoteTypeTabulator
 		}
 	}
 
@@ -191,6 +197,9 @@ func DetectNoteTypeFromContent(tags []string, content, arquivo string) NoteType 
 			strings.Contains(lowerContent, "# mindmap") {
 			return NoteTypeMindmap
 		}
+		if strings.Contains(lowerContent, "type: tabulator") {
+			return NoteTypeTabulator
+		}
 	}
 
 	return nt
@@ -213,6 +222,8 @@ func NoteTypeCanonicalTag(t NoteType) string {
 		return "captura"
 	case NoteTypeSemanal:
 		return "semanal"
+	case NoteTypeTabulator:
+		return "tabulator"
 	}
 	return ""
 }
@@ -339,6 +350,12 @@ const (
 	EPUBPrefix       = "epubs/"
 	ImagePrefix      = "images/"
 
+	// DatasetPrefix é o diretório de arquivos INTERNOS das células de notas
+	// Tabulator (coluna do tipo "arquivo"). NÃO entra em FileDirs: é servido por
+	// /file/download (por isso está em AllowedFilePrefixes), mas não é varrido
+	// nem indexado, então não aparece na lista lateral/busca como anexo.
+	DatasetPrefix = "datasets/"
+
 	// Nomes dos diretórios (sem a barra final), para filepath.Join.
 	NotesDir      = "notes"
 	PDFDir        = "pdfs"
@@ -346,6 +363,7 @@ const (
 	ArchiveDir    = "archives"
 	EPUBDir       = "epubs"
 	ImageDir      = "images"
+	DatasetDir    = "datasets"
 )
 
 // FileDirs são os diretórios de ARQUIVO do docs/ (sem notes/, cujas notas vivem
@@ -361,14 +379,21 @@ var SearchDirs = append(append([]string{}, FileDirs...), NotesDir)
 // permitidos para acesso via API de arquivos (validação de path traversal em
 // /file e /file/download).
 var AllowedFilePrefixes = []string{
-	NotePrefix, PDFPrefix, AttachmentPrefix, ArchivePrefix, EPUBPrefix, ImagePrefix,
+	NotePrefix, PDFPrefix, AttachmentPrefix, ArchivePrefix, EPUBPrefix, ImagePrefix, DatasetPrefix,
 }
 
-// NonNoteFilePrefixes são os prefixos de ARQUIVO — tudo em AllowedFilePrefixes
-// exceto NotePrefix (as notas markdown vivem no banco, não em disco). É a lista
-// usada ao expandir um link/anexo sem pasta (ex: "manual.pdf") para todos os
-// diretórios onde ele pode estar.
-var NonNoteFilePrefixes = prefixesExcept(NotePrefix)
+// InternalFilePrefixes são diretórios de arquivos internos do app: existem no
+// docs/ e são servidos por /file(/download), mas NÃO são varridos nem indexados
+// (ficam fora de FileDirs) e, por isso, não aparecem na lista/busca. Hoje só
+// datasets/, onde a coluna de arquivos das notas Tabulator guarda os envios.
+var InternalFilePrefixes = []string{DatasetPrefix}
+
+// NonNoteFilePrefixes são os prefixos de ARQUIVO monitorados — tudo em
+// AllowedFilePrefixes exceto NotePrefix (as notas markdown vivem no banco, não
+// em disco) e os diretórios internos (InternalFilePrefixes). É a lista usada ao
+// expandir um link/anexo sem pasta (ex: "manual.pdf") para todos os diretórios
+// onde ele pode estar, e espelha FileDirs.
+var NonNoteFilePrefixes = prefixesExcept(append([]string{NotePrefix}, InternalFilePrefixes...)...)
 
 // InlineDocPrefixes são os prefixos cujos arquivos são servidos como documento
 // (abertos/exibidos) em vez de download puro: notas, PDFs, anexos e imagens.
@@ -401,12 +426,16 @@ func hasAnyPrefix(path string, prefixes []string) bool {
 	return false
 }
 
-// prefixesExcept devolve uma cópia de AllowedFilePrefixes sem o prefixo dado,
+// prefixesExcept devolve uma cópia de AllowedFilePrefixes sem os prefixos dados,
 // preservando a ordem original (resultado determinístico).
-func prefixesExcept(exclude string) []string {
+func prefixesExcept(exclude ...string) []string {
+	skip := make(map[string]bool, len(exclude))
+	for _, e := range exclude {
+		skip[e] = true
+	}
 	out := make([]string, 0, len(AllowedFilePrefixes))
 	for _, p := range AllowedFilePrefixes {
-		if p != exclude {
+		if !skip[p] {
 			out = append(out, p)
 		}
 	}

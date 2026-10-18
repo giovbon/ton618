@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"ton618/core/internal/processor"
 	"ton618/core/internal/repository"
 
 	"gopkg.in/yaml.v3"
@@ -179,6 +180,19 @@ func (s *BackupService) CreateStreamContext(ctx context.Context, out io.Writer, 
 			// Desenho -> .excalidraw
 			zipFilename = strings.TrimSuffix(filename, ".md") + ".excalidraw"
 			zipData = []byte(body)
+		case "tabulator":
+			// Nota Tabulator: mantém o .md (fidelidade total, restaurável) E
+			// acrescenta um .csv legível — visão de planilha dos registros.
+			zipData = []byte(content)
+			if csvData, ok := processor.TabulatorCSVFromNote(content); ok {
+				csvName := strings.TrimSuffix(filename, ".md") + ".csv"
+				entries = append(entries, noteEntry{
+					name:    csvName,
+					data:    csvData,
+					modTime: repository.ParseMtime(mtimeStr),
+				})
+				seen[csvName] = true
+			}
 		default:
 			// Markdown normal
 			zipData = []byte(content)

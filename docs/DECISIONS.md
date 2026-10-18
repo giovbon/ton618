@@ -1608,3 +1608,253 @@ sobrava um extrator de trechos.
 - Testes removidos junto com o recurso: embeddings (unit/integração), hibrida, ask/synthesize,
   thresholds/device das settings, snapshot de tabelas derivadas, rename preservando chunks e os
   guardas de CSP do CDN do ONNX/HuggingFace.
+
+## 14. Nota Tabulator — planilha de inserção de dados (18/10/2026)
+
+📍 `core/internal/processor/tabulator.go` | `core/internal/features/notes/handlers_tabulator.go` | `core/internal/features/notes/tabulator.templ` | `core/web/src/tabulator-note.js` | `core/internal/core/services/backup.go` | `core/internal/core/domain/data.go` | `core/internal/processor/markdown.go`
+
+**Decisão:** novo tipo de nota `Tabulator` — uma nota-planilha de **inserção de dados**
+(linhas e colunas), aberta em tela cheia em `/tabulator`. É um tipo **distinto** do
+`!Tabulator`/`/database`, que continua sendo a página de **administração de notas**.
+
+**Por quê:** faltava no app um lugar para manter pequenos conjuntos de dados tabulares
+(catálogos, listas, coleções) sem sair do ecossistema de notas. Como os dados vivem no
+corpo da própria nota, ela reusa o que já existe — tabela `notes`, save/rename/delete,
+hierarquia, tags e backups — e, diferente de desenho/markmap, participa da **busca global**.
+
+### 14.1 Formato no disco
+
+O corpo da nota guarda o payload JSON; o frontmatter é o habitual (`type: tabulator`):
+
+```markdown
+---
+type: tabulator
+---
+
+{"columns":[{"field":"c1","title":"Nome"},{"field":"c2","title":"Idade","type":"number"}],"rows":[{"c1":"Ana","c2":30}]}
+```
+
+- `columns`: `{field, title, type?, width?}` — `field` é a chave usada nas linhas.
+- `rows`: lista de mapas `field → valor`. A ordem das linhas é a posição no array
+  (não há `_id`).
+- `type` da coluna: `string` (default), `number`, `date`, `boolean`, `file`. O tipo é
+  **opcional** e só influencia o editor da célula e o comparador da ordenação — não muda o
+  formato gravado (valores são strings/números JSON como digitados). Colunas `file` guardam
+  na célula o **caminho** do arquivo enviado (ver 14.5).
+
+### 14.2 Indexação e busca
+
+- As linhas são indexadas no FTS: **cada linha** vira um fragmento (`Document`) da seção
+  `Registro N`, com texto no formato `Título: valor | Título: valor`; os nomes das colunas
+  viram um fragmento extra da seção `Colunas`.
+- Por isso, buscar por uma célula (`Recife`) **e** por um nome de coluna (`Cidade`)
+  encontra a nota — comportamento diferente de `drawing`/`markmap`, cujo corpo não é indexado.
+- `type: tabulator` adiciona a tag canônica `tabulator` (persistida) e a inclui em
+  `InternalTypeTags`: ela não aparece como tag para o usuário (sidebar, Configurações e
+  resultados de busca).
+- Numa coluna `file` (14.5), o texto indexado é o **caminho** gravado (`datasets/<nome>`), de
+  modo que buscar pelo **nome do arquivo** encontra a linha — mas o arquivo em si **não** é
+  indexado como anexo (ver 14.5).
+
+### 14.3 CSV
+
+- Cada nota pode ser exportada como CSV pelo botão ⤓ do editor
+  (`/api/tabulator/export?file=…`), com **BOM UTF-8** para o Excel reconhecer os acentos.
+- No **Backup** (`/api/backup`), notas Tabulator saem como `.md` (fidelidade total,
+  restaurável) **e** como `.csv` (visão de planilha). O backup total não muda: a nota vive
+  no banco.
+
+### 14.4 Ordenação, filtros e tipos
+
+- **O tipo da coluna é opcional**: default `string`; só muda o editor da célula
+  (texto/número/data/sim‑não/arquivo) e o comparador da ordenação. **Não há seletor de tipo na
+  barra**: a coluna nasce como **Texto** e o tipo é definido/alterado no menu do cabeçalho
+  (**⋮ → Tipo da coluna**), junto de renomear/excluir coluna.
+- **Ordenação**: clique no título da coluna; o comparador (`sorter`) segue o tipo
+  (`string`/`number`/`date`/`boolean`; colunas `arquivo` ordenam por `string`, pelo caminho).
+- **Filtro por coluna**: cada coluna tem um input no cabeçalho (“contém”, case-insensitive).
+- **Filtro rápido**: caixa “Filtrar nesta tabela…” aplica “contém” em todas as colunas.
+- ⚠️ **Ordenação e filtros são apenas visuais.** A ordem gravada no arquivo segue a ordem
+  canônica das linhas (campo interno `_idx`, não persistido): ordenar/filtrar para inspecionar
+  nunca reordena nem descarta dados no disco. A serialização usa `getRows()` (todas as linhas,
+  ignorando filtros) e reordena por `_idx`.
+
+### 14.5 Coluna de arquivo (envio por clique na célula)
+
+- Tipo de coluna **`file`** (`type: "file"` no JSON da coluna): a célula não tem editor de
+  texto — ao clicar, abre o seletor de arquivos e o envio vai para **`POST /api/tabulator/upload`**
+  (multipart, campo `file`). A célula passa a guardar o **caminho** (`datasets/<nome>`) e exibe
+  um link para abrir/baixar + um “×” para remover.
+- Os arquivos vão para **`docs/datasets/`** — um diretório **interno**
+  (`domain.DatasetPrefix` / `InternalFilePrefixes`): está em `AllowedFilePrefixes` (por isso é
+  servido por `/file/download`) mas **não** entra em `FileDirs`, então o watcher não o varre e o
+  arquivo **não é indexado nem aparece na lista lateral/busca** como anexo. O invariante
+  `NonNoteFilePrefixes ↔ FileDirs` continua válido (o teste de prefixos cobre o caso).
+- O nome enviado é sanitizado (`processor.TabulatorUploadFilename`: só o basename, sem
+  separadores/caracteres de controle, tamanho limitado preservando a extensão) e, se já existir,
+  recebe sufixo `-2`, `-3`… — o arquivo anterior **não** é sobrescrito.
+- Limite de **64 MiB** por arquivo; **um arquivo por célula** (para vários, use vários registros).
+- **Exclusão real (sem órfãos):** quando o arquivo deixa de ser referenciado, ele é apagado do
+  disco. A reconciliação roda no **save da nota** (`notes.ReconcileTabulatorFiles`, chamado por
+  `doSaveNote`): compara as referências `datasets/...` do conteúdo anterior com as do novo e
+  remove o que sobrou — cobre limpar a célula (×), trocar o arquivo, excluir o registro e
+  excluir a coluna. Excluir a nota também apaga os arquivos dela (`HandleFileDelete`,
+  `NoteService.Delete` e a exclusão em massa do Arquivamento).
+- A remoção só acontece se **nenhuma outra nota** ainda referenciar o arquivo
+  (`Store.CountOtherNotesReferencing`, casamento literal com os curingas do `LIKE` escapados) —
+  notas **duplicadas** apontam para os mesmos arquivos, e a guarda evita que a cópia perca o
+  anexo. Só caminhos válidos de `datasets/` (um único nível, sem `..`) são considerados
+  (`processor.IsTabulatorFilePath`); se a verificação falhar, o arquivo é **preservado**.
+
+### 14.6 Editor (frontend)
+
+- `notes/tabulator.templ`: página de tela cheia (padrão de `drawing`/`mindmap`), com autosave
+  por debounce em `/api/note/save`, rename/duplicar/excluir, exportar CSV e os botões
+  **+ Novo registro** / **+ Nova coluna**.
+- `web/src/tabulator-note.js` (bundle esbuild, declarado em `web/build.js`): monta a tabela
+  Tabulator (editor por tipo de coluna, coluna `#` e coluna de ações com botão de excluir
+  registro) e o menu do cabeçalho (**Renomear coluna / Tipo da coluna / Excluir coluna**).
+  Usa a biblioteca já vendorizada (`static/tabulator.min.js` + tema
+  `tabulator_midnight.min.css`), a mesma de `/database`.
+- Entrada de criação: menu **Criar → + Tabulator** (desktop e mobile). A busca global roteia
+  resultados do tipo `tabulator` para `/tabulator`.
+- Tema próprio no `<style>` do template (paleta zinc do app): cabeçalho destacado, zebra e
+  separadores visíveis, foco/edição em esmeralda — corrige o baixo contraste do tema
+  `midnight` do Tabulator.
+- **Armadilha (medida no navegador):** o Tabulator aplica a classe `.tabulator` **no próprio
+  container**, ou seja, `#tabulator-table` **é** a raiz da tabela. Regras do tipo
+  `#tabulator-table .tabulator …` (incluindo a que já existia no template) **nunca casavam**, e
+  por isso o tema `midnight` cru aparecia (linhas `#666`, cabeçalho `#333`, bordas `#999`). Os
+  seletores do tema agora são `#tabulator-table …` / `#tabulator-table.tabulator`.
+- `layout: "fitColumns"` com `widthGrow: 1` nas colunas de dados (as colunas `#` e de ações têm
+  largura fixa): as colunas ocupam a largura da tela, sem a faixa vazia à direita que o
+  `fitDataFill` deixava. Largura ajustada manualmente pelo usuário não é persistida.
+
+### 14.7 Validação
+
+- `go build`, `go vet` e `go test -tags sqlite_fts5 ./...` — verdes; novos testes em
+  `internal/processor/tabulator_test.go`, `internal/core/domain/data_tabulator_test.go` e
+  `internal/features/notes/handlers_tabulator_test.go` (upload: grava em `datasets/`, sanitiza
+  o nome e não sobrescreve em colisão).
+- `tsc --noEmit`, `npm run build` e `npm test` — verdes; helpers puros em
+  `core/web/tests/tabulator-note.unit.cjs`.
+- E2E em `core/web/tests/tabulator.spec.ts` (executado em Chromium): criação/edição/autosave,
+  tipo de coluna, **ordenação e filtros** (provando que não reordenam os dados gravados),
+  **upload pela coluna de arquivo** (arquivo baixável, link persistente e remoção) e download do CSV.
+- Remoção dos arquivos de célula coberta por testes: `processor` (extração/validação dos caminhos
+  `datasets/...`), `internal/core/db/notes_refcount_test.go` (contagem de referências e escape dos
+  curingas do `LIKE`), `internal/features/notes/tabulator_files_test.go` (apaga removido/trocado,
+  preserva o de nota duplicada, nunca sai de `datasets/`) e no E2E (o arquivo some do disco
+  depois do “×” e depois de excluir o registro).
+- Verificado que um arquivo enviado em `datasets/` **não** entra na tabela `documents` (ou seja,
+  não é indexado/listado).
+- Verificado com o binário real (DATA_DIR isolado): render, save, busca por célula/coluna,
+  CSV com acentos, ZIP com `.md`+`.csv`, redirect `/editor`→`/tabulator`, ícone próprio na
+  sidebar e tipo `Tabulator` na página `/database`.
+
+### 14.8 Visual compartilhado com a `/database` e ícone próprio do tipo (18/10/2026)
+
+- O desenho/cores da tabela passou a ter **uma única fonte**: `web/static/tabulator-theme.css`,
+  aplicada pela classe `.ton-tabulator` no container (que é a própria raiz da tabela — ver 14.6).
+  A nota `/tabulator` e a administração `/database` carregam o mesmo arquivo; cada página guarda no
+  seu `<style>` só o que é local (largura total, padding das células, árvore de hierarquia,
+  paginação e as decorações das células).
+- Motivo: os dois blocos de CSS tinham **divergido** (cabeçalho `#18181b`, linhas `#09090b` e sem
+  zebra na `/database` × `#1b1b20`/`#121215` com zebra na nota) e o contraste reforçado existia só
+  na nota. Agora ambos usam a mesma paleta: cabeçalho `#1b1b20` com borda inferior de 2px
+  `#3f3f46`, linhas `#121215` (zebra `#18181d`), hover `#24242c`, separadores `#26262c` e acento
+  esmeralda (`#10b981`/`#34d399`) no foco, na edição e na ordenação.
+- O padding das células **não** é compartilhado: a `/database` depende do `padding-left: 12px` para
+  o deslocamento das guias da hierarquia (§6.28). A nota usa `6px 8px`; a `/database`, `8px 12px`.
+- **Ícone próprio do tipo:** a `/database` monta o ícone de cada linha no servidor
+  (`icons.SVGString` → campo `_icon`), enquanto o navbar/sidebar e os templates usam o renderizador
+  templ (`icons.Icon`). Os dois switches tinham **divergido** (56 nomes existiam só no template) e
+  `Config["tabulator"].Icon = "container"` não tinha `case` em `SVGString` — o tipo caía no
+  **fallback genérico de arquivo** (que era o “sem ícone próprio”). Foram portados os 56 ícones
+  faltantes (e 6 que só existiam no Go), deixando os dois renderizadores com os mesmos 111 nomes.
+- Testes de regressão: `internal/ui/icons/config_test.go` passou a comparar os dois arquivos-fonte
+  (paridade de nomes — um `case` novo tem que entrar nos dois lados) e a validar que **todo** ícone
+  referenciado no `Config` existe em ambos. Sem isso, tipos como `desenho`, `youtube`, `agenda`,
+  `task` e `captura` também apareciam com o ícone genérico quando renderizados por `SVGString`/
+  `IconSVG` — isto é, na página `/database` (campo `_icon`) e nas listas do bloco `consulta`.
+- E2E: `database.spec.ts` verifica que a `/database` usa o tema compartilhado (as mesmas cores) e
+  que o tipo `Tabulator` renderiza o ícone `container`; `tabulator.spec.ts` verifica as **mesmas**
+  cores na nota (se uma tela mudar sozinha, um dos dois testes quebra).
+
+### 14.9 Seletor visual do tipo da coluna (submenu) (18/10/2026)
+
+- Antes, **⋮ → Tipo da coluna** abria um `prompt()` que exigia **digitar** o tipo (“número”, “data”…).
+  Agora o item é um **submenu nativo do Tabulator** (`menu: [...]`): ao clicar, a lista dos 5 tipos
+  (Texto / Número / Data / Sim‑Não / Arquivo) abre **ao lado** do item; o **tipo atual vem marcado**
+  (✓ + realce esmeralda) e basta um clique — sem digitar nada. (O nome da coluna em **+ Nova coluna**
+  / **Renomear coluna** continua em `prompt`, porque ali a entrada é texto livre por natureza.)
+- **Por que o submenu nativo e não um modal:** o Tabulator já suporta item com `menu: [...]`
+  (ganha a classe `tabulator-menu-item-submenu`, a seta ▸ e o posicionamento à direita via
+  `popup.child()`). Assim não há nada de posicionamento/fechamento/foco para manter à mão: o
+  submenu herda o comportamento do menu ⋮ (mesmo visual, fecha ao clicar fora). A primeira
+  tentativa foi um `<dialog>` modal **centralizado**; funcionava, mas era mais pesado e menos “no
+  fluxo” do que o desejado.
+- Cada item do submenu é um `{label, action}`; o `label` é uma **função** reavaliada a cada
+  abertura (lê `colTypes[field]`), então o ✓ acompanha o tipo atual sem reconstruir o menu. O
+  conteúdo é um HTML próprio (ícone + nome + ✓) — o Tabulator aceita `label` como função que
+  devolve HTML (`innerHTML`) ou um `Node`.
+- ⚠️ **Mesma escala de valores:** as opções expõem exatamente os 5 valores canônicos
+  (`string`/`number`/`date`/`boolean`/`file`) e são exportadas em `TabulatorNoteUtils.columnTypes`;
+  um teste unitário garante `normalizeType(value) === value`, ou seja, o que o submenu grava é o
+  mesmo valor que o JSON da nota persiste. `applyColumnType` só dispara autosave quando o tipo
+  **muda**.
+- Os estilos do item (`.tab-type-item`/`.tab-type-ico`/`.tab-type-name`/`.tab-type-check`) ficam no
+  `<style>` do `notes/tabulator.templ`: o menu é montado no fim do `<body>`, **fora** de
+  `#tabulator-root`, então os seletores são globais (mas com prefixo próprio). Não vão para
+  `tabulator-theme.css`, que é o tema da **tabela** compartilhado com a `/database`.
+- E2E (`tabulator.spec.ts`): clicar em **Tipo da coluna** abre o submenu com os 5 tipos, o atual
+  marcado (`.tab-type-item.is-current`) e **nenhum `<input>`**; escolher o tipo atual fecha o menu
+  sem alterar nada. A coluna `arquivo` do teste passa a ser criada pelo submenu (`pickColumnType`),
+  restando só o `prompt` do nome.
+
+## 15. Execução sem processos fantasmas — `run.sh` (18/10/2026)
+
+- Sintoma: depois de rodar o projeto sobrava um `ton618` **suspenso** (`stat T`, típico de
+  `Ctrl+Z`) segurando a porta — o socket continuava em `LISTEN` e o app parava de responder, sem
+  erro visível. O `core/run.sh` antigo terminava com `./ton618 … | tee …`, sem `trap` e sem tratar
+  sinais, e dependia de um único `fuser -k` silencioso.
+- `core/run.sh` agora:
+  - termina com **`exec`** (`exec ./ton618 > >(tee -a "$LOG_FILE") 2>&1`): o shell é substituído
+    pelo servidor, então não existe processo-pai para ficar órfão segurando a porta e o `Ctrl+C`
+    vai direto para ele (o log continua em arquivo e na tela, via `tee`);
+  - **ignora `SIGTSTP`** antes do `exec` (disposição herdada): `Ctrl+Z` não deixa mais o servidor
+    suspenso prendendo a porta;
+  - libera a porta antes de compilar **e** de novo imediatamente antes de subir (`free_port`:
+    descobre o PID pelo dono do socket com `ss`, manda `SIGTERM`, espera, cai para `SIGKILL`), e
+    aborta com mensagem clara se a porta continuar ocupada — em vez de falhar com “address already
+    in use”;
+  - grava o PID em `$DATA_DIR/ton618.pid` e ganhou os subcomandos **`stop`** (encerra o que estiver
+    na porta, idempotente) e **`status`** (mostra o dono da porta e **avisa quando o processo está
+    SUSPENSO**). O `run.sh` da raiz repassa `stop`/`status`.
+- `core/.gitignore` passou a ignorar os byproducts de compressão do build
+  (`web/static/**/*.gz` e `web/static/**/*.br`), que apareciam como não rastreados a cada build.
+
+## 16. Busca global — cor do nome da nota = cor do tipo (18/10/2026)
+
+- Sintoma: no resultado da busca global o **nome da nota** aparecia sempre na mesma família de cor,
+  sem relação com o tipo — o ícone do badge seguia o `icons.Config`, mas o título tinha uma cor
+  **fixa por ramo do `if`** (`text-lime-400` no tabulator, `text-emerald-400` no markmap,
+  `text-sky-400` no desenho e no markdown, `text-orange-400` no pdf). Era o mesmo tipo de divergência
+  já corrigido nos ícones (§14.8), só que aplicado a cores: `desenho` (`#9C63F8`, roxo) e `markdown`
+  (`#F54927`) saíam em **azul**; `tabulator` (`#10C809`) saía em `lime-400`, um verde **diferente** do
+  do próprio ícone do tipo.
+- Correção: o título passou a usar a **cor do tipo** como fonte única
+  (`icons.GetColor(res.Tipo)` → `icons.ParseClassAndStyle`, que manda classe Tailwind para o `class` e
+  cor raw/hex para o `style` inline). O mesmo valor já alimenta o ícone do badge, a sidebar e a
+  `/database`, então nome + ícone + sidebar ficam na mesma cor.
+- De quebra, os 5 blocos `<a>` duplicados (um por tipo) viraram **um só**, com o destino isolado em
+  `searchResultHref(res)` (mesma tabela de rotas de antes: `/file`, `/drawing`, `/mindmap`,
+  `/tabulator`, `/editor#line-N`); o `target="_blank"` continua **só** no pdf (atributo condicional do
+  templ). O `style` vazio nos tipos cuja cor é classe sai como `style=""` (inócuo).
+- Teste: `internal/features/search/search_results_color_test.go` renderiza o item para
+  `tabulator`/`markdown`/`markmap`/`desenho`/`pdf`, extrai a tag `<a>` do título e confere que ela
+  carrega **a mesma cor** de `icons.GetColor(tipo)` (o valor esperado é **derivado** do Config, então
+  voltar a fixar `text-lime-400` na mão quebra o teste), que o `href` é o esperado, que só o pdf tem
+  `target` e que tipos com cores distintas **não** compartilham a mesma cor aplicada.
+- Não muda o destaque do termo buscado (`.search-highlight`/`.stem-highlight`), que continua em
+  azul/violeta como indicador de “onde casou” — inclusive quando o termo casa no próprio nome.

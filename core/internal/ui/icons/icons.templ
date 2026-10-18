@@ -174,6 +174,12 @@ templ Icon(name string, class string) {
 			<path d="M5 12h14"></path>
 			<path d="M12 5v14"></path>
 		</svg>
+	case "download", "file-down", "exportar":
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
+			<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+			<polyline points="7 10 12 15 17 10"></polyline>
+			<line x1="12" x2="12" y1="15" y2="3"></line>
+		</svg>
 	case "trash", "trash-2", "delete", "excluir":
 		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
 			<path d="M3 6h18"></path>
@@ -311,6 +317,22 @@ templ Icon(name string, class string) {
 			<path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"></path>
 			<path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"></path>
 			<path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"></path>
+		</svg>
+	case "vector-square", "workflow":
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
+<circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 13v2"></path>
+		</svg>
+	case "globe", "web":
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
+<path d="M14.531 12.469 6.619 20.38a1 1 0 1 1-1.414-1.414l7.912-7.912"></path><path d="M15.686 4.314A12.5 12.5 0 0 0 5.467 2.155a1 1 0 0 0-.583 1.402l2.366 4.26a1 1 0 0 0 1.474.285 11.5 11.5 0 0 1 6.862-2.188"></path><path d="M19.686 8.314a11.5 11.5 0 0 1-2.188 6.862 1 1 0 0 0 .285 1.474l4.26 2.366a1 1 0 0 0 1.402-.583 12.5 12.5 0 0 0-2.159-10.219Z"></path>
+		</svg>
+	case "arquivo":
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
+<rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path>
+		</svg>
+	case "galaxy":
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={ cleanClass } style={ styleAttr }>
+<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle><line x1="21.17" x2="12" y1="8" y2="8"></line><line x1="3.95" x2="8.54" y1="6.06" y2="14"></line><line x1="10.88" x2="15.46" y1="21.94" y2="14"></line>
 		</svg>
 	default:
 		<i data-lucide={ name } class={ cleanClass } style={ styleAttr }></i>

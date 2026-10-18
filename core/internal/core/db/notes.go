@@ -75,6 +75,29 @@ func (s *Store) DeleteNote(filename string) error {
 	return nil
 }
 
+// CountOtherNotesReferencing conta quantas notas (exceto `except`) contêm o
+// caminho `path` no conteúdo. É a guarda usada antes de apagar um arquivo de
+// datasets/ (células de notas Tabulator): notas duplicadas referenciam os mesmos
+// arquivos, então o arquivo só pode ser removido quando nenhuma outra nota ainda
+// o referencia. Casamento é literal (curingas do LIKE são escapados).
+func (s *Store) CountOtherNotesReferencing(path, except string) (int, error) {
+	if path == "" {
+		return 0, nil
+	}
+
+	var n int
+	err := s.DB.QueryRowContext(s.queryCtx(),
+		`SELECT COUNT(*) FROM notes WHERE filename <> ? AND content LIKE ? ESCAPE '\'`,
+		except, "%"+escapeLikePattern(path)+"%").Scan(&n)
+	return n, err
+}
+
+// escapeLikePattern escapa os curingas do LIKE (%, _) e o próprio caractere de
+// escape, para que um nome de arquivo com "_" não vire curinga.
+func escapeLikePattern(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
 // RenameNote renames a note from old to new filename.
 func (s *Store) RenameNote(old, new string) error {
 	s.WriteMu.Lock()

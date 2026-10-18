@@ -86,13 +86,9 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		snippet := buildSnippet(hit, query)
 
 		tags := db.TagsToSlice(hit.Doc.Tags)
-		var userTags []string
-		for _, t := range tags {
-			lowerT := strings.ToLower(t)
-			if lowerT != "drawing" {
-				userTags = append(userTags, t)
-			}
-		}
+		// FilterUserTags remove as tags internas de tipo de editor (drawing,
+		// markmap, tabulator, ...) — o usuário não deve vê-las como tags.
+		userTags := domain.FilterUserTags(tags)
 
 		weight, ok := weightCache[hit.Doc.Arquivo]
 		if !ok {

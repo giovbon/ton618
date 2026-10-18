@@ -100,9 +100,15 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 		isMd := strings.HasSuffix(strings.ToLower(arquivo), ".md")
 
 		if isMd {
+			// Conteúdo antes de remover: uma nota Tabulator pode referenciar
+			// arquivos em datasets/ que devem ser apagados junto.
+			content, _ := ctx.Store.GetNote(arquivo)
 			ctx.Store.DeleteNote(arquivo)
 			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
 			os.Remove(fullPath)
+			if content != "" {
+				notes.ReconcileTabulatorFiles(ctx.Store, ctx.Cfg.DocsDir, arquivo, content, "")
+			}
 		} else {
 			fullPath := filepath.Join(ctx.Cfg.DocsDir, arquivo)
 			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {

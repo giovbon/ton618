@@ -3,6 +3,8 @@ package icons
 import (
 	"bytes"
 	"context"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -58,5 +60,71 @@ func TestIconSVG_SemanalAplicaCor(t *testing.T) {
 	}
 	if !strings.Contains(svg, "color:#14B8A6") {
 		t.Errorf("IconSVG(semanal) não aplicou a cor esperada: %s", svg)
+	}
+}
+
+// caseLabels casa os rótulos de `case` dos dois renderizadores
+// (`case "a", "b":`) para extrair os NOMES de ícone suportados.
+var caseLabels = regexp.MustCompile(`case\s+((?:"[^"]+"\s*(?:,\s*)?)+)\s*:`)
+var caseNames = regexp.MustCompile(`"([^"]+)"`)
+
+// iconNamesFromSource lê os nomes de ícone do switch de um arquivo-fonte.
+func iconNamesFromSource(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ler %s: %v", path, err)
+	}
+	names := make(map[string]bool)
+	for _, m := range caseLabels.FindAllStringSubmatch(string(data), -1) {
+		for _, n := range caseNames.FindAllStringSubmatch(m[1], -1) {
+			names[n[1]] = true
+		}
+	}
+	if len(names) == 0 {
+		t.Fatalf("nenhum case de ícone encontrado em %s", path)
+	}
+	return names
+}
+
+// TestIconNames_ParidadeEntreRenderizadores garante que os DOIS renderizadores
+// conhecem exatamente os mesmos nomes de ícone: `icons.templ` (usado por navbar,
+// sidebar e /database) e `icons.go`/SVGString (usado pelo JSON do banco/busca,
+// via IconSVG). Um case presente em apenas um dos lados faz a mesma nota aparecer
+// com o ícone genérico de arquivo (fallback do switch) em uma das telas: foi
+// assim que o tipo `tabulator` (ícone "container") ficou sem ícone próprio na
+// tabela do /database — o case existia só no templ.
+func TestIconNames_ParidadeEntreRenderizadores(t *testing.T) {
+	viaString := iconNamesFromSource(t, "icons.go")   // SVGString
+	viaTempl := iconNamesFromSource(t, "icons.templ") // Icon
+
+	for n := range viaTempl {
+		if !viaString[n] {
+			t.Errorf("ícone %q só existe no icons.templ — falta o case em SVGString (icons.go)", n)
+		}
+	}
+	for n := range viaString {
+		if !viaTempl[n] {
+			t.Errorf("ícone %q só existe em SVGString (icons.go) — falta o case no icons.templ", n)
+		}
+	}
+}
+
+// TestConfig_IconesExistemNosRenderizadores impede que uma chave do Config aponte
+// para um ícone inexistente (GetIcon/GetColor cairiam no fallback em silêncio).
+// Cobre todos os tipos de nota e chaves de UI.
+func TestConfig_IconesExistemNosRenderizadores(t *testing.T) {
+	viaString := iconNamesFromSource(t, "icons.go")
+	viaTempl := iconNamesFromSource(t, "icons.templ")
+
+	for key, spec := range Config {
+		if spec.Icon == "" {
+			t.Errorf("chave %q sem ícone definido", key)
+			continue
+		}
+		if !viaString[spec.Icon] || !viaTempl[spec.Icon] {
+			t.Errorf("chave %q aponta para o ícone %q, inexistente (SVGString: %v, templ: %v)",
+				key, spec.Icon, viaString[spec.Icon], viaTempl[spec.Icon])
+		}
 	}
 }

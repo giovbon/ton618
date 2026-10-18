@@ -87,7 +87,8 @@
     var TYPE_LABELS = {
         nota: "Nota", pdf: "PDF", epub: "EPUB", anexo: "Anexo", arquivo: "Arquivo",
         desenho: "Desenho", markmap: "Mapa mental", youtube: "YouTube",
-        artigo: "Artigo", captura: "Captura", semanal: "Semanal", imagem: "Imagem"
+        artigo: "Artigo", captura: "Captura", semanal: "Semanal", imagem: "Imagem",
+        tabulator: "Tabulator"
     };
 
     function typeLabel(t) {

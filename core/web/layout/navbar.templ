@@ -88,6 +88,10 @@ templ Navbar() {
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap")) <span>+ Markmap</span>
                         </a>
+                        <a href="/tabulator"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) <span>+ Tabulator</span>
+                        </a>
                     </div>
                 </div>
 
@@ -192,6 +196,11 @@ templ Navbar() {
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
                         @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap"))
                         <span class="text-[11px] font-semibold text-emerald-400/90">+ Markmap</span>
+                    </a>
+                    <a href="/tabulator" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-lime-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator"))
+                        <span class="text-[11px] font-semibold text-lime-400/90">+ Tabulator</span>
                     </a>
                     <a href="/semana" id="mobile-criar-semana-link" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-teal-400 transition-all active:scale-[0.98]">

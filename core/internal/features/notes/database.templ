@@ -82,13 +82,21 @@ templ databaseContent() {
     </div>
 
     <!-- Tabulator container -->
-    <div id="notes-table" class="w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
+    <div id="notes-table" class="ton-tabulator w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
 </div>
 
 <!-- Tabulator Assets loaded dynamically below -->
 
 <style>
-    /* Tabulator Overrides to match the premium dark mode of TON-618 */
+    /* ── Ajustes locais da administração de notas (/database) ─────────────
+       O DESENHO e as CORES da tabela (cabeçalho, linhas, zebra, células em
+       edição, filtros, rolagem, foco/ordenação em esmeralda) vêm de
+       /static/tabulator-theme.css (classe .ton-tabulator) — a MESMA fonte da
+       nota Tabulator. Aqui ficam só o que é específico desta página: largura
+       total, padding das células (a árvore depende dele), controles da
+       hierarquia, paginação e as decorações das células. */
+
+    /* Ocupa a largura toda (a página já tem padding próprio). */
     #notes-table {
         width: 100vw;
         position: relative;
@@ -98,50 +106,20 @@ templ databaseContent() {
         margin-right: -50vw;
         border-radius: 0 !important;
     }
-    .tabulator {
-        background-color: transparent !important;
-        border: none !important;
-        font-family: var(--font-sans) !important;
-        font-size: 13px;
-    }
-    .tabulator-header {
-        background-color: #18181b !important; /* zinc-900 */
-        border-bottom: 1px solid #27272a !important; /* zinc-800 */
-        color: #a1a1aa !important; /* zinc-400 */
-        font-weight: 700 !important;
-    }
-    .tabulator-col {
-        background-color: #18181b !important;
-        border-right: 1px solid #27272a !important;
-    }
-    .tabulator-row {
-        background-color: #09090b !important; /* zinc-950 */
-        border-bottom: 1px solid #27272a !important; /* zinc-800 */
-        color: #d4d4d8 !important; /* zinc-300 */
-        transition: background-color 0.15s;
-    }
-    .tabulator-row:hover {
-        background-color: #18181b !important; /* zinc-900 */
-    }
-    .tabulator-row.tabulator-row-even {
-        background-color: #09090b !important; /* zinc-950 */
-    }
-    .tabulator-cell {
-        border-right: 1px solid #27272a !important;
+
+    /* Padding local: o offset das guias da hierarquia (DECISIONS §6.28) sai
+       deste padding-left (12px) + meia largura do controle +/- (8px). Não
+       mexer sem revisar as guias. */
+    #notes-table .tabulator-row .tabulator-cell {
         padding: 8px 12px !important;
     }
-    .tabulator-cell input {
-        background-color: #27272a !important;
-        color: #fff !important;
-        border: 1px solid #3f3f46 !important;
-        border-radius: 4px;
-        padding: 4px;
-    }
-    /* Editable cells indication */
-    .tabulator-cell.tabulator-editable:hover {
-        background-color: rgba(14, 165, 233, 0.1) !important; /* sky-500/10 */
+
+    /* Células editáveis: dica de hover no acento do tema (esmeralda). */
+    #notes-table .tabulator-cell.tabulator-editable:hover {
+        background-color: rgba(16, 185, 129, 0.08) !important;
         cursor: pointer;
     }
+
     /* Cell Formatters styling */
     .tag-pill {
         display: inline-block;
@@ -154,7 +132,6 @@ templ databaseContent() {
         margin-right: 4px;
         margin-bottom: 2px;
     }
-
     /* ── Hierarquia de notas (módulo Data Tree) ──
        Controle padrão do Tabulator, recolorido para o dark mode do TON-618.
        ⚠️ Não use dataTreeExpandElement/CollapseElement: o Tabulator substitui o
@@ -162,7 +139,7 @@ templ databaseContent() {
        Usamos :has() no wrapper para exibir + / − via ::before no próprio pai,
        evitando o problema de display:none ocultar o ::before do filho. */
     #notes-table .tabulator-data-tree-control {
-        background: #18181b !important; /* zinc-900 */
+        background: #1b1b20 !important; /* superfície do tema */
         border: 1px solid #3f3f46 !important; /* zinc-700 */
         border-radius: 5px !important;
         width: 16px !important;
@@ -177,8 +154,8 @@ templ databaseContent() {
         justify-content: center;
     }
     #notes-table .tabulator-data-tree-control:hover {
-        background: #27272a !important; /* zinc-800 */
-        border-color: #0ea5e9 !important; /* sky-500 */
+        background: #24242c !important; /* hover do tema */
+        border-color: #10b981 !important; /* emerald-500 (acento do tema) */
     }
     /* Oculta as barras internas do tema */
     #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-expand,
@@ -199,7 +176,7 @@ templ databaseContent() {
         font-size: 14px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
-        color: #a1a1aa !important; /* zinc-400 */
+        color: #a1a1aa !important; /* texto suave do tema */
         font-family: monospace !important;
     }
     /* Ícone − quando aberto: o pai contém o filho -collapse */
@@ -216,18 +193,17 @@ templ databaseContent() {
         font-size: 14px !important;
         font-weight: 700 !important;
         line-height: 1 !important;
-        color: #a1a1aa !important; /* zinc-400 */
+        color: #a1a1aa !important; /* texto suave do tema */
         font-family: monospace !important;
     }
     /* Hover: muda cor do ícone para sky-400 */
     #notes-table .tabulator-data-tree-control:hover::before {
-        color: #38bdf8 !important; /* sky-400 */
+        color: #34d399 !important; /* emerald-400 do tema */
     }
-
     /* Premium Dark Mode Footer & Pagination styling */
     .tabulator-footer {
-        background-color: #09090b !important; /* zinc-950 */
-        border-top: 1px solid #27272a !important; /* zinc-800 */
+        background-color: #121215 !important; /* fundo de linha do tema */
+        border-top: 2px solid #3f3f46 !important; /* borda do tema (espelha o cabeçalho) */
         color: #a1a1aa !important; /* zinc-400 */
         padding: 10px 16px !important;
     }
@@ -238,9 +214,9 @@ templ databaseContent() {
         gap: 6px;
     }
     .tabulator-footer select {
-        background-color: #18181b !important; /* zinc-900 */
-        border: 1px solid #27272a !important; /* zinc-800 */
-        color: #d4d4d8 !important; /* zinc-300 */
+        background-color: #1b1b20 !important; /* superfície do tema */
+        border: 1px solid #3f3f46 !important; /* borda do tema */
+        color: #e4e4e7 !important; /* texto do tema */
         border-radius: 6px;
         padding: 4px 8px !important;
         font-weight: 500;
@@ -248,11 +224,11 @@ templ databaseContent() {
         cursor: pointer;
     }
     .tabulator-footer select:focus {
-        border-color: #0ea5e9 !important; /* sky-500 */
+        border-color: #10b981 !important; /* emerald-500 (acento do tema) */
     }
     .tabulator-footer .tabulator-page {
-        background-color: #18181b !important; /* zinc-900 */
-        border: 1px solid #27272a !important; /* zinc-800 */
+        background-color: #1b1b20 !important; /* superfície do tema */
+        border: 1px solid #3f3f46 !important; /* borda do tema */
         color: #a1a1aa !important; /* zinc-400 */
         border-radius: 6px;
         padding: 4px 10px !important;
@@ -261,14 +237,14 @@ templ databaseContent() {
         transition: all 0.15s ease;
     }
     .tabulator-footer .tabulator-page:hover:not(.disabled) {
-        background-color: #27272a !important; /* zinc-800 */
+        background-color: #24242c !important; /* hover do tema */
         color: #ffffff !important;
-        border-color: #3f3f46 !important;
+        border-color: #52525b !important;
     }
     .tabulator-footer .tabulator-page.active {
-        background-color: rgba(14, 165, 233, 0.15) !important; /* sky-500/15 */
-        border-color: rgba(14, 165, 233, 0.4) !important; /* sky-500/40 */
-        color: #38bdf8 !important; /* sky-400 */
+        background-color: rgba(16, 185, 129, 0.15) !important; /* emerald-500/15 */
+        border-color: rgba(16, 185, 129, 0.4) !important; /* emerald-500/40 */
+        color: #34d399 !important; /* emerald-400 do tema */
         font-weight: 700;
     }
     .tabulator-footer .tabulator-page.disabled {
@@ -277,7 +253,6 @@ templ databaseContent() {
         border-color: transparent !important;
         cursor: not-allowed;
     }
-
     /* ── Leitura da hierarquia (Fase 1) ──
        Guias verticais: cada linha desenha 1 px por nível ANCESTRAL. O nível
        vem de --lvl (rowFormatter); o passo (18px) é o dataTreeChildIndent e o
@@ -368,5 +343,9 @@ templ databaseContent() {
     }
 </style>
 
+<!-- Tema compartilhado com a nota Tabulator (ver tabulator-theme.css):
+     o .tabulator entra no PRÓPRIO container, então a classe .ton-tabulator
+     marca a raiz da tabela nas duas páginas. -->
+<link rel="stylesheet" href={ staticver.URL("/static/tabulator-theme.css") } />
 <script src={ staticver.URL("/static/database.js") }></script>
 }

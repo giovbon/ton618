@@ -254,13 +254,18 @@ func (ctx *HandlerContext) HandleFileDownload(w http.ResponseWriter, r *http.Req
 // doSaveNote é o helper interno compartilhado entre HandleFileSave e HandleNoteSaveJSON.
 // Retorna (unchanged bool, err error). unchanged=true quando o conteúdo é idêntico ao salvo.
 func (ctx *HandlerContext) doSaveNote(filename, content, tags string) (unchanged bool, err error) {
-	if current, e := ctx.Store.GetNote(filename); e == nil && current == content {
+	previous, prevErr := ctx.Store.GetNote(filename)
+	if prevErr == nil && previous == content {
 		return true, nil
 	}
 	tagList := strings.Split(tags, ",")
 	if e := ctx.Notes.Save(filename, content, tagList); e != nil {
 		return false, e
 	}
+	// Nota Tabulator: apaga os arquivos de datasets/ que eram referenciados por
+	// células e deixaram de ser (célula esvaziada, arquivo trocado, registro ou
+	// coluna excluídos).
+	ReconcileTabulatorFiles(ctx.Store, ctx.Cfg.DocsDir, filename, previous, content)
 	return false, nil
 }
 
@@ -317,6 +322,13 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Nota Tabulator: guarda o conteúdo antes de remover, para apagar depois os
+	// arquivos de datasets/ que ficarem sem nenhuma nota referenciando.
+	var previousContent string
+	if ft == fileTypeNote {
+		previousContent, _ = ctx.Store.GetNote(filename)
+	}
+
 	// Remove o arquivo físico do disco (se existir)
 	os.Remove(fullPath)
 
@@ -339,6 +351,10 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 	// Remove from DB (common cleanup for all types, atomically)
 	if err := ctx.Store.DeleteAllFileRecords(filename); err != nil {
 		slog.Error("delete all file records", "file", filename, "error", err)
+	}
+
+	if previousContent != "" {
+		ReconcileTabulatorFiles(ctx.Store, ctx.Cfg.DocsDir, filename, previousContent, "")
 	}
 
 	w.Header().Set("HX-Trigger", "reload-sidebar")

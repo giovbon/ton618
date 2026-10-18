@@ -285,8 +285,9 @@ func TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica(t *testing.T) {
 		allowed[p] = true
 	}
 
-	if len(NonNoteFilePrefixes)+1 != len(AllowedFilePrefixes) {
-		t.Errorf("NonNoteFilePrefixes deveria ter %d itens, got %d", len(AllowedFilePrefixes)-1, len(NonNoteFilePrefixes))
+	if len(NonNoteFilePrefixes)+1+len(InternalFilePrefixes) != len(AllowedFilePrefixes) {
+		t.Errorf("AllowedFilePrefixes deveria ser NonNoteFilePrefixes + notes/ + internos (%d), got %d",
+			len(NonNoteFilePrefixes)+1+len(InternalFilePrefixes), len(AllowedFilePrefixes))
 	}
 	for i, p := range NonNoteFilePrefixes {
 		if !allowed[p] {
@@ -309,6 +310,21 @@ func TestPrefixosDeDiretorio_SaoDerivadosDaFonteUnica(t *testing.T) {
 	// Matchers usados pelos handlers.
 	if !HasAllowedFilePrefix("notes/x.md") || !HasAllowedFilePrefix("images/a.png") {
 		t.Error("prefixos permitidos deveriam ser aceitos")
+	}
+	// datasets/ é permitido (servido por /file/download), mas é diretório INTERNO:
+	// fica fora de NonNoteFilePrefixes e de FileDirs (não é varrido/indexado).
+	if !HasAllowedFilePrefix("datasets/relatorio.pdf") {
+		t.Error("datasets/ deveria ser um prefixo permitido")
+	}
+	for _, p := range NonNoteFilePrefixes {
+		if p == DatasetPrefix {
+			t.Error("NonNoteFilePrefixes não deve conter o diretório interno datasets/")
+		}
+	}
+	for _, d := range FileDirs {
+		if d == DatasetDir {
+			t.Error("FileDirs não deve conter datasets/ (não é varrido nem indexado)")
+		}
 	}
 	if HasAllowedFilePrefix("etc/passwd") || HasAllowedFilePrefix("x.md") {
 		t.Error("caminho fora dos prefixos permitidos não deveria ser aceito")

@@ -180,6 +180,10 @@ func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fil
 		clearText = true
 	case "markmap", "mindmap":
 		canonicalTag = "markmap"
+	case "tabulator":
+		// Nota Tabulator: o corpo (JSON da planilha) É indexado — ver
+		// ProcessMarkdownContent, que delega para ProcessTabulatorContent.
+		canonicalTag = "tabulator"
 	default:
 		return fileTags
 	}
@@ -223,6 +227,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	// Parse frontmatter
 	var metaParts []string
 	var fm map[string]interface{}
+	var frontmatterType string
 	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
 		endIdx := strings.Index(text[4:], "\n---")
 		if endIdx != -1 {
@@ -268,6 +273,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				// Aplica comportamentos e tag canônica conforme o type: do frontmatter
 				if typeRaw, ok := fm["type"]; ok {
 					if typeStr, ok := typeRaw.(string); ok {
+						frontmatterType = strings.ToLower(strings.TrimSpace(typeStr))
 						fileTags = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
 					}
 				}
@@ -280,6 +286,12 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 				text = text[afterFrontmatter:]
 			}
 		}
+	}
+
+	// Nota Tabulator: indexa o corpo JSON célula a célula (um fragmento por
+	// linha + um com os nomes das colunas) em vez de tratá-lo como markdown.
+	if frontmatterType == "tabulator" {
+		return ProcessTabulatorContent(text, filename, timestampStr, creationStr, fileTags), nil, fileTags
 	}
 
 	if strings.TrimSpace(text) == "" {

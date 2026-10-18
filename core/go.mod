@@ -6,6 +6,7 @@ require (
 	cel.dev/cel-go v0.32.0
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
+	github.com/a-h/templ v0.3.1070
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/horiagug/youtube-transcript-api-go v0.0.13
 	github.com/yuin/goldmark v1.8.6

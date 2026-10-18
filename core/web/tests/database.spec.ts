@@ -79,3 +79,53 @@ test('coluna "Modificação" começa oculta e pode ser mostrada', async ({ page 
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('db_column_visibility') || '{}').mtime))
     .toBe(true);
 });
+
+// A /database usa o MESMO tema visual da nota Tabulator (arquivo compartilhado
+// static/tabulator-theme.css, classe .ton-tabulator) — as cores abaixo são as
+// mesmas verificadas em tabulator.spec.ts — e o tipo de nota `tabulator` tem
+// ícone PRÓPRIO na coluna "Tipo" (o "container"), não o ícone genérico de
+// arquivo que aparece quando o case do ícone existe em só um dos renderizadores.
+test('usa o tema compartilhado e o tipo Tabulator tem ícone próprio', async ({ page }) => {
+  // Cria uma nota Tabulator (mesmo fluxo da nota real) para haver uma linha.
+  await page.goto('/tabulator');
+  await expect(page.locator('#tabulator-table .tabulator-header')).toBeVisible({ timeout: 20000 });
+  await page.click('#tab-add-row');
+  await expect(page.locator('#editor-status')).toHaveText('✓', { timeout: 20000 });
+
+  await page.goto('/database');
+  await expect(page.locator('#notes-table .tabulator-header')).toBeVisible({ timeout: 20000 });
+  await page.mouse.move(4, 4); // sem hover em nenhuma linha
+
+  const themeLoaded = await page.evaluate(() =>
+    Array.from(document.styleSheets).some(s => (s.href || '').includes('tabulator-theme.css')),
+  );
+  expect(themeLoaded).toBe(true);
+
+  const header = page.locator('#notes-table .tabulator-header');
+  await expect(header).toHaveCSS('background-color', 'rgb(27, 27, 32)'); // #1b1b20
+  await expect(header).toHaveCSS('border-bottom-width', '2px');
+  await expect(header).toHaveCSS('border-bottom-color', 'rgb(63, 63, 70)'); // #3f3f46
+  await expect(page.locator('#notes-table .tabulator-header .tabulator-col').first()).toHaveCSS(
+    'background-color',
+    'rgb(27, 27, 32)',
+  );
+  await expect(page.locator('#notes-table .tabulator-row').first()).toHaveCSS(
+    'background-color',
+    'rgb(18, 18, 21)', // #121215
+  );
+  await expect(page.locator('#notes-table .tabulator-row .tabulator-cell').first()).toHaveCSS(
+    'border-right-color',
+    'rgb(38, 38, 44)', // #26262c
+  );
+
+  // Ícone do tipo: o SVG do "container" (não o fallback de arquivo).
+  const typeIcon = page
+    .locator('#notes-table .tabulator-row')
+    .filter({ hasText: 'Tabulator' })
+    .first()
+    .locator('.tabulator-cell[tabulator-field="type"] svg');
+  await expect(typeIcon).toBeVisible();
+  const svg = await typeIcon.innerHTML();
+  expect(svg).toContain('M22 7.7c0-.6'); // path exclusivo do ícone "container"
+  expect(svg).not.toContain('M15 2H6a2 2 0 0 0-2 2v16'); // fallback genérico de arquivo
+});
