@@ -37,6 +37,13 @@ COPY --from=web-builder /web/static ./web/static
 # Gerar código do templ antes de compilar
 RUN templ generate
 
+# go mod tidy DEPOIS do templ generate: os *_templ.go são gitignored e não
+# existem no COPY acima, então o go.mod commitado (que o Dependabot "tidi" sem os
+# _templ.go) não exige github.com/a-h/templ. Tidy após o generate restaura a
+# dependência (mesma lógica do run.sh e do pr_checks.yml), senão o go build
+# quebra com "no required module provides package github.com/a-h/templ".
+RUN go mod tidy
+
 RUN GOARM=$(echo "${TARGETVARIANT}" | sed 's/v//') && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${GOARM} go build \
     -tags "${BUILD_TAGS}" \
