@@ -20,11 +20,24 @@ tag** e decide o tipo de bump:
 |---|---|---|
 | `BREAKING CHANGE` no corpo, ou `tipo!:` no assunto (`feat!:` / `fix(api)!:`) | **MAJOR** | `v3.4.0` → `v4.0.0` |
 | Assunto começando com `feat:` | **MINOR** | `v3.4.0` → `v3.5.0` |
-| `fix:`, `chore:`, `docs:`, `ci:`, `refactor:`, `perf:`, bumps de dependência, etc. | **PATCH** | `v3.4.0` → `v3.4.1` |
-| Nenhum commit relevante (raro em push para `main`) | **PATCH** | `v3.4.0` → `v3.4.1` |
+| `fix:`, `refactor:`, `perf:` e demais (exceto os "sem release" abaixo) | **PATCH** | `v3.4.0` → `v3.4.1` |
+| **Só** `chore:`, `docs:`, `ci:`, `test:`, `style:`, `build:` ou bumps de dependência (`Bump …`) | **nenhum** | não cria tag; só republica `:latest` |
+| Nenhum commit desde a última tag | **nenhum** | não cria tag; só republica `:latest` |
 
 A precedência é MAJOR > MINOR > PATCH: basta **um** commit quebrável para subir
 o major; na ausência dele, basta **um** `feat:` para subir o minor.
+
+### Quando NÃO há release
+
+Se **todos** os commits desde a última tag forem "não-releasable" — ou seja,
+`chore`/`docs`/`ci`/`test`/`style`/`build` ou bumps de dependência
+(`Bump …`), ou não houver commit — **nenhuma tag é criada**. O pipeline ainda
+roda e republica a imagem apenas como **`:latest`** (sem `vX.Y.Z`), porque o
+rebuild é útil (ex.: dependências novas) mas não configura uma versão nova.
+
+Por isso os merges do Dependabot **não geram versão** a cada PR: eles só
+atualizam a `:latest`. Uma tag `vX.Y.Z` só nasce quando entra um `feat:`,
+`fix:` (ou `refactor:`/`perf:`) ou um `BREAKING CHANGE`.
 
 > Não há mais o antigo "`+1` no patch a cada 30 commits". O tipo é sempre
 > derivado do conteúdo dos commits.
