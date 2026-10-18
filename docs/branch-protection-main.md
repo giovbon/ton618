@@ -1,6 +1,6 @@
 # Proteção da branch `main` (PR Checks + deploy)
 
-A proteção de branch é uma **configuração do GitHub** (Settings do repositório), **não** é aplicada pelo código deste repositório. Este doc instrui como exigir que o workflow **PR Checks** passe **antes** do merge — o mesmo check que dá segurança ao **auto-merge do Dependabot** (`.github/dependabot.yml`).
+A proteção de branch é uma **configuração do GitHub** (Settings do repositório), **não** é aplicada pelo código deste repositório. Este doc instrui como exigir que o workflow **PR Checks** (`Test (Go + Web)`) passe **antes** do merge — o mesmo check que dá segurança ao **auto-merge do Dependabot** (que é configurado na UI: Settings → Dependabot → Automations).
 
 ## O status check a exigir
 
@@ -44,13 +44,20 @@ JSON
 
 O exemplo acima exige o check **sem** revisão obrigatória (count `0`) — ideal para o auto-merge de minors/patch do Dependabot.
 
-## ⚠️ Interação com o auto-merge do Dependabot
+## ⚠️ Auto-merge do Dependabot (NÃO é via `dependabot.yml`)
 
-- O auto-merge (`.github/dependabot.yml`) só mergeia quando **os checks exigidos passam**.
-- Se você **exigir revisão obrigatória** na proteção da `main`, o auto-merge **não** ignora: até minors precisariam de aprovação humana (perde-se o "auto").
+> As chaves `auto_merge` / `pull_request_review_rule` **não existem** no schema do `dependabot.yml` — usá-las quebra a validação do Dependabot. O auto-merge nativo é **configurado na UI do GitHub**:
+
+**GitHub → Settings → Dependabot → Automations:**
+- Ative **"Allow automerging for minor and patch updates"** (ou selecione os update-types desejados).
+- O Dependabot então auto-mergeia os PRs qualificados **depois que o workflow "PR Checks" (`Test (Go + Web)`) passa** — desde que a proteção da `main` **não** exija revisão obrigatória que bloqueie o merge.
+- Não há escopo por `target-branch` na UI — o auto-merge aplica ao repo. Para restringir a `main`, a proteção de branch é o mecanismo.
+
+Interação com a proteção da branch:
+- Se você **exigir revisão obrigatória** na `main`, o auto-merge **não** ignora: até minors precisariam de aprovação humana (perde-se o "auto").
 - Decisão recomendada por perfil:
-  - **Agilidade + auto-merge:** exigir **só o status check** `Test (Go + Web)`, sem revisão obrigatória da branch. (Majors já caem na regra de revisão do Dependabot via `pull_request_review_rule`.)
-  - **Mais vigilância:** exigir tambem **1 revisão** obrigatória — aí TODA mudança (inclusive minors) pede aprovação antes de mergear.
+  - **Agilidade + auto-merge:** exigir **só o status check** `Test (Go + Web)`, sem revisão obrigatória. Minors/patch auto-mergeiam; majors exigem review (via `reviewers` do Dependabot).
+  - **Mais vigilância:** exigir **1 revisão** obrigatória — aí TODA mudança (inclusive minors) pede aprovação antes de mergear.
 
 ## Onde o `main` recebe mudanças
 
