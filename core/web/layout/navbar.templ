@@ -147,6 +147,12 @@ templ Navbar() {
                 </a>
 
                 <!-- Utility icons (cinza conforme especificado) -->
+                <!-- Ajuda: à esquerda das configurações. Abre /help, que renderiza
+                     o HELP.md da raiz do projeto (markdown). -->
+                <a id="nav-help" href="/help"
+                    class="text-zinc-400 hover:text-sky-300 transition-colors cursor-pointer" title="Ajuda / Docs">
+                    @icons.Icon(icons.GetIcon("help"), "w-4 h-4 " + icons.GetColor("help"))
+                </a>
                 <button @click="$store.settings.openTab('arquivamento')"
                     class="text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Configurações">
                     @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
@@ -243,6 +249,12 @@ templ Navbar() {
                          (árvore + várias colunas) não é utilizável numa tela de
                          celular. O acesso continua no menu do desktop
                          (#nav-database) e pela URL /database. -->
+
+                    <a id="mobile-nav-help" href="/help" @click="mobileMenuOpen = false"
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-300 hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        @icons.Icon(icons.GetIcon("help"), "w-4 h-4 " + icons.GetColor("help"))
+                        <span class="text-[11px] font-bold tracking-wider">AJUDA</span>
+                    </a>
 
                     <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
                         class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">

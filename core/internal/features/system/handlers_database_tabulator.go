@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -160,17 +161,17 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 	columns = append(columns, map[string]interface{}{"title": "Título", "field": "titulo", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tags", "field": "tags", "editor": "input"})
 	columns = append(columns, map[string]interface{}{"title": "Tipo", "field": "type", "editor": false, "width": 110})
+	// Hierarquia: a coluna "Pai" é onde o usuário edita a nota-mãe (fixa).
+	columns = append(columns, map[string]interface{}{"title": "Pai", "field": parentKey, "editor": "input"})
 
-	for col := range columnSet {
-		lowerCol := strings.ToLower(col)
-		if lowerCol != "arquivo" && lowerCol != "titulo" && lowerCol != "tags" && lowerCol != "mtime" && lowerCol != "type" && lowerCol != "markmap" {
-			title := strings.ToUpper(col[:1]) + col[1:]
-			columns = append(columns, map[string]interface{}{
-				"title":  title,
-				"field":  col,
-				"editor": "input",
-			})
-		}
+	// Campos dinâmicos (frontmatter / metadados): apenas os que o usuário
+	// liberou na aba "Colunas" viram coluna (allowlist salva em `db_columns`).
+	for _, col := range ctx.dynamicColumnWhiteList(columnSet) {
+		columns = append(columns, map[string]interface{}{
+			"title":  fieldTitle(col),
+			"field":  col,
+			"editor": "input",
+		})
 	}
 	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false, "visible": false})
 
@@ -192,6 +193,148 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			"meta":    meta,
 		})
 	}
+}
+
+// ── Preferência de colunas (aba "Colunas" nas configurações) ──
+
+// ColumnFieldOption é uma opção da aba "Colunas": um campo do frontmatter que
+// o usuário pode marcar para virar (ou não) coluna no Tabulator.
+type ColumnFieldOption struct {
+	Field   string
+	Title   string
+	Checked bool
+}
+
+// readAllowedColumns devolve (a) o conjunto de campos que o usuário permitiu
+// virar coluna e (b) se a preferência já foi salva. Distingue "nunca
+// configurado" (cfg=false ⇒ todos habilitados, comportamento padrão) de
+// "desmarquei tudo" (cfg=true com allowed vazio ⇒ nenhum campo liberado). O
+// marker "-" representa justamente a allowlist vazia explícita, porque um valor
+// vazio em `settings` é indistinguível de "não salvo" (GetSetting devolve "").
+func (ctx *HandlerContext) readAllowedColumns() (allowed map[string]bool, cfg bool) {
+	allowed = make(map[string]bool)
+	raw, _ := ctx.Store.GetSetting("db_columns")
+	if raw == "" {
+		return allowed, false
+	}
+	if raw == "-" {
+		return allowed, true
+	}
+	for _, f := range strings.Split(raw, ",") {
+		f = strings.TrimSpace(f)
+		if f != "" {
+			allowed[f] = true
+		}
+	}
+	return allowed, true
+}
+
+// isDynamicColumnField decide se um campo é dinâmico — isto é, controlável
+// pela aba "Colunas". Campos embutidos/fixos (arquivo, titulo, tags, type,
+// mtime, pai) e campos de configuração interna (markmap) ficam de fora: nunca
+// são colunas dinâmicas, por construção.
+func isDynamicColumnField(field string) bool {
+	switch strings.ToLower(field) {
+	case "arquivo", "titulo", "tags", "mtime", "type", "pai", "parent", "markmap":
+		return false
+	}
+	return true
+}
+
+// dynamicColumnWhiteList filtra um conjunto de campos candidatos, respeitando
+// a allowlist salva (`readAllowedColumns`; vazia = inclui todos). Ordena a
+// saída para o payload ser determinístico.
+func (ctx *HandlerContext) dynamicColumnWhiteList(candidates map[string]bool) []string {
+	allowed, cfg := ctx.readAllowedColumns()
+	var out []string
+	for col := range candidates {
+		if !isDynamicColumnField(col) {
+			continue
+		}
+		// Sem preferência salva (cfg=false) => todos os campos viram coluna.
+		// Com preferência salva => só os liberados (allowed), mesmo que vazio.
+		if !cfg || allowed[col] {
+			out = append(out, col)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// fieldTitle formata o rótulo de uma coluna dinâmica (primeira letra maiúscula).
+func fieldTitle(field string) string {
+	if field == "" {
+		return field
+	}
+	return strings.ToUpper(field[:1]) + field[1:]
+}
+
+// collectColumnCandidates devolve a lista ordenada de campos dinâmicos
+// disponíveis em alguma nota (frontmatter) ou arquivo (metadados externos).
+// É a fonte da verdade da aba "Colunas".
+func (ctx *HandlerContext) collectColumnCandidates(noteList []domain.NoteItem) ([]string, error) {
+	notesContent, err := ctx.Store.GetAllNotesContent()
+	if err != nil {
+		notesContent = make(map[string]string)
+	}
+	fileMeta, err := ctx.Store.GetAllFileMetadata()
+	if err != nil {
+		fileMeta = nil
+	}
+
+	set := make(map[string]bool)
+	for _, n := range noteList {
+		content := notesContent[n.Arquivo]
+		fm, _, err := notes.ParseFrontmatter(content)
+		if err != nil {
+			fm = make(map[string]interface{})
+		}
+		for k := range fm {
+			if isDynamicColumnField(k) {
+				set[k] = true
+			}
+		}
+		// Arquivos (PDF/EPUB/ZIP) não têm frontmatter: os metadados da tabela
+		// são a única fonte das propriedades (ver DECISIONS §6.24).
+		if !isNoteFile(n.Arquivo) {
+			for k := range fileMeta[n.Arquivo] {
+				if isDynamicColumnField(k) {
+					set[k] = true
+				}
+			}
+		}
+	}
+
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// columnFieldOptions monta a lista de opções da aba "Colunas" com o estado de
+// marcação atual (vazio na allowlist = todos marcados).
+func (ctx *HandlerContext) columnFieldOptions() ([]ColumnFieldOption, error) {
+	noteList, err := ctx.Notes.GetMany()
+	if err != nil {
+		return nil, err
+	}
+	candidates, err := ctx.collectColumnCandidates(noteList)
+	if err != nil {
+		return nil, err
+	}
+	allowed, cfg := ctx.readAllowedColumns()
+	opts := make([]ColumnFieldOption, 0, len(candidates))
+	for _, f := range candidates {
+		// Sem preferência salva => todos marcados; com preferência => só os liberados.
+		opts = append(opts, ColumnFieldOption{
+			Field:   f,
+			Title:   fieldTitle(f),
+			Checked: !cfg || allowed[f],
+		})
+	}
+	return opts, nil
 }
 
 // ── Título exibido na coluna "Título" do Tabulator ──

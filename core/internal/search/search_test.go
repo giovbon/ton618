@@ -2,11 +2,13 @@ package search
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"ton618/core/internal/core/db"
+	"ton618/core/internal/core/domain"
 )
 
 // ── buildFTSQuery ───────────────────────────────────────────────
@@ -68,6 +70,117 @@ func TestBuildFTSQuery_MultipleTermsWithAND(t *testing.T) {
 	}
 	if !contains(result, "golang*") || !contains(result, "concorrencia*") {
 		t.Errorf("ambos os termos devem estar presentes com sufixo *, got %q", result)
+	}
+}
+
+// ── buildFTSQuery — expansão por sinônimos ─────────────────────
+
+// Uma única palavra com sinônimos é expandida com OR (jogo de recall puro).
+func TestBuildFTSQuery_SingleWordExpandsSynonyms(t *testing.T) {
+	result := buildFTSQuery("carro")
+	for _, s := range []string{"carro", "automovel", "veiculo", "auto"} {
+		if !contains(result, "texto:"+s+"*") {
+			t.Errorf("esperava termo %q com sufixo * na expansão, got %q", s, result)
+		}
+	}
+	if !contains(result, "OR") {
+		t.Errorf("a expansão deveria usar OR entre as variantes, got %q", result)
+	}
+}
+
+// Palavra sem entrada no mapa de sinônimos permanece como um único termo.
+func TestBuildFTSQuery_SingleWordNoSynonymsUnchanged(t *testing.T) {
+	result := buildFTSQuery("palavra")
+	expected := `(tags:palavra* OR arquivo:palavra* OR secao:palavra* OR texto:palavra*)`
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
+// O lookup de sinônimos é insensível a acentos: "país" encontra a entrada "pais".
+func TestBuildFTSQuery_SingleWordSynonymAccentInsensitive(t *testing.T) {
+	result := buildFTSQuery("país")
+	if !contains(result, "texto:nacao*") {
+		t.Errorf("accent-insensitive lookup: esperava sinônimo nacao, got %q", result)
+	}
+	if !contains(result, "texto:país*") {
+		t.Errorf("o termo original deve permanecer, got %q", result)
+	}
+}
+
+// MULTI-palavra NÃO expande: evitar o produto cartesiano dos sinônimos.
+// "carro" tem sinônimos, mas em consulta de 2 termos eles NÃO podem entrar.
+func TestBuildFTSQuery_MultiWordDoesNotExpandSynonyms(t *testing.T) {
+	result := buildFTSQuery("carro vermelho")
+	if contains(result, "automovel") || contains(result, "veiculo") || contains(result, "auto") {
+		t.Errorf("multi-word não deve expandir sinônimos (produto cartesiano), got %q", result)
+	}
+	if !contains(result, "carro*") || !contains(result, "vermelho*") {
+		t.Errorf("os termos originais devem estar presentes, got %q", result)
+	}
+	if !contains(result, "AND") {
+		t.Errorf("multi-word deve manter AND entre termos, got %q", result)
+	}
+}
+
+// Sinônimos NÃO entram em frases entre aspas (modo exato).
+func TestBuildFTSQuery_QuotedPhraseNoSynonyms(t *testing.T) {
+	result := buildFTSQuery(`"carro vermelho"`)
+	if contains(result, "automovel") || contains(result, "veiculo") {
+		t.Errorf("frase entre aspas não deve expandir sinônimos, got %q", result)
+	}
+}
+
+// uma palavra + stopword conta como UM conteúdo → ainda expande.
+func TestBuildFTSQuery_WordPlusStopwordStillOneContent(t *testing.T) {
+	result := buildFTSQuery("carro de")
+	if !contains(result, "texto:automovel*") {
+		t.Errorf("stopwords não contam: 'carro de' é 1 conteúdo e deve expandir, got %q", result)
+	}
+	if !contains(result, "texto:carro*") {
+		t.Errorf("o termo original deve permanecer, got %q", result)
+	}
+}
+
+// ── UserSynonymMap (configuração de sinônimos) ─────────────────
+
+func TestUserSynonymMap_NormalizaSobrescreve(t *testing.T) {
+	rules := []domain.SynonymRule{
+		// Acentos e maiúsculas são normalizados (carro → automovel).
+		{Termo: "Carro", Sinonimos: []string{"Automóvel", "Veículo"}},
+		// Si mesmo nunca vira sinônimo (pc → PC removido).
+		{Termo: "PC", Sinonimos: []string{"computador", "PC"}},
+		// Termo vazio é ignorado.
+		{Termo: "", Sinonimos: []string{"x"}},
+	}
+	m := UserSynonymMap(rules)
+
+	if got := m["carro"]; !reflect.DeepEqual(got, []string{"automovel", "veiculo"}) {
+		t.Errorf("carro: esperava [automovel veiculo], got %v", got)
+	}
+	if got := m["pc"]; !reflect.DeepEqual(got, []string{"computador"}) {
+		t.Errorf("pc: esperava [computador] (si mesmo removido), got %v", got)
+	}
+	if _, ok := m[""]; ok {
+		t.Error("termo vazio não deveria gerar entrada")
+	}
+}
+
+// A lookup fornecida (usuário) tem prioridade sobre o mapa embarcado: quando ela
+// devolve sinônimos, o embarcado não entra na expansão.
+func TestBuildFTSQueryWithSynonyms_UsesProvidedLookup(t *testing.T) {
+	lookup := func(term string) []string {
+		if normalizeSynonym(term) == "carro" {
+			return []string{"buggy"}
+		}
+		return nil
+	}
+	result := buildFTSQueryWithSynonyms("carro", lookup)
+	if !contains(result, "texto:buggy*") {
+		t.Errorf("a lookup fornecida deveria virar sinônimo, got %q", result)
+	}
+	if contains(result, "automovel") || contains(result, "veiculo") {
+		t.Errorf("mapa embarcado não deveria ser usado quando a lookup fornece, got %q", result)
 	}
 }
 
@@ -439,6 +552,64 @@ func TestSearch_ResultadosOrdenadosPorScore(t *testing.T) {
 	if results.Hits[0].Doc.Arquivo != "notas/relevante.md" {
 		t.Errorf("nota relevante deveria vir primeiro. Got: %s", results.Hits[0].Doc.Arquivo)
 	}
+}
+
+// Sinônimo configurado pelo usuário: a nota que contém o termo original deve
+// vir SEMPRE antes das que casam apenas via sinônimo, independente do BM25
+// (a nota do sinônimo é mais recente/melhor pontuada no FTS). Regressão do
+// comportamento esperado: "buscar bunda" destaca a nota com "bunda".
+func TestSearch_SinonimoExatoVemPrimeiro(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+	now := time.Now()
+
+	// Sinônimo criado na aba "Sinônimos": bunda → peito, vagina.
+	if err := store.SetSetting("synonyms_config",
+		`[{"termo":"bunda","sinonimos":["peito","vagina"]}]`); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	// Nota com o termo EXATO ("bunda") no conteúdo.
+	store.InsertDocument(db.Document{
+		ID: "doc-bunda", Tipo: "markdown", Arquivo: "notas/bunda.md",
+		Secao: "Titulo", Texto: "aqui aparece bunda no texto",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-bunda", "markdown", "notas/bunda.md", "Titulo", "aqui aparece bunda no texto", "")
+	store.SetFileMod("notas/bunda.md", now.Format(time.RFC3339))
+
+	// Nota que só contém o SINÔNIMO "peito" (mais recente → BM25/recência maior).
+	store.InsertDocument(db.Document{
+		ID: "doc-sinonimo", Tipo: "markdown", Arquivo: "notas/sinonimo.md",
+		Secao: "Titulo", Texto: "assunto sobre peito e vagina",
+		Timestamp: now.Add(time.Minute).Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-sinonimo", "markdown", "notas/sinonimo.md", "Titulo", "assunto sobre peito e vagina", "")
+	store.SetFileMod("notas/sinonimo.md", now.Add(time.Minute).Format(time.RFC3339))
+
+	results, err := Search(context.Background(), store, "bunda", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+	if len(results.Hits) == 0 {
+		t.Fatal("busca por bunda (com sinônimos) deveria retornar resultados")
+	}
+	if results.Hits[0].Doc.Arquivo != "notas/bunda.md" {
+		t.Errorf("nota com o termo original deveria vir primeiro, got %s → %v",
+			results.Hits[0].Doc.Arquivo, arquivosDosHits(results.Hits))
+	}
+}
+
+// arquivosDosHits lista os arquivos na ordem dos hits (auxiliar de diagnóstico).
+func arquivosDosHits(hits []SearchHit) []string {
+	out := make([]string, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, h.Doc.Arquivo)
+	}
+	return out
 }
 
 func TestSearch_ExactMatchOnly(t *testing.T) {

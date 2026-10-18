@@ -51,14 +51,37 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	seenFiles := make(map[string]bool)
-	weightCache := make(map[string]float64)
-	var items []domain.SearchResultItem
+	// Seleciona, por arquivo, o MELHOR fragmento para representar a nota nos
+	// resultados. Os hits já vêm ordenados por FinalScore (o primeiro é o de maior
+	// score); mas se um fragmento POSTERIOR contém um termo da busca e o escolhido
+	// não, trocamos para ele — assim o snippet é montado a partir do fragmento
+	// onde o termo realmente aparece (evita mostrar um fragmento-resumo sem o
+	// termo, comum em notas longas com cabeçalho de poucos caracteres).
+	type slot struct {
+		hit      search.SearchHit
+		contains bool
+	}
+	chosen := make(map[string]int)
+	var slots []slot
 	for _, hit := range results.Hits {
-		if seenFiles[hit.Doc.Arquivo] {
+		arq := hit.Doc.Arquivo
+		c := containsSearchTerm(hit.Doc.Texto, query)
+		idx, ok := chosen[arq]
+		if !ok {
+			chosen[arq] = len(slots)
+			slots = append(slots, slot{hit: hit, contains: c})
 			continue
 		}
-		seenFiles[hit.Doc.Arquivo] = true
+		if c && !slots[idx].contains {
+			slots[idx].hit = hit
+			slots[idx].contains = true
+		}
+	}
+
+	weightCache := make(map[string]float64)
+	var items []domain.SearchResultItem
+	for _, s := range slots {
+		hit := s.hit
 
 		snippet := buildSnippet(hit, query)
 

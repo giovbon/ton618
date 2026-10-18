@@ -429,3 +429,12 @@ type AutoTagRule struct {
 	Days int    `json:"days"`
 	Tag  string `json:"tag"`
 }
+
+// SynonymRule define uma entrada editável de sinônimos (aba "Sinônimos" nas
+// configurações): um termo e seus sinônimos. O termo e os sinônimos são
+// normalizados (minúsculas + sem acento) no momento do lookup em
+// internal/search; aqui ficam como o usuário digitou.
+type SynonymRule struct {
+	Termo     string   `json:"termo"`
+	Sinonimos []string `json:"sinonimos"`
+}

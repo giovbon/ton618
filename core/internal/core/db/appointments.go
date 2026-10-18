@@ -7,10 +7,12 @@ import (
 	"ton618/core/internal/core/domain"
 )
 
-// CreateAppointment inserts a new appointment into the database.
+// CreateAppointment inserts a new appointment into the database. Usa
+// appointmentsMu (domínio independente do núcleo) — não bloqueia nem é
+// bloqueado pelo WriteMu (#3).
 func (s *Store) CreateAppointment(a domain.Appointment) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.appointmentsMu.Lock()
+	defer s.appointmentsMu.Unlock()
 
 	if a.CreatedAt == "" {
 		a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -27,10 +29,10 @@ func (s *Store) CreateAppointment(a domain.Appointment) error {
 	})
 }
 
-// UpdateAppointment updates an existing appointment.
+// UpdateAppointment updates an existing appointment. Usa appointmentsMu (#3).
 func (s *Store) UpdateAppointment(a domain.Appointment) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.appointmentsMu.Lock()
+	defer s.appointmentsMu.Unlock()
 
 	return s.Q.UpdateAppointment(s.queryCtx(), dbgen.UpdateAppointmentParams{
 		Description: sql.NullString{String: a.Description, Valid: true},
@@ -42,18 +44,18 @@ func (s *Store) UpdateAppointment(a domain.Appointment) error {
 	})
 }
 
-// DeleteAppointment removes an appointment by ID.
+// DeleteAppointment removes an appointment by ID. Usa appointmentsMu (#3).
 func (s *Store) DeleteAppointment(id string) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.appointmentsMu.Lock()
+	defer s.appointmentsMu.Unlock()
 
 	return s.Q.DeleteAppointment(s.queryCtx(), id)
 }
 
-// DeleteOldAppointments removes all appointments whose event_date is before the given time.
+// DeleteOldAppointments removes all appointments whose event_date is before the given time. Usa appointmentsMu (#3).
 func (s *Store) DeleteOldAppointments(before time.Time) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.appointmentsMu.Lock()
+	defer s.appointmentsMu.Unlock()
 
 	return s.Q.DeleteOldAppointments(s.queryCtx(), sql.NullString{
 		String: before.UTC().Format(time.RFC3339),

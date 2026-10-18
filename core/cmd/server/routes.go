@@ -23,6 +23,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/todos", sysCtx.HandleTodosPage)
 	mux.Get("/settings", sysCtx.HandleTodoSettingsPage)
 	mux.Get("/database", sysCtx.HandleDatabasePage)
+	mux.Get("/help", sysCtx.HandleHelpPage)
 	mux.Get("/login", sysCtx.HandleLogin)
 
 	// API System
@@ -36,6 +37,10 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Get("/api/settings/auto-tag", sysCtx.HandleGetAutoTagSettings)
 	mux.Post("/api/settings/auto-tag", sysCtx.HandlePostAutoTagSettings)
 	mux.Post("/api/settings/auto-tag/apply", sysCtx.HandleApplyAutoTag)
+	mux.Get("/api/settings/columns", sysCtx.HandleGetColumnsSettings)
+	mux.Post("/api/settings/columns", sysCtx.HandlePostColumnsSettings)
+	mux.Get("/api/settings/synonyms", sysCtx.HandleGetSynonymSettings)
+	mux.Post("/api/settings/synonyms", sysCtx.HandlePostSynonymSettings)
 
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)

@@ -24,6 +24,17 @@ type Store struct {
 	Q       *dbgen.Queries
 	WriteMu sync.Mutex
 
+	// Granularidade de locks (#3): WriteMu serializa as escritas do "núcleo"
+	// (notes, documents/FTS, links/tags, todos, file_metadata, popularity e as
+	// transações cross-domain ReplaceFileIndexes/DeleteAllFileRecords). Dois
+	// domínios totalmente independentes — settings/notificações e appointmenos —
+	// nunca aparecem nessas transações, então têm locks próprios e NÃO bloqueiam
+	// nem são bloqueados pelo restante. Isso permite, ex: salvar uma nota
+	// (WriteMu) em paralelo com um save de configuração (settingsMu) ou um
+	// update de agenda (appointmentsMu).
+	settingsMu     sync.Mutex
+	appointmentsMu sync.Mutex
+
 	// cancelMu + queryPending registram os cancel() dos contextos criados por
 	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;
 	// o registro permite cancelar tudo no Close sem alterar os ~80 pontos de
@@ -119,6 +130,11 @@ func (s *Store) RunInTx(fn func(tx *sql.Tx) error) error {
 
 // NewStore abre (ou cria) o banco e inicializa o schema.
 func NewStore(path string) (*Store, error) {
+	// #6: snapshot do último estado bom ANTES de aplicar migrations (se uma
+	// migration falhar, o backup em <dir>/backups/pre-migration.db permite
+	// restaurar). Tolerante a falha — é só uma rede de segurança.
+	backupBeforeMigration(path)
+
 	database, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("db open: %w", err)

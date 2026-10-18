@@ -37,6 +37,7 @@ templ Layout(title string, loadTipTap bool, content templ.Component) {
                     if (tabName === "marcadores" && typeof loadMarcadores === "function") loadMarcadores();
                     if (tabName === "stopwords" && typeof loadStopwords === "function") loadStopwords();
                     if (tabName === "restaurar" && typeof loadArchives === "function") loadArchives();
+                    if (tabName === "colunas" && typeof reloadColumnFields === "function") reloadColumnFields();
                 },
                 close() {
                     this.open = false;

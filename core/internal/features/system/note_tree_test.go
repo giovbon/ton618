@@ -427,6 +427,66 @@ func TestHandleGetDatabaseData_AbrirColumnRemoved(t *testing.T) {
 	}
 }
 
+// Nenhum campo pode ser exposto como coluna duas vezes (a "Abrir" já foi um
+// caso real: duas definições de abrir_link no handler). Regressão guarda a
+// unicidade dos field do payload do Tabulator.
+func TestHandleGetDatabaseData_NoDuplicateColumnFields(t *testing.T) {
+	ctx := newTestContext(t)
+	// Frontmatter com vários campos dinâmicos + built-ins + hierarquia.
+	saveTestNote(t, ctx, "notes/a.md",
+		"---\nautor: Fulano\nmarcador: z\ninteracao: 2026-01-01\ntags: [x]\n---\n# A", "")
+
+	resp := fetchDatabase(t, ctx)
+	seen := make(map[string]bool)
+	for _, col := range resp.Columns {
+		field, _ := col["field"].(string)
+		if field == "" {
+			continue
+		}
+		if seen[field] {
+			t.Errorf("campo exposto como coluna mais de uma vez: %q", field)
+		}
+		seen[field] = true
+	}
+}
+
+// A aba "Colunas" salva uma allowlist (`db_columns`) e o payload só deve expor
+// como coluna os campos liberados — os demais campos do frontmatter somem.
+func TestHandleGetDatabaseData_ColumnAllowlist(t *testing.T) {
+	ctx := newTestContext(t)
+	saveTestNote(t, ctx, "notes/a.md",
+		"---\nautor: Fulano\nmarcador: z\norigem: web\n---\n# A", "")
+
+	// Sem allowlist salva: todos os campos dinâmicos viram coluna.
+	resp := fetchDatabase(t, ctx)
+	for _, f := range []string{"autor", "marcador", "origem"} {
+		if _, ok := treeColumn(resp.Columns, f); !ok {
+			t.Errorf("sem allowlist, o campo %q deveria ser coluna", f)
+		}
+	}
+
+	// Allowlist = só “autor”: os demais deixam de virar coluna.
+	if err := ctx.Store.SetSetting("db_columns", "autor"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	resp = fetchDatabase(t, ctx)
+	if _, ok := treeColumn(resp.Columns, "autor"); !ok {
+		t.Error("autor deveria continuar coluna (está na allowlist)")
+	}
+	for _, f := range []string{"marcador", "origem"} {
+		if _, ok := treeColumn(resp.Columns, f); ok {
+			t.Errorf("campo %q fora da allowlist não deveria virar coluna", f)
+		}
+	}
+
+	// Campos fixos (titulo, type, pai) permanecem independentemente.
+	for _, f := range []string{"titulo", "type", parentKey} {
+		if _, ok := treeColumn(resp.Columns, f); !ok {
+			t.Errorf("campo fixo %q deveria sempre existir", f)
+		}
+	}
+}
+
 func TestHandleGetDatabaseData_FlatWhenNoParent(t *testing.T) {
 	ctx := newTestContext(t)
 	saveTestNote(t, ctx, "notes/a.md", "# A", "")

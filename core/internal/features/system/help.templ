@@ -1,0 +1,15 @@
+package system
+
+import "ton618/core/web/layout"
+
+templ HelpPage(title string, html string) {
+    @layout.Layout(title, false, helpDoc(html))
+}
+
+// helpDoc renderiza o markdown da ajuda já convertido para HTML pelo servidor
+// (goldmark). O wrapper `prose` usa o plugin de tipografia do Tailwind.
+templ helpDoc(html string) {
+    <article class="prose prose-invert prose-zinc max-w-none">
+        @templ.Raw(html)
+    </article>
+}

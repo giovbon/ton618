@@ -19,6 +19,7 @@ type AppConfig struct {
 	StateDir         string
 	AuthUser         string
 	AuthPass         string
+	HelpDocPath      string // arquivo markdown do help (/help); vazio = resolve automaticamente
 }
 
 func Load() *AppConfig {
@@ -33,6 +34,7 @@ func Load() *AppConfig {
 		StateDir:         getEnv("STATE_DIR", "./data"),
 		AuthUser:         getEnv("AUTH_USER", "admin"),
 		AuthPass:         getEnv("AUTH_PASS", "ton618"),
+		HelpDocPath:      getEnv("HELP_DOC", ""),
 	}
 
 	// Resolve caminhos relativos para absolutos (essencial no Windows)

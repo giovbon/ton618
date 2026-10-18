@@ -17,10 +17,11 @@ func (s *Store) GetSetting(key string) (string, error) {
 	return val.String, nil
 }
 
-// SetSetting atualiza ou insere uma configuração.
+// SetSetting atualiza ou insere uma configuração. Usa settingsMu (domínio
+// independente do núcleo) — não bloqueia nem é bloqueado pelo WriteMu (#3).
 func (s *Store) SetSetting(key, value string) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	return s.Q.SetSetting(s.queryCtx(), dbgen.SetSettingParams{
 		Key:   key,
 		Value: sql.NullString{String: value, Valid: true},
@@ -36,10 +37,12 @@ func (s *Store) HasNotificationBeenSent(id string) (bool, error) {
 	return count > 0, nil
 }
 
-// RecordNotificationSent registra que uma notificação foi enviada.
+// RecordNotificationSent registra que uma notificação foi enviada. Usa
+// settingsMu (domínio independente do núcleo) — não bloqueia nem é bloqueado
+// pelo WriteMu (#3).
 func (s *Store) RecordNotificationSent(id, notificationType, sentAt string) error {
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	return s.Q.RecordNotificationSent(s.queryCtx(), dbgen.RecordNotificationSentParams{
 		ID:     id,
 		Type:   sql.NullString{String: notificationType, Valid: true},

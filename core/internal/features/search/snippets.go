@@ -20,6 +20,23 @@ func cleanTermForMatching(t string) string {
 	return strings.TrimSpace(t)
 }
 
+// containsSearchTerm informa se `texto` contém (substring, insensível a acento e
+// a maiúsculas) algum termo da query. Usado para escolher, por arquivo, o
+// fragmento cujo trecho realmente tem o termo — garantindo que o snippet de um
+// resultado mostre/realce a ocorrência (não um fragmento-resumo sem o termo).
+func containsSearchTerm(texto, query string) bool {
+	if texto == "" {
+		return false
+	}
+	low := removeAccents(strings.ToLower(texto))
+	for _, t := range extractSearchTerms(query) {
+		if len(t) > 1 && strings.Contains(low, removeAccents(strings.ToLower(t))) {
+			return true
+		}
+	}
+	return false
+}
+
 func extractSearchTerms(query string) []string {
 	var terms []string
 	remaining := query
@@ -163,10 +180,17 @@ func extractSnippetAroundMatch(text, query string, windowSize int) string {
 
 	terms := extractSearchTerms(query)
 
+	// Localiza a ocorrência usando APENAS minúsculas (não remove acentos) porque
+	// ToLower preserva o tamanho em bytes do texto, mantendo o índice alinhado
+	// com a fatia do texto ORIGINAL abaixo. Remover acentos (removeAccents)
+	// ENCURTA os bytes — o índice passaria a apontar para um lugar errado no
+	// texto original e o trecho recortado não conteria o termo (bug real visto na
+	// busca de termos que aparecem depois de muitas palavras acentuadas, ex:
+	// "lula" dentro de "celular" numa transcrição).
 	matchPos := -1
-	textLower := removeAccents(strings.ToLower(text))
+	textLower := strings.ToLower(text)
 	for _, term := range terms {
-		normalizedTerm := removeAccents(strings.ToLower(term))
+		normalizedTerm := strings.ToLower(term)
 		if idx := strings.Index(textLower, normalizedTerm); idx != -1 {
 			if matchPos == -1 || idx < matchPos {
 				matchPos = idx
@@ -271,4 +295,16 @@ func highlightSnippetManual(snippet, query string) string {
 		return snippet
 	}
 	return re.ReplaceAllString(snippet, "__HL_START__${1}__HL_END__")
+}
+
+// highlightSpans destaca as ocorrências de `query` em `text` com o mesmo span de
+// busca usado no trecho do corpo (search-highlight). Feito para destacar também o
+// TÍTULO/seção (res.Secao), cobrindo o caso em que o termo casou em um campo fora
+// do corpo — onde o snippet do FTS (coluna texto) não gera marcador.
+func highlightSpans(text, query string) string {
+	h := highlightSnippetManual(text, query)
+	h = html.EscapeString(h)
+	h = strings.ReplaceAll(h, "__HL_START__", `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">`)
+	h = strings.ReplaceAll(h, "__HL_END__", "</span>")
+	return h
 }

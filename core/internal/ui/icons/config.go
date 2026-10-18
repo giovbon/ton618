@@ -51,6 +51,8 @@ var Config = map[string]IconSpec{
 	// ── UTILIDADES & MENUS ──
 	"config":   {Icon: "settings", Color: "#696969"},
 	"settings": {Icon: "settings", Color: "#696969"},
+	"docs":     {Icon: "book-open", Color: "text-sky-400"},
+	"help":     {Icon: "docs", Color: "text-sky-400"},
 	"sair":     {Icon: "log-out", Color: "#696969"},
 	"logout":   {Icon: "log-out", Color: "#696969"},
 
@@ -81,6 +83,10 @@ var Config = map[string]IconSpec{
 	"settings-agenda":       {Icon: "calendar", Color: "text-cyan-400"},
 	"ntfy":                  {Icon: "bell", Color: "text-rose-400"},
 	"settings-ntfy":         {Icon: "bell", Color: "text-rose-400"},
+	"colunas":               {Icon: "columns", Color: "text-sky-400"},
+	"settings-colunas":      {Icon: "columns", Color: "text-sky-400"},
+	"sinonimos":             {Icon: "shuffle", Color: "text-violet-400"},
+	"settings-sinonimos":    {Icon: "shuffle", Color: "text-violet-400"},
 	"semantica":             {Icon: "sparkles", Color: "text-violet-400"},
 	"settings-semantica":    {Icon: "sparkles", Color: "text-violet-400"},
 }

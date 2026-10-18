@@ -1,5 +1,12 @@
+
 # Mantém dependências (Go, npm e GitHub Actions) atualizadas automaticamente.
-# PRs são abertos semanalmente; revise antes de mesclar.
+# Semanalmente, minors (+ patches) são AUTO-MERGED de forma segura — apenas na
+# branch main e DEPOIS que o workflow "PR Checks" (pr_checks.yml) passar. Majors
+# ficam fora do auto-merge e pedem revisão humana (pull_request_review_rule).
+#
+# ⚠️ Confira o nome em `reviewers`: "giovbon" é um palpite a partir do dono da
+#    imagem Docker (giovbon/ton618_core). Troque pelo seu usuário do GitHub se
+#    for outro.
 version: 2
 updates:
   - package-ecosystem: "gomod"
@@ -7,6 +14,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    auto_merge:
+      enabled: true
+      rules:
+        - match-update-type: "minor" # menor + patch; major NÃO entra no auto-merge
+      target-branch: "main"
+    pull_request_review_rule:
+      match-update-type: "major"     # majors pedem revisão humana (não auto-merged)
+      reviewers:
+        - "giovbon"
     labels:
       - "dependencies"
       - "go"
@@ -17,6 +33,15 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     versioning-strategy: increase
+    auto_merge:
+      enabled: true
+      rules:
+        - match-update-type: "minor"
+      target-branch: "main"
+    pull_request_review_rule:
+      match-update-type: "major"
+      reviewers:
+        - "giovbon"
     labels:
       - "dependencies"
       - "npm"
@@ -26,6 +51,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    auto_merge:
+      enabled: true
+      rules:
+        - match-update-type: "minor"
+      target-branch: "main"
+    pull_request_review_rule:
+      match-update-type: "major"
+      reviewers:
+        - "giovbon"
     labels:
       - "dependencies"
       - "npm"
@@ -35,6 +69,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    auto_merge:
+      enabled: true
+      rules:
+        - match-update-type: "minor"
+      target-branch: "main"
+    pull_request_review_rule:
+      match-update-type: "major"
+      reviewers:
+        - "giovbon"
     labels:
       - "dependencies"
       - "npm"
@@ -44,6 +87,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    auto_merge:
+      enabled: true
+      rules:
+        - match-update-type: "minor"
+      target-branch: "main"
+    pull_request_review_rule:
+      match-update-type: "major"
+      reviewers:
+        - "giovbon"
     labels:
       - "dependencies"
       - "github-actions"
