@@ -85,3 +85,11 @@ jobs:
         run: |
           npm run typecheck
           npm test
+
+      - name: 🔨 Build web (esbuild + Tailwind)
+        # Roda node build.js: é onde erros de DEPENDÊNCIA NÃO-RESOLVIDA no bundle
+        # aparecem (ex.: auto-merge que atualizou @tiptap/extension-* para 3.32 sem
+        # @tiptap/extensions / core alinhado). Sem este passo, a quebra só
+        # estourava no build Docker.
+        working-directory: ./core/web
+        run: node build.js --dev
