@@ -279,7 +279,7 @@ Todos os estáticos → Compressão Gzip + Brotli
 
 ### GitHub Actions (`.github/workflows/deploy_core.yml`)
 1. **Job de teste**: Go tests, gofmt check, go vet, npm typecheck
-2. **Versionamento**: Auto-incremento de versão patch (ou tag manual)
+2. **Versionamento**: Auto-incremento SemVer via Conventional Commits (`feat`→minor, `fix`→patch, `BREAKING`→major) ou tag manual — ver [`docs/versionamento.md`](docs/versionamento.md)
 3. **Job de deploy**: Docker build multi-arch (AMD64 + ARM64), push para Docker Hub
 
 ### Docker

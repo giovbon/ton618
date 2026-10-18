@@ -100,6 +100,7 @@ jobs:
       contents: write
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      bump: ${{ steps.version.outputs.bump }}
 
     steps:
       - name: 📥 Checkout com histórico de tags
@@ -107,13 +108,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🔢 Calcular Próxima Versão
+      - name: 🔢 Calcular Próxima Versão (SemVer via Conventional Commits)
         id: version
         run: |
           # 1. Se foi informado manualmente via workflow_dispatch
           if [ -n "${{ inputs.tag }}" ]; then
             echo "Usando tag manual informada: ${{ inputs.tag }}"
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+            echo "bump=manual" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -122,11 +124,19 @@ jobs:
             CURRENT_TAG="${GITHUB_REF#refs/tags/}"
             echo "Usando tag do evento push: $CURRENT_TAG"
             echo "tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+            echo "bump=manual" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # 3. Auto-incremento para pushes na branch main
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v2.0.0")
+          # 3. Auto-incremento SemVer para pushes na branch main.
+          #    A regra deriva o tipo de bump dos commits desde a última tag,
+          #    seguindo Conventional Commits:
+          #      - "BREAKING CHANGE" no corpo ou "tipo!:" no assunto -> MAJOR (X.0.0)
+          #      - assunto começando com "feat:"                       -> MINOR (0.X.0)
+          #      - "fix:" e demais (chore, docs, ci, refactor, perf,
+          #        bumps de dependência, etc.)                          -> PATCH (0.0.X)
+          #    Sem mudança de versão manual: o tipo é sempre detectado.
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Última versão encontrada: $LAST_TAG"
 
           CLEAN_VER="${LAST_TAG#v}"
@@ -135,21 +145,36 @@ jobs:
           PATCH=$(echo "$CLEAN_VER" | cut -d. -f3)
 
           # Trata caso a tag não siga exatamente major.minor.patch
-          MAJOR="${MAJOR:-2}"
+          MAJOR="${MAJOR:-0}"
           MINOR="${MINOR:-0}"
           PATCH="${PATCH:-0}"
 
-          # Incrementa o número do patch
-          PATCH=$((PATCH + 1))
-
-          # Se o PATCH atingir 30 commits, incrementa o MINOR e zera o PATCH
-          if [ "$PATCH" -ge 30 ]; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
+          # Assunto + corpo dos commits desde a última tag (se a tag existir)
+          if git rev-parse -q --verify "refs/tags/${LAST_TAG}" >/dev/null 2>&1; then
+            RANGE="${LAST_TAG}..HEAD"
+          else
+            RANGE="HEAD"
           fi
+          COMMITS="$(git log "$RANGE" --format='%s%n%b' 2>/dev/null || true)"
+
+          if printf '%s\n' "$COMMITS" | grep -qiE 'BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:'; then
+            BUMP="major"
+          elif printf '%s\n' "$COMMITS" | grep -qiE '^feat(\([^)]*\))?:'; then
+            BUMP="minor"
+          else
+            BUMP="patch"
+          fi
+          echo "Tipo de bump detectado: $BUMP"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
 
           NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
           echo "Nova versão calculada: $NEW_TAG"
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
           # Configura autor e cria tag no repositório
@@ -225,5 +250,6 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Imagem** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${{ needs.bump-version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Bump** | \`${{ needs.bump-version.outputs.bump }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} \vert{}" >> $GITHUB_STEP_SUMMARY
           echo "| **Modo** | ${{ steps.platforms.outputs.mode }} \vert{}" >> $GITHUB_STEP_SUMMARY
