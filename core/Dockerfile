@@ -77,6 +77,11 @@ RUN mkdir -p /app/web/static
 COPY --from=builder /app/web/static /app/web/static
 COPY --from=builder /app/web/package.json /app/web/package.json
 
+# Documentação de Ajuda: o help (/help) lê o HELP.md. O contexto do build é
+# ./core, então ele vive em core/HELP.md (é o mesmo conteúdo do HELP.md na raiz
+# do repo). Copia para /app/HELP.md e aponta HELP_DOC para ele.
+COPY --from=builder /app/HELP.md ./HELP.md
+
 RUN mkdir -p /app/docs /app/data && chmod 777 /app/docs /app/data
 
 VOLUME ["/app/docs", "/app/data"]
@@ -87,6 +92,7 @@ ENV DOCS_DIR=/app/docs \
     DB_PATH=/app/data/ton618.db \
     STATE_DIR=/app/data \
     WEB_DIR=/app/web \
+    HELP_DOC=/app/HELP.md \
     PORT=6180
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

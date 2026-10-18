@@ -36,10 +36,16 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Enable auto-merge for Dependabot PRs (minor + patch)
+      - name: Enable auto-merge for Dependabot PRs (minor + patch, exceto sensíveis)
         if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-patch') &&
+          !contains(steps.metadata.outputs.dependency-names, '@tiptap/') &&
+          !contains(steps.metadata.outputs.dependency-names, 'github.com/a-h/templ')
+        # Exclui do auto-merge: @tiptap/* (ecossistema que exige bump em lockstep —
+        # atualizacão parcial quebrou o build) e github.com/a-h/templ (gera os
+        # *_templ.go gitignored; bump desalinhado quebra o build Go). Esses seguem
+        # para revisão humana.
         # Usa --squash (e não --merge): a proteção da branch `main` (ex.:
         # "Require linear history") bloqueia merge commits, então --merge falhava
         # com "Merge method merge commits are not allowed". Squash é compatível.
