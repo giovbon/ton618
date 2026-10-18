@@ -59,6 +59,10 @@ jobs:
             go run github.com/a-h/templ/cmd/templ@latest generate
           fi
 
+      - name: 📦 go mod tidy (depois do templ generate)
+        working-directory: ./core
+        run: go mod tidy
+
       - name: 🧪 Testes Go
         working-directory: ./core
         run: go test ./...
