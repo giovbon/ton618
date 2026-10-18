@@ -16,7 +16,8 @@ Repositório → **Settings** → **Branches** → **Add branch protection rule*
 1. **Branch name pattern:** `main`
 2. **Require status checks to pass before merging** → **Select checks** → marque **`Test (Go + Web)`**
    - (Opcional) **Require branches to be up to date before merging** — garante que o merge só ocorra com a branch atualizada.
-3. **Prevent self-approval** / **Require pull request reviews before merging**: ⚠️ veja o caveat abaixo antes de marcar.
+3. **Require pull request reviews before merging**: ⚠️ veja o caveat abaixo antes de marcar.
+   - Nota: **não existe um checkbox "Prevent self-approval"** — impedir que o autor aprove o próprio PR é **comportamento padrão** do GitHub (não há o que ativar).
 4. **Require linear history** (opcional, para histórico limpo).
 5. Salve.
 

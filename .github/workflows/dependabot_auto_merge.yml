@@ -40,7 +40,10 @@ jobs:
         if: |
           steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
           steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        run: gh pr merge --auto --merge "$PR_URL"
+        # Usa --squash (e não --merge): a proteção da branch `main` (ex.:
+        # "Require linear history") bloqueia merge commits, então --merge falhava
+        # com "Merge method merge commits are not allowed". Squash é compatível.
+        run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: "${{ github.event.pull_request.html_url }}"
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
