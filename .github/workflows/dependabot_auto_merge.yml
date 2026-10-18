@@ -1,0 +1,46 @@
+# Auto-merge seguro dos PRs do Dependabot.
+#
+# O Dependabot NÃO possui auto-merge por chave de configuração (auto_merge /
+# pull_request_review_rule não existem em dependabot.yml). O padrão oficial da
+# documentação do GitHub é este workflow: ele detecta um PR do Dependabot e
+# "habilita auto-merge" no PR (gh pr merge --auto). O GitHub então mergeia o PR
+# automaticamente assim que os checks obrigatórios (PR Checks → "Test (Go + Web)")
+# passarem — por isso a proteção da `main` (docs/branch-protection-main.md) é o
+# que garante a segurança.
+#
+# Pré-requisitos:
+#   - Habilitar "Allow auto-merge" no repo: Settings → General → Pull Requests
+#     → marcar "Allow auto-merge".
+#   - Proteger a `main` exigindo o check "Test (Go + Web)" antes do merge
+#     (para os auto-merged só acontecerem após os testes passarem).
+#
+# Escopo: só minor + patch (update-type version-update:semver-minor/patch).
+# Majors NÃO são auto-merged — exigem revisão humana.
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' || github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Enable auto-merge for Dependabot PRs (minor + patch)
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: "${{ github.event.pull_request.html_url }}"
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

@@ -48,10 +48,15 @@ O exemplo acima exige o check **sem** revisão obrigatória (count `0`) — idea
 
 > As chaves `auto_merge` / `pull_request_review_rule` **não existem** no schema do `dependabot.yml` — usá-las quebra a validação do Dependabot. O auto-merge nativo é **configurado na UI do GitHub**:
 
-**GitHub → Settings → Dependabot → Automations:**
-- Ative **"Allow automerging for minor and patch updates"** (ou selecione os update-types desejados).
-- O Dependabot então auto-mergeia os PRs qualificados **depois que o workflow "PR Checks" (`Test (Go + Web)`) passa** — desde que a proteção da `main` **não** exija revisão obrigatória que bloqueie o merge.
-- Não há escopo por `target-branch` na UI — o auto-merge aplica ao repo. Para restringir a `main`, a proteção de branch é o mecanismo.
+**GitHub → Settings → General → Pull Requests → "Allow auto-merge":** habilitar (condição para qualquer auto-merge).
+
+Depois, escolha UMA das formas de ativar o auto-merge nos PRs do Dependabot:
+
+**(a) Workflow versionado (recomendado)** — `.github/workflows/dependabot_auto_merge.yml`: detecta PR do Dependabot e roda `gh pr merge --auto --merge` para minors+patch, esperando os checks passar. É versionável e não depende de aba da UI.
+
+**(b) Nativo/Dependabot (se disponível)** — a aba/opção nativa, quando existe, está sob as configurações do Dependabot; a localização variou entre versões do GitHub e não é estável. O workflow em (a) é o caminho confiável e documentado.
+
+Em ambos: os PRs qualificados só mergeiam **depois que o "PR Checks" (`Test (Go + Web)`) passa** — desde que a proteção da `main` **não** exija revisão obrigatória que bloqueie o merge. Para restringir a `main`, a proteção de branch é o mecanismo.
 
 Interação com a proteção da branch:
 - Se você **exigir revisão obrigatória** na `main`, o auto-merge **não** ignora: até minors precisariam de aprovação humana (perde-se o "auto").
