@@ -10,9 +10,9 @@ templ Tabulator(data domain.EditorData) {
 }
 
 templ tabulatorContent(data domain.EditorData) {
-<div class="editor-root flex flex-col" id="tabulator-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px 0 24px; border-radius: 0;">
+<div class="editor-root flex flex-col" id="tabulator-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 0 0 0; border-radius: 0;">
     <!-- Topbar: nome + status + ações -->
-    <div class="flex items-center gap-3 mb-2 shrink-0 relative z-20" id="tabulator-topbar">
+    <div class="flex items-center gap-3 px-6 mb-2 shrink-0 relative z-30" id="tabulator-topbar">
         <input
             id="file-name"
             type="text"
@@ -53,7 +53,7 @@ templ tabulatorContent(data domain.EditorData) {
     </div>
 
     <!-- Toolbar: inserir dados + filtrar -->
-    <div class="flex flex-wrap items-center gap-2 mb-2 shrink-0 relative z-20" id="tabulator-toolbar">
+    <div class="flex flex-wrap items-center gap-2 px-6 mb-2 shrink-0 relative z-20" id="tabulator-toolbar">
         <button
             id="tab-add-row"
             type="button"
