@@ -1,0 +1,95 @@
+# Checks de PUll Request (incluindo os PRs do Dependabot).
+#
+# O deploy_core.yml só dispara em push para main / tags, então os PRs (muitos
+# deles de atualização de dependência via Dependabot) não eram validados por CI.
+# Este workflow roda o MESMO conjunto de checks do job `test` do deploy em todo
+# PR, antes do merge — a red de seguranca pra não mesclar quebra silenciosa.
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Go + Web)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: core/go.sum
+
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            core/package-lock.json
+            core/web/package-lock.json
+
+      - name: 📦 Instalar deps do core
+        working-directory: ./core
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: 🔨 Gerar Template Templ
+        working-directory: ./core
+        run: |
+          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
+          if [ -n "$TEMPL_REQ" ]; then
+            go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
+          else
+            go run github.com/a-h/templ/cmd/templ@latest generate
+          fi
+
+      - name: 📦 go mod tidy (depois do templ generate)
+        working-directory: ./core
+        run: go mod tidy
+
+      - name: 🧪 Testes Go
+        working-directory: ./core
+        run: go test ./...
+
+      - name: 🎨 Verificar formatação (gofmt)
+        working-directory: ./core
+        run: |
+          UNFORMATTED="$(gofmt -l cmd internal)"
+          if [ -n "$UNFORMATTED" ]; then
+            echo "❌ Arquivos fora do gofmt:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: 🩺 go vet
+        working-directory: ./core
+        run: go vet ./...
+
+      - name: 🟢 Instalar deps do web
+        working-directory: ./core/web
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NODE_OPTIONS: "--no-network-family-autoselection"
+        run: npm ci --legacy-peer-deps
+
+      - name: 🧪 Typecheck + testes unitários do web
+        working-directory: ./core/web
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: 🔨 Build web (esbuild + Tailwind)
+        # Roda node build.js: é onde erros de DEPENDÊNCIA NÃO-RESOLVIDA no bundle
+        # aparecem (ex.: auto-merge que atualizou @tiptap/extension-* para 3.32 sem
+        # @tiptap/extensions / core alinhado). Sem este passo, a quebra só
+        # estourava no build Docker.
+        working-directory: ./core/web
+        run: node build.js --dev

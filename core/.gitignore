@@ -1,0 +1,67 @@
+# --- Go Build ---
+ton618
+/server
+*.exe
+*.test
+*.out
+*.test-output
+/tmp/
+
+# --- Local Data ---
+documents/
+data/
+docs/
+*.db
+state/
+*.bleve/
+
+# --- Dependencies ---
+node_modules/
+
+# --- Environment ---
+.env
+.env.local
+.env.prod
+
+# --- IDEs / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+.vim/
+.DS_Store
+Thumbs.db
+Desktop.ini
+nul
+NUL
+Nul
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Workspace ---
+go.work
+go.work.sum
+/vendor/
+repomix-output.xml
+*.log
+coverage.out
+
+# Build artifacts
+*_templ.go
+web/static/editor.js
+web/static/editor.js.gz
+web/static/drawing.js
+web/static/drawing.js.gz
+
+# Byproducts de compressão do build (web/build.js gera .gz/.br para cada arquivo
+# de web/static/ — inclusive os vendorizados). São gerados a cada build; o
+# repositório guarda apenas os originais.
+web/static/**/*.gz
+web/static/**/*.br
+
+# Local IA Models (Downloaded via download_model.js)
+web/static/models/*
+!web/static/models/*.js

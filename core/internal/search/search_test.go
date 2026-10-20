@@ -1,0 +1,1097 @@
+package search
+
+import (
+	"context"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"ton618/core/internal/core/db"
+	"ton618/core/internal/core/domain"
+)
+
+// ── buildFTSQuery ───────────────────────────────────────────────
+
+func TestBuildFTSQuery_EmptyString(t *testing.T) {
+	result := buildFTSQuery("")
+	if result != "" {
+		t.Errorf("esperado vazio, got %q", result)
+	}
+}
+
+func TestBuildFTSQuery_SingleWord(t *testing.T) {
+	result := buildFTSQuery("palavra")
+	expected := `(tags:palavra* OR arquivo:palavra* OR secao:palavra* OR texto:palavra*)`
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
+func TestBuildFTSQuery_QuotedPhrase(t *testing.T) {
+	result := buildFTSQuery(`"frase exata"`)
+	expected := `(tags:"frase exata" OR arquivo:"frase exata" OR secao:"frase exata" OR texto:"frase exata")`
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
+func TestBuildFTSQuery_SingleQuoteProximity(t *testing.T) {
+	result := buildFTSQuery(`'texto proximo'`)
+	// FTS5 nao suporta NEAR, usa AND por coluna
+	if !strings.Contains(result, "texto:\"texto\" AND texto:\"proximo\"") {
+		t.Errorf("esperado AND query, got %q", result)
+	}
+	if !strings.Contains(result, "secao:\"texto\" AND secao:\"proximo\"") {
+		t.Errorf("esperado secao AND, got %q", result)
+	}
+}
+
+func TestBuildFTSQuery_StopwordSkipped(t *testing.T) {
+	result := buildFTSQuery("de")
+	if result != "" {
+		t.Errorf("stopword deveria ser ignorada, got %q", result)
+	}
+}
+
+func TestBuildFTSQuery_ShortWordNoStar(t *testing.T) {
+	result := buildFTSQuery("go")
+	expected := `(tags:go OR arquivo:go OR secao:go OR texto:go)`
+	if result != expected {
+		t.Errorf("esperado %q (sem sufixo *), got %q", expected, result)
+	}
+}
+
+func TestBuildFTSQuery_MultipleTermsWithAND(t *testing.T) {
+	result := buildFTSQuery("golang concorrencia")
+	// Deve conter AND entre os dois termos
+	if !contains(result, "AND") {
+		t.Errorf("esperado AND entre termos, got %q", result)
+	}
+	if !contains(result, "golang*") || !contains(result, "concorrencia*") {
+		t.Errorf("ambos os termos devem estar presentes com sufixo *, got %q", result)
+	}
+}
+
+// ── buildFTSQuery — expansão por sinônimos ─────────────────────
+
+// Uma única palavra com sinônimos é expandida com OR (jogo de recall puro).
+func TestBuildFTSQuery_SingleWordExpandsSynonyms(t *testing.T) {
+	result := buildFTSQuery("carro")
+	for _, s := range []string{"carro", "automovel", "veiculo", "auto"} {
+		if !contains(result, "texto:"+s+"*") {
+			t.Errorf("esperava termo %q com sufixo * na expansão, got %q", s, result)
+		}
+	}
+	if !contains(result, "OR") {
+		t.Errorf("a expansão deveria usar OR entre as variantes, got %q", result)
+	}
+}
+
+// Palavra sem entrada no mapa de sinônimos permanece como um único termo.
+func TestBuildFTSQuery_SingleWordNoSynonymsUnchanged(t *testing.T) {
+	result := buildFTSQuery("palavra")
+	expected := `(tags:palavra* OR arquivo:palavra* OR secao:palavra* OR texto:palavra*)`
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
+// O lookup de sinônimos é insensível a acentos: "país" encontra a entrada "pais".
+func TestBuildFTSQuery_SingleWordSynonymAccentInsensitive(t *testing.T) {
+	result := buildFTSQuery("país")
+	if !contains(result, "texto:nacao*") {
+		t.Errorf("accent-insensitive lookup: esperava sinônimo nacao, got %q", result)
+	}
+	if !contains(result, "texto:país*") {
+		t.Errorf("o termo original deve permanecer, got %q", result)
+	}
+}
+
+// MULTI-palavra NÃO expande: evitar o produto cartesiano dos sinônimos.
+// "carro" tem sinônimos, mas em consulta de 2 termos eles NÃO podem entrar.
+func TestBuildFTSQuery_MultiWordDoesNotExpandSynonyms(t *testing.T) {
+	result := buildFTSQuery("carro vermelho")
+	if contains(result, "automovel") || contains(result, "veiculo") || contains(result, "auto") {
+		t.Errorf("multi-word não deve expandir sinônimos (produto cartesiano), got %q", result)
+	}
+	if !contains(result, "carro*") || !contains(result, "vermelho*") {
+		t.Errorf("os termos originais devem estar presentes, got %q", result)
+	}
+	if !contains(result, "AND") {
+		t.Errorf("multi-word deve manter AND entre termos, got %q", result)
+	}
+}
+
+// Sinônimos NÃO entram em frases entre aspas (modo exato).
+func TestBuildFTSQuery_QuotedPhraseNoSynonyms(t *testing.T) {
+	result := buildFTSQuery(`"carro vermelho"`)
+	if contains(result, "automovel") || contains(result, "veiculo") {
+		t.Errorf("frase entre aspas não deve expandir sinônimos, got %q", result)
+	}
+}
+
+// uma palavra + stopword conta como UM conteúdo → ainda expande.
+func TestBuildFTSQuery_WordPlusStopwordStillOneContent(t *testing.T) {
+	result := buildFTSQuery("carro de")
+	if !contains(result, "texto:automovel*") {
+		t.Errorf("stopwords não contam: 'carro de' é 1 conteúdo e deve expandir, got %q", result)
+	}
+	if !contains(result, "texto:carro*") {
+		t.Errorf("o termo original deve permanecer, got %q", result)
+	}
+}
+
+// ── UserSynonymMap (configuração de sinônimos) ─────────────────
+
+func TestUserSynonymMap_NormalizaSobrescreve(t *testing.T) {
+	rules := []domain.SynonymRule{
+		// Acentos e maiúsculas são normalizados (carro → automovel).
+		{Termo: "Carro", Sinonimos: []string{"Automóvel", "Veículo"}},
+		// Si mesmo nunca vira sinônimo (pc → PC removido).
+		{Termo: "PC", Sinonimos: []string{"computador", "PC"}},
+		// Termo vazio é ignorado.
+		{Termo: "", Sinonimos: []string{"x"}},
+	}
+	m := UserSynonymMap(rules)
+
+	if got := m["carro"]; !reflect.DeepEqual(got, []string{"automovel", "veiculo"}) {
+		t.Errorf("carro: esperava [automovel veiculo], got %v", got)
+	}
+	if got := m["pc"]; !reflect.DeepEqual(got, []string{"computador"}) {
+		t.Errorf("pc: esperava [computador] (si mesmo removido), got %v", got)
+	}
+	if _, ok := m[""]; ok {
+		t.Error("termo vazio não deveria gerar entrada")
+	}
+}
+
+// A lookup fornecida (usuário) tem prioridade sobre o mapa embarcado: quando ela
+// devolve sinônimos, o embarcado não entra na expansão.
+func TestBuildFTSQueryWithSynonyms_UsesProvidedLookup(t *testing.T) {
+	lookup := func(term string) []string {
+		if normalizeSynonym(term) == "carro" {
+			return []string{"buggy"}
+		}
+		return nil
+	}
+	result := buildFTSQueryWithSynonyms("carro", lookup)
+	if !contains(result, "texto:buggy*") {
+		t.Errorf("a lookup fornecida deveria virar sinônimo, got %q", result)
+	}
+	if contains(result, "automovel") || contains(result, "veiculo") {
+		t.Errorf("mapa embarcado não deveria ser usado quando a lookup fornece, got %q", result)
+	}
+}
+
+// ── extractTerms ────────────────────────────────────────────────
+
+func TestExtractTerms_NormalQuery(t *testing.T) {
+	terms := extractTerms("golang concorrencia")
+	expected := []string{"golang", "concorrencia"}
+	if !stringSliceEqual(terms, expected) {
+		t.Errorf("esperado %v, got %v", expected, terms)
+	}
+}
+
+func TestExtractTerms_StopwordsFiltered(t *testing.T) {
+	terms := extractTerms("goroutines de go e channels")
+	// "de" e "e" são stopwords e devem ser filtradas.
+	// "go" tem 2 caracteres (len > 1) e não é stopword → deve ser incluído.
+	for _, term := range terms {
+		if stopwords[term] {
+			t.Errorf("stopword %q não deveria estar nos termos", term)
+		}
+	}
+	if !containsTerm(terms, "goroutines") {
+		t.Errorf("esperado 'goroutines' nos termos, got %v", terms)
+	}
+}
+
+func TestExtractTerms_PunctuationTrimmed(t *testing.T) {
+	terms := extractTerms("golang, concorrencia! python?")
+	expected := []string{"golang", "concorrencia", "python"}
+	if !stringSliceEqual(terms, expected) {
+		t.Errorf("esperado %v (sem pontuação), got %v", expected, terms)
+	}
+}
+
+func TestExtractTerms_HashtagPreserved(t *testing.T) {
+	// O caractere "#" não está na lista de Trim ("?,;.:!+-")
+	// Portanto #urgente permanece como está em extractTerms
+	terms := extractTerms("#urgente golang")
+	expected := []string{"#urgente", "golang"}
+	if !stringSliceEqual(terms, expected) {
+		t.Errorf("esperado %v, got %v", expected, terms)
+	}
+}
+
+// ── cleanQuery ─────────────────────────────────────────────────
+
+func TestCleanQuery_Normal(t *testing.T) {
+	result := cleanQuery("Golang  Concorrencia")
+	expected := "golang concorrencia"
+	if result != expected {
+		t.Errorf("esperado %q, got %q", expected, result)
+	}
+}
+
+func TestCleanQuery_RemovesSpecialChars(t *testing.T) {
+	result := cleanQuery("+tags:urgente \"exata\" golang")
+	// cleanQueryRe (regex [\+\*\"]) remove +, * e aspas
+	// Resultado: "tags:urgente exata golang"
+	if contains(result, "\"") {
+		t.Errorf("cleanQuery deveria remover aspas, got %q", result)
+	}
+}
+
+func TestCleanQuery_Empty(t *testing.T) {
+	result := cleanQuery("")
+	if result != "" {
+		t.Errorf("esperado vazio, got %q", result)
+	}
+}
+
+// ── extractTags ─────────────────────────────────────────────────
+
+func TestExtractTags_TagsPrefix(t *testing.T) {
+	tags, remaining := extractTags("tags:urgente golang")
+	expected := []string{"urgente"}
+	if !stringSliceEqual(tags, expected) {
+		t.Errorf("esperado %v, got %v", expected, tags)
+	}
+	if !contains(remaining, "golang") {
+		t.Errorf("'golang' deveria permanecer em remaining, got %q", remaining)
+	}
+}
+
+func TestExtractTags_Hashtag(t *testing.T) {
+	tags, _ := extractTags("#importante")
+	expected := []string{"importante"}
+	if !stringSliceEqual(tags, expected) {
+		t.Errorf("esperado %v, got %v", expected, tags)
+	}
+}
+
+func TestExtractTags_Multiple(t *testing.T) {
+	tags, _ := extractTags("#urgente tags:programacao golang")
+	if len(tags) < 2 {
+		t.Errorf("esperado 2 tags, got %v", tags)
+	}
+	if !containsTerm(tags, "urgente") || !containsTerm(tags, "programacao") {
+		t.Errorf("esperado ['urgente', 'programacao'], got %v", tags)
+	}
+}
+
+func TestExtractTags_QuotedTagValue(t *testing.T) {
+	tags, _ := extractTags(`tags:"minha tag"`)
+	expected := []string{"minha tag"}
+	if !stringSliceEqual(tags, expected) {
+		t.Errorf("esperado %v, got %v", expected, tags)
+	}
+}
+
+func TestExtractTags_NoTags(t *testing.T) {
+	tags, remaining := extractTags("golang concorrencia")
+	if len(tags) != 0 {
+		t.Errorf("esperado nenhuma tag, got %v", tags)
+	}
+	if remaining != "golang concorrencia" {
+		t.Errorf("remaining não deveria mudar, got %q", remaining)
+	}
+}
+
+// ── scoreTitle ─────────────────────────────────────────────────
+
+func TestScoreTitle_ExactMatch(t *testing.T) {
+	score := scoreTitle("Go › Concorrencia", []string{"concorrencia"})
+	if score != 1.0 {
+		t.Errorf("esperado 1.0 (exact match), got %v", score)
+	}
+}
+
+func TestScoreTitle_PartialMatch(t *testing.T) {
+	score := scoreTitle("Go › Concorrencia", []string{"concor"})
+	if score != 0.4 {
+		t.Errorf("esperado 0.4 (partial match), got %v", score)
+	}
+}
+
+func TestScoreTitle_NoMatch(t *testing.T) {
+	score := scoreTitle("Go › Concorrencia", []string{"python"})
+	if score != 0 {
+		t.Errorf("esperado 0 (sem match), got %v", score)
+	}
+}
+
+func TestScoreTitle_MultipleTerms(t *testing.T) {
+	score := scoreTitle("Go › Concorrencia Channels", []string{"concorrencia"})
+	if score <= 0 {
+		t.Errorf("esperado > 0 para match com último segmento, got %v", score)
+	}
+}
+
+// ── scorePath ───────────────────────────────────────────────────
+
+func TestScorePath_Match(t *testing.T) {
+	score := scorePath("notas/golang-dicas.md", []string{"golang"})
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (match no path), got %v", score)
+	}
+}
+
+func TestScorePath_NoMatch(t *testing.T) {
+	score := scorePath("notas/python-dicas.md", []string{"golang"})
+	if score != 0 {
+		t.Errorf("esperado 0 (sem match), got %v", score)
+	}
+}
+
+func TestScorePath_MultipleTerms(t *testing.T) {
+	score := scorePath("notas/golang-dicas.md", []string{"golang", "rust"})
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (apenas um termo match), got %v", score)
+	}
+}
+
+func TestScorePath_ShortTermIgnored(t *testing.T) {
+	score := scorePath("notas/go-dicas.md", []string{"go"})
+	if score != 0 {
+		t.Errorf("esperado 0 (termo curto ignorado), got %v", score)
+	}
+}
+
+// ── scoreFreshness ──────────────────────────────────────────────
+
+func TestScoreFreshness_Today(t *testing.T) {
+	now := time.Now().Add(-1 * time.Hour).Format(time.RFC3339)
+	score := scoreFreshness(now)
+	if score != 0.5 {
+		t.Errorf("esperado 0.5 (today), got %v", score)
+	}
+}
+
+func TestScoreFreshness_ThreeDaysAgo(t *testing.T) {
+	ts := time.Now().Add(-72 * time.Hour).Format(time.RFC3339)
+	score := scoreFreshness(ts)
+	if score != 0.25 {
+		t.Errorf("esperado 0.25 (3 dias), got %v", score)
+	}
+}
+
+func TestScoreFreshness_FourteenDaysAgo(t *testing.T) {
+	ts := time.Now().Add(-14 * 24 * time.Hour).Format(time.RFC3339)
+	score := scoreFreshness(ts)
+	if score != 0.1 {
+		t.Errorf("esperado 0.1 (14 dias), got %v", score)
+	}
+}
+
+func TestScoreFreshness_SixtyDaysAgo(t *testing.T) {
+	ts := time.Now().Add(-60 * 24 * time.Hour).Format(time.RFC3339)
+	score := scoreFreshness(ts)
+	if score != 0 {
+		t.Errorf("esperado 0 (60 dias), got %v", score)
+	}
+}
+
+func TestScoreFreshness_InvalidTimestamp(t *testing.T) {
+	score := scoreFreshness("invalido")
+	if score != 0 {
+		t.Errorf("esperado 0 (timestamp inválido), got %v", score)
+	}
+}
+
+func TestScoreFreshness_EmptyTimestamp(t *testing.T) {
+	score := scoreFreshness("")
+	if score != 0 {
+		t.Errorf("esperado 0 (vazio), got %v", score)
+	}
+}
+
+// ── scoreFragment: verifica pesos individuais ──────────────────
+
+func makeHit(texto, arquivo, secao, timestamp string, tags []string) *SearchHit {
+	tagStr := ""
+	for i, t := range tags {
+		if i > 0 {
+			tagStr += ","
+		}
+		tagStr += t
+	}
+	// Score negativo simula rank FTS5 (mais negativo = melhor match)
+	return &SearchHit{
+		Score: -10.0,
+		Doc: db.Document{
+			Texto:     texto,
+			Arquivo:   arquivo,
+			Secao:     secao,
+			Tags:      tagStr,
+			Timestamp: timestamp,
+		},
+	}
+}
+
+func TestScoreFragment_TituloExato(t *testing.T) {
+	hit := makeHit("texto qualquer", "nota.md", "Instalação", "", nil)
+	score, details := scoreFragment(hit, []string{"instalação"}, "instalação", 0.0, 0)
+
+	if details["titulo"] == 0 {
+		t.Error("match exato no titulo deveria gerar bonus de titulo")
+	}
+
+	hit2 := makeHit("texto qualquer", "nota.md", "Configuração", "", nil)
+	score2, _ := scoreFragment(hit2, []string{"instalação"}, "instalação", 0.0, 0)
+
+	if score2 >= score {
+		t.Error("hit sem match no titulo deveria ter score menor que hit com match")
+	}
+}
+
+func TestScoreFragment_FraseExata(t *testing.T) {
+	hit := makeHit(
+		"aprendendo a usar goroutines channels em go",
+		"nota.md", "Go Lang", "",
+		nil,
+	)
+	score, details := scoreFragment(hit, []string{"goroutines", "channels"}, "goroutines channels", 0.0, 0)
+
+	if details["frase_exata"] == 0 {
+		t.Error("frase exata no texto deveria gerar bonus de frase_exata")
+	}
+
+	hit2 := makeHit(
+		"goroutines sao legais channels tambem mas separados",
+		"nota.md", "Go Lang", "",
+		nil,
+	)
+	score2, _ := scoreFragment(hit2, []string{"goroutines", "channels"}, "goroutines channels", 0.0, 0)
+
+	if score2 >= score {
+		t.Error("hit com frase exata deveria ter score maior")
+	}
+}
+
+func TestScoreFragment_CaminhoMatch(t *testing.T) {
+	hit := makeHit("conteudo generico", "notas/golang-dicas.md", "Go", "", nil)
+	score, details := scoreFragment(hit, []string{"golang"}, "golang", 0.0, 0)
+
+	if details["caminho"] == 0 {
+		t.Error("match no nome do arquivo deveria gerar bonus de caminho")
+	}
+
+	hit2 := makeHit("conteudo generico", "notas/outra-coisa.md", "Go", "", nil)
+	score2, _ := scoreFragment(hit2, []string{"golang"}, "golang", 0.0, 0)
+
+	if score2 >= score {
+		t.Error("hit com match no caminho deveria ter score maior")
+	}
+}
+
+func TestScoreFragment_Recencia(t *testing.T) {
+	agora := time.Now().Format(time.RFC3339)
+	mesPassado := time.Now().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
+
+	hitRecente := makeHit("texto", "nota.md", "", agora, nil)
+	hitAntigo := makeHit("texto", "nota.md", "", mesPassado, nil)
+
+	scoreRec, _ := scoreFragment(hitRecente, []string{"texto"}, "texto", 0.0, 0)
+	scoreAnt, _ := scoreFragment(hitAntigo, []string{"texto"}, "texto", 0.0, 0)
+
+	if scoreRec <= scoreAnt {
+		t.Error("nota recente deveria ter score maior que nota de 30 dias atras")
+	}
+}
+
+func TestScoreFragment_BM25BaseEDominante(t *testing.T) {
+	// Mesmo texto, mesmo titulo, scores diferentes
+	hitBom := makeHit("golang explicado em detalhes", "nota.md", "Golang", "", nil)
+	hitBom.Score = -20.0 // BM25 forte (mais negativo = melhor)
+
+	hitFraco := makeHit("golang explicado em detalhes", "nota.md", "Golang", "", nil)
+	hitFraco.Score = -2.0 // BM25 fraco
+
+	scoreBom, _ := scoreFragment(hitBom, []string{"golang"}, "golang", 0.0, 0)
+	scoreFraco, _ := scoreFragment(hitFraco, []string{"golang"}, "golang", 0.0, 0)
+
+	if scoreBom <= scoreFraco {
+		t.Error("hit com BM25 forte (score -20) deveria ter score maior que hit com BM25 fraco (score -2)")
+	}
+}
+
+// ── Ordenação por score ────────────────────────────────────────
+
+func TestSearch_ResultadosOrdenadosPorScore(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Cria duas notas com relevancias diferentes
+	now := time.Now()
+
+	store.InsertDocument(db.Document{ID: "doc1", Tipo: "markdown", Arquivo: "notas/relevante.md", Secao: "Titulo", Texto: "termo_de_busca especifico aqui", Timestamp: now.Format(time.RFC3339)})
+	store.IndexFTS("doc1", "markdown", "notas/relevante.md", "Titulo", "termo_de_busca especifico aqui", "tag1")
+	store.SetFileMod("notas/relevante.md", now.Format(time.RFC3339))
+
+	store.InsertDocument(db.Document{ID: "doc2", Tipo: "markdown", Arquivo: "notas/irrelevante.md", Secao: "Outro", Texto: "conteudo generico sem o termo", Timestamp: now.Add(-24 * time.Hour).Format(time.RFC3339)})
+	store.IndexFTS("doc2", "markdown", "notas/irrelevante.md", "Outro", "conteudo generico sem o termo", "")
+	store.SetFileMod("notas/irrelevante.md", now.Add(-24*time.Hour).Format(time.RFC3339))
+
+	results, err := Search(context.Background(), store, "termo_de_busca", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+
+	if len(results.Hits) == 0 {
+		t.Fatal("nenhum resultado retornado")
+	}
+
+	// A nota com o termo deve vir primeiro
+	if results.Hits[0].Doc.Arquivo != "notas/relevante.md" {
+		t.Errorf("nota relevante deveria vir primeiro. Got: %s", results.Hits[0].Doc.Arquivo)
+	}
+}
+
+// Sinônimo configurado pelo usuário: a nota que contém o termo original deve
+// vir SEMPRE antes das que casam apenas via sinônimo, independente do BM25
+// (a nota do sinônimo é mais recente/melhor pontuada no FTS). Regressão do
+// comportamento esperado: "buscar bunda" destaca a nota com "bunda".
+func TestSearch_SinonimoExatoVemPrimeiro(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+	now := time.Now()
+
+	// Sinônimo criado na aba "Sinônimos": bunda → peito, vagina.
+	if err := store.SetSetting("synonyms_config",
+		`[{"termo":"bunda","sinonimos":["peito","vagina"]}]`); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	// Nota com o termo EXATO ("bunda") no conteúdo.
+	store.InsertDocument(db.Document{
+		ID: "doc-bunda", Tipo: "markdown", Arquivo: "notas/bunda.md",
+		Secao: "Titulo", Texto: "aqui aparece bunda no texto",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-bunda", "markdown", "notas/bunda.md", "Titulo", "aqui aparece bunda no texto", "")
+	store.SetFileMod("notas/bunda.md", now.Format(time.RFC3339))
+
+	// Nota que só contém o SINÔNIMO "peito" (mais recente → BM25/recência maior).
+	store.InsertDocument(db.Document{
+		ID: "doc-sinonimo", Tipo: "markdown", Arquivo: "notas/sinonimo.md",
+		Secao: "Titulo", Texto: "assunto sobre peito e vagina",
+		Timestamp: now.Add(time.Minute).Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-sinonimo", "markdown", "notas/sinonimo.md", "Titulo", "assunto sobre peito e vagina", "")
+	store.SetFileMod("notas/sinonimo.md", now.Add(time.Minute).Format(time.RFC3339))
+
+	results, err := Search(context.Background(), store, "bunda", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+	if len(results.Hits) == 0 {
+		t.Fatal("busca por bunda (com sinônimos) deveria retornar resultados")
+	}
+	if results.Hits[0].Doc.Arquivo != "notas/bunda.md" {
+		t.Errorf("nota com o termo original deveria vir primeiro, got %s → %v",
+			results.Hits[0].Doc.Arquivo, arquivosDosHits(results.Hits))
+	}
+}
+
+// arquivosDosHits lista os arquivos na ordem dos hits (auxiliar de diagnóstico).
+func arquivosDosHits(hits []SearchHit) []string {
+	out := make([]string, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, h.Doc.Arquivo)
+	}
+	return out
+}
+
+func TestSearch_ExactMatchOnly(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Insere documento com a palavra "configurar"
+	store.InsertDocument(db.Document{
+		ID:        "doc-stem",
+		Tipo:      "markdown",
+		Arquivo:   "notas/config.md",
+		Secao:     "Geral",
+		Texto:     "vamos configurar este banco de dados",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-stem", "markdown", "notas/config.md", "Geral", "vamos configurar este banco de dados", "")
+
+	// Busca exata por "configurar" deve encontrar
+	results, err := Search(context.Background(), store, "configurar", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+	if len(results.Hits) == 0 {
+		t.Fatal("deveria encontrar 'configurar' ao buscar por 'configurar'")
+	}
+
+	// Busca por "configurações" NÃO deve mais encontrar (stemming removido)
+	results, err = Search(context.Background(), store, "configurações", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+	if len(results.Hits) > 0 {
+		t.Error("NÃO deveria encontrar 'configurar' ao buscar por 'configurações' — stemming foi removido")
+	}
+}
+
+func TestSearch_NotaComTagVemPrimeiro(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota com tag correspondente ao termo
+	store.InsertDocument(db.Document{ID: "doc1", Tipo: "markdown", Arquivo: "notas/com-tag.md", Secao: "Assunto", Texto: "texto sobre o termo", Timestamp: now.Format(time.RFC3339)})
+	store.IndexFTS("doc1", "markdown", "notas/com-tag.md", "Assunto", "texto sobre o termo", "urgente")
+	store.SetFileMod("notas/com-tag.md", now.Format(time.RFC3339))
+
+	// Nota sem tag mas com termo no texto
+	store.InsertDocument(db.Document{ID: "doc2", Tipo: "markdown", Arquivo: "notas/sem-tag.md", Secao: "Assunto", Texto: "texto sobre o termo de busca", Timestamp: now.Format(time.RFC3339)})
+	store.IndexFTS("doc2", "markdown", "notas/sem-tag.md", "Assunto", "texto sobre o termo de busca", "")
+	store.SetFileMod("notas/sem-tag.md", now.Format(time.RFC3339))
+
+	results, err := Search(context.Background(), store, "urgente", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+
+	if len(results.Hits) == 0 {
+		t.Fatal("nenhum resultado retornado")
+	}
+
+	// Nota com a tag "urgente" matchando o termo "urgente"
+	// Se ela está nos resultados, deve vir antes da sem tag
+	for _, h := range results.Hits {
+		if h.Doc.Arquivo == "notas/com-tag.md" {
+			return // encontrou — ok
+		}
+	}
+}
+
+// ── Helpers do gate de evidência (busca híbrida) ──
+
+func TestHasExplicitTagFilter(t *testing.T) {
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"tags:urgente", true},
+		{"tags:\"urgente\"", true},
+		{"urgente tags:prova", true},
+		{"#programacao", true},
+		{"linguagem de programação", false},
+		{"nginx config", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := HasExplicitTagFilter(c.query); got != c.want {
+			t.Errorf("HasExplicitTagFilter(%q) = %v, want %v", c.query, got, c.want)
+		}
+	}
+}
+
+func TestHasContentEvidence(t *testing.T) {
+	doc := db.Document{
+		Arquivo: "notes/aula-09-08.md",
+		Secao:   "Anotações",
+		Texto:   "Estudamos linguagem de programação e orientação a objetos.",
+	}
+
+	if !HasContentEvidence(doc, "linguagem") {
+		t.Error("esperava evidência: 'linguagem' está no texto")
+	}
+	if !HasContentEvidence(doc, "linguagem de programação") {
+		t.Error("esperava evidência: termos da frase no texto")
+	}
+	if !HasContentEvidence(doc, "aula") {
+		t.Error("esperava evidência: 'aula' está no arquivo")
+	}
+	if !HasContentEvidence(doc, "anotações") {
+		t.Error("esperava evidência: 'anotações' está na seção (com acento)")
+	}
+	if HasContentEvidence(doc, "prova") {
+		t.Error("não esperava evidência: 'prova' não aparece em lugar nenhum")
+	}
+
+	// Hashtag sozinha NÃO é evidência de conteúdo (rótulo, não menção).
+	tagOnly := db.Document{
+		Arquivo: "notes/admin.md",
+		Secao:   "Geral",
+		Texto:   "Avaliação de dados marcada para sexta. #programacao",
+	}
+	if HasContentEvidence(tagOnly, "programacao") {
+		t.Error("não esperava evidência: 'programacao' aparece só como hashtag")
+	}
+
+	// Hashtag + menção real = evidência.
+	misto := db.Document{
+		Arquivo: "notes/misto.md",
+		Secao:   "Geral",
+		Texto:   "Programacao é divertida #programacao",
+	}
+	if !HasContentEvidence(misto, "programacao") {
+		t.Error("esperava evidência: 'programacao' também aparece como palavra real")
+	}
+
+	// Query sem termos verificáveis (só stopwords) não deve filtrar.
+	if !HasContentEvidence(doc, "de") {
+		t.Error("query sem termos verificáveis não deve filtrar")
+	}
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
+
+func containsTerm(slice []string, term string) bool {
+	for _, s := range slice {
+		if s == term {
+			return true
+		}
+	}
+	return false
+}
+
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func newTestStore(t *testing.T) *db.Store {
+	t.Helper()
+	s, err := db.NewStore(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatalf("db.NewStore: %v", err)
+	}
+	return s
+}
+
+// ── buildProximityExpression ───────────────────────────────────
+
+func TestBuildProximityExpression_SingleWord(t *testing.T) {
+	result := buildProximityExpression("golang")
+	if !strings.Contains(result, "texto:golang") {
+		t.Errorf("esperado termo unico, got %q", result)
+	}
+}
+
+func TestBuildProximityExpression_MultipleWords(t *testing.T) {
+	result := buildProximityExpression("parcialmente artigo")
+	if !strings.Contains(result, `texto:"parcialmente" AND texto:"artigo"`) {
+		t.Errorf("esperado AND entre termos no texto, got %q", result)
+	}
+	if !strings.Contains(result, `secao:"parcialmente" AND secao:"artigo"`) {
+		t.Errorf("esperado AND entre termos na secao, got %q", result)
+	}
+}
+
+func TestBuildProximityExpression_StopwordsFiltered(t *testing.T) {
+	result := buildProximityExpression("de um artigo")
+	// "de" e "um" sao stopwords, devem ser filtrados; sobra "artigo" (1 palavra)
+	if !strings.Contains(result, "texto:artigo") {
+		t.Errorf("so 'artigo' deveria sobrar, got %q", result)
+	}
+}
+
+// ── extractTerms (quoted phrases) ──────────────────────────────
+
+func TestExtractTerms_DoubleQuotedPhrase(t *testing.T) {
+	terms := extractTerms(`"parcialmente artigo"`)
+	if !containsTerm(terms, "parcialmente artigo") {
+		t.Errorf("frase entre aspas deveria ser termo unico, got %v", terms)
+	}
+}
+
+func TestExtractTerms_SingleQuotedPhrase(t *testing.T) {
+	terms := extractTerms(`'parcialmente artigo'`)
+	if !containsTerm(terms, "parcialmente artigo") {
+		t.Errorf("frase entre aspas simples deveria ser termo unico, got %v", terms)
+	}
+}
+
+func TestExtractTerms_QuotedPhraseAddsIndividualWords(t *testing.T) {
+	terms := extractTerms(`'parcialmente artigo'`)
+	if !containsTerm(terms, "parcialmente") {
+		t.Errorf("palavra 'parcialmente' deveria estar nos termos (fallback), got %v", terms)
+	}
+	if !containsTerm(terms, "artigo") {
+		t.Errorf("palavra 'artigo' deveria estar nos termos (fallback), got %v", terms)
+	}
+}
+
+func TestExtractTerms_MixedQuotedAndUnquoted(t *testing.T) {
+	terms := extractTerms(`'proximo termo' golang`)
+	if !containsTerm(terms, "proximo termo") {
+		t.Errorf("frase entre aspas deveria ser termo unico, got %v", terms)
+	}
+	if !containsTerm(terms, "golang") {
+		t.Errorf("termo solto 'golang' deveria estar nos termos, got %v", terms)
+	}
+}
+
+func TestExtractTerms_EmptyQuote_Ignored(t *testing.T) {
+	terms := extractTerms(`"" golang`)
+	// aspas vazias nao devem adicionar termo vazio
+	if containsTerm(terms, "") {
+		t.Errorf("aspas vazias nao deveriam adicionar termo vazio, got %v", terms)
+	}
+	if !containsTerm(terms, "golang") {
+		t.Errorf("'golang' deveria estar nos termos, got %v", terms)
+	}
+}
+
+// ── buildFTSQuery edge cases ──────────────────────────────────
+
+func TestBuildFTSQuery_MixedQuotes(t *testing.T) {
+	result := buildFTSQuery(`"exato" 'proximo'`)
+	if !strings.Contains(result, `"exato"`) {
+		t.Errorf("esperado frase exata com aspas duplas, got %q", result)
+	}
+	if !strings.Contains(result, "proximo") {
+		t.Errorf("esperado termo de proximidade, got %q", result)
+	}
+}
+
+func TestSearch_ExcludesDrawingNotes(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// 1. Insert a drawing note (contains "drawing" in tags)
+	store.InsertDocument(db.Document{
+		ID:        "doc-drawing",
+		Tipo:      "markdown",
+		Arquivo:   "notas/desenho.md",
+		Secao:     "Geral",
+		Texto:     "um belo desenho de teste excalidraw",
+		Tags:      "tag1,drawing",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-drawing", "markdown", "notas/desenho.md", "Geral", "um belo desenho de teste excalidraw", "tag1,drawing")
+
+	// 2. Insert a regular markdown note (no "drawing" in tags)
+	store.InsertDocument(db.Document{
+		ID:        "doc-markdown",
+		Tipo:      "markdown",
+		Arquivo:   "notas/comum.md",
+		Secao:     "Geral",
+		Texto:     "um texto comum de teste",
+		Tags:      "tag1,urgente",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-markdown", "markdown", "notas/comum.md", "Geral", "um texto comum de teste", "tag1,urgente")
+
+	// 3. Search for "teste" - matches both documents in FTS
+	results, err := Search(context.Background(), store, "teste", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search() error: %v", err)
+	}
+
+	// 4. Verify that the drawing note is excluded, but the regular note is found
+	foundMarkdown := false
+	foundDrawing := false
+	for _, h := range results.Hits {
+		if h.ID == "doc-markdown" {
+			foundMarkdown = true
+		}
+		if h.ID == "doc-drawing" {
+			foundDrawing = true
+		}
+	}
+
+	if !foundMarkdown {
+		t.Error("esperado encontrar a nota comum, mas não foi retornada")
+	}
+	if foundDrawing {
+		t.Error("nota do tipo desenho não deveria ser retornada nos resultados de busca")
+	}
+}
+
+func TestSearch_TagFiltering(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota com tag "urgente" e texto "reuniao de pauta"
+	store.InsertDocument(db.Document{
+		ID:        "doc-urgente",
+		Tipo:      "markdown",
+		Arquivo:   "notas/urgente.md",
+		Secao:     "Geral",
+		Texto:     "esta e uma reuniao muito importante",
+		Tags:      "urgente,trabalho",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-urgente", "markdown", "notas/urgente.md", "Geral", "esta e uma reuniao muito importante", "urgente,trabalho")
+
+	// Nota sem tag "urgente" com texto "reuniao de pauta"
+	store.InsertDocument(db.Document{
+		ID:        "doc-comum",
+		Tipo:      "markdown",
+		Arquivo:   "notas/comum.md",
+		Secao:     "Geral",
+		Texto:     "outra reuniao de pauta tranquila",
+		Tags:      "ideias",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-comum", "markdown", "notas/comum.md", "Geral", "outra reuniao de pauta tranquila", "ideias")
+
+	// Caso 1: Buscar "tags:urgente" (apenas filtro de tag)
+	res1, err := Search(context.Background(), store, "tags:urgente", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente, obtido %d hits", len(res1.Hits))
+	}
+
+	// Caso 2: Buscar "#trabalho" (filtro de tag por hashtag)
+	res2, err := Search(context.Background(), store, "#trabalho", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res2.Hits) != 1 || res2.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente para hashtag, obtido %v", res2.Hits)
+	}
+
+	// Caso 3: Buscar "tags:urgente reuniao" (tag + termo termo)
+	res3, err := Search(context.Background(), store, "tags:urgente reuniao", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res3.Hits) != 1 || res3.Hits[0].ID != "doc-urgente" {
+		t.Errorf("Esperado encontrar apenas doc-urgente para tag+termo, obtido %v", res3.Hits)
+	}
+}
+
+func TestSearch_AccentInsensitivity(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota contendo palavra com acento
+	store.InsertDocument(db.Document{
+		ID:        "doc-acento",
+		Tipo:      "markdown",
+		Arquivo:   "notas/computacao.md",
+		Secao:     "Tecnologia",
+		Texto:     "A ciência da computação é fantástica.",
+		Tags:      "estudos",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-acento", "markdown", "notas/computacao.md", "Tecnologia", "A ciência da computação é fantástica.", "estudos")
+
+	// Caso 1: Buscar sem acento
+	res1, err := Search(context.Background(), store, "computacao", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca sem acento falhou. Esperado encontrar doc-acento, obtido %d hits", len(res1.Hits))
+	}
+
+	// Caso 2: Buscar com acento exato
+	res2, err := Search(context.Background(), store, "computação", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res2.Hits) != 1 || res2.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca com acento exato falhou. Esperado encontrar doc-acento, obtido %d hits", len(res2.Hits))
+	}
+
+	// Caso 3: Buscar com caixa alta e acento
+	res3, err := Search(context.Background(), store, "COMPUTAÇÃO", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res3.Hits) != 1 || res3.Hits[0].ID != "doc-acento" {
+		t.Errorf("Busca com caixa alta e acento falhou. Esperado encontrar doc-acento, obtido %d hits", len(res3.Hits))
+	}
+}
+
+func TestSearch_HyphenatedWordMatch(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+
+	// Nota com hífen
+	store.InsertDocument(db.Document{
+		ID:        "doc-hifen",
+		Tipo:      "markdown",
+		Arquivo:   "notas/hifen.md",
+		Secao:     "Geral",
+		Texto:     "Por favor envie um e-mail para confirmar a vaga.",
+		Tags:      "comunicacao",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-hifen", "markdown", "notas/hifen.md", "Geral", "Por favor envie um e-mail para confirmar a vaga.", "comunicacao")
+
+	// Caso 1: Buscar com hífen
+	res1, err := Search(context.Background(), store, "e-mail", 0, 20,
+		func(s string) int { return 0 },
+		func(s string) float64 { return 0.0 },
+	)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(res1.Hits) != 1 || res1.Hits[0].ID != "doc-hifen" {
+		t.Errorf("Busca de termo com hífen falhou. Esperado encontrar doc-hifen, obtido %d hits", len(res1.Hits))
+	}
+}

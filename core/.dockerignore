@@ -1,0 +1,68 @@
+# --- Version Control ---
+.git
+.github
+
+# --- Environment & Secrets (Security Risk) ---
+.env
+.env.*
+
+# --- Local Databases & State ---
+data/
+state/
+*.db
+*.bleve/
+*.log
+
+# --- IDEs & OS Files ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.bak
+.vim/
+
+# --- Go Build & Test Artifacts ---
+ton618
+ton618.exe
+server
+go.work
+go.work.sum
+/vendor/
+*.test
+*.out
+*.test-output
+coverage.out
+# Generated templ files (rebuilt in container)
+*_templ.go
+
+# --- Node & Web Frontend ---
+web/node_modules/
+node_modules/
+# Local built assets (rebuilt in container)
+web/static/editor.js
+web/static/editor.js.gz
+web/static/drawing.js
+web/static/drawing.js.gz
+
+# --- Documentation & Misc ---
+docs/
+*.md
+# HELP.md é servido em /help (ENV HELP_DOC) e copiado explicitamente no
+# Dockerfile (COPY --from=builder /app/HELP.md). Precisa entrar no contexto,
+# apesar do *.md acima — por isso a exceção.
+!HELP.md
+repomix-output.xml
+
+# --- Scripts & Dev Tools ---
+build_check.sh
+deploy.sh
+extract.py
+*.py
+tmp/
+
+# Local IA Models (rebuilt / downloaded in container)
+web/static/models/*
+!web/static/models/*.js

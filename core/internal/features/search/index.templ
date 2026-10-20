@@ -1,0 +1,248 @@
+package search
+
+import (
+	"ton618/core/internal/ui/icons"
+	"ton618/core/web/layout"
+)
+
+templ Index(title string) {
+    @layout.Layout(title, false, indexContent())
+}
+
+templ indexContent() {
+<div>
+    <!-- Search toggle + bar -->
+    <div class="flex items-center gap-3 mb-4">
+        <div class="flex items-center gap-1 p-0.5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl select-none">
+            <!-- Busca de Notas -->
+            <button
+                id="btn-search-notes"
+                type="button"
+                onclick="setSearchMode('notes')"
+                class="flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40"
+                title="Busca de Notas (por nome do arquivo)"
+            >
+                @icons.Icon(icons.GetIcon("busca-notas"), "w-4 h-4")
+            </button>
+
+            <!-- Busca Global -->
+            <button
+                id="btn-search-global"
+                type="button"
+                onclick="setSearchMode('global')"
+                class="flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"
+                title="Busca Global no Conteúdo (texto completo)"
+            >
+                @icons.Icon(icons.GetIcon("busca-global"), "w-4 h-4")
+            </button>
+        </div>
+
+        <div class="relative flex-1">
+            <input
+                id="search-local"
+                type="text"
+                placeholder="Filtrar nomes das notas..."
+                name="q"
+                autocomplete="off"
+                hx-get="/api/sidebar"
+                hx-trigger="load, input changed delay:200ms, search, reload-sidebar from:body"
+                hx-target="#contentArea"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-sky-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition-all"
+            />
+            <input
+                id="search-global"
+                type="text"
+                placeholder="Buscar no conteúdo das notas (com lematização)..."
+                name="q"
+                autocomplete="off"
+                hx-post="/search"
+                hx-trigger="input changed delay:300ms, search"
+                hx-target="#global-container"
+                class="w-full px-4 py-2.5 text-[13px] bg-zinc-900/60 border border-emerald-500/40 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition-all hidden"
+            />
+            <div
+                id="spinner"
+                class="absolute right-3 top-1/2 -translate-y-1/2 htmx-indicator"
+            >
+                <svg
+                    class="animate-spin h-4 w-4 text-zinc-500"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                >
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+        <div id="compact-container">
+            <div id="contentArea"></div>
+        </div>
+        <div id="global-container" class="hidden"></div>
+    </div>
+</div>
+
+<script>
+    var currentSearchMode = "notes"; // "notes" | "global"
+
+    function setSearchMode(mode) {
+        if (currentSearchMode === mode) return;
+        currentSearchMode = mode;
+
+        var btnNotes = document.getElementById("btn-search-notes");
+        var btnGlobal = document.getElementById("btn-search-global");
+
+        var localInput = document.getElementById("search-local");
+        var globalInput = document.getElementById("search-global");
+
+        var compactContainer = document.getElementById("compact-container");
+        var globalContainer = document.getElementById("global-container");
+
+        // Reset classes dos botões
+        btnNotes.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+        btnGlobal.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
+
+        localInput.classList.add("hidden");
+        globalInput.classList.add("hidden");
+
+        compactContainer.classList.add("hidden");
+        globalContainer.classList.add("hidden");
+
+        if (mode === "notes") {
+            btnNotes.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-sky-500/20 text-sky-400 border-sky-500/40";
+            localInput.classList.remove("hidden");
+            compactContainer.classList.remove("hidden");
+            localInput.focus();
+        } else if (mode === "global") {
+            btnGlobal.className = "flex items-center justify-center p-2 rounded-lg transition-all duration-300 border bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+            globalInput.classList.remove("hidden");
+            globalContainer.classList.remove("hidden");
+            globalInput.focus();
+        }
+    }
+
+    function editorRouteForTipo(tipo) {
+        switch (tipo) {
+            case "desenho":    return "/drawing";
+            case "markmap":    return "/mindmap";
+            case "mindmap":    return "/mindmap";
+            case "tabulator":  return "/tabulator";
+            default:           return "/editor";
+        }
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // Helper to generate regex pattern for accent-insensitive search
+    function makeAccentInsensitivePattern(str) {
+        var charMap = {
+            'a': '[aáàâãäAÁÀÂÃÄ]', 'á': '[aáàâãäAÁÀÂÃÄ]', 'à': '[aáàâãäAÁÀÂÃÄ]', 'â': '[aáàâãäAÁÀÂÃÄ]', 'ã': '[aáàâãäAÁÀÂÃÄ]', 'ä': '[aáàâãäAÁÀÂÃÄ]',
+            'e': '[eéèêëEÉÈÊË]', 'é': '[eéèêëEÉÈÊË]', 'è': '[eéèêëEÉÈÊË]', 'ê': '[eéèêëEÉÈÊË]', 'ë': '[eéèêëEÉÈÊË]',
+            'i': '[iíìîïIÍÌÎÏ]', 'í': '[iíìîïIÍÌÎÏ]', 'ì': '[iíìîïIÍÌÎÏ]', 'î': '[iíìîïIÍÌÎÏ]', 'ï': '[iíìîïIÍÌÎÏ]',
+            'o': '[oóòôõöOÓÒÔÕÖ]', 'ó': '[oóòôõöOÓÒÔÕÖ]', 'ò': '[oóòôõöOÓÒÔÕÖ]', 'ô': '[oóòôõöOÓÒÔÕÖ]', 'õ': '[oóòôõöOÓÒÔÕÖ]', 'ö': '[oóòôõöOÓÒÔÕÖ]',
+            'u': '[uúùûüUÚÙÛÜ]', 'ú': '[uúùûüUÚÙÛÜ]', 'ù': '[uúùûüUÚÙÛÜ]', 'û': '[uúùûüUÚÙÛÜ]', 'ü': '[uúùûüUÚÙÛÜ]',
+            'c': '[cçCÇ]', 'ç': '[cçCÇ]'
+        };
+        var pattern = "";
+        for (var i = 0; i < str.length; i++) {
+            var ch = str[i].toLowerCase();
+            if (charMap[ch]) {
+                pattern += charMap[ch];
+            } else {
+                pattern += str[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+        }
+        return pattern;
+    }
+
+    function cleanJSOperators(w) {
+        if (!w) return "";
+        w = w.replace(/^[+\-~#]+/, "");
+        w = w.replace(/[*~]+$/, "");
+        w = w.replace(/^["']+|["']+$/g, "");
+        return w.trim();
+    }
+
+    // ── Original FTS5 search highlight ──
+    function highlightSearchTerms(query) {
+        if (!query) return;
+
+        var rawTerms = [];
+        var remaining = query;
+        var quoteRe = /"([^"]*)"|\'([^']*)'/g;
+        var m;
+        while ((m = quoteRe.exec(query)) !== null) {
+            var phrase = m[1] || m[2];
+            if (phrase && phrase.length > 1) {
+                rawTerms.push(phrase);
+            }
+            remaining = remaining.replace(m[0], " ");
+        }
+        var words = remaining.split(/\s+/).filter(function (w) {
+            return w.length > 1 && w !== '"' && !w.startsWith('-') && !w.startsWith('+tags:') && !w.startsWith('#');
+        });
+        rawTerms = rawTerms.concat(words);
+
+        var terms = [];
+        var seen = {};
+        rawTerms.forEach(function(w) {
+            var cleaned = cleanJSOperators(w);
+            if (cleaned.length > 1 && !seen[cleaned.toLowerCase()]) {
+                seen[cleaned.toLowerCase()] = true;
+                terms.push(cleaned);
+            }
+        });
+
+        if (!terms.length) return;
+
+        var stemsEl = document.getElementById("search-metadata");
+        var stems = [];
+        if (stemsEl && stemsEl.dataset.stems) {
+            stems = stemsEl.dataset.stems.split(",").filter(function(s) { return s.length > 0; });
+        }
+
+        document.querySelectorAll("#global-container a, .search-section-title, .search-tag-item").forEach(function (el) {
+            var html = el.innerHTML;
+            terms.forEach(function (w) {
+                var pat = makeAccentInsensitivePattern(w);
+                var re = new RegExp("(" + pat + ")(?![^<]*>|[^<>]*<\/)", "gi");
+                html = html.replace(re, '<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">$1</span>');
+            });
+            stems.forEach(function (stem) {
+                var cleanedStem = cleanJSOperators(stem);
+                if (cleanedStem.length <= 1) return;
+                var pat = makeAccentInsensitivePattern(cleanedStem);
+                var re = new RegExp("\\b(" + pat + "[a-zA-Z0-9À-ÿ_]*)\\b(?![^<]*>|[^<>]*<\/)", "gi");
+                html = html.replace(re, function(match, group1, offset, fullText) {
+                    var prevText = fullText.slice(0, offset);
+                    var lastSpanIdx = prevText.lastIndexOf("<span");
+                    if (lastSpanIdx !== -1) {
+                        var lastCloseIdx = prevText.lastIndexOf("</span>");
+                        if (lastCloseIdx < lastSpanIdx) {
+                            var spanOpenTag = prevText.slice(lastSpanIdx);
+                            if (spanOpenTag.includes("search-highlight")) {
+                                return match;
+                            }
+                        }
+                    }
+                    return '<span class="stem-highlight text-violet-400 font-bold bg-violet-500/15 rounded-sm px-0.5">' + match + '</span>';
+                });
+            });
+            el.innerHTML = html;
+        });
+    }
+
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'global-container') {
+            var q = document.getElementById('search-global').value;
+            highlightSearchTerms(q);
+        }
+    });
+</script>
+}

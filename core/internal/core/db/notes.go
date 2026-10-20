@@ -1,0 +1,232 @@
+package db
+
+import (
+	"database/sql"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"ton618/core/internal/core/db/generated"
+)
+
+// GetNote returns the content of a note by filename.
+func (s *Store) GetNote(filename string) (string, error) {
+	content, err := s.Q.GetNote(s.queryCtx(), filename)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return content.String, err
+}
+
+// BatchGetNotesContent retorna o conteúdo de várias notas em uma única query.
+// Notas inexistentes simplesmente não aparecem no mapa. Usado pela busca híbrida
+// para montar snippets dos resultados só-semânticos (evita N+1 de GetNote).
+func (s *Store) BatchGetNotesContent(filenames []string) (map[string]string, error) {
+	if len(filenames) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(filenames))
+	args := make([]any, len(filenames))
+	for i, name := range filenames {
+		placeholders[i] = "?"
+		args[i] = name
+	}
+
+	query := "SELECT filename, content FROM notes WHERE filename IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := s.DB.QueryContext(s.queryCtx(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(filenames))
+	for rows.Next() {
+		var name string
+		var content sql.NullString
+		if err := rows.Scan(&name, &content); err != nil {
+			return nil, err
+		}
+		result[name] = content.String
+	}
+	return result, rows.Err()
+}
+
+// SaveNote inserts or updates a note's content and modification time.
+func (s *Store) SaveNote(filename, content, mtime string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+	return s.Q.SaveNote(s.queryCtx(), dbgen.SaveNoteParams{
+		Filename: filename,
+		Content:  sql.NullString{String: content, Valid: true},
+		Mtime:    sql.NullString{String: mtime, Valid: true},
+	})
+}
+
+// DeleteNote removes a note by filename and cleans up its FTS documents.
+func (s *Store) DeleteNote(filename string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	if err := s.Q.DeleteNote(s.queryCtx(), filename); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CountOtherNotesReferencing conta quantas notas (exceto `except`) contêm o
+// caminho `path` no conteúdo. É a guarda usada antes de apagar um arquivo de
+// datasets/ (células de notas Tabulator): notas duplicadas referenciam os mesmos
+// arquivos, então o arquivo só pode ser removido quando nenhuma outra nota ainda
+// o referencia. Casamento é literal (curingas do LIKE são escapados).
+func (s *Store) CountOtherNotesReferencing(path, except string) (int, error) {
+	if path == "" {
+		return 0, nil
+	}
+
+	var n int
+	err := s.DB.QueryRowContext(s.queryCtx(),
+		`SELECT COUNT(*) FROM notes WHERE filename <> ? AND content LIKE ? ESCAPE '\'`,
+		except, "%"+escapeLikePattern(path)+"%").Scan(&n)
+	return n, err
+}
+
+// escapeLikePattern escapa os curingas do LIKE (%, _) e o próprio caractere de
+// escape, para que um nome de arquivo com "_" não vire curinga.
+func escapeLikePattern(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// RenameNote renames a note from old to new filename.
+func (s *Store) RenameNote(old, new string) error {
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
+	if old == new {
+		return nil
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE notes SET filename = ? WHERE filename = ?", new, old); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// GetAllNotes returns all note filenames and their mtimes, ordered by mtime desc.
+func (s *Store) GetAllNotes() (map[string]string, error) {
+	rows, err := s.Q.GetAllNotes(s.queryCtx())
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string)
+	for _, r := range rows {
+		result[r.Filename] = r.Mtime.String
+	}
+	return result, nil
+}
+
+// GetAllNotesPaginated returns a paginated list of notes.
+func (s *Store) GetAllNotesPaginated(from, size int) (map[string]string, int, error) {
+	count, err := s.Q.CountNotes(s.queryCtx())
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.Q.GetAllNotesPaginated(s.queryCtx(), dbgen.GetAllNotesPaginatedParams{
+		Limit:  int64(size),
+		Offset: int64(from),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make(map[string]string)
+	for _, r := range rows {
+		result[r.Filename] = r.Mtime.String
+	}
+	return result, int(count), nil
+}
+
+// GetNoteMtime returns just the mtime for a note.
+func (s *Store) GetNoteMtime(filename string) (string, error) {
+	mtime, err := s.Q.GetNoteMtime(s.queryCtx(), filename)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return mtime.String, err
+}
+
+// NoteExists checks if a note exists.
+func (s *Store) NoteExists(filename string) bool {
+	count, _ := s.Q.NoteExists(s.queryCtx(), filename)
+	return count > 0
+}
+
+// GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
+func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
+	return s.Q.GetNotesNeedingMarkmapTag(s.queryCtx())
+}
+
+// MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.
+// It skips files that already exist in the DB (by filename).
+// Returns the count of imported notes.
+func (s *Store) MigrateNotesFromDisk(docsDir string) (int, error) {
+	notesDir := filepath.Join(docsDir, "notes")
+	entries, err := os.ReadDir(notesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	imported := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".md") {
+			continue
+		}
+		filename := "notes/" + name
+		if s.NoteExists(filename) {
+			continue // skip already imported
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		fullPath := filepath.Join(notesDir, name)
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		mtime := info.ModTime().Format(time.RFC3339)
+		if err := s.SaveNote(filename, string(content), mtime); err != nil {
+			continue
+		}
+		imported++
+	}
+	return imported, nil
+}
+
+// GetAllNotesContent returns all note filenames and their content in a single query.
+func (s *Store) GetAllNotesContent() (map[string]string, error) {
+	rows, err := s.Q.GetAllNotesContent(s.queryCtx())
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string)
+	for _, r := range rows {
+		result[r.Filename] = r.Content.String
+	}
+	return result, nil
+}

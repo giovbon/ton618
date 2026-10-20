@@ -1,0 +1,325 @@
+package layout
+
+import "ton618/core/internal/ui/icons"
+
+templ Navbar() {
+    <nav x-data="{ mobileMenuOpen: false }" class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-xs sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
+            <div class="flex flex-col shrink-0 items-start">
+                <a href="/" class="flex items-center gap-2.5 group" title="TON-618 — Sistema de Gestão de Conhecimento">
+                    <div class="relative w-7 h-7 shrink-0 group-hover:scale-125 transition-transform duration-300">
+                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+                            class="w-full h-full drop-shadow-[0_0_12px_rgba(255,255,255,0.5)]">
+                            <defs>
+                                <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
+                                    <feGaussianBlur stdDeviation="3" result="blur" />
+                                    <feColorMatrix in="blur" type="matrix"
+                                        values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 18 -7" result="glow" />
+                                    <feComposite in="SourceGraphic" in2="glow" operator="over" />
+                                </filter>
+                                <radialGradient id="singularityGrad" cx="50%" cy="50%" r="50%">
+                                    <stop offset="65%" stop-color="#000000" />
+                                    <stop offset="100%" stop-color="#0f172a" />
+                                </radialGradient>
+                            </defs>
+                            <circle cx="50" cy="50" r="45" fill="white" filter="url(#logoGlow)" opacity="0.25" />
+                            <circle cx="50" cy="50" r="28" stroke="white" stroke-width="1.2" stroke-opacity="0.85"
+                                fill="none" filter="url(#logoGlow)" />
+                            <circle cx="50" cy="50" r="26" fill="url(#singularityGrad)" />
+                            <circle cx="50" cy="50" r="22" fill="#000000" />
+                            <path d="M50 8 C75 8 92 22 92 50 C92 68 82 82 70 86 C80 72 80 52 75 42 C70 34 58 26 50 26 Z"
+                                fill="white" opacity="0.7" transform="rotate(0 50 50)" />
+                            <path d="M50 10 C72 10 88 25 88 50 C88 66 78 80 66 84 C76 70 76 54 72 44 C66 36 56 28 50 28 Z"
+                                fill="#e2e8f0" opacity="0.3" transform="rotate(120 50 50)" />
+                            <path d="M50 10 C70 10 86 28 86 50 C86 66 78 80 66 84 C74 70 74 54 70 44 C66 36 56 28 50 28 Z"
+                                fill="white" opacity="0.5" transform="rotate(240 50 50)" />
+                        </svg>
+                    </div>
+                    <span class="text-base font-black tracking-tight text-zinc-200 group-hover:text-white transition-colors">TON-618</span>
+                </a>
+                <!-- Progress Bar -->
+                <div id="upload-progress-container" x-data="{ uploading: false, progress: 0 }"
+                    @htmx:xhr:progress.window="uploading = true; progress = Math.round($event.detail.loaded / $event.detail.total * 100)"
+                    @htmx:after-request.window="uploading = false; progress = 0"
+                    :class="{ 'opacity-100': uploading, 'opacity-0': !uploading }"
+                    class="w-full h-1 bg-zinc-900/50 border border-zinc-800/50 rounded-full mt-1 overflow-hidden opacity-0 transition-opacity duration-300 pointer-events-none">
+                    <div id="upload-progress-bar" class="h-full bg-sky-500 rounded-full transition-all duration-150 ease-out relative overflow-hidden" style="width: 0%;" :style="'width: ' + progress + '%'">
+                        <div id="upload-progress-glow" class="absolute inset-0 progress-shimmer" :class="progress >= 100 ? 'block' : 'hidden'"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- ── hidden file inputs (always present) ── -->
+            <input id="pdf-file-input" type="file" name="file" accept=".pdf" class="hidden" 
+                hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
+                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
+            <input id="epub-file-input" type="file" name="file" accept=".epub" class="hidden" 
+                hx-post="/upload" hx-trigger="change" hx-encoding="multipart/form-data" 
+                hx-on::after-request="if(event.detail.successful) window.location.href='/'" />
+            <input id="zip-file-input" type="file" name="files" multiple class="hidden" />
+
+            <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
+
+                <!-- 🗓️ NOTA DA SEMANA (acesso direto, só o ícone) -->
+                <a id="nav-semana" href="/semana" title="Nota da semana"
+                    class="flex items-center justify-center p-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all">
+                    @icons.Icon(icons.GetIcon("semanal"), "w-3.5 h-3.5 " + icons.GetColor("semanal"))
+                </a>
+
+                <!-- ＋ CRIAR dropdown -->
+                <div class="relative" id="criar-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
+                    <button id="criar-btn"
+                        @click="open = !open"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
+                        @icons.Icon("plus", "w-3.5 h-3.5")
+                        Criar
+                    </button>
+                    <div id="criar-menu"
+                        x-show="open" x-cloak
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                        <a href="/editor" @click="open = false"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota")) <span>+ Nota</span>
+                        </a>
+                        <a href="/drawing"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho")) <span>+ Desenho</span>
+                        </a>
+                        <a href="/mindmap"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap")) <span>+ Markmap</span>
+                        </a>
+                        <a href="/tabulator"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) <span>+ Tabulator</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 🌐 CAPTURA dropdown -->
+                <div class="relative" id="captura-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
+                    <button id="captura-btn"
+                        @click="open = !open"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all cursor-pointer">
+                        @icons.Icon(icons.GetIcon("captura"), "w-3.5 h-3.5 " + icons.GetColor("captura"))
+                        Captura
+                    </button>
+                    <div id="captura-menu"
+                        x-show="open" x-cloak
+                        class="absolute left-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
+                        <a href="#" id="pdf-upload-link" @click.prevent="open = false; document.getElementById('pdf-file-input').click();"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
+                            @icons.Icon(icons.GetIcon("pdf"), "w-4 h-4 " + icons.GetColor("pdf")) <span>Upload PDF</span>
+                        </a>
+                        <a href="#" id="epub-upload-link" @click.prevent="open = false; document.getElementById('epub-file-input').click();"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-sky-400 transition-colors">
+                            @icons.Icon(icons.GetIcon("epub"), "w-4 h-4 " + icons.GetColor("epub")) <span>Upload EPUB</span>
+                        </a>
+                        <a href="#" id="zip-upload-link" @click.prevent="open = false; document.getElementById('zip-file-input').click();"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-amber-400 transition-colors">
+                            @icons.Icon(icons.GetIcon("anexo"), "w-4 h-4 " + icons.GetColor("anexo")) <span>Upload Anexo</span>
+                        </a>
+                        <a href="#" id="capture-link" @click.prevent="open = false; promptCapture($el);"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-emerald-400 transition-colors">
+                            @icons.Icon(icons.GetIcon("captura"), "w-4 h-4 " + icons.GetColor("captura")) <span>Web Capture</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Nav links — icon + label only for key destinations -->
+                <a id="nav-agenda" href="/agenda"
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">
+                    @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 " + icons.GetColor("agenda")) Agenda
+                </a>
+                <a id="nav-todos" href="/todos"
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
+                    @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task")) Task
+                    <!-- Contagem de tarefas: carregada pelo HTMX (swap innerHTML para
+                         o container sobreviver à troca — NUNCA trocar por outerHTML,
+                         senão o span perde os atributos hx-* e só atualiza uma vez).
+                         O `?r=` é cache-buster, `hx-sync="this:replace"` aborta uma
+                         requisição em voo (resposta fora de ordem mostraria número
+                         velho) e o timeout de 5s evita que um servidor travado deixe
+                         o número antigo na tela em silêncio (mostra "?" vermelho).
+                         ⚠️ O evento de falha de REDE do htmx 1.9.12 chama-se
+                         `htmx:sendError` (camelCase) — com `send-error` o handler
+                         nunca dispara e o "?" não aparece. -->
+                    <span id="todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
+                </a>
+                <a id="nav-database" href="/database"
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Tabulator">
+                    @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) Tabulator
+                </a>
+
+                <!-- Utility icons (cinza conforme especificado) -->
+                <!-- Ajuda: à esquerda das configurações. Abre /help, que renderiza
+                     o HELP.md da raiz do projeto (markdown). -->
+                <a id="nav-help" href="/help"
+                    class="text-zinc-400 hover:text-sky-300 transition-colors cursor-pointer" title="Ajuda / Docs">
+                    @icons.Icon(icons.GetIcon("help"), "w-4 h-4 " + icons.GetColor("help"))
+                </a>
+                <button @click="$store.settings.openTab('arquivamento')"
+                    class="text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Configurações">
+                    @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
+                </button>
+                <button onclick="logout()"
+                    class="text-zinc-400 hover:text-red-400 transition-colors cursor-pointer" title="Sair">
+                    @icons.Icon(icons.GetIcon("sair"), "w-4 h-4 " + icons.GetColor("sair"))
+                </button>
+            </div>
+            <button id="mobile-menu-toggle" @click="mobileMenuOpen = !mobileMenuOpen"
+                class="md:hidden text-zinc-400 hover:text-white focus:outline-hidden focus:ring-2 focus:ring-sky-500 rounded-sm"
+                :aria-expanded="mobileMenuOpen.toString()" aria-controls="mobile-menu" title="Abrir menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M4 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M4 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+            </button>
+        </div>
+        <div id="mobile-menu" x-show="mobileMenuOpen" x-cloak
+            class="md:hidden border-t border-zinc-900/50 bg-zinc-950/98 px-4 py-3.5 space-y-3.5">
+            <!-- Seção: Criar -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Criar</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <a href="/editor" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota"))
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Nota</span>
+                    </a>
+                    <a href="/drawing"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-pink-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("desenho"), "w-4 h-4 " + icons.GetColor("desenho"))
+                        <span class="text-[11px] font-semibold text-pink-400/90">+ Desenho</span>
+                    </a>
+                    <a href="/mindmap"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-emerald-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("markmap"), "w-4 h-4 " + icons.GetColor("markmap"))
+                        <span class="text-[11px] font-semibold text-emerald-400/90">+ Markmap</span>
+                    </a>
+                    <a href="/tabulator" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-lime-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator"))
+                        <span class="text-[11px] font-semibold text-lime-400/90">+ Tabulator</span>
+                    </a>
+                    <a href="/semana" id="mobile-criar-semana-link" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-teal-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("semanal"), "w-4 h-4 " + icons.GetColor("semanal"))
+                        <span class="text-[11px] font-semibold text-teal-400">+ Semana</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Seção: Capturar -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Capturar</div>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <a href="#" id="mobile-pdf-link" @click.prevent="mobileMenuOpen = false; document.getElementById('pdf-file-input').click();"
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("pdf"), "w-4 h-4 " + icons.GetColor("pdf"))
+                        <span class="text-[11px] font-semibold text-zinc-300">+ PDF</span>
+                    </a>
+                    <a href="#" id="mobile-epub-link" @click.prevent="mobileMenuOpen = false; document.getElementById('epub-file-input').click();"
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("epub"), "w-4 h-4 " + icons.GetColor("epub"))
+                        <span class="text-[11px] font-semibold text-zinc-300">+ EPUB</span>
+                    </a>
+                    <a href="#" id="mobile-zip-link" @click.prevent="mobileMenuOpen = false; document.getElementById('zip-file-input').click();"
+                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("anexo"), "w-4 h-4 " + icons.GetColor("anexo"))
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Anexo</span>
+                    </a>
+                    <button id="mobile-capture-link" @click="mobileMenuOpen = false; promptCapture($el);"
+                        class="col-span-3 flex items-center justify-start gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-zinc-300 transition-all active:scale-[0.98] w-full text-left">
+                        @icons.Icon(icons.GetIcon("captura"), "w-4 h-4 " + icons.GetColor("captura"))
+                        <span class="text-[11px] font-semibold text-zinc-300">+ Web Capture</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Seção: Navegação / Ações -->
+            <div>
+                <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Navegação</div>
+                <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
+                    <a id="mobile-nav-agenda" href="/agenda" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
+                        @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 " + icons.GetColor("agenda"))
+                        <span class="text-[11px] font-bold tracking-wider">AGENDA</span>
+                    </a>
+                    
+                    <a id="mobile-nav-todos" href="/todos" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
+                        @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task"))
+                        <span class="text-[11px] font-bold tracking-wider">TASK</span>
+                        <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
+                    </a>
+                    
+                    <!-- Tabulator: fora do menu mobile de propósito — a tabela
+                         (árvore + várias colunas) não é utilizável numa tela de
+                         celular. O acesso continua no menu do desktop
+                         (#nav-database) e pela URL /database. -->
+
+                    <a id="mobile-nav-help" href="/help" @click="mobileMenuOpen = false"
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-300 hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        @icons.Icon(icons.GetIcon("help"), "w-4 h-4 " + icons.GetColor("help"))
+                        <span class="text-[11px] font-bold tracking-wider">AJUDA</span>
+                    </a>
+
+                    <button @click="mobileMenuOpen = false; $store.settings.openTab('arquivamento')"
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        @icons.Icon(icons.GetIcon("config"), "w-4 h-4 " + icons.GetColor("config"))
+                        <span class="text-[11px] font-bold tracking-wider">CONFIGURAÇÕES</span>
+                    </button>
+                    
+                    <div class="border-t border-zinc-800/80 my-1"></div>
+                    
+                    <button @click="mobileMenuOpen = false; logout()"
+                        class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-900/50 transition-colors text-left font-bold">
+                        @icons.Icon(icons.GetIcon("sair"), "w-4 h-4 " + icons.GetColor("sair"))
+                        <span class="text-[11px] font-bold tracking-wider">SAIR</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <script>
+        // Badge de tarefas: se o servidor não responder (app suspenso/parado), o número
+        // ficaria velho em silêncio — o pior tipo de bug, porque parece problema de
+        // contagem. Com o timeout do hx-request, aqui ele passa a AVISAR.
+        // (Um swap bem-sucedido depois sobrescreve este conteúdo.)
+        window.todosBadgeOffline = function (el) {
+            if (!el) return;
+            el.innerHTML = '<span class="ml-0.5 px-1.5 py-0.5 rounded-sm bg-red-500/20 text-red-400 text-[9px] font-black leading-none" title="Servidor não respondeu — a contagem pode estar desatualizada">?</span>';
+        };
+
+        // Recarrega a contagem de Tasks do cabeçalho sob demanda.
+        // Use em qualquer ação que crie/remova linhas da tabela `todos` fora do
+        // editor (que já dispara o evento no save): excluir nota pela sidebar,
+        // arquivar/excluir em massa, restaurar arquivo de backup.
+        // Sem isso o número fica velho até o próximo reload completo.
+        window.tonRefreshTodosBadge = function () {
+            try {
+                document.body.dispatchEvent(new Event("todos-updated"));
+            } catch (e) { /* ambiente sem body/Event */ }
+        };
+
+        (function() {
+            const path = window.location.pathname;
+            if (path === '/agenda') {
+                const nav = document.getElementById('nav-agenda');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-400 flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-agenda');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sky-400 bg-sky-950/40 border border-sky-500/20 transition-colors';
+            } else if (path === '/todos') {
+                const nav = document.getElementById('nav-todos');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-500/30 text-amber-400 flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-todos');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-amber-400 bg-amber-950/40 border border-amber-500/20 transition-colors';
+            } else if (path === '/database') {
+                // Só o item do desktop: o Tabulator saiu do menu mobile de propósito.
+                const nav = document.getElementById('nav-database');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 transition-all';
+            }
+        })();
+    </script>
+}

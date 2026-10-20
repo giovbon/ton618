@@ -1,0 +1,159 @@
+package search
+
+import (
+	"strconv"
+	"ton618/core/internal/core/domain"
+	"ton618/core/internal/ui/icons"
+)
+
+func getLineHash(line int) string {
+	if line > 0 {
+		return "#line-" + strconv.Itoa(line)
+	}
+	return ""
+}
+
+// searchResultHref roteia o clique no título para o editor certo conforme o tipo
+// da nota. Antes essa regra estava duplicada em cada ramo do `if` do template.
+func searchResultHref(res domain.SearchResultItem) string {
+	switch res.Tipo {
+	case "pdf":
+		return "/file?name=" + res.Arquivo
+	case "desenho", "drawing":
+		return "/drawing?file=" + res.Arquivo
+	case "markmap", "mindmap":
+		return "/mindmap?file=" + res.Arquivo
+	case "tabulator":
+		return "/tabulator?file=" + res.Arquivo
+	default:
+		return "/editor?file=" + res.Arquivo + getLineHash(res.Line)
+	}
+}
+
+templ SearchResults(data domain.SearchResultsData, size int) {
+	<div id="search-metadata" data-stems="" class="hidden"></div>
+	if data.Query != "" {
+		<p class="text-[11px] font-medium text-zinc-500 mb-4 tracking-wide uppercase">
+			{ strconv.Itoa(data.Total) } resultado
+			if data.Total != 1 {
+				{ "s" }
+			}
+			para &ldquo;{ data.Query }&rdquo;
+		</p>
+	}
+	if len(data.Results) > 0 {
+		@searchResultItems(data)
+		@searchMoreSentinel(0, size, data.Total)
+	} else {
+		if data.Query != "" {
+			<div class="text-center py-20">
+				<p class="text-zinc-500 text-sm">
+					Nenhum resultado para &ldquo;{ data.Query }&rdquo;.
+				</p>
+				<p class="text-zinc-600 text-xs mt-1">
+					Tente termos diferentes ou verifique a ortografia.
+				</p>
+			</div>
+		} else {
+			<div class="text-center py-20">
+				<p class="text-zinc-600 text-sm">
+					Comece a digitar para buscar suas notas.
+				</p>
+				<p class="text-zinc-700 text-xs mt-1">
+					O índice será atualizado automaticamente.
+				</p>
+			</div>
+		}
+	}
+}
+
+// SearchResultsMore é o partial de "carregar mais" (scroll infinito): apenas os
+// itens + a sentinela do próximo from. A resposta SUBSTITUI a sentinela revelada
+// (hx-swap="outerHTML").
+templ SearchResultsMore(data domain.SearchResultsData, from, size int) {
+	if len(data.Results) > 0 {
+		@searchResultItems(data)
+		@searchMoreSentinel(from, size, data.Total)
+	}
+}
+
+// searchMoreSentinel dispara o próximo carregamento quando entra no viewport
+// (hx-trigger="revealed"). Só é renderizada se ainda houver resultados além do
+// from atual — quando acaba, a sentinela some e o scroll para.
+templ searchMoreSentinel(from, size, total int) {
+	if from+size < total {
+		<div
+			hx-post={ "/search?from=" + strconv.Itoa(from+size) + "&size=" + strconv.Itoa(size) }
+			hx-trigger="revealed"
+			hx-swap="outerHTML"
+			hx-include="#search-global"
+			hx-indicator="#spinner"
+			class="py-4 text-center text-[11px] text-zinc-500 animate-pulse"
+		>
+			Carregando mais...
+		</div>
+	}
+}
+
+templ searchResultItems(data domain.SearchResultsData) {
+	<ul class="space-y-2.5">
+		for _, res := range data.Results {
+			@searchResultItem(res, data.Query)
+		}
+	</ul>
+}
+
+templ searchResultItem(res domain.SearchResultItem, query string) {
+	<li class="relative bg-zinc-900/30 border border-zinc-800/50 hover:border-emerald-500/30 hover:bg-emerald-950/10 rounded-xl transition-all duration-300 group p-4">
+		<div class="relative z-10">
+			<div class="flex items-center gap-2 min-w-0 mb-2">
+				{{
+					iconName := icons.GetIcon(res.Tipo)
+					iconColor := icons.GetColor(res.Tipo)
+					// O NOME da nota usa a MESMA cor do tipo (fonte única: Config de
+					// ícones/cores). Antes a cor era fixa por ramo do `if` e tinha
+					// divergido do Config (ex: desenho/markdown saíam em azul).
+					titleColorClass, titleColorStyle := icons.ParseClassAndStyle(iconColor)
+					titleClass := "text-[13px] font-black tracking-tight hover:opacity-70 transition-all truncate cursor-pointer"
+					if titleColorClass != "" {
+						titleClass += " " + titleColorClass
+					}
+				}}
+				<span class="text-[9px] font-black tracking-widest text-zinc-500 uppercase bg-zinc-800/30 px-1.5 py-0.5 rounded-sm shrink-0 flex items-center gap-1">
+					@icons.Icon(iconName, "w-3 h-3 " + iconColor) { res.Tipo }
+				</span>
+				<a
+					href={ templ.SafeURL(searchResultHref(res)) }
+					class={ titleClass }
+					style={ titleColorStyle }
+					if res.Tipo == "pdf" {
+						target="_blank"
+					}
+				>
+					{ domain.DisplayName(res.Arquivo) }
+				</a>
+			</div>
+			if res.Secao != "" {
+				<div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase search-section-title">
+					@templ.Raw(highlightSpans(res.Secao, query))
+				</div>
+			}
+			<!-- Sem line-clamp: um line-clamp (ex.: 4 linhas) pode cortar VISUALMENTE
+			     o trecho quando a ocorrência está fundo num parágrafo longo — o span de
+			     destaque existe no HTML, mas fica além das linhas exibidas e o termo
+			     "some". Sem clamp o trecho inteiro é mostrado e o destaque fica visível. -->
+			<div class="text-[14px] leading-relaxed text-zinc-400 font-sans snippet-text">
+				@templ.Raw(res.Snippet)
+			</div>
+			if len(res.Tags) > 0 {
+				<div class="mt-3 flex items-center justify-between gap-3">
+					<div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
+						for _, tag := range res.Tags {
+							<span class="px-2 py-0.5 rounded-sm bg-zinc-800/60 text-[10px] font-semibold text-zinc-400 search-tag-item">#{ tag }</span>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	</li>
+}

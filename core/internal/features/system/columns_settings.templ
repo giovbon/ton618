@@ -1,0 +1,42 @@
+package system
+
+// ColumnsSettings é o formulário da aba "Colunas" nas configurações: o usuário
+// marca quais campos do frontmatter podem virar coluna no Tabulator. Campos
+// desmarcados são omitidos das colunas (allowlist salva em `db_columns`).
+templ ColumnsSettings(fields []ColumnFieldOption, saved bool) {
+    <div id="columns-settings-container" class="space-y-6">
+        if saved {
+            <div class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-lg text-sm mb-4">
+                Preferências de colunas salvas com sucesso!
+            </div>
+        }
+        <p class="text-xs text-zinc-400 leading-relaxed">
+            Marque quais campos do frontmatter podem virar coluna na tabela. Os campos desmarcados
+            não são exibidos como colunas. As colunas principais (Título, Tags, Tipo, Pai, Arquivo
+            e Modificação) são fixas e sempre disponíveis.
+        </p>
+        <form hx-post="/api/settings/columns" hx-target="#columns-settings-container" hx-swap="outerHTML" class="space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                for _, f := range fields {
+                    <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-zinc-800/40 border border-zinc-700/50 text-zinc-200 text-xs cursor-pointer hover:bg-zinc-800/70 transition-colors">
+                        <input type="checkbox" name="columns" value={ f.Field } checked?={ f.Checked }
+                            class="w-3.5 h-3.5 rounded-sm border-zinc-700 text-sky-500 bg-zinc-900 focus:ring-sky-500" />
+                        <span>{ f.Title }</span>
+                    </label>
+                }
+            </div>
+            if len(fields) == 0 {
+                <p class="text-xs text-zinc-500 mt-2">
+                    Nenhum campo de frontmatter encontrado ainda. Os campos aparecem aqui depois que alguma
+                    nota os usa no frontmatter.
+                </p>
+            }
+            <div class="pt-4 border-t border-zinc-800 flex justify-end">
+                <button type="submit"
+                    class="px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-colors">
+                    💾 Salvar Colunas
+                </button>
+            </div>
+        </form>
+    </div>
+}

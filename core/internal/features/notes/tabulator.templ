@@ -1,0 +1,491 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
+import "ton618/core/internal/ui/icons"
+
+templ Tabulator(data domain.EditorData) {
+    @layout.Layout(data.Title, false, tabulatorContent(data))
+}
+
+templ tabulatorContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="tabulator-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 0 0 0; border-radius: 0;">
+    <!-- Topbar: nome + status + ações -->
+    <div class="flex items-center gap-3 px-6 mb-2 shrink-0 relative z-30" id="tabulator-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-hidden focus:text-emerald-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+
+        <button
+            id="tabulator-export-btn"
+            type="button"
+            class="text-zinc-500 hover:text-emerald-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Exportar como CSV"
+        >
+            @icons.Icon("download", "w-4 h-4")
+        </button>
+        <button
+            id="duplicate-editor-btn"
+            type="button"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta tabela"
+        >
+            @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
+        </button>
+        <button
+            id="delete-editor-btn"
+            type="button"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta tabela"
+        >
+            @icons.Icon(icons.GetIcon("excluir"), "w-4 h-4 " + icons.GetColor("excluir"))
+        </button>
+    </div>
+
+    <!-- Toolbar: inserir dados + filtrar -->
+    <div class="flex flex-wrap items-center gap-2 px-6 mb-2 shrink-0 relative z-20" id="tabulator-toolbar">
+        <button
+            id="tab-add-row"
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-[11px] font-bold tracking-wide uppercase"
+        >
+            @icons.Icon("plus", "w-3.5 h-3.5") Novo registro
+        </button>
+        <button
+            id="tab-add-col"
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors text-[11px] font-bold tracking-wide uppercase"
+        >
+            @icons.Icon("plus", "w-3.5 h-3.5") Nova coluna
+        </button>
+        <div class="relative flex-1 min-w-[160px] max-w-xs">
+            <input
+                id="tab-filter"
+                type="search"
+                placeholder="Filtrar nesta tabela..."
+                autocomplete="off"
+                class="w-full px-3 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-700/50 text-[12px] text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-emerald-500/50 transition-colors"
+            />
+        </div>
+        <span id="tab-count" class="ml-auto text-[11px] font-semibold text-zinc-500">0 registro(s) · 0 coluna(s)</span>
+    </div>
+
+    <!-- placeholders para compatibilidade com layout.templ -->
+    <div id="frontmatter-area" class="hidden"></div>
+    <div id="tag-suggestions" class="hidden mt-2">
+        <div id="tag-suggestion-list" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- Planilha -->
+    <div id="tabulator-table" class="ton-tabulator flex-1 min-h-0"></div>
+
+    <!-- Seletor usado pela coluna "arquivo" (aberto ao clicar na célula). -->
+    <input id="tab-file-input" type="file" class="hidden" />
+
+    <textarea id="content-output" class="hidden">{ data.Content }</textarea>
+</div>
+
+<link rel="stylesheet" href={ staticver.URL("/static/tabulator_midnight.min.css") } />
+<link rel="stylesheet" href={ staticver.URL("/static/tabulator-theme.css") } />
+<script src={ staticver.URL("/static/tabulator.min.js") }></script>
+<script src={ staticver.URL("/static/tabulator-note.js") }></script>
+
+<style>
+    /* ── Ajustes locais da nota Tabulator ────────────────────────────────
+       O tema (cores/design da tabela) vive em /static/tabulator-theme.css
+       (classe .ton-tabulator, compartilhada com /database). Aqui ficam só o
+       que é específico desta nota: coluna de numeração, botões e a coluna de
+       ARQUIVO. */
+    #tabulator-table {
+        min-height: 0;
+        padding-bottom: 12px;
+    }
+    /* Coluna de numeração: discreta, alinhada por dígitos. */
+    #tabulator-table .tabulator-row .tabulator-cell[tabulator-field="_rownum"] {
+        color: #5b5b66 !important;
+        font-variant-numeric: tabular-nums;
+    }
+    #tabulator-table .tabulator-header .tabulator-col[tabulator-field="_rownum"] .tabulator-col-title {
+        color: #71717a !important;
+    }
+    /* ── Botão de excluir registro (coluna de ações) ── */
+    #tabulator-root .tab-del-btn {
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        color: #71717a;
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+        padding: 0 6px;
+    }
+    #tabulator-root .tab-del-btn:hover {
+        background: rgba(127, 29, 29, 0.25);
+        color: #f87171;
+    }
+    /* ── Coluna "arquivo" ── */
+    #tabulator-root .tab-file-cell {
+        align-items: center;
+        display: inline-flex;
+        gap: 4px;
+        max-width: 100%;
+    }
+    #tabulator-root .tab-file-link {
+        color: #34d399;
+        font-weight: 600;
+        overflow: hidden;
+        text-decoration: none;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #tabulator-root .tab-file-link:hover {
+        color: #6ee7b7;
+        text-decoration: underline;
+    }
+    #tabulator-root .tab-file-del {
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        color: #71717a;
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        padding: 0 4px;
+    }
+    #tabulator-root .tab-file-del:hover {
+        background: rgba(127, 29, 29, 0.25);
+        color: #f87171;
+    }
+    #tabulator-root .tab-file-empty {
+        color: #52525b;
+        cursor: pointer;
+        font-style: italic;
+    }
+    #tabulator-root .tab-file-empty:hover {
+        color: #34d399;
+    }
+    #tabulator-root .tab-file-raw {
+        color: #a1a1aa;
+    }
+    /* Célula durante o envio do arquivo. */
+    @keyframes tabFilePulse {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 0.9; }
+    }
+    #tabulator-root .tabulator-cell.tab-file-uploading {
+        animation: tabFilePulse 1s ease-in-out infinite;
+        color: #38bdf8 !important;
+    }
+
+    /* Célula: respiro local (o padding difere da /database, que tem árvore). */
+    #tabulator-table .tabulator-row .tabulator-cell {
+        padding: 6px 8px;
+    }
+
+    /* ── Submenu "Tipo da coluna" (item do menu ⋮ do Tabulator) ──────────
+       O submenu é nativo do Tabulator (`menu: [...]`), então não há artefato
+       próprio para estilizar: só o conteúdo do item (ícone + nome + ✓). Os
+       seletores .tab-type-* não dependem de #tabulator-root porque o menu é
+       montado no fim do <body>. */
+    .tab-type-item {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        min-width: 132px;
+    }
+    .tab-type-item .tab-type-ico {
+        color: #9ca3af;
+        display: inline-flex;
+        flex: none;
+    }
+    .tab-type-item .tab-type-ico svg {
+        height: 15px;
+        width: 15px;
+    }
+    .tab-type-item .tab-type-name {
+        flex: 1;
+        white-space: nowrap;
+    }
+    .tab-type-item .tab-type-check {
+        color: #34d399;
+        flex: none;
+        font-weight: 700;
+        text-align: right;
+        width: 12px;
+    }
+    .tab-type-item.is-current .tab-type-ico,
+    .tab-type-item.is-current .tab-type-name {
+        color: #34d399;
+        font-weight: 600;
+    }
+</style>
+
+<script>
+    (function () {
+        "use strict";
+
+        var filenameInput = document.getElementById("file-name");
+        var statusEl = document.getElementById("editor-status");
+        var countEl = document.getElementById("tab-count");
+        var rawContent = document.getElementById("content-output").value;
+
+        var FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+        var initialFrontmatter = "---\ntype: tabulator\n---\n";
+        var initialData = null;
+        var parseError = false;
+
+        // Preserva o frontmatter existente (tags do usuário); garante "type: tabulator"
+        // só quando a nota nasce sem frontmatter.
+        var fmMatch = rawContent.match(FRONTMATTER_REGEX);
+        if (fmMatch) {
+            initialFrontmatter = "---\n" + fmMatch[1] + "\n---\n";
+            var body = (fmMatch[2] || "").trim();
+            if (body) {
+                try {
+                    initialData = JSON.parse(body);
+                } catch (e) {
+                    parseError = true;
+                    console.error("Tabulator: JSON inválido no corpo da nota:", e);
+                }
+            }
+        }
+
+        if (!initialData || typeof initialData !== "object") {
+            initialData = { columns: [{ field: "c1", title: "Coluna 1" }, { field: "c2", title: "Coluna 2" }], rows: [] };
+        }
+        if (!initialData.columns || !initialData.columns.length) {
+            initialData.columns = [{ field: "c1", title: "Coluna 1" }];
+        }
+        if (!initialData.rows) initialData.rows = [];
+
+        var editor = null;
+        var currentStatus = "saved";
+        var lastSavedHash = null;
+        var generateHash = EditorCommon.generateHash;
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        function updateCount() {
+            if (!editor || !countEl) return;
+            var total = editor.getRowCount();
+            var shown = editor.getFilteredRowCount();
+            var rowsLabel = (shown === total)
+                ? total + " registro(s)"
+                : shown + " de " + total + " registro(s)";
+            countEl.textContent = rowsLabel + " · " + editor.getColumnCount() + " coluna(s)";
+        }
+
+        function buildContent() {
+            return initialFrontmatter + JSON.stringify(editor ? editor.getData() : initialData);
+        }
+
+        // ── Autosave com debounce + fila (evita corrida entre edições) ──
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1200);
+        }
+
+        function onChange() {
+            setStatus("dirty");
+            updateCount();
+            scheduleSave();
+        }
+
+        async function doSave() {
+            if (saveInProgress) {
+                savePending = true;
+                return;
+            }
+            // Corpo original ilegível: só sobrescreve com confirmação explícita,
+            // para não destruir dados que o usuário tenha na nota.
+            if (parseError) {
+                if (!confirm("O conteúdo original desta nota não pôde ser lido (JSON inválido). Salvar agora vai SUBSTITUÍ-LO pelos dados atuais. Continuar?")) {
+                    setStatus("dirty");
+                    return;
+                }
+                parseError = false;
+            }
+
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var fullContent = buildContent();
+            var currentHash = await generateHash(fullContent);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var rawName = filenameInput.value.trim() ||
+                (filenameInput.dataset && filenameInput.dataset.filename) || "";
+            if (!rawName) {
+                saveInProgress = false;
+                setStatus("dirty");
+                return;
+            }
+            var filename = EditorCommon.normalizeFilename(rawName);
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", fullContent);
+            fd.append("tags", "");
+            fd.append("silent", "true");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar nota Tabulator:", e);
+                if (savePending) scheduleSave();
+            }
+        }
+
+        // Garante que o estado atual esteja gravado antes de uma ação que lê o
+        // arquivo no servidor (ex: exportar CSV). Se um save já estiver em voo,
+        // espera ele terminar.
+        function flushSave() {
+            clearTimeout(saveTimer);
+            return new Promise(function (resolve) {
+                (function attempt() {
+                    if (saveInProgress) {
+                        setTimeout(attempt, 150);
+                        return;
+                    }
+                    Promise.resolve(doSave()).then(resolve, resolve);
+                })();
+            });
+        }
+
+        function initEditor() {
+            var container = document.getElementById("tabulator-table");
+            editor = window.initTabulatorNote(container, {
+                initialData: initialData,
+                onChange: onChange,
+                onFilter: updateCount
+            });
+            updateCount();
+            (async function () {
+                lastSavedHash = await generateHash(buildContent());
+            })();
+        }
+
+        function boot() {
+            if (window.Tabulator && window.initTabulatorNote) {
+                initEditor();
+                return;
+            }
+            var tries = 0;
+            var timer = setInterval(function () {
+                if ((window.Tabulator && window.initTabulatorNote) || tries++ > 50) {
+                    clearInterval(timer);
+                    if (window.Tabulator && window.initTabulatorNote) {
+                        initEditor();
+                    } else {
+                        console.error("Biblioteca Tabulator não carregada.");
+                        document.getElementById("tabulator-table").innerHTML =
+                            "<div style='padding:20px;color:#f87171;'>Erro: módulo da tabela não carregado. Recarregue a página.</div>";
+                    }
+                }
+            }, 100);
+        }
+
+        // ── Botões da toolbar ──
+        document.getElementById("tab-add-row").addEventListener("click", function () {
+            if (!editor) return;
+            editor.addRow({}).then(updateCount);
+        });
+
+        // "+ Nova coluna" cria como Texto; o tipo (número/data/sim-não/arquivo) é
+        // definido depois no menu ⋮ do cabeçalho → "Tipo da coluna".
+        document.getElementById("tab-add-col").addEventListener("click", function () {
+            if (!editor) return;
+            var title = prompt("Nome da nova coluna:", "Coluna");
+            if (title === null) return;
+            title = title.trim();
+            if (!title) return;
+            editor.addColumn(title, "string").then(updateCount);
+        });
+
+        // Filtro rápido da tabela (visual; não altera os dados).
+        var quickFilterTimer = null;
+        document.getElementById("tab-filter").addEventListener("input", function () {
+            var value = this.value;
+            clearTimeout(quickFilterTimer);
+            quickFilterTimer = setTimeout(function () {
+                if (!editor) return;
+                editor.setQuickFilter(value);
+                updateCount();
+            }, 150);
+        });
+
+        document.getElementById("tabulator-export-btn").addEventListener("click", function () {
+            var filename = EditorCommon.getCurrentFilename(filenameInput);
+            if (!filename) return;
+            flushSave().then(function () {
+                var url = "/api/tabulator/export?file=" +
+                    encodeURIComponent(filename).replace(/%2F/gi, "/");
+                window.location.href = url;
+            });
+        });
+
+        // ── Ações comuns dos editores ──
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput, 'Excluir definitivamente esta tabela?');
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/tabulator", 'Duplicar esta tabela "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: buildContent,
+            redirectBase: "/tabulator",
+            setStatus: setStatus
+        });
+
+        EditorCommon.setupCtrlS(function () { doSave(); });
+
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+
+        boot();
+    })();
+</script>
+}

@@ -1,0 +1,70 @@
+package notes
+
+import (
+	"net/http"
+	"strings"
+
+	"ton618/core/internal/core/domain"
+	"ton618/core/internal/processor"
+)
+
+// HandleEditor é o handler principal que renderiza o editor de markdown.
+// Para notas de tipos especiais (drawing, mindmap), redireciona para o editor correto.
+func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("file")
+	if filename == "" {
+		filename = "notes/" + processor.GenerateCUID2() + ".md"
+	}
+
+	// ZIPs → download direto
+	if strings.HasSuffix(strings.ToLower(filename), ".zip") {
+		http.Redirect(w, r, "/file/download?name="+SafeFileQueryEscape(filename), http.StatusFound)
+		return
+	}
+
+	// Normaliza o filename
+	sanitized := NoteFilename(filename)
+	if sanitized != filename {
+		http.Redirect(w, r, "/editor?file="+SafeFileQueryEscape(sanitized), http.StatusFound)
+		return
+	}
+
+	nd, _ := ctx.loadNoteData(filename)
+
+	// Redireciona para o editor especializado se necessário
+	noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
+	if noteType.EditorRoute() != "/editor" {
+		http.Redirect(w, r, noteType.EditorRoute()+"?file="+SafeFileQueryEscape(filename), http.StatusFound)
+		return
+	}
+
+	data := buildEditorData("Editor - "+domain.DisplayName(filename), filename, nd)
+	data.AllTags = nd.AllTags
+	// Hierarquia (pai + filhas) para a barra do editor — uma query em lote
+	// (GetAllNotesContent). Falha aqui não impede a abertura da nota.
+	if hParent, hChildren, hErr := ctx.Notes.GetHierarchy(filename); hErr == nil {
+		data.Parent = hParent
+		data.Children = hChildren
+	}
+	Editor(data).Render(r.Context(), w)
+}
+
+// HandleDrawing renderiza o editor de desenhos (Excalidraw).
+func (ctx *HandlerContext) HandleDrawing(w http.ResponseWriter, r *http.Request) {
+	filename, redirected := ensureNoteFilename(w, r, "/drawing")
+	if redirected {
+		return
+	}
+
+	nd, _ := ctx.loadNoteData(filename)
+
+	if nd.Exists {
+		noteType := domain.DetectNoteTypeFromContent(nd.FileTags, nd.Content, filename)
+		if redirectIfWrongEditor(w, r, noteType, "/drawing", filename) {
+			return
+		}
+	}
+
+	data := buildEditorData("Desenho - "+domain.DisplayName(filename), filename, nd)
+	Drawing(data).Render(r.Context(), w)
+}

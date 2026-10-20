@@ -1,0 +1,120 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+type AppConfig struct {
+	DocsDir          string
+	DBPath           string
+	PollIntervalSec  time.Duration
+	ScanWorkers      int           // workers da indexação inicial (0 = automático)
+	NtfyPollInterval time.Duration // intervalo do poll de notificações ntfy (precisão dos lembretes)
+	Port             string
+	WebDir           string
+	StateDir         string
+	AuthUser         string
+	AuthPass         string
+	HelpDocPath      string // arquivo markdown do help (/help); vazio = resolve automaticamente
+}
+
+func Load() *AppConfig {
+	cfg := &AppConfig{
+		DocsDir:          getEnv("DOCS_DIR", "./docs"),
+		DBPath:           getEnv("DB_PATH", "./data/ton618.db"),
+		PollIntervalSec:  time.Duration(getEnvAsInt("POLL_INTERVAL_SEC", 30)) * time.Second,
+		ScanWorkers:      getEnvAsInt("SCAN_WORKERS", 0), // 0 = automático (GOMAXPROCS, máx 4)
+		NtfyPollInterval: time.Duration(getEnvAsInt("NTFY_POLL_INTERVAL_SEC", 60)) * time.Second,
+		Port:             getEnv("PORT", "6180"),
+		WebDir:           getEnv("WEB_DIR", "./web"),
+		StateDir:         getEnv("STATE_DIR", "./data"),
+		AuthUser:         getEnv("AUTH_USER", "admin"),
+		AuthPass:         getEnv("AUTH_PASS", "ton618"),
+		HelpDocPath:      getEnv("HELP_DOC", ""),
+	}
+
+	// Resolve caminhos relativos para absolutos (essencial no Windows)
+	if absDir, err := filepath.Abs(cfg.DocsDir); err == nil {
+		cfg.DocsDir = absDir
+	}
+	if absDB, err := filepath.Abs(cfg.DBPath); err == nil {
+		cfg.DBPath = absDB
+	}
+	if absWeb, err := filepath.Abs(cfg.WebDir); err == nil {
+		cfg.WebDir = absWeb
+	}
+	if absState, err := filepath.Abs(cfg.StateDir); err == nil {
+		cfg.StateDir = absState
+	}
+
+	// Validações
+	if cfg.PollIntervalSec <= 0 {
+		cfg.PollIntervalSec = 30 * time.Second
+	}
+	if cfg.NtfyPollInterval <= 0 {
+		cfg.NtfyPollInterval = 60 * time.Second
+	}
+	if cfg.Port == "" {
+		cfg.Port = "6180"
+	}
+	if cfg.AuthUser == "" {
+		cfg.AuthUser = "admin"
+	}
+	if cfg.AuthPass == "" {
+		cfg.AuthPass = "ton618"
+	}
+
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return fallback
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok {
+		var i int
+		if _, err := fmt.Sscanf(v, "%d", &i); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	if v, ok := os.LookupEnv(key); ok {
+		switch strings.ToLower(v) {
+		case "true", "1", "yes":
+			return true
+		default:
+			return false
+		}
+	}
+	return fallback
+}
+
+func (c *AppConfig) EnsureDirs() error {
+	for _, dir := range []string{c.DocsDir, c.StateDir} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+	// Cria apenas os diretórios para arquivos binários físicos (PDFs, anexos, archives, EPUBs).
+	// Notas são armazenadas exclusivamente no banco SQLite — não há pasta docs/notes/ nem docs/links/.
+	for _, sub := range []string{"pdfs", "attachments", "archives"} {
+		if err := os.MkdirAll(filepath.Join(c.DocsDir, sub), 0755); err != nil {
+			return err
+		}
+	}
+	return nil
+}

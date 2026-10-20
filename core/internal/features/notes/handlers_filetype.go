@@ -1,0 +1,140 @@
+package notes
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"ton618/core/internal/core/domain"
+)
+
+// safeJoin resolve o caminho e verifica se ele está contido no diretório base,
+// prevenindo path traversal (ex: notes/../../../etc/passwd).
+func safeJoin(baseDir, target string) (string, error) {
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolver diretório base: %w", err)
+	}
+	absTarget, err := filepath.Abs(filepath.Join(baseDir, target))
+	if err != nil {
+		return "", fmt.Errorf("resolver caminho: %w", err)
+	}
+	// Garante que o caminho resolvido começa com o diretório base
+	if !strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) && absTarget != absBase {
+		return "", fmt.Errorf("path traversal detectado: %s", target)
+	}
+	return absTarget, nil
+}
+
+// fileType enumera os tipos de arquivo manipulados pelos handlers.
+type fileType int
+
+const (
+	fileTypeNote  fileType = iota // Nota markdown em notes/
+	fileTypePDF                   // PDF em pdfs/ ou notes/
+	fileTypeEPUB                  // EPUB em epubs/
+	fileTypeZip                   // ZIP/attachment em attachments/ (ou archives/)
+	fileTypeImage                 // Imagem em images/, notes/ (legado) ou attachments/
+)
+
+// resolveFileInfo determina o tipo, nome lógico e caminho completo de um arquivo.
+// raw é o nome vindo do formulário (ex: "doc.pdf", "notes/nota.md", "anexo.zip").
+func resolveFileInfo(docsDir, raw string) (ft fileType, filename, fullPath string, found bool) {
+	ext := strings.ToLower(filepath.Ext(raw))
+
+	switch ext {
+	case ".pdf":
+		basename := filepath.Base(raw)
+		subdirs := []string{domain.PDFDir, domain.NotesDir}
+		for _, sd := range subdirs {
+			testPath := filepath.Join(docsDir, sd, basename)
+			if _, err := os.Stat(testPath); err == nil {
+				return fileTypePDF, sd + "/" + basename, testPath, true
+			}
+		}
+		return fileTypePDF, "", "", false
+
+	case ".epub":
+		basename := filepath.Base(raw)
+		filename = domain.EPUBPrefix + basename
+		fullPath = filepath.Join(docsDir, domain.EPUBDir, basename)
+		return fileTypeEPUB, filename, fullPath, true
+
+	case ".zip":
+		basename := filepath.Base(raw)
+		// Tenta attachments/ primeiro; se não existir, tenta archives/
+		sd := domain.AttachmentDir
+		if strings.HasPrefix(raw, domain.ArchivePrefix) {
+			sd = domain.ArchiveDir
+		} else if !strings.HasPrefix(raw, domain.AttachmentPrefix) {
+			// raw veio sem prefixo: verifica se existe em archives/
+			if _, err := os.Stat(filepath.Join(docsDir, domain.ArchiveDir, basename)); err == nil {
+				sd = domain.ArchiveDir
+			}
+		}
+		filename = sd + "/" + basename
+		fullPath = filepath.Join(docsDir, sd, basename)
+		return fileTypeZip, filename, fullPath, true
+
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg":
+		basename := filepath.Base(raw)
+		sd := imageSubdir(docsDir, raw, basename)
+		filename = sd + "/" + basename
+		var err error
+		fullPath, err = safeJoin(docsDir, filename)
+		if err != nil {
+			return fileTypeImage, "", "", false
+		}
+		return fileTypeImage, filename, fullPath, true
+
+	default:
+		// Nota markdown — sanitiza o nome para prevenir path traversal
+		base := filepath.Base(raw)
+		name := strings.TrimSuffix(base, ".md")
+		filename = NoteFilename(name)
+		fullPath, err := safeJoin(docsDir, filename)
+		if err != nil {
+			return fileTypeNote, "", "", false
+		}
+		// Não verifica existência — a nota pode estar só no DB
+		return fileTypeNote, filename, fullPath, true
+	}
+}
+
+// imageSubdir resolve em qual subdiretório de docs/ uma imagem vive. O prefixo
+// informado manda: images/ é o canônico desde 17/09/2026 e attachments/ continua
+// aceito para imagens anexadas manualmente. Sem prefixo (ex: só "foto.png"),
+// prefere images/ quando o arquivo existe lá e cai para notes/, onde as imagens
+// eram gravadas antes — mantendo as referências antigas funcionando.
+func imageSubdir(docsDir, raw, basename string) string {
+	switch {
+	case strings.HasPrefix(raw, imagesPrefix):
+		return domain.ImageDir
+	case strings.HasPrefix(raw, domain.AttachmentPrefix):
+		return domain.AttachmentDir
+	case !strings.Contains(raw, "/"):
+		if _, err := os.Stat(filepath.Join(docsDir, domain.ImageDir, basename)); err == nil {
+			return domain.ImageDir
+		}
+	}
+	return domain.NotesDir
+}
+
+// resolveFileInfoStrict como resolveFileInfo, mas retorna found=false se o arquivo
+// não existir em disco. Para notas markdown (fileTypeNote), não verifica o disco pois
+// notas são armazenadas exclusivamente no banco de dados.
+func resolveFileInfoStrict(docsDir, raw string) (ft fileType, filename, fullPath string, found bool) {
+	ft, filename, fullPath, found = resolveFileInfo(docsDir, raw)
+	if !found {
+		return
+	}
+	// Notas residem no banco — não exigem arquivo físico.
+	// PDFs, EPUBs e ZIPs precisam do arquivo em disco.
+	if ft != fileTypeNote {
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			return ft, filename, fullPath, false
+		}
+	}
+	return
+}

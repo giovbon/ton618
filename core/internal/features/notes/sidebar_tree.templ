@@ -1,0 +1,232 @@
+package notes
+
+import (
+    "strconv"
+    "strings"
+    "ton618/core/internal/core/domain"
+    "ton618/core/internal/ui/icons"
+)
+
+templ SidebarTree(notes []domain.NoteItem, query string) {
+    if len(notes) == 0 {
+        <div class="text-center py-16" id="sidebar-tree">
+            <p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p>
+        </div>
+    } else {
+        <div class="space-y-2" id="sidebar-tree">
+            for _, n := range notes {
+                @SidebarNoteItem(n, query)
+            }
+            @PromptRenameScript()
+        </div>
+    }
+}
+
+// SidebarTreePaginated é a variante com scroll infinito usada pela busca de
+// Notas: primeira página (from=0) com a sentinela de carregamento.
+templ SidebarTreePaginated(notes []domain.NoteItem, query string, from, size, total int) {
+    if len(notes) == 0 {
+        <div class="text-center py-16" id="sidebar-tree">
+            <p class="text-zinc-600 text-sm">Nenhuma nota encontrada.</p>
+        </div>
+    } else {
+        <div class="space-y-2" id="sidebar-tree">
+            for _, n := range notes {
+                @SidebarNoteItem(n, query)
+            }
+            @SidebarMoreSentinel(from, size, total)
+            @PromptRenameScript()
+        </div>
+    }
+}
+
+// SidebarTreeMore é o partial de "carregar mais": só os itens + a sentinela do
+// próximo from (a resposta substitui a sentinela via hx-swap="outerHTML").
+templ SidebarTreeMore(notes []domain.NoteItem, query string, from, size, total int) {
+    if len(notes) > 0 {
+        for _, n := range notes {
+            @SidebarNoteItem(n, query)
+        }
+        @SidebarMoreSentinel(from, size, total)
+    }
+}
+
+// SidebarMoreSentinel dispara o próximo carregamento quando entra no viewport
+// (hx-trigger="revealed"). Some quando não há mais resultados.
+templ SidebarMoreSentinel(from, size, total int) {
+    if from+size < total {
+        <div
+            hx-get={ "/api/sidebar?from=" + strconv.Itoa(from+size) + "&size=" + strconv.Itoa(size) }
+            hx-trigger="revealed"
+            hx-swap="outerHTML"
+            hx-include="#search-local"
+            class="py-4 text-center text-[11px] text-zinc-500 animate-pulse"
+        >
+            Carregando mais...
+        </div>
+    }
+}
+
+templ SidebarNoteItem(n domain.NoteItem, query string) {
+    {{
+        filename := getFilename(n.Arquivo)
+        displayType := getDisplayType(n)
+        iconName := icons.GetIcon(displayType)
+        iconColor := icons.GetColor(displayType)
+        visibleTags := getVisibleTags(n.Tags)
+    }}
+    <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/30 border border-zinc-800/50 hover:border-sky-500/30 hover:bg-sky-950/10 transition-all duration-300 group">
+        <div class="flex-1 min-w-0">
+            <a href={ templ.SafeURL(getNoteLink(n)) } target={ getTarget(n.Arquivo) } class="block">
+                <span class="text-[13px] font-medium text-zinc-300 hover:text-sky-400 transition-colors truncate flex items-center gap-1.5">
+                    @icons.Icon(iconName, "w-4 h-4 shrink-0 " + iconColor)
+                    @highlightText(filename, query)
+                </span>
+            </a>
+        </div>
+        
+        if len(visibleTags) > 0 {
+            <div class="hidden sm:flex gap-1 shrink-0">
+                for _, t := range visibleTags {
+                    <span class="text-[9px] font-bold text-zinc-600 bg-zinc-800/40 px-1.5 py-0.5 rounded-sm">#{ t }</span>
+                }
+            </div>
+        }
+
+        if n.ChildrenCount > 0 {
+            <span
+                class="shrink-0 flex items-center gap-1 text-[9px] font-mono font-bold text-indigo-300 bg-indigo-950/40 border border-indigo-500/25 px-1.5 py-0.5 rounded-sm"
+                title={ childrenCountTitle(n.ChildrenCount) }
+            >
+                @icons.Icon(icons.GetIcon("filhas"), "w-3 h-3")
+                <span>{ strconv.Itoa(n.ChildrenCount) }</span>
+            </span>
+        }
+        
+        <button type="button" 
+            data-oldname={ n.Arquivo }
+            data-currenttitle={ filename }
+            onclick="promptRenameNote(this)"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1 rounded-md hover:bg-zinc-900/60" title="Editar título">
+            @icons.Icon("edit-3", "w-3.5 h-3.5")
+        </button>
+        <button type="button" hx-post="/api/notes/delete" hx-vals={ `{"filename": "` + n.Arquivo + `"}` } hx-target="#sidebar-tree" hx-swap="none" hx-confirm={ "Excluir " + n.Arquivo + "?" } 
+            hx-on::after-request="tonRefreshTodosBadge()"
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1 rounded-md bg-zinc-950/80 hover:bg-zinc-900" title="Excluir">
+            @icons.Icon("trash-2", "w-3.5 h-3.5")
+        </button>
+    </div>
+}
+
+func getFilename(path string) string {
+    parts := strings.Split(path, "/")
+    if len(parts) > 0 {
+        name := parts[len(parts)-1]
+        name = strings.TrimPrefix(name, "captura-")
+        return strings.TrimSuffix(name, ".md")
+    }
+    return path
+}
+
+func getNoteLink(n domain.NoteItem) string {
+    path := n.Arquivo
+    if strings.HasSuffix(strings.ToLower(path), ".epub") {
+        return "/epub/reader?file=" + SafeFileQueryEscape(path)
+    }
+    if strings.HasPrefix(path, "pdfs/") {
+        return "/file?name=" + SafeFileQueryEscape(path)
+    }
+    if strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
+        return "/file/download?name=" + SafeFileQueryEscape(path)
+    }
+    var noteType domain.NoteType
+    if n.Type != "" {
+        noteType = domain.NoteType(n.Type)
+    } else {
+        noteType = domain.DetectNoteType(n.Tags, path)
+    }
+    route := noteType.EditorRoute()
+    return route + "?file=" + SafeFileQueryEscape(path)
+}
+
+func getTarget(path string) string {
+    if strings.HasSuffix(strings.ToLower(path), ".epub") {
+        return ""
+    }
+    if strings.HasPrefix(path, "pdfs/") || strings.HasPrefix(path, "attachments/") || strings.HasPrefix(path, "archives/") {
+        return "_blank"
+    }
+    return ""
+}
+
+func getNoteIcon(path string, noteType string, tags []string) string {
+    return icons.GetIcon(noteType)
+}
+
+func getDisplayType(n domain.NoteItem) string {
+    if n.Type != "" {
+        return n.Type
+    }
+    return string(domain.DetectNoteType(n.Tags, n.Arquivo))
+}
+
+func getVisibleTags(tags []string) []string {
+    var visible []string
+    for _, t := range tags {
+        t = strings.ToLower(t)
+        if t != "drawing" {
+            visible = append(visible, t)
+        }
+    }
+    return visible
+}
+
+// childrenCountTitle é o tooltip do badge de filhas na sidebar (hierarquia de
+// notas: quantas notas declaram esta como pai via `pai:` no frontmatter).
+func childrenCountTitle(n int) string {
+    if n == 1 {
+        return "1 nota filha (pai: apontando para esta)"
+    }
+    return strconv.Itoa(n) + " notas filhas (pai: apontando para esta)"
+}
+
+func highlightText(text, query string) templ.Component {
+    if query == "" {
+        return templ.Raw(templ.EscapeString(text))
+    }
+    
+    queryClean := strings.TrimSpace(strings.ToLower(query))
+    if queryClean == "" {
+        return templ.Raw(templ.EscapeString(text))
+    }
+
+    textLower := strings.ToLower(text)
+    idx := strings.Index(textLower, queryClean)
+    if idx == -1 {
+        return templ.Raw(templ.EscapeString(text))
+    }
+
+    before := templ.EscapeString(text[:idx])
+    match := templ.EscapeString(text[idx : idx+len(queryClean)])
+    after := templ.EscapeString(text[idx+len(queryClean):])
+
+    highlighted := before + `<span class="search-highlight text-sky-400 font-bold bg-sky-500/10 rounded-sm px-0.5">` + match + `</span>` + after
+    return templ.Raw(highlighted)
+}
+
+templ PromptRenameScript() {
+    <script type="text/javascript">
+        function promptRenameNote(btn) {
+            var oldName = btn.getAttribute("data-oldname");
+            var currentTitle = btn.getAttribute("data-currenttitle");
+            var newTitle = prompt("Novo título:", currentTitle);
+            if (newTitle && newTitle.trim() !== "") {
+                htmx.ajax("POST", "/api/notes/rename", {
+                    values: { old: oldName, new: newTitle },
+                    target: "#sidebar-tree",
+                    swap: "none"
+                });
+            }
+        }
+    </script>
+}

@@ -1,0 +1,683 @@
+package notes
+
+import (
+	"context"
+	"net/url"
+	"sync"
+	"ton618/core/internal/core/domain"
+
+	"fmt"
+	"log/slog"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"ton618/core/internal/core/db"
+	"ton618/core/internal/processor"
+	"ton618/core/internal/repository"
+)
+
+// fileOps define as operações de banco de mais alto nível que o NoteService
+// precisa do db.Store. Esta interface permite testar o NoteService sem banco real.
+type fileOps interface {
+	DeleteAllFileRecords(filename string) error
+	GetFilesModsAndTags() ([]db.FileModTag, error)
+	GetNotesNeedingMarkmapTag() ([]string, error)
+	GetActiveTodoMarkers() ([]db.TodoMarker, error)
+	ReplaceFileIndexes(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, todos []processor.TodoItem, modTime time.Time) error
+	GetAllFileMetadata() (map[string]map[string]string, error)
+	SetFileMetadata(arquivo, key, value string) error
+}
+
+// NoteService gerencia o ciclo de vida de notas markdown.
+type NoteService struct {
+	store   fileOps // operações de banco (desacoplado via interface)
+	notes   repository.NoteStore
+	tags    repository.TagStore
+	links   repository.LinkStore
+	pop     repository.PopStore
+	fileMod repository.FileModStore
+	docsDir string
+
+	// Cache do mapa de contagens de filhas (badge da sidebar). Ver
+	// GetChildrenCounts/invalidateChildrenCounts em hierarchy.go.
+	childrenMu  sync.Mutex
+	childrenMap map[string]int
+	childrenAt  time.Time
+}
+
+// NewNoteService cria o serviço de notas.
+func NewNoteService(
+	store fileOps,
+	notes repository.NoteStore,
+	tags repository.TagStore,
+	links repository.LinkStore,
+	pop repository.PopStore,
+	fm repository.FileModStore,
+	docsDir string,
+) *NoteService {
+	return &NoteService{
+		store:   store,
+		notes:   notes,
+		tags:    tags,
+		links:   links,
+		pop:     pop,
+		fileMod: fm,
+		docsDir: docsDir,
+	}
+}
+
+// Save salva conteúdo markdown, reindexa e gerencia tags/links.
+// Usa context.Background() internamente. Prefira SaveWithContext se tiver
+// um contexto HTTP disponível para propagar cancelamento.
+func (s *NoteService) Save(filename, content string, rawTags []string) error {
+	return s.SaveWithContext(context.Background(), filename, content, rawTags)
+}
+
+// SaveWithContext é como Save, mas aceita um contexto para propagar
+// cancelamento (ex: cliente desconectou) até a camada de banco.
+func (s *NoteService) SaveWithContext(ctx context.Context, filename, content string, rawTags []string) error {
+	// Garante o formato do filename
+	if !strings.HasSuffix(filename, ".md") {
+		filename += ".md"
+	}
+	if !strings.HasPrefix(filename, domain.NotePrefix) {
+		filename = domain.NotePrefix + filename
+	}
+
+	mtime := time.Now().UTC()
+	return s.processAndSave(ctx, filename, content, mtime)
+}
+
+// Delete remove uma nota do banco SQLite.
+// Notas vivem exclusivamente no banco — não há arquivo em disco para remover.
+func (s *NoteService) Delete(filename string) error {
+	filename = NoteFilename(filename)
+
+	// Conteúdo ANTES de remover: uma nota Tabulator pode referenciar arquivos em
+	// datasets/ que precisam ser apagados (se nenhuma outra nota os usar).
+	previous, _ := s.notes.GetNote(filename)
+
+	if err := s.store.DeleteAllFileRecords(filename); err != nil {
+		slog.Error("delete all file records", "file", filename, "error", err)
+	}
+
+	if counter, ok := s.store.(datasetRefCounter); ok {
+		ReconcileTabulatorFiles(counter, s.docsDir, filename, previous, "")
+	}
+
+	// Uma nota removida não pode continuar contando como filha na sidebar.
+	s.invalidateChildrenCounts()
+
+	return nil
+}
+
+// Rename renomeia uma nota e atualiza todos os índices.
+func (s *NoteService) Rename(oldName, newName string) error {
+	if !strings.HasPrefix(oldName, domain.NotePrefix) {
+		oldName = domain.NotePrefix + oldName
+	}
+	if !strings.HasSuffix(oldName, ".md") {
+		oldName += ".md"
+	}
+	if !strings.HasPrefix(newName, domain.NotePrefix) {
+		newName = domain.NotePrefix + newName
+	}
+	if !strings.HasSuffix(newName, ".md") {
+		newName += ".md"
+	}
+
+	if oldName == newName {
+		return nil
+	}
+
+	// Verifica se a nota de origem existe no banco (única fonte de verdade)
+	oldExists := s.notes.NoteExists(oldName)
+	if !oldExists {
+		if mods, err := s.store.GetFilesModsAndTags(); err == nil {
+			for _, m := range mods {
+				if m.Arquivo == oldName || m.Arquivo == strings.TrimPrefix(oldName, domain.NotePrefix) {
+					oldExists = true
+					break
+				}
+			}
+		}
+	}
+
+	// Verifica se já existe uma nota com o mesmo nome no banco
+	if s.notes.NoteExists(newName) {
+		return fmt.Errorf("já existe uma nota com o nome: %s", newName)
+	}
+
+	if !oldExists {
+		if processor.IsDraftName(oldName) {
+			// Se a nota de origem é um rascunho gerado automaticamente ainda não salvo no banco,
+			// permite a transição para o novo nome sem erro.
+			slog.Info("renomeando rascunho de nota ainda não salvo", "oldName", oldName, "newName", newName)
+			return nil
+		}
+		return fmt.Errorf("nota não encontrada: %s", oldName)
+	}
+
+	if err := s.notes.RenameNote(oldName, newName); err != nil {
+		return fmt.Errorf("rename note: %w", err)
+	}
+
+	// Captura tags da nota original para preservar em caso de tipos especiais
+	oldTags, _ := s.tags.GetFileTags(oldName)
+
+	// Remove todos os registros antigos do DB numa transação atômica
+	if err := s.store.DeleteAllFileRecords(oldName); err != nil {
+		slog.Error("delete all file records on rename", "file", oldName, "error", err)
+	}
+
+	// Lê conteúdo do banco (única fonte de verdade — não há arquivo em disco)
+	content, _ := s.notes.GetNote(newName)
+
+	if content != "" {
+		parts := strings.Split(newName, "/")
+		base := parts[len(parts)-1]
+		newTitle := strings.TrimSuffix(base, ".md")
+
+		// Preserva tags de tipo interno no frontmatter da nota (ex: drawing, mindmap)
+		for _, tag := range oldTags {
+			if domain.InternalTypeTags[strings.ToLower(tag)] {
+				if newContent, err := UpdateFrontmatterProperty(content, "type", strings.ToLower(tag)); err == nil {
+					content = newContent
+				}
+			}
+		}
+
+		// Atualiza as propriedades 'title' e 'titulo' no frontmatter da nota no banco
+		if fm, _, err := ParseFrontmatter(content); err == nil && fm != nil {
+			if _, hasTitle := fm["title"]; hasTitle {
+				if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+					content = newContent
+				}
+			}
+			if _, hasTitulo := fm["titulo"]; hasTitulo {
+				if newContent, err := UpdateFrontmatterProperty(content, "titulo", newTitle); err == nil {
+					content = newContent
+				}
+			}
+			if _, hasTitle := fm["title"]; !hasTitle {
+				if _, hasTitulo := fm["titulo"]; !hasTitulo {
+					if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+						content = newContent
+					}
+				}
+			}
+		} else {
+			if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
+				content = newContent
+			}
+		}
+
+		if err := s.processAndSave(context.Background(), newName, content, time.Now().UTC()); err != nil {
+			slog.Error("processAndSave after rename", "file", newName, "error", err)
+		}
+	}
+
+	// Atualiza os wikilinks e URLs nos arquivos que referenciavam a nota antiga
+	if err := s.UpdateBacklinksOnRename(oldName, newName); err != nil {
+		slog.Error("update backlinks on rename", "oldName", oldName, "newName", newName, "error", err)
+	}
+
+	// Propaga a mudança de nome para filhas: atualiza o campo `pai:` de todas as
+	// notas que apontavam para o nome antigo, para que não se tornem órfãs.
+	if err := s.UpdateParentOnRename(oldName, newName); err != nil {
+		slog.Error("update parent on rename", "oldName", oldName, "newName", newName, "error", err)
+	}
+
+	return nil
+}
+
+// UpdateBacklinksOnRename atualiza wikilinks, links markdown e URLs em todas as notas
+// quando qualquer arquivo (.md, .zip, .pdf, .epub, etc.) é renomeado.
+func (s *NoteService) UpdateBacklinksOnRename(oldName, newName string) error {
+	if oldName == "" || newName == "" || oldName == newName {
+		return nil
+	}
+
+	oldBase := filepath.Base(oldName)
+	newBase := filepath.Base(newName)
+
+	oldTitle := strings.TrimSuffix(oldBase, filepath.Ext(oldBase))
+	newTitle := strings.TrimSuffix(newBase, filepath.Ext(newBase))
+
+	candidateMap := make(map[string]bool)
+
+	// Busca backlinks registrados no banco
+	if bl1, err := s.links.GetBacklinks(oldName); err == nil {
+		for _, f := range bl1 {
+			candidateMap[f] = true
+		}
+	}
+	if bl2, err := s.links.GetBacklinks(oldBase); err == nil {
+		for _, f := range bl2 {
+			candidateMap[f] = true
+		}
+	}
+	if bl3, err := s.links.GetBacklinks(strings.ToLower(oldName)); err == nil {
+		for _, f := range bl3 {
+			candidateMap[f] = true
+		}
+	}
+	if bl4, err := s.links.GetBacklinks(strings.ToLower(oldBase)); err == nil {
+		for _, f := range bl4 {
+			candidateMap[f] = true
+		}
+	}
+
+	// Garante que todas as notas do sistema sejam testadas caso a indexação
+	// de backlinks estivesse pendente (ex: primeiro uso ou índice corrompido).
+	// Só expande se o índice não retornou nenhum candidato — preserva o
+	// comportamento de segurança sem cancelar o benefício da otimização
+	// para vaults grandes (ver §10 DECISIONS.md: ~86× mais rápido).
+	if len(candidateMap) == 0 {
+		if allNotes, err := s.notes.GetAllNotes(); err == nil {
+			for f := range allNotes {
+				candidateMap[f] = true
+			}
+		}
+	}
+
+	oldEsc := SafeFileQueryEscape(oldName)
+	newEsc := SafeFileQueryEscape(newName)
+	oldUrlEsc := url.QueryEscape(oldName)
+	newUrlEsc := url.QueryEscape(newName)
+
+	oldBaseEsc := SafeFileQueryEscape(oldBase)
+	newBaseEsc := SafeFileQueryEscape(newBase)
+	oldBaseUrlEsc := url.QueryEscape(oldBase)
+	newBaseUrlEsc := url.QueryEscape(newBase)
+
+	// Carrega o conteúdo de todas as notas em UMA query. Antes era feito um
+	// GetNote por candidato (N+1): com 1.000 notas custava ~212ms; em lote,
+	// ~2ms. Os candidatos já são "todas as notas" (ver GetAllNotes acima).
+	contents, cErr := s.notes.GetAllNotesContent()
+	if cErr != nil {
+		slog.Error("update backlinks: load note contents", "error", cErr)
+		contents = nil
+	}
+
+	for refFile := range candidateMap {
+		if refFile == oldName || refFile == newName {
+			continue
+		}
+		refContent, ok := contents[refFile]
+		if !ok && contents == nil {
+			// Fallback: se o carregamento em lote falhou, lê individualmente.
+			var getErr error
+			refContent, getErr = s.notes.GetNote(refFile)
+			if getErr != nil {
+				continue
+			}
+		}
+		if refContent == "" {
+			continue
+		}
+
+		// 1. Wikilinks [[target]]
+		updatedContent := processor.WikilinkRegex.ReplaceAllStringFunc(refContent, func(match string) string {
+			submatches := processor.WikilinkRegex.FindStringSubmatch(match)
+			if len(submatches) > 1 {
+				target := strings.TrimSpace(submatches[1])
+				if target == "" {
+					return match
+				}
+				normTarget := strings.ToLower(target)
+
+				// Match com nome completo (ex: attachments/meuarquivo.zip ou notes/nota.md)
+				if normTarget == strings.ToLower(oldName) {
+					return strings.Replace(match, target, newName, 1)
+				}
+
+				// Match com nome base (ex: meuarquivo.zip)
+				if normTarget == strings.ToLower(oldBase) {
+					return strings.Replace(match, target, newBase, 1)
+				}
+
+				// Match com o nome sem extensão (ex: "meudesenho", "manual", "anexo")
+				if normTarget == strings.ToLower(oldTitle) {
+					return strings.Replace(match, target, newTitle, 1)
+				}
+
+				if !strings.Contains(normTarget, ".") {
+					oldExt := filepath.Ext(oldBase)
+					if oldExt != "" && normTarget+strings.ToLower(oldExt) == strings.ToLower(oldBase) {
+						return strings.Replace(match, target, newTitle, 1)
+					}
+					if normTarget+".md" == strings.ToLower(oldBase) || domain.NotePrefix+normTarget+".md" == strings.ToLower(oldName) {
+						return strings.Replace(match, target, newTitle, 1)
+					}
+				}
+			}
+			return match
+		})
+
+		// 2. URLs de download/mídia e caminhos relativos em markdown links
+		if strings.Contains(updatedContent, oldName) || strings.Contains(updatedContent, oldEsc) || strings.Contains(updatedContent, oldUrlEsc) ||
+			strings.Contains(updatedContent, oldBase) || strings.Contains(updatedContent, oldBaseEsc) || strings.Contains(updatedContent, oldBaseUrlEsc) {
+
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldEsc, "name="+newEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldUrlEsc, "name="+newUrlEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "name="+oldName, "name="+newName)
+
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldEsc, "file="+newEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldUrlEsc, "file="+newUrlEsc)
+			updatedContent = strings.ReplaceAll(updatedContent, "file="+oldName, "file="+newName)
+
+			for _, prefix := range domain.AllowedFilePrefixes {
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBase, prefix+newBase)
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseEsc, prefix+newBaseEsc)
+				updatedContent = strings.ReplaceAll(updatedContent, prefix+oldBaseUrlEsc, prefix+newBaseUrlEsc)
+			}
+		}
+
+		if updatedContent != refContent {
+			if err := s.Save(refFile, updatedContent, nil); err != nil {
+				slog.Error("update referring note during rename", "refFile", refFile, "error", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// UpdateParentOnRename varre todas as notas e atualiza o campo `pai:` do
+// frontmatter naquelas que apontam para oldName, substituindo pelo newName.
+// Chamado automaticamente por Rename para evitar que filhas virem órfãs.
+func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
+	if oldName == "" || newName == "" || oldName == newName {
+		return nil
+	}
+
+	// Nome canônico (sem pasta e sem extensão) — é o formato gravado em `pai:`.
+	oldBase := filepath.Base(oldName)
+	oldShort := strings.TrimSuffix(oldBase, filepath.Ext(oldBase))
+	newBase := filepath.Base(newName)
+	newShort := strings.TrimSuffix(newBase, filepath.Ext(newBase))
+
+	if oldShort == newShort {
+		return nil // o nome-base não mudou; nenhuma filha precisará ser atualizada
+	}
+
+	contents, err := s.notes.GetAllNotesContent()
+	if err != nil {
+		return fmt.Errorf("UpdateParentOnRename: load notes: %w", err)
+	}
+
+	for refFile, refContent := range contents {
+		if refFile == oldName || refFile == newName || refContent == "" {
+			continue
+		}
+
+		fm, _, fmErr := ParseFrontmatter(refContent)
+		if fmErr != nil || fm == nil {
+			continue
+		}
+
+		// Compara já na forma canônica (nome-base minúsculo): a mesma regra usada
+		// na leitura da hierarquia (hierarchy.go), tanto para a chave `pai` quanto
+		// para a legada `parent`, e tolerando [[]], aspas, alias e caminho.
+		if ParentCompareKey(ParentRefOfContent(refContent)) != strings.ToLower(oldShort) {
+			continue // esta nota não é filha do alvo
+		}
+
+		// Grava sempre a forma canônica (nome curto, sem extensão, sem pasta)
+		updated, updErr := UpdateFrontmatterProperty(refContent, domain.ParentKey, newShort)
+		if updErr != nil {
+			slog.Error("UpdateParentOnRename: update frontmatter", "file", refFile, "error", updErr)
+			continue
+		}
+
+		// Remove chave legada `parent:` se existir
+		if _, hasLegacy := fm[domain.ParentKeyLegacy]; hasLegacy {
+			updated, updErr = UpdateFrontmatterProperty(updated, domain.ParentKeyLegacy, "")
+			if updErr != nil {
+				slog.Error("UpdateParentOnRename: remove legacy parent key", "file", refFile, "error", updErr)
+			}
+		}
+
+		if err := s.Save(refFile, updated, nil); err != nil {
+			slog.Error("UpdateParentOnRename: save", "file", refFile, "error", err)
+		} else {
+			slog.Info("UpdateParentOnRename: pai atualizado", "file", refFile, "old", oldShort, "new", newShort)
+		}
+	}
+
+	// Arquivos (PDF/EPUB/ZIP/...) que declaram este pai vivem na tabela
+	// file_metadata: não têm frontmatter. Regrava o `pai` para o novo nome curto,
+	// senão viram filhas órfãs de um nome que não existe mais (DECISIONS §6.24).
+	if fileMeta, fmErr := s.store.GetAllFileMetadata(); fmErr == nil {
+		for file, meta := range fileMeta {
+			if ParentCompareKey(meta[domain.ParentKey]) != strings.ToLower(oldShort) {
+				continue
+			}
+			if err := s.store.SetFileMetadata(file, domain.ParentKey, newShort); err != nil {
+				slog.Error("UpdateParentOnRename: update file metadata", "file", file, "error", err)
+			} else {
+				slog.Info("UpdateParentOnRename: pai de arquivo atualizado", "file", file, "old", oldShort, "new", newShort)
+			}
+		}
+	}
+
+	// O cache de contagens da sidebar pode ter contado filhas-arquivo.
+	s.invalidateChildrenCounts()
+
+	return nil
+}
+
+// GetMany retorna todas as notas para listagem (formato domain.NoteItem).
+func (s *NoteService) GetMany() ([]domain.NoteItem, error) {
+	dbItems, err := s.store.GetFilesModsAndTags()
+	if err != nil {
+		return nil, err
+	}
+
+	var items []domain.NoteItem
+	for _, item := range dbItems {
+		var tags []string
+		if item.Tags != "" {
+			tags = strings.Split(item.Tags, ",")
+		}
+
+		noteType := domain.DetectNoteType(tags, item.Arquivo)
+		if noteType == domain.NoteTypeImage {
+			continue
+		}
+		userTags := domain.FilterUserTags(tags)
+
+		items = append(items, domain.NoteItem{
+			Arquivo: item.Arquivo,
+			Tags:    userTags,
+			Mtime:   item.Mtime,
+			Type:    string(noteType),
+		})
+	}
+	return items, nil
+}
+
+// SyncDatabase garante que todas as notas da tabela 'notes' estejam devidamente indexadas no FTS e na tabela de tags.
+func (s *NoteService) SyncDatabase() error {
+	return s.SyncDatabaseWithContext(context.Background())
+}
+
+// SyncDatabaseWithContext é como SyncDatabase, mas aceita contexto para cancelamento.
+func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		return err
+	}
+
+	// Identifica markmaps legados através de query otimizada (apenas IDs)
+	legacyMarkmaps, _ := s.store.GetNotesNeedingMarkmapTag()
+	legacyMap := make(map[string]bool)
+	for _, name := range legacyMarkmaps {
+		legacyMap[name] = true
+	}
+
+	for filename, mtimeStr := range allNotes {
+		existingMod, err := s.fileMod.GetFileMod(filename)
+		if err != nil {
+			continue
+		}
+
+		if existingMod == "" || legacyMap[filename] {
+			content, getErr := s.notes.GetNote(filename)
+			if getErr != nil || content == "" {
+				continue
+			}
+			mtime, err := time.Parse(time.RFC3339, mtimeStr)
+			if err != nil {
+				mtime = time.Now()
+			}
+			slog.Info("Auto-reindexando nota no banco", "file", filename)
+			if err := s.processAndSave(ctx, filename, content, mtime); err != nil {
+				slog.Error("erro ao auto-reindexar nota", "file", filename, "error", err)
+			}
+		}
+	}
+
+	// Garante que notas cujo tipo vem do conteúdo tenham a tag canônica persistida,
+	// tornando a detecção de tipo estável e independente de conteúdo.
+	if err := s.EnsureTypeTags(ctx); err != nil {
+		slog.Error("erro ao garantir tags de tipo", "error", err)
+	}
+	return nil
+}
+
+// EnsureTypeTags garante que a tag canônica de tipo esteja persistida na tabela
+// tags para notas cujo tipo é derivável apenas do conteúdo (ex: frontmatter
+// "type: markmap" sem a tag "markmap"). Isso torna o tipo (e portanto o ícone)
+// determinístico em toda a aplicação, pois DetectNoteType só depende de tags +
+// caminho + nome — nunca do conteúdo.
+func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		return err
+	}
+
+	for filename := range allNotes {
+		tags, err := s.tags.GetFileTags(filename)
+		if err != nil {
+			continue
+		}
+
+		// Se o tipo já é determinado por tag/caminho, não há o que persistir.
+		detected := domain.DetectNoteType(tags, filename)
+		if isTypeTaggedNoteType(detected) {
+			continue
+		}
+
+		content, err := s.notes.GetNote(filename)
+		if err != nil || content == "" {
+			continue
+		}
+
+		fromContent := domain.DetectNoteTypeFromContent(tags, content, filename)
+		canonical := domain.NoteTypeCanonicalTag(fromContent)
+		if canonical == "" {
+			continue
+		}
+
+		// Persiste a tag canônica (sem duplicar as existentes).
+		merged := make([]string, 0, len(tags)+1)
+		merged = append(merged, tags...)
+		merged = append(merged, canonical)
+		if err := s.tags.SetFileTags(filename, merged); err != nil {
+			slog.Error("EnsureTypeTags: erro ao persistir tag de tipo", "file", filename, "error", err)
+		}
+	}
+	return nil
+}
+
+// isTypeTaggedNoteType indica se o tipo já vem de tags/caminho persistidos
+// (ou seja, não depende do conteúdo para ser estável).
+func isTypeTaggedNoteType(t domain.NoteType) bool {
+	switch t {
+	case domain.NoteTypeDrawing,
+		domain.NoteTypeMindmap,
+		domain.NoteTypeTabulator,
+		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
+		domain.NoteTypeSemanal,
+		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:
+		return true
+	}
+	return false
+}
+
+// GetBacklinks retorna os backlinks de 2 níveis para uma nota.
+// Nível 1: notas que linkam PARA esta nota.
+// Nível 2: notas que as notas de nível 1 linkam (excluindo a nota atual).
+func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, error) {
+	level1, err := s.links.GetBacklinks(filename)
+	if err != nil {
+		return nil, fmt.Errorf("get backlinks: %w", err)
+	}
+
+	// Exclui backlinks da própria nota (self-link não faz sentido)
+	filtered := make([]string, 0, len(level1))
+	for _, bl := range level1 {
+		if bl != filename {
+			filtered = append(filtered, bl)
+		}
+	}
+
+	return &domain.BacklinksResult{
+		Level1: filtered,
+	}, nil
+}
+
+// ── privado ──
+
+// processAndSave centraliza o processamento e indexação do markdown.
+// As notas vivem exclusivamente no banco SQLite — content é sempre fornecido pelo caller.
+// O contexto é propagado para ReplaceFileIndexes, permitindo cancelamento.
+func (s *NoteService) processAndSave(ctx context.Context, filename, content string, modTime time.Time) error {
+	if content == "" {
+		return fmt.Errorf("processAndSave: conteúdo vazio para %s", filename)
+	}
+
+	docs, links, fileTags := processor.ProcessMarkdownContent(
+		[]byte(content), filename, modTime, modTime,
+	)
+
+	// 2. Extrai TODOs estruturados
+	var todos []processor.TodoItem
+	activeMarkers, err := s.store.GetActiveTodoMarkers()
+	if err == nil {
+		// make(..., 0) em vez de `var markers []string`: com TODOS os marcadores
+		// desativados a slice precisa chegar vazia (e não nil) em ExtractTodos —
+		// nil significa "não informado" e faria o extrator voltar aos marcadores
+		// padrão, continuando a criar tarefas de TODO/DOING/DONE desativados.
+		markers := make([]string, 0, len(activeMarkers))
+		for _, m := range activeMarkers {
+			markers = append(markers, m.Marker)
+		}
+		todos = processor.ExtractTodos(content, filename, modTime, markers)
+	} else {
+		slog.Error("get active todo markers", "error", err)
+	}
+
+	// 3. Prepara tags limpas
+	cleanTags := fileTags
+
+	// 4. Salva o conteúdo da nota no banco
+	mtimeStr := modTime.UTC().Format(time.RFC3339)
+	if err := s.notes.SaveNote(filename, content, mtimeStr); err != nil {
+		return fmt.Errorf("save note: %w", err)
+	}
+
+	// 5. Submete documentos, links, tags e todos em transação única
+	if err := s.store.ReplaceFileIndexes(ctx, filename, docs, links, cleanTags, todos, modTime); err != nil {
+		return fmt.Errorf("replace file indexes: %w", err)
+	}
+
+	// A hierarquia (`pai:`) pode ter mudado: o badge de filhas da sidebar precisa
+	// ser recalculado na próxima leitura.
+	s.invalidateChildrenCounts()
+
+	return nil
+}

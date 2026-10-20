@@ -1,0 +1,351 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/staticver"
+import "ton618/core/internal/ui/icons"
+
+templ Database(title string) {
+    @layout.Layout(title, true, databaseContent())
+}
+
+templ databaseContent() {
+<div>
+    @templ.Raw("<script>window.TON_ICON_CONFIG = " + icons.ConfigJSON() + ";</script>")
+    <!-- Header -->
+    <div class="flex flex-col gap-4 mb-6">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
+                @icons.Icon(icons.GetIcon("tabulator"), "w-6 h-6 " + icons.GetColor("tabulator")) Tabulator
+            </h1>
+            <div class="flex items-center gap-4">
+                <!-- Contador: apenas QUANTAS notas estão sendo exibidas agora
+                     (muda com a busca — ver setStats em database.js) -->
+                <div class="text-sm font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
+
+                <!-- Expandir/recolher (botão único) + filtro de hierarquia
+                     (só no modo árvore; o JS mostra). O rótulo/ícone reflete a
+                     AÇÃO disponível e o estado é persistido no localStorage. -->
+                <div id="db-tree-actions" class="flex items-center gap-1.5" style="display:none">
+                    <button id="db-expand-toggle" type="button" aria-pressed="false"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        title="Recolher todos os níveis da hierarquia">
+                        <span id="db-expand-icon-expand" class="hidden">@icons.Icon("chevron-down", "w-3.5 h-3.5")</span>
+                        <span id="db-expand-icon-collapse">@icons.Icon("chevron-right", "w-3.5 h-3.5")</span>
+                        <span id="db-expand-label">Recolher</span>
+                    </button>
+                    <button id="db-hierarchy-toggle" type="button" aria-pressed="false"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        title="Mostrando todas as notas — clique para exibir só as que participam da hierarquia">
+                        <span id="db-hierarchy-icon-all">@icons.Icon("layers", "w-3.5 h-3.5")</span>
+                        <span id="db-hierarchy-icon-only" class="hidden">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
+                        <span id="db-hierarchy-label">Todas as notas</span>
+                    </button>
+                </div>
+
+                <!-- Column Visibility Selector -->
+                <div class="relative" id="column-selector-container">
+                    <button id="column-selector-btn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden">
+                        @icons.Icon("columns", "w-3.5 h-3.5")
+                        Colunas
+                    </button>
+                    <!-- Dropdown Menu -->
+                    <div id="column-selector-menu" class="absolute right-0 mt-2 w-56 origin-top-right bg-zinc-950/95 border border-zinc-800 rounded-xl shadow-2xl hidden z-50 p-3 max-h-80 overflow-y-auto">
+                        <div class="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">Exibir/Ocultar Colunas</div>
+                        <div class="space-y-1" id="column-checkboxes">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search input and filters -->
+        <div class="mt-2 flex items-center gap-2">
+            <div class="relative flex-1 min-w-0">
+                <input id="db-search" type="text" placeholder="Buscar em qualquer campo..." autocomplete="off"
+                    class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 transition-all" />
+                <button id="db-search-clear" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
+                    @icons.Icon("x", "w-3.5 h-3.5")
+                </button>
+            </div>
+            <!-- Alterna o modo de busca (ver applySearch/setupSearchModeButton).
+                 "Pai + irmãos": resultado + caminho de pais + irmãs.
+                 "Só resultados": apenas as notas que casaram. -->
+            <button id="db-search-mode" type="button" aria-pressed="false"
+                class="shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 focus:outline-hidden focus:border-sky-500 transition-all"
+                title="Busca: mostrando o resultado com o caminho de pais e as irmãs — clique para mostrar só as notas que casaram">
+                <span id="db-search-mode-icon-contexto">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
+                <span id="db-search-mode-icon-resultados" class="hidden">@icons.Icon("search", "w-3.5 h-3.5")</span>
+                <span id="db-search-mode-label">Pai + irmãos</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabulator container -->
+    <div id="notes-table" class="ton-tabulator w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
+</div>
+
+<!-- Tabulator Assets loaded dynamically below -->
+
+<style>
+    /* ── Ajustes locais da administração de notas (/database) ─────────────
+       O DESENHO e as CORES da tabela (cabeçalho, linhas, zebra, células em
+       edição, filtros, rolagem, foco/ordenação em esmeralda) vêm de
+       /static/tabulator-theme.css (classe .ton-tabulator) — a MESMA fonte da
+       nota Tabulator. Aqui ficam só o que é específico desta página: largura
+       total, padding das células (a árvore depende dele), controles da
+       hierarquia, paginação e as decorações das células. */
+
+    /* Ocupa a largura toda (a página já tem padding próprio). */
+    #notes-table {
+        width: 100vw;
+        position: relative;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
+        border-radius: 0 !important;
+    }
+
+    /* Padding local: o offset das guias da hierarquia (DECISIONS §6.28) sai
+       deste padding-left (12px) + meia largura do controle +/- (8px). Não
+       mexer sem revisar as guias. */
+    #notes-table .tabulator-row .tabulator-cell {
+        padding: 8px 12px !important;
+    }
+
+    /* Células editáveis: dica de hover no acento do tema (esmeralda). */
+    #notes-table .tabulator-cell.tabulator-editable:hover {
+        background-color: rgba(16, 185, 129, 0.08) !important;
+        cursor: pointer;
+    }
+
+    /* Cell Formatters styling */
+    .tag-pill {
+        display: inline-block;
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #e4e4e7;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-right: 4px;
+        margin-bottom: 2px;
+    }
+    /* ── Hierarquia de notas (módulo Data Tree) ──
+       Controle padrão do Tabulator, recolorido para o dark mode do TON-618.
+       ⚠️ Não use dataTreeExpandElement/CollapseElement: o Tabulator substitui o
+       controle inteiro por eles (some o wrapper e o tabIndex) — ver database.js.
+       Usamos :has() no wrapper para exibir + / − via ::before no próprio pai,
+       evitando o problema de display:none ocultar o ::before do filho. */
+    #notes-table .tabulator-data-tree-control {
+        background: #1b1b20 !important; /* superfície do tema */
+        border: 1px solid #3f3f46 !important; /* zinc-700 */
+        border-radius: 5px !important;
+        width: 16px !important;
+        height: 16px !important;
+        margin-right: 7px !important;
+        position: relative !important;
+        overflow: hidden !important;
+        /* A célula do Título é um flex container (§6.28): sem flex-shrink: 0 o
+           controle é espremido (18px → 8-11px) pelas linhas de título longo. */
+        flex-shrink: 0 !important;
+        align-items: center;
+        justify-content: center;
+    }
+    #notes-table .tabulator-data-tree-control:hover {
+        background: #24242c !important; /* hover do tema */
+        border-color: #10b981 !important; /* emerald-500 (acento do tema) */
+    }
+    /* Oculta as barras internas do tema */
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-expand,
+    #notes-table .tabulator-data-tree-control .tabulator-data-tree-control-collapse {
+        display: none !important;
+    }
+    /* Ícone + quando fechado: o pai contém o filho -expand */
+    #notes-table .tabulator-data-tree-control:has(.tabulator-data-tree-control-expand)::before {
+        content: "+" !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 100% !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        color: #a1a1aa !important; /* texto suave do tema */
+        font-family: monospace !important;
+    }
+    /* Ícone − quando aberto: o pai contém o filho -collapse */
+    #notes-table .tabulator-data-tree-control:has(.tabulator-data-tree-control-collapse)::before {
+        content: "−" !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 100% !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        color: #a1a1aa !important; /* texto suave do tema */
+        font-family: monospace !important;
+    }
+    /* Hover: muda cor do ícone para sky-400 */
+    #notes-table .tabulator-data-tree-control:hover::before {
+        color: #34d399 !important; /* emerald-400 do tema */
+    }
+    /* Premium Dark Mode Footer & Pagination styling */
+    .tabulator-footer {
+        background-color: #121215 !important; /* fundo de linha do tema */
+        border-top: 2px solid #3f3f46 !important; /* borda do tema (espelha o cabeçalho) */
+        color: #a1a1aa !important; /* zinc-400 */
+        padding: 10px 16px !important;
+    }
+    .tabulator-footer .tabulator-paginator {
+        color: #a1a1aa !important;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .tabulator-footer select {
+        background-color: #1b1b20 !important; /* superfície do tema */
+        border: 1px solid #3f3f46 !important; /* borda do tema */
+        color: #e4e4e7 !important; /* texto do tema */
+        border-radius: 6px;
+        padding: 4px 8px !important;
+        font-weight: 500;
+        outline: none;
+        cursor: pointer;
+    }
+    .tabulator-footer select:focus {
+        border-color: #10b981 !important; /* emerald-500 (acento do tema) */
+    }
+    .tabulator-footer .tabulator-page {
+        background-color: #1b1b20 !important; /* superfície do tema */
+        border: 1px solid #3f3f46 !important; /* borda do tema */
+        color: #a1a1aa !important; /* zinc-400 */
+        border-radius: 6px;
+        padding: 4px 10px !important;
+        font-weight: 600;
+        font-family: inherit;
+        transition: all 0.15s ease;
+    }
+    .tabulator-footer .tabulator-page:hover:not(.disabled) {
+        background-color: #24242c !important; /* hover do tema */
+        color: #ffffff !important;
+        border-color: #52525b !important;
+    }
+    .tabulator-footer .tabulator-page.active {
+        background-color: rgba(16, 185, 129, 0.15) !important; /* emerald-500/15 */
+        border-color: rgba(16, 185, 129, 0.4) !important; /* emerald-500/40 */
+        color: #34d399 !important; /* emerald-400 do tema */
+        font-weight: 700;
+    }
+    .tabulator-footer .tabulator-page.disabled {
+        opacity: 0.3;
+        background-color: transparent !important;
+        border-color: transparent !important;
+        cursor: not-allowed;
+    }
+    /* ── Leitura da hierarquia (Fase 1) ──
+       Guias verticais: cada linha desenha 1 px por nível ANCESTRAL. O nível
+       vem de --lvl (rowFormatter); o passo (18px) é o dataTreeChildIndent e o
+       offset base (20px) é o centro do controle +/- do 1º nível
+       (padding-left 12px + 8px de meia largura).
+       O espaçador da árvore precisa ter largura ZERO: a largura padrão do tema
+       (7px) desalinhava as guias dos níveis mais fundos. */
+    #notes-table .tabulator-data-tree-branch-empty {
+        width: 0 !important;
+    }
+    #notes-table .tabulator-cell[tabulator-field="titulo"] {
+        /* A célula é um flex container de UMA linha: o espaçador da árvore
+           (width 0 + margin-left do nível), o controle +/- e o título dividem
+           a largura. Sem isso o título é uma caixa ATÔMICA (inline-flex) que,
+           sendo maior que a largura disponível, transborda a célula e o
+           `text-overflow: ellipsis` do tema troca TODO o conteúdo por um
+           único "..." — ver DECISIONS §6.28. */
+        display: inline-flex;
+        align-items: center;
+        background-image: repeating-linear-gradient(
+            to right,
+            #71717a 0 1px,
+            transparent 1px 18px
+        );
+        background-repeat: no-repeat;
+        background-size: calc(var(--lvl, 0) * 18px) 100%;
+        background-position: 20px 0;
+    }
+    .db-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        /* Ocupa a sobra da linha e pode encolher (min-width: 0) para o texto
+           ser cortado com "…" em vez de vazar da célula.
+           ⚠️ flex-basis EXPLÍCITO em 0: com `auto` (== max-content do título) a
+           soma das bases estoura a célula nas linhas de título longo e o
+           encolhimento proporcional espreme os IRMÃOS flex — foi assim que o
+           controle +/- ficou com 8-11px em vez de 18px (ver DECISIONS §6.28). */
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    /* Só o texto do título encolhe — o ícone (flex-shrink: 0) e o chip de
+       filhas continuam visíveis mesmo com o título truncado. */
+    .db-title > strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .db-type {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .db-title-icon {
+        display: inline-flex;
+        align-items: center;
+        /* Neutro de propósito: a cor por tipo é definida pelo servidor (SSOT) —
+           não duplicar a paleta no cliente (ver DECISIONS §6.9). */
+        color: #71717a;
+        flex-shrink: 0;
+    }
+    .db-title-icon svg {
+        display: block;
+    }
+    .db-child-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        font-family: var(--font-mono);
+        color: #a5b4fc; /* indigo-300 */
+        background: rgba(49, 46, 129, 0.35);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: 999px;
+    }
+    .db-orphan-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: #f59e0b; /* amber-500 */
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+        flex-shrink: 0;
+    }
+</style>
+
+<!-- Tema compartilhado com a nota Tabulator (ver tabulator-theme.css):
+     o .tabulator entra no PRÓPRIO container, então a classe .ton-tabulator
+     marca a raiz da tabela nas duas páginas. -->
+<link rel="stylesheet" href={ staticver.URL("/static/tabulator-theme.css") } />
+<script src={ staticver.URL("/static/database.js") }></script>
+}

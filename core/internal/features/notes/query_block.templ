@@ -1,0 +1,202 @@
+package notes
+
+import (
+	"net/url"
+
+	"ton618/core/internal/processor"
+	"ton618/core/internal/ui/icons"
+)
+
+// QueryPanel é o CONTEÚDO do painel de Consultas da nota.
+//
+// É carregado pelo próprio HTMX (`hx-get="/api/query?file=…"`), com swap
+// **innerHTML** no container `#query-panel` — o mesmo desenho do badge de Tasks
+// (§6.15): o elemento que escuta `query-blocks-updated` sobrevive à troca, então
+// salvar a nota atualiza o resultado sem reload e sem avaliador no cliente.
+//
+// O painel só desenha algo quando a nota tem bloco ```consulta; sem bloco, o
+// fragmento é vazio e o container fica invisível.
+templ QueryPanel(arquivo string, blocos []QueryBloco, excedeu bool) {
+	if len(blocos) > 0 {
+		<div class="mt-6 space-y-2.5">
+			<div class="flex items-baseline gap-2">
+				<span class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Consultas</span>
+				<button
+					type="button"
+					class="ml-auto text-[10px] px-2 py-0.5 rounded-md border border-zinc-700/60 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors"
+					title="Recalcular as consultas desta nota"
+					hx-get={ "/api/query?file=" + url.QueryEscape(arquivo) }
+					hx-target="#query-panel"
+					hx-swap="innerHTML"
+				>atualizar</button>
+			</div>
+			for _, b := range blocos {
+				@queryCard(b)
+			}
+			if excedeu {
+				<p class="text-[11px] text-amber-400/80">
+					só os primeiros blocos <span class="font-mono">consulta</span> desta nota são executados (máximo { numero(processor.MaxQueryBlocks) })
+				</p>
+			}
+		</div>
+	}
+}
+
+// queryCard desenha um bloco: cabeçalho com o que a consulta pede, corpo com o
+// resultado e, quando falha, a MENSAGEM — erro é conteúdo, nunca tela de erro.
+templ queryCard(b QueryBloco) {
+	<section class="rounded-xl border border-zinc-800/70 bg-zinc-900/40 overflow-hidden">
+		<header class="flex items-center gap-2 px-3 py-1.5 border-b border-zinc-800/60">
+			<span class="text-[11px] text-zinc-400 truncate font-mono" title={ b.Rotulo }>{ b.Rotulo }</span>
+			if b.Erro == "" {
+				<span class="ml-auto shrink-0 text-[10px] text-zinc-500 tabular-nums">{ resultadoResumo(b) }</span>
+			}
+		</header>
+		if b.Erro != "" {
+			<div class="px-3 py-2 text-[12px] text-red-400/90 leading-relaxed">{ b.Erro }</div>
+		} else {
+			@queryCorpo(b)
+		}
+	</section>
+}
+
+// queryCorpo escolhe a apresentação pedida em `mostrar:`.
+templ queryCorpo(b QueryBloco) {
+	switch b.Spec.Mostrar {
+		case processor.QueryMostrarContagem:
+			<div class="flex items-baseline gap-2 px-3 py-3">
+				<span class="text-2xl font-semibold text-zinc-100 tabular-nums">{ b.Result.ContagemTexto() }</span>
+				<span class="text-[11px] text-zinc-500">{ rotuloContagem(b.Spec) }</span>
+			</div>
+		case processor.QueryMostrarTabela:
+			@queryTabela(b)
+		case processor.QueryMostrarCartoes:
+			@queryCartoes(b)
+		case processor.QueryMostrarArvore:
+			@queryArvore(b)
+		default:
+			@queryLista(b)
+	}
+}
+
+templ queryLista(b QueryBloco) {
+	if len(b.Result.Rows) == 0 {
+		@queryVazio(b)
+	} else {
+		<ul class="divide-y divide-zinc-800/40">
+			for _, r := range b.Result.Rows {
+				<li class="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800/30">
+					if r.Classe != "" {
+						<span class="shrink-0 opacity-80">@templ.Raw(icons.IconSVG(r.Classe, "w-3.5 h-3.5"))</span>
+					}
+					<a
+						href={ r.OpenURL() }
+						target={ alvoAba(r) }
+						class="text-[13px] text-zinc-200 hover:text-sky-400 truncate"
+						title={ r.Caminho }
+					>{ r.Titulo }</a>
+					<span class="text-[10px] text-zinc-600 shrink-0">{ r.Pasta }</span>
+					<span class="ml-auto text-[10px] text-zinc-500 shrink-0">{ linhaDetalhe(r) }</span>
+				</li>
+			}
+		</ul>
+		@queryRodape(b)
+	}
+}
+
+templ queryTabela(b QueryBloco) {
+	<div class="overflow-x-auto">
+		<table class="w-full text-[12px]">
+			<thead>
+				<tr class="text-[10px] uppercase tracking-wide text-zinc-500">
+					for _, c := range colunasEfetivas(b.Spec) {
+						<th class="text-left font-semibold px-3 py-1.5 border-b border-zinc-800/60">{ colunaTitulo(c) }</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range b.Result.Rows {
+					<tr class="hover:bg-zinc-800/30">
+						for i, c := range colunasEfetivas(b.Spec) {
+							<td class="px-3 py-1.5 border-b border-zinc-800/30 text-zinc-300 max-w-[22rem] truncate">
+								if i == 0 {
+									<a href={ r.OpenURL() } target={ alvoAba(r) } class="hover:text-sky-400" title={ r.Caminho }>{ r.Coluna(c) }</a>
+								} else {
+									{ r.Coluna(c) }
+								}
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+	if len(b.Result.Rows) == 0 {
+		@queryVazio(b)
+	} else {
+		@queryRodape(b)
+	}
+}
+
+templ queryCartoes(b QueryBloco) {
+	if len(b.Result.Rows) == 0 {
+		@queryVazio(b)
+	} else {
+		<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
+			for _, r := range b.Result.Rows {
+				<a
+					href={ r.OpenURL() }
+					target={ alvoAba(r) }
+					class="block rounded-lg border border-zinc-800/70 bg-zinc-900/60 p-2.5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-colors"
+				>
+					<div class="flex items-center gap-1.5">
+						if r.Classe != "" {
+							<span class="shrink-0 opacity-80">@templ.Raw(icons.IconSVG(r.Classe, "w-3.5 h-3.5"))</span>
+						}
+						<span class="text-[12px] font-medium text-zinc-200 truncate">{ r.Titulo }</span>
+					</div>
+					if r.Snippet != "" {
+						<div class="mt-1 text-[11px] text-zinc-500 line-clamp-3 [&_b]:text-zinc-300 [&_b]:font-semibold">
+							@templ.Raw(r.Snippet)
+						</div>
+					}
+					if len(r.Tags) > 0 {
+						<div class="mt-1.5 flex flex-wrap gap-1">
+							for _, t := range r.Tags {
+								<span class="text-[9px] px-1.5 py-0.5 rounded-sm bg-zinc-800/70 text-zinc-400">{ t }</span>
+							}
+						</div>
+					}
+				</a>
+			}
+		</div>
+		@queryRodape(b)
+	}
+}
+
+templ queryArvore(b QueryBloco) {
+	if len(b.Result.Rows) == 0 {
+		@queryVazio(b)
+	} else {
+		<ul class="py-1">
+			for _, r := range b.Result.Rows {
+				<li class="flex items-center gap-2 py-1 pr-3" style={ indentacao(r.Nivel) }>
+					<span class="text-zinc-600 font-mono text-[10px]">└</span>
+					<a href={ r.OpenURL() } class="text-[13px] text-zinc-200 hover:text-sky-400 truncate" title={ r.Caminho }>{ r.Titulo }</a>
+					<span class="ml-auto text-[10px] text-zinc-500 shrink-0">{ r.MtimeRel() }</span>
+				</li>
+			}
+		</ul>
+		@queryRodape(b)
+	}
+}
+
+templ queryRodape(b QueryBloco) {
+	if b.Result.Rodape() != "" {
+		<p class="px-3 py-1.5 text-[10px] text-zinc-500 border-t border-zinc-800/50">{ b.Result.Rodape() }</p>
+	}
+}
+
+templ queryVazio(b QueryBloco) {
+	<p class="px-3 py-2 text-[12px] text-zinc-500">{ textoVazio(b.Spec) }</p>
+}

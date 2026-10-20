@@ -1,0 +1,617 @@
+package notes
+
+import "ton618/core/web/layout"
+import "ton618/core/internal/core/domain"
+import "ton618/core/internal/core/staticver"
+import "ton618/core/internal/ui/icons"
+
+templ Mindmap(data domain.EditorData) {
+    @layout.Layout(data.Title, false, mindmapContent(data))
+}
+
+templ mindmapContent(data domain.EditorData) {
+<div class="editor-root flex flex-col" id="mindmap-root" style="position: fixed; left: 0; top: 53px; width: 100vw; height: calc(100vh - 53px); z-index: 40; background-color: #09090b; padding: 12px 24px; border-radius: 0;">
+    <!-- Topbar -->
+    <div class="flex items-center gap-3 mb-3 shrink-0 relative z-20" id="mindmap-topbar">
+        <input
+            id="file-name"
+            type="text"
+            value={ data.DisplayName }
+            data-filename={ data.Filename }
+            class="flex-1 min-w-0 bg-transparent border-none text-sm font-black tracking-tight text-zinc-200 focus:outline-hidden focus:text-sky-400 truncate"
+            spellcheck="false"
+        />
+        <span id="editor-status" class="text-base font-mono text-zinc-600 shrink-0">—</span>
+        @BacklinksPopover(data.Backlinks)
+
+        <button
+            id="duplicate-editor-btn"
+            onclick="duplicateCurrentNote()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Duplicar esta nota"
+        >
+            @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
+        </button>
+        <button
+            id="delete-editor-btn"
+            onclick="deleteCurrentNote()"
+            class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Excluir esta nota"
+        >
+            @icons.Icon(icons.GetIcon("excluir"), "w-4 h-4 " + icons.GetColor("excluir"))
+        </button>
+    </div>
+
+    <!-- Layout Dividido (Split-Pane) -->
+    <div class="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0 relative" id="mindmap-split-container">
+        <!-- Painel Esquerdo: Editor de Código (Markdown) -->
+        <div class="mindmap-editor-panel flex flex-col min-w-0 relative" id="mindmap-editor-panel">
+            <div class="flex-1 w-full relative min-h-0">
+                <div
+                    id="mindmap-editor"
+                    class="editor-codejar absolute inset-0 w-full h-full focus:outline-hidden"
+                    spellcheck="false"
+                >{ data.Content }</div>
+            </div>
+        </div>
+
+        <!-- Divisor arrastável -->
+        <div id="mindmap-resizer"
+             class="hidden md:flex w-2 shrink-0 cursor-col-resize items-center justify-center group relative z-10"
+             title="Arraste para redimensionar">
+            <div class="w-px h-full bg-zinc-800 group-hover:bg-yellow-500/60 transition-colors duration-150 absolute"></div>
+            <div class="relative z-10 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <span class="w-0.5 h-3 rounded-full bg-yellow-400/80 block"></span>
+                <span class="w-0.5 h-3 rounded-full bg-yellow-400/80 block"></span>
+                <span class="w-0.5 h-3 rounded-full bg-yellow-400/80 block"></span>
+            </div>
+        </div>
+
+        <!-- Painel Direito: Visualizador do Mapa Mental (SVG) -->
+        <div class="hidden md:flex flex-col bg-zinc-950 border border-zinc-850/80 rounded-xl overflow-hidden relative min-w-0" id="preview-panel" style="flex: 1 1 0%;">
+            <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
+                <button
+                    id="fit-btn"
+                    onclick="triggerFit()"
+                    class="bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-all p-2 rounded-lg cursor-pointer flex items-center justify-center w-8 h-8 text-xs font-bold"
+                    title="Ajustar Mapa à Tela"
+                >
+                    @icons.Icon("search", "w-3.5 h-3.5")
+                </button>
+            </div>
+            <svg id="mindmap-svg" class="w-full h-full text-zinc-100" style="background-color: #09090b; cursor: grab;"></svg>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var STORAGE_KEY = 'mindmap-editor-pct';
+    var MIN_PCT = 15;
+    var MAX_PCT = 85;
+
+    function applyPct(pct) {
+        var editorPanel = document.getElementById('mindmap-editor-panel');
+        var previewPanel = document.getElementById('preview-panel');
+        if (!editorPanel || !previewPanel) return;
+        editorPanel.style.flex = '0 0 ' + pct + '%';
+        editorPanel.style.width = pct + '%';
+        previewPanel.style.flex = '0 0 ' + (100 - pct) + '%';
+        previewPanel.style.width = (100 - pct) + '%';
+    }
+
+    // Restaura posição salva
+    var saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+    if (saved >= MIN_PCT && saved <= MAX_PCT) {
+        applyPct(saved);
+    }
+
+    var resizer = document.getElementById('mindmap-resizer');
+    var container = document.getElementById('mindmap-split-container');
+    if (!resizer || !container) return;
+
+    var dragging = false;
+
+    resizer.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        dragging = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        var overlay = document.createElement('div');
+        overlay.id = 'resizer-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+        document.body.appendChild(overlay);
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        var rect = container.getBoundingClientRect();
+        var pct = ((e.clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(MIN_PCT, Math.min(MAX_PCT, pct));
+        applyPct(pct);
+    });
+
+    document.addEventListener('mouseup', function(e) {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        var overlay = document.getElementById('resizer-overlay');
+        if (overlay) overlay.remove();
+        var rect = container.getBoundingClientRect();
+        var editorPanel = document.getElementById('mindmap-editor-panel');
+        if (editorPanel) {
+            var pct = (editorPanel.offsetWidth / rect.width) * 100;
+            localStorage.setItem(STORAGE_KEY, pct.toFixed(1));
+        }
+    });
+})();
+</script>
+
+<style>
+    .mindmap-editor-panel {
+        flex: 0 0 35%;
+        width: 35%;
+        height: 100%;
+    }
+    @media (max-width: 767px) {
+        .mindmap-editor-panel {
+            flex: 1 1 0% !important;
+            width: 100% !important;
+            height: auto !important;
+        }
+    }
+    /* Editor CodeJar */
+    .editor-codejar {
+        margin: 0 !important;
+        padding: 16px !important;
+        font-family: var(--font-mono) !important;
+        font-size: 14px !important;
+        line-height: 1.625 !important;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
+        box-sizing: border-box !important;
+        border-radius: 0.75rem; /* rounded-xl */
+        border: 1px solid #27272a !important; /* border-zinc-800 */
+        background-color: #09090b !important;
+        color: #d4d4d8 !important;
+        tab-size: 4;
+        scrollbar-gutter: stable !important;
+        overflow-y: auto !important;
+        caret-color: #38bdf8 !important;
+        z-index: 10;
+    }
+    
+    .editor-codejar:focus {
+        border-color: #3f3f46 !important;
+    }
+
+    @media (max-width: 767px) {
+        .editor-codejar {
+            border: none !important;
+            border-radius: 0 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            padding: 8px 4px !important;
+        }
+        .editor-codejar:focus {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+    }
+
+    .editor-codejar:empty::before {
+        content: "# Markmap\n- Escreva seus tópicos em Markdown...";
+        color: #52525b; /* zinc-600 */
+        pointer-events: none;
+    }
+    
+    /* Estilização customizada de scrollbar */
+    .editor-codejar::-webkit-scrollbar {
+        width: 10px !important;
+        height: 10px !important;
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    .editor-codejar::-webkit-scrollbar-thumb {
+        background-color: #27272a !important; /* zinc-800 */
+        border-radius: 10px !important;
+        border: 2px solid #09090b !important;
+    }
+
+    /* Firefox scrollbars */
+    .editor-codejar {
+        scrollbar-width: thin !important;
+        scrollbar-color: #27272a transparent !important;
+    }
+
+    /* Markmap custom SVG overrides for Premium Dark Theme */
+    #mindmap-svg {
+        --markmap-text-color: #f4f4f5 !important; /* zinc-100 */
+        --markmap-code-bg: #18181b !important; /* zinc-900 */
+        --markmap-code-color: #f4f4f5 !important; /* zinc-100 */
+        --markmap-circle-open-bg: #18181b !important;
+    }
+
+    #mindmap-svg g.markmap-node text {
+        fill: #f4f4f5 !important; /* zinc-100 */
+        font-family: var(--font-sans) !important;
+        font-weight: 500;
+        font-size: 13px !important;
+    }
+
+    /* Heading 1 (depth 1) styling */
+    #mindmap-svg g.markmap-node[data-depth="1"] text {
+        fill: #38bdf8 !important; /* sky-400 */
+        font-weight: 800 !important;
+        font-size: 15px !important;
+    }
+    #mindmap-svg g.markmap-node[data-depth="1"] .markmap-foreign {
+        color: #38bdf8 !important; /* sky-400 */
+        font-weight: 800 !important;
+        font-size: 15px !important;
+    }
+
+    /* Root node styling */
+    #mindmap-svg g.markmap-node[data-depth="0"] text {
+        fill: #ffffff !important;
+        font-weight: 900 !important;
+        font-size: 18px !important;
+    }
+    #mindmap-svg g.markmap-node[data-depth="0"] .markmap-foreign {
+        color: #ffffff !important;
+        font-weight: 900 !important;
+        font-size: 18px !important;
+    }
+
+    /* Foreign object styling for normal nodes */
+    #mindmap-svg .markmap-foreign {
+        color: #f4f4f5 !important; /* zinc-100 */
+        font-family: var(--font-sans) !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
+    }
+
+    #mindmap-svg .markmap-foreign a {
+        color: #38bdf8 !important; /* sky-400 */
+        text-decoration: none !important;
+    }
+
+    #mindmap-svg .markmap-foreign a:hover {
+        color: #7dd3fc !important; /* sky-300 */
+        text-decoration: underline !important;
+    }
+
+    /* Inline and Block Code Styling */
+    #mindmap-svg .markmap-foreign code {
+        font-family: var(--font-mono) !important;
+        font-weight: 600 !important; /* Thicker font for readability */
+        font-size: 12px !important;
+        background-color: #18181b !important; /* zinc-900 */
+        color: #e4e4e7 !important; /* zinc-200 */
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #27272a !important; /* zinc-800 */
+    }
+
+    #mindmap-svg .markmap-foreign pre {
+        background: transparent !important;
+        margin: 4px 0 !important;
+        padding: 0 !important;
+    }
+
+    #mindmap-svg .markmap-foreign pre > code {
+        display: block !important;
+        padding: 6px 10px !important;
+        white-space: pre !important;
+        overflow-x: auto !important;
+    }
+
+    /* Checkbox styling */
+    #mindmap-svg .markmap-foreign input[type="checkbox"] {
+        accent-color: #38bdf8 !important; /* sky-400 */
+        margin-right: 4px !important;
+        vertical-align: middle !important;
+    }
+
+    #mindmap-svg path.markmap-link {
+        stroke-opacity: 0.6 !important;
+        stroke-width: 2px !important;
+    }
+</style>
+
+<!-- Carrega bundles compilados locais -->
+<script type="module" src={ staticver.URL("/static/mindmap.js") }></script>
+
+<script type="module">
+    import { CodeJar } from '/static/codejar.js?v=8';
+
+    (function () {
+        "use strict";
+
+        var editorEl = document.getElementById("mindmap-editor");
+        var svgEl = document.getElementById("mindmap-svg");
+        var statusEl = document.getElementById("editor-status");
+        var filenameInput = document.getElementById("file-name");
+
+        var currentStatus = "saved";
+        var saveTimer = null;
+        var saveInProgress = false;
+        var savePending = false;
+        var lastSavedHash = null;
+        var mmWrapper = null;
+
+        // generateHash via EditorCommon (lida com crypto.subtle em HTTP)
+        var generateHash = EditorCommon.generateHash;
+
+        function highlightMarkdown(code) {
+            var html = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            var tokens = [];
+            var id = 0;
+            var tokenPrefix = "TK" + Math.random().toString(36).substring(2) + "X";
+            function addToken(text, className) {
+                var tokenPlace = tokenPrefix + (id++) + "Y";
+                tokens.push({ id: tokenPlace, html: '<span class="' + className + '">' + text + '</span>' });
+                return tokenPlace;
+            }
+
+            // 0. Frontmatter (--- ... ---)
+            html = html.replace(/^---[\s\S]*?---/gm, function(match) {
+                return addToken(match, "text-zinc-500 font-mono");
+            });
+
+            // 1. Fenced code blocks (``` ... ```) — antes de outros padrões para evitar conflitos
+            html = html.replace(/```[\s\S]*?```/g, function(match) {
+                return addToken(match, "text-emerald-400 font-mono");
+            });
+
+            // 2. Inline code `code`
+            html = html.replace(/`[^`\n]+`/g, function(match) {
+                return addToken(match, "text-pink-400 font-mono bg-zinc-900/60 px-1 rounded-sm");
+            });
+
+            // 3. Images ![alt](url)
+            html = html.replace(/!\[[^\]]*\]\([^)]*\)/g, function(match) {
+                return addToken(match, "text-purple-400");
+            });
+
+            // 4. Links [text](url)
+            html = html.replace(/\[([^\]]+)\]\([^)]+\)/g, function(match) {
+                return addToken(match, "text-sky-400 underline");
+            });
+
+            // 5. Headers (#, ##, ###, etc)
+            html = html.replace(/^#{1,6}\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-sky-400 font-black");
+            });
+
+            // 6. Horizontal rules (---, ***, ___)
+            html = html.replace(/^(\s*[-*_]\s*){3,}$/gm, function(match) {
+                return addToken(match, "text-zinc-600");
+            });
+
+            // 7. Blockquotes (> text)
+            html = html.replace(/^>\s+[^\n]+/gm, function(match) {
+                return addToken(match, "text-zinc-400 italic border-l-2 border-zinc-600 pl-2");
+            });
+
+            // 8. Unordered list markers (-, *, +)
+            html = html.replace(/^(\s*)[-*+]\s+/gm, function(match, space) {
+                return space + addToken(match.trimStart(), "text-amber-400 font-bold");
+            });
+
+            // 9. Ordered list markers (1., 2., etc)
+            html = html.replace(/^(\s*)\d+\.\s+/gm, function(match, space) {
+                return space + addToken(match.trimStart(), "text-amber-400 font-bold");
+            });
+
+            // 10. Task list markers (- [ ] or - [x])
+            html = html.replace(/^(\s*)[-*+]\s+\[[ x]\]\s+/gim, function(match, space) {
+                return space + addToken(match.trimStart(), "text-emerald-500");
+            });
+
+            // 11. Bold (**text** or __text__)
+            html = html.replace(/(\*\*|__)(?:(?!\1)[\s\S]*?)\1/g, function(match) {
+                return addToken(match, "font-bold text-zinc-100");
+            });
+
+            // 12. Italic (*text* or _text_) — cuidadoso para nao pegar underscores em palavras
+            html = html.replace(/(?<!\w)(\*|_)(?:(?!\1)[^\s*_][^*_\n]*?)\1(?!\w)/g, function(match) {
+                return addToken(match, "italic text-zinc-300");
+            });
+
+            // 13. Strikethrough (~~text~~)
+            html = html.replace(/~~[^~]+~~/g, function(match) {
+                return addToken(match, "line-through text-zinc-500");
+            });
+
+            // 14. Tables (| col1 | col2 |)
+            html = html.replace(/^\|.+\|$/gm, function(match) {
+                return addToken(match, "text-zinc-300");
+            });
+
+            // Restore tokens recursively
+            var tokenRegExp = new RegExp(tokenPrefix + "(\\d+)Y", "g");
+            var lastHtml;
+            do {
+                lastHtml = html;
+                html = html.replace(tokenRegExp, function(match, tokenId) {
+                    var idx = parseInt(tokenId, 10);
+                    return tokens[idx] ? tokens[idx].html : match;
+                });
+            } while (html !== lastHtml);
+
+            return html;
+        }
+
+        const highlight = (editor) => {
+            editor.innerHTML = highlightMarkdown(editor.textContent);
+        };
+
+        const jar = CodeJar(editorEl, highlight, { tab: "  " });
+        EditorCommon.setupCodeJarActiveLine(editorEl);
+
+        // Aplica highlight no conteúdo inicial (CodeJar não faz isso automático)
+        highlight(editorEl);
+
+        function isMobile() {
+            return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile|webOS/i.test(navigator.userAgent);
+        }
+
+        function setStatus(s) {
+            currentStatus = s;
+            EditorCommon.setStatus(statusEl, s);
+        }
+
+        function handleChange() {
+            setStatus("dirty");
+            if (!isMobile() && mmWrapper) {
+                try {
+                    mmWrapper.update(jar.toString());
+                } catch (e) {
+                    console.warn("Erro ao atualizar o mapa mental:", e);
+                }
+            }
+            scheduleSave();
+        }
+
+        jar.onUpdate(handleChange);
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                if (saveInProgress) {
+                    savePending = true;
+                } else {
+                    doSave();
+                }
+            }, 1200);
+        }
+
+        function ensureMindmapFrontmatter(c) {
+            var trimmed = c.trim();
+            if (trimmed.startsWith("---")) return c;
+            if (/^\s*markmap:\s*\n/.test(c)) {
+                return "---\ntype: markmap\n" + c.replace(/^\s*(markmap:\s*\n(?:[ \t]+[^\n]*\n?)*)/, "$1---\n");
+            }
+            return "---\ntype: markmap\nmarkmap:\n  maxWidth: 400\n---\n" + c;
+        }
+
+        async function doSave() {
+            if (saveInProgress) return;
+            saveInProgress = true;
+            savePending = false;
+            setStatus("saving");
+
+            var content = ensureMindmapFrontmatter(jar.toString());
+            var currentHash = await generateHash(content);
+
+            if (currentHash === lastSavedHash) {
+                saveInProgress = false;
+                setStatus("saved");
+                if (savePending) doSave();
+                return;
+            }
+
+            var filename = filenameInput.value.trim();
+            if (!filename.endsWith(".md")) filename += ".md";
+            if (!filename.startsWith("notes/")) filename = "notes/" + filename;
+
+            var fd = new FormData();
+            fd.append("filename", filename);
+            fd.append("content", content);
+            fd.append("tags", "mindmap");
+            fd.append("silent", "true");
+
+            try {
+                var r = await fetch("/api/note/save", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                
+                saveInProgress = false;
+                setStatus("saved");
+                lastSavedHash = currentHash;
+                filenameInput.dataset.filename = filename;
+
+                var params = new URLSearchParams(window.location.search);
+                params.set("file", filename);
+                window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+
+                if (savePending) {
+                    doSave();
+                }
+            } catch (e) {
+                saveInProgress = false;
+                setStatus("dirty");
+                console.error("Erro ao salvar:", e);
+                if (savePending) {
+                    scheduleSave();
+                }
+            }
+        }
+
+        async function doRename() {
+            await EditorCommon.doRenameContent(filenameInput, function() {
+                return ensureMindmapFrontmatter(jar.toString());
+            }, "/mindmap", {
+                setStatus: setStatus,
+                tags: "mindmap",
+                onSaved: async function (content) {
+                    lastSavedHash = await generateHash(content);
+                }
+            });
+        }
+
+        function deleteCurrentNote() {
+            EditorCommon.deleteCurrentNote(filenameInput);
+        }
+
+        function duplicateCurrentNote() {
+            EditorCommon.duplicateCurrentNote(filenameInput, "/mindmap", 'Duplicar esta nota "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
+        }
+
+        EditorCommon.setupRenameListeners(filenameInput, {
+            getContent: function () {
+                return ensureMindmapFrontmatter(jar.toString());
+            },
+            redirectBase: "/mindmap",
+            tags: "mindmap",
+            setStatus: setStatus
+        });
+
+        EditorCommon.setupCtrlS(doSave);
+
+        window.triggerFit = function() {
+            if (mmWrapper) {
+                mmWrapper.fit();
+            }
+        };
+
+        // Inicialização
+        (async function () {
+            setStatus("saved");
+            lastSavedHash = await generateHash(jar.toString());
+
+            // Inicializa o Markmap apenas no desktop se disponível globalmente
+            if (!isMobile() && window.initMindmap) {
+                mmWrapper = window.initMindmap(svgEl, jar.toString());
+            }
+        })();
+
+        window.saveMindmap = doSave;
+        window.deleteCurrentNote = deleteCurrentNote;
+        window.duplicateCurrentNote = duplicateCurrentNote;
+    })();
+</script>
+}
