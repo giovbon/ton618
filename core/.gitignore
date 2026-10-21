@@ -51,10 +51,20 @@ coverage.out
 
 # Build artifacts
 *_templ.go
-web/static/editor.js
-web/static/editor.js.gz
+
+# Bundles gerados por web/build.js (regenerados pelo run.sh ao iniciar).
+# ⚠️ Estiveram commitados no commit inicial; foram des-rastreados com
+# `git rm --cached` em out/2026 para o .gitignore finally ter efeito.
+web/static/app.css
+web/static/database.js
 web/static/drawing.js
 web/static/drawing.js.gz
+web/static/editor.js
+web/static/editor.js.gz
+web/static/editor-init.js
+web/static/js/app.js
+web/static/mindmap.js
+web/static/tabulator-note.js
 
 # Byproducts de compressão do build (web/build.js gera .gz/.br para cada arquivo
 # de web/static/ — inclusive os vendorizados). São gerados a cada build; o
