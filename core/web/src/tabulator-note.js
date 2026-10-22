@@ -97,11 +97,8 @@
         { value: "file", label: "Arquivo", icon: TYPE_ICONS.file }
     ];
 
-    function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, function (c) {
-            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-        });
-    }
+    // SSOT em editor-common.js (o layout carrega antes deste bundle).
+    var escapeHtml = EditorCommon.escapeHtml;
 
     // Converte o caminho guardado na célula em URL de download (servido por
     // /file/download, que valida o prefixo datasets/ no backend).

@@ -87,6 +87,7 @@ interface Window {
 // ── EditorCommon (exposto por editor-common.js) ──
 declare namespace EditorCommon {
   function generateHash(text: string): Promise<string>;
+  function escapeHtml(value: any): string;
   function setStatus(el: HTMLElement, s: 'saved' | 'saving' | 'dirty'): void;
   function getAuthHeaders(): Record<string, string>;
   function httpSaveNote(filename: string, content: string, tags?: string, silent?: boolean): Promise<Response>;

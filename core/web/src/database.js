@@ -75,13 +75,8 @@
     }
 
     // Escapa texto que vai para HTML (nomes de arquivo podem ter <, >, &).
-    function escapeHtml(s) {
-        return String(s == null ? "" : s)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
+    // SSOT em editor-common.js, carregado no <head> do layout.
+    var escapeHtml = EditorCommon.escapeHtml;
 
     // Normaliza o valor digitado num filtro `tipo:` para o vocabulário do
     // frontmatter (PT snake_case: mapa_mental, anexo, ...). Espelha

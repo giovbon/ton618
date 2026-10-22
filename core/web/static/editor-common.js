@@ -20,6 +20,15 @@
             }
         },
 
+        // ── escapeHtml: SSOT de escaping para HTML (texto e atributos) ──
+        // null/undefined viram string vazia; aspa simples também é escapada
+        // para uso seguro em atributos. Os bundles delegam para cá.
+        escapeHtml: function (value) {
+            return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+            });
+        },
+
         // ── setStatus: atualiza o indicador de status (salvo/salvando/sujo) ──
         setStatus: function (el, s) {
             if (s === "saved") {

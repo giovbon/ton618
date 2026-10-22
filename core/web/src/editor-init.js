@@ -1085,13 +1085,8 @@ import { initHierarchy } from './editor-hierarchy.js';
 
     var slashSelected = 0;
 
-    function htmlEscape(s) {
-        return s
-            .replace(/&/g, "&amp;")
-            .replace(/"/g, "&quot;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-    }
+    // SSOT em editor-common.js (o layout carrega antes deste bundle).
+    var htmlEscape = EditorCommon.escapeHtml;
 
     function selectSlashItem(idx) {
         slashSelected = idx;

@@ -6,6 +6,11 @@ const path = require("node:path");
 // tabulator-note.js é um IIFE que só toca `window` (sem DOM no carregamento),
 // então basta um `window` falso para exercitar os helpers puros.
 global.window = {};
+// tabulator-note.js usa EditorCommon.escapeHtml (SSOT). editor-common.js
+// registra um listener de document no load — stub suficiente para o Node.
+global.document = { addEventListener: function () {} };
+require(path.join(__dirname, "..", "static", "editor-common.js"));
+global.EditorCommon = global.window.EditorCommon;
 
 require(path.join(__dirname, "..", "src", "tabulator-note.js"));
 
