@@ -478,11 +478,11 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 			docTags := db.TagsToSlice(doc.Tags)
 			docTagMap := make(map[string]bool)
 			for _, dt := range docTags {
-				docTagMap[strings.ToLower(dt)] = true
+				docTagMap[normalizeTagKey(dt)] = true
 			}
 			hasAllTags := true
 			for _, qt := range queryTags {
-				if !docTagMap[strings.ToLower(qt)] {
+				if !docTagMap[normalizeTagKey(qt)] {
 					hasAllTags = false
 					break
 				}
@@ -622,7 +622,7 @@ func buildFTSQueryWithParsed(p parsedQuery, lookup func(string) []string) string
 
 	// Adiciona restrições de tags no formato FTS5 tags:"nome_da_tag"
 	for _, tag := range tags {
-		tag = sanitizeFTS5Term(tag)
+		tag = sanitizeFTS5Term(normalizeTagKey(tag))
 		// Filtra apenas caracteres válidos para tag
 		tag = strings.Map(func(r rune) rune {
 			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' {
@@ -817,21 +817,28 @@ func cleanQuery(raw string) string {
 	return strings.TrimSpace(spacesRe.ReplaceAllString(clean, " "))
 }
 
-// extractTags extrai tags formatadas (tags:xxx ou #hashtag) da query bruta.
+// normalizeTagKey é a chave de comparação de tags: minúscula e sem acentos.
+// O FTS5 unicode61 já remove diacríticos; sem isso, a segunda linha de defesa
+// em Go descartava hits que o FTS havia casado (ex.: tags:saude × tag "saúde").
+func normalizeTagKey(tag string) string {
+	return RemoveAccents(strings.ToLower(strings.TrimSpace(tag)))
+}
 
+// extractTags extrai tags formatadas (tags:xxx ou #hashtag) da query bruta.
+// As tags saem na forma canônica de comparação (minúsculas, sem acentos).
 func extractTags(raw string) (tags []string, remaining string) {
 	remaining = raw
 	matches := tagFilterRegex.FindAllStringSubmatch(remaining, -1)
 	for _, m := range matches {
 		if len(m) > 1 {
-			tags = append(tags, strings.ToLower(strings.Trim(m[1], `"`)))
+			tags = append(tags, normalizeTagKey(strings.Trim(m[1], `"`)))
 			remaining = strings.Replace(remaining, m[0], " ", 1)
 		}
 	}
 	hashtags := nativeHashtag.FindAllStringSubmatch(remaining, -1)
 	for _, m := range hashtags {
 		if len(m) > 1 {
-			tags = append(tags, strings.ToLower(m[1]))
+			tags = append(tags, normalizeTagKey(m[1]))
 			remaining = strings.Replace(remaining, m[0], " ", 1)
 		}
 	}

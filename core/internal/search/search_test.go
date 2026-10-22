@@ -1010,6 +1010,39 @@ func TestSearch_TagFiltering(t *testing.T) {
 	}
 }
 
+// O FTS5 (unicode61) casa "saude" com a tag "saúde", mas o filtro Go de
+// segunda linha comparava apenas ToLower e descartava o hit. As duas pontas
+// precisam usar a mesma chave normalizada (minúscula + sem acento).
+func TestSearch_TagFilteringAccentInsensitive(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	now := time.Now()
+	store.InsertDocument(db.Document{
+		ID:        "doc-saude",
+		Tipo:      "markdown",
+		Arquivo:   "notas/saude.md",
+		Secao:     "Geral",
+		Texto:     "conteudo sobre bem-estar",
+		Tags:      "saúde,bem-estar",
+		Timestamp: now.Format(time.RFC3339),
+	})
+	store.IndexFTS("doc-saude", "markdown", "notas/saude.md", "Geral", "conteudo sobre bem-estar", "saúde,bem-estar")
+
+	for _, query := range []string{"tags:saude", "tags:saúde", "#saude", "#saúde"} {
+		res, err := Search(context.Background(), store, query, 0, 20,
+			func(s string) int { return 0 },
+			func(s string) float64 { return 0.0 },
+		)
+		if err != nil {
+			t.Fatalf("%s: Search error: %v", query, err)
+		}
+		if len(res.Hits) != 1 || res.Hits[0].ID != "doc-saude" {
+			t.Errorf("%s: esperado 1 hit doc-saude, obtido %d hits: %v", query, len(res.Hits), res.Hits)
+		}
+	}
+}
+
 func TestSearch_AccentInsensitivity(t *testing.T) {
 	store := newTestStore(t)
 	defer store.Close()
