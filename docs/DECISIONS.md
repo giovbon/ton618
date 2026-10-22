@@ -69,7 +69,8 @@ Serve como referência para manter consistência em contribuições futuras.
 - **Store concreto, não interface**: `db.Store` é concreto. Repository interfaces existem só onde há benefício claro (testabilidade de serviços). Não criar interface só por "bom costume".
 - **sqlc para queries SQL**: Queries em `query.sql`, geradas para `internal/core/db/generated/`. Evitar SQL espalhado no código.
 - **Mutex para escrita**: `WriteMu sync.Mutex` no Store serializa escritas. Leituras concorrentes são livres (WAL).
-- **Mtimes sempre em UTC (RFC3339 com `Z`)**: `time.Now().UTC().Format(time.RFC3339)`. Gravar mtime em formato local (ex: `-03:00`) misturado com UTC quebra a ordenação por string da sidebar/database. A ordenação em `system/handlers.go` usa `mtimeNewer()`, que compara `time.Time` parseado (robusto a formatos mistos/legados). Corrigido em 17/08/2026 (`HandleUploadAttachment` gravava local) com testes de regressão em `system/handlers_mtime_test.go` e `notes/handlers_upload_mtime_test.go`.
+- **Mtimes sempre em UTC (RFC3339 com `Z`)**: `time.Now().UTC().Format(time.RFC3339)`. Gravar mtime em formato local (ex: `-03:00`) misturado com UTC quebra a ordenação por string da sidebar/database. A ordenação em `system/handlers.go` usa `mtimeNewer()`, que compara `time.Time` parseado (robusto a formatos mistos/legados). Corrigido em 17/08/2026 (`HandleUploadAttachment` gravava local) com testes de regressão em `system/handlers_mtime_test.go` e `notes/handlers_upload_mtime_test.go`. **`mtimeNewer` é a única regra de ordenação por mtime** (22/10/2026): a árvore do Acervo usava uma cópia própria (`mtimeIsNewer`) que divergia em valores inválidos; a função canônica agora também entende o formato de exibição do Acervo (`2006-01-02 15:04:05`, hora local) e inválidos nunca "vencem".
+- **Normalização de acentos é SSOT em `search.RemoveAccents`** (22/10/2026): o pacote `features/search` mantinha uma tabela `strings.NewReplacer` duplicada que já divergia — faltava mapear `Õ` (a cópia principal tinha `"õ"` no lugar). `RemoveAccents` apenas troca diacríticos (não faz case-fold); os callers combinam com `strings.ToLower`. Teste: `internal/search/accents_test.go`.
 - **Testes com banco real**: `newTestStore(t)` cria SQLite em `t.TempDir()` — sem mocks, sem abstração.
 - **Testes de integração no mesmo package**: `embedding_integration_test.go` testa fluxos completos (salvar → indexar → buscar → deletar).
 
@@ -82,6 +83,7 @@ Serve como referência para manter consistência em contribuições futuras.
 - **Web Worker para tarefas pesadas**: `semantic-worker.js` (ESM module) executa inferência ONNX em thread separada — não bloqueia UI.
 - **var, function, sem arrow functions nos fontes do browser**: O build target é es2020 e algumas páginas usam IIFE. Manter compatibilidade.
 - **Ícones Lucide são inline SVG server-side**: Todos os ícones são renderizados como `<svg>` direto no HTML pelo `icons.templ`. **Não depende de JS do lado do cliente.** Ícones não reconhecidos viram um círculo genérico (fallback). O pacote npm `lucide` foi removido — zero dependência de JS para ícones.
+- **Escaping HTML é SSOT em `EditorCommon.escapeHtml`** (`static/editor-common.js`, arquivo manual legado): `database.js`, `tabulator-note.js` e `editor-init.js` delegam para ele (null/undefined → `""`, escapa `& < > " '`). Antes havia 4 cópias com semânticas diferentes (uma não escapava `"`/`'` e outra não tratava null). Teste: `tests/tabulator-note.unit.cjs` carrega o `editor-common.js` real.
 
 ### 2.3 Testes
 
@@ -1140,6 +1142,9 @@ Opções de nós no Markmap como `maxWidth: 300` (e cores, etc.) não funcionava
 
 ### Detalhes que evitaram bugs reais
 
+- ⚠️ **Rename de arquivo pelo editor (corrigido em 22/10/2026):** só o caminho do Acervo preservava `file_metadata`; o `POST /file/rename` do editor usava uma cópia quase igual que **perdia o `pai:`** (o arquivo voltava para a raiz). O rename físico agora vive em `notes.RenameNonNoteFile` e é o único caminho para os dois handlers (Acervo e editor); teste de regressão em `notes/handlers_file_test.go` (`TestHandleFileRename_ArchivePreservaMetadados`).
+- ⚠️ **Título do frontmatter tem um único leitor (corrigido em 22/10/2026):** `notes.FrontmatterTitle`/`FrontmatterTitleKey` comparam `title`/`titulo` **case-insensitive** (com precedência de `titulo`, só valor string). Antes o Acervo era case-insensitive, mas a duplicação e o rename eram case-sensitive: um `Title:` deixava a cópia sem o prefixo `copia-` e o título antigo permanecia após o rename. Testes: `frontmatter_test.go` (variantes de caixa) e regressões em `handlers_save_test.go`/`frontmatter_test.go`.
+- ⚠️ **Rename de pai parseia o frontmatter uma vez (22/10/2026):** `UpdateParentOnRename` lia o mesmo conteúdo até 4× por filha (`ParseFrontmatter` + `ParentRefOfContent` + `UpdateFrontmatterProperty` + remoção da chave legada). Agora usa `parentRefFromMap(fm)` e `updateFrontmatterPropertyIn(fm, body, …)`; a remoção de `parent:` também não sobrescreve mais `updated` com `""` se a codificação falhar (evitava salvar a nota vazia).
 - ⚠️ **Cache do Tabulator (bug encontrado no E2E):** a linha é cacheada por **mtime**, que não muda ao editar metadado nem ao renomear a nota-mãe. Se a injeção só preenchesse chaves ausentes, o `pai` antigo ficaria **preso** na linha. Agora, para arquivos, a injeção **remove as chaves que não existem mais** (toda chave sem prefixo `_` que não seja coluna nativa é metadado) e então aplica os valores atuais.
 - SQL direto nos métodos do `Store` (como `BatchGetNotesContent`), em vez de sqlc: mantém a feature autocontida e não exige regenerar o pacote `dbgen`.
 - ⚠️ Em `db.go` o schema é uma raw string Go delimitada por crase: **comentário SQL não pode conter crase** (fecha a string).
@@ -1531,6 +1536,9 @@ ZIP com três partes:
   na cópia (`db.Store.Snapshot`).
 - `VACUUM INTO` em vez de copiar o arquivo: aplica o WAL pendente e nunca produz cópia rasgada de um
   banco em uso.
+- **Falha ao ler as notas aborta o backup (corrigido em 22/10/2026):** `CreateStreamContext` descartava
+  o erro de `GetAllNotes` e gerava um ZIP **sem as notas** com status 200 (perda silenciosa). Agora o
+  erro é propagado ao handler (`backup: carregar notas: …`), com regressão em `backup_test.go`.
 
 ### 9.2 Restauração (`POST /api/restore`) — sempre SUBSTITUIÇÃO TOTAL
 
