@@ -1858,3 +1858,63 @@ type: tabulator
   `target` e que tipos com cores distintas **não** compartilham a mesma cor aplicada.
 - Não muda o destaque do termo buscado (`.search-highlight`/`.stem-highlight`), que continua em
   azul/violeta como indicador de “onde casou” — inclusive quando o termo casa no próprio nome.
+## 17. Campo `tipo:` no frontmatter — filtro por tipo de nota (21/10/2026)
+
+- Motivo: o tipo de nota era só inferido (`DetectNoteType`: tags → caminho → nome/conteúdo) e nunca
+  persistido num campo visível; na prática alguns tipos eram impossíveis de filtrar na busca — a
+  busca global só tinha sintaxe `tags:` e o FTS5 **excluía duramente** desenhos/PDFs/anexos dos
+  resultados (`fts.go`), então `tipo:desenho`/`tipo:pdf` jamais casariam.
+- Decisão: gravar `tipo:` no frontmatter de TODA nota `.md`, no vocabulário PT snake_case fixo
+  (`nota, desenho, mapa_mental, tabulator, pdf, epub, anexo, arquivo, imagem, youtube, artigo,
+  captura, semanal`). É um **espelho** determinístico de `DetectNoteType` — a detecção continua
+  sendo a fonte da verdade; uma edição manual do valor é normalizada no próximo save/backfill.
+  `mapa_mental` substitui o valor interno `markmap` **só** no frontmatter (rotas/tags/ícones
+  continuam `markmap` — ver `core/internal/core/domain/note_tipo.go`).
+- Gravação: `NoteService.processAndSave` (ponto único de todo save: editor, rename, duplicação,
+  editores especiais) chama `ensureNoteTipoField`, que detecta o tipo pelas mesmas tags do banco +
+  conteúdo + caminho e usa `UpdateFrontmatterProperty`. Backfill idempotente de todas as notas roda
+  no boot via `EnsureNoteTypeField` (chamado pelo `SyncDatabaseWithContext`, depois do
+  `EnsureTypeTags`). Arquivos binários (pdf/anexo/arquivo/epub/imagem) não têm frontmatter (§6.24)
+  — o tipo deles é derivado do caminho pelo indexador.
+- Índice: migração v24 adiciona a coluna `note_type` a `documents` e `docs_fts` (a FTS5 é recriada —
+  `ALTER ADD COLUMN` não existe em tabela virtual — e `file_mods` é limpo para forçar reindex
+  completa). `processor.Document.NoteType` carrega o valor content-aware (markdown/tabulator); os
+  escritores do db derivam de tags + caminho (`DeriveNoteType`). O sqlc não foi regenerado (CLI
+  ausente): `Store.InsertDocument` faz o INSERT do sqlc + um `UPDATE note_type` logo atrás.
+- Busca global: nova sintaxe `tipo:x` (alias `type:`, case-insensitive, aceita aspas e múltiplos
+  filtros em OR). O valor é normalizado (`domain.NormalizeNoteTipo`: espaços/hífens → `_`, aliases
+  markmap/drawing/...) e vira predicado `note_type:"x"` na query MATCH; com filtro de tipo as
+  exclusões duras do FTS/LIKE são relaxadas (mantendo só `deletar`) — senão `tipo:pdf` jamais
+  casaria. O fallback LIKE recebe `AND note_type = ?`.
+- Acervo: a coluna Tipo (`row["type"]`) passa a usar o vocabulário do frontmatter (frontmatter se
+  existir, senão a detecção) e a célula exibe **apenas o valor cru** (`mapa_mental`, `anexo`, ...)
+  como texto simples — o formatter de ícone + rótulo legível foi removido (`TYPE_LABELS`/`typeLabel`
+  do database.js ficaram órfãos e saíram junto; o `typeLabel` do `tabulator-note.js` é outro módulo
+  e permanece). O filtro `tipo:` do `parseSearchQuery`/`makeMatcher` normaliza o valor digitado. O
+  campo `tipo` do frontmatter NÃO vira coluna dinâmica (é o mesmo dado da coluna fixa "Tipo").
+- Nota: as notas **imagem** continuam fora das linhas do Acervo (comportamento pré-existente do
+  `GetMany`) — `tipo:imagem` funciona na busca global.
+
+## 18. Busca global — todos os trechos da nota no card (22/10/2026)
+
+- Problema: a busca global colapsava os hits POR ARQUIVO mantendo **um único fragmento** por nota
+  (o de maior score, ou o primeiro que contém o termo). Como notas Tabulator são indexadas linha a
+  linha (uma linha da planilha = um fragmento com `secao: "Registro N"` — ver
+  `ProcessTabulatorContent`), pesquisar o conteúdo de uma célula casava em N linhas e o card
+  mostrava só 1 — as outras ocorrências eram descartadas em silêncio.
+- Decisão (escolha do usuário): o card da nota passa a listar **TODOS** os trechos que casaram,
+  cada um com o rótulo da seção (ex.: `Registro 3`) e o destaque próprio, com teto de
+  `maxSnippetsPerNote = 5`; o excedente vira "+N ocorrências" no rodapé do card. Os trechos que
+  contêm o termo ficam na frente (preservando a ordem de ranking) — o primeiro é o principal.
+- Contagem: o "X resultados" (e o COUNT das queries FTS/LIKE em `fts.go`) passa a contar
+  **arquivos distintos** (notas), não fragmentos — uma planilha com 30 linhas que casando é
+  1 resultado. A página continua sendo de notas: `search.Search` agora carrega
+  `size * searchFragmentsPerNote` (= 5×) fragmentos por página para o agrupamento no handler ter
+  material dos extras (antes o trim cortava em `size` fragmentos, matando os extras).
+- Arquivos: `domain.SearchResultItem` ganha `Snippets []SearchSnippet` (Secao + HTML) e
+  `ExtraCount int`; o handler (`handlers_search.go`) agrupa por bucket `with/without` termo; o
+  template (`search_results.templ`) renderiza a lista indentada + o contador.
+- Limite conhecido: a paginação ("carregar mais") ainda desloca por FRAGMENTO no SQL — um card
+  pode se repetir entre páginas quando as linhas de uma nota atravessam a borda do offset (era
+  possível antes também); corrigir isso de verdade exige paginar por `GROUP BY arquivo` no FTS,
+  o que muda a semântica do ranking e fica para uma iteração futura se incomodar.

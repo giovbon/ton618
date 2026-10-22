@@ -14,6 +14,12 @@ import (
 	"ton618/core/internal/search"
 )
 
+// maxSnippetsPerNote é quantos trechos de UMA nota o card de resultado lista
+// (o principal + extras). O que exceder vira "+N ocorrências" no rodapé do
+// card — típico de notas Tabulator, onde cada linha da planilha é um fragmento
+// indexado e o termo pode casar em dezenas de linhas.
+const maxSnippetsPerNote = 5
+
 // ── Search (HTMX partial) ──
 
 func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) {
@@ -51,49 +57,60 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Seleciona, por arquivo, o MELHOR fragmento para representar a nota nos
-	// resultados. Os hits já vêm ordenados por FinalScore (o primeiro é o de maior
-	// score); mas se um fragmento POSTERIOR contém um termo da busca e o escolhido
-	// não, trocamos para ele — assim o snippet é montado a partir do fragmento
-	// onde o termo realmente aparece (evita mostrar um fragmento-resumo sem o
-	// termo, comum em notas longas com cabeçalho de poucos caracteres).
-	type slot struct {
-		hit      search.SearchHit
-		contains bool
-	}
-	chosen := make(map[string]int)
-	var slots []slot
-	for _, hit := range results.Hits {
-		arq := hit.Doc.Arquivo
-		c := containsSearchTerm(hit.Doc.Texto, query)
-		idx, ok := chosen[arq]
+	// A página é de NOTAS (cards), não de fragmentos: agrupa os hits por
+	// arquivo e o card passa a listar TODOS os trechos que casaram (até
+	// maxSnippetsPerNote; o resto vira "+N ocorrências" no rodapé do card).
+	// Antes cada nota virava um card com UM fragmento e as outras linhas da
+	// planilha/seções que casavam eram descartadas em silêncio.
+	// Os hits chegam ordenados (HasOriginalTerm, depois FinalScore); dentro
+	// de cada nota os trechos que contêm o termo ficam na frente preservando a
+	// ordem relativa — o primeiro vira o trecho principal do card.
+	type bucket struct{ with, without []*search.SearchHit }
+	buckets := make(map[string]*bucket)
+	var order []string
+	for i := range results.Hits {
+		hit := &results.Hits[i]
+		b, ok := buckets[hit.Doc.Arquivo]
 		if !ok {
-			chosen[arq] = len(slots)
-			slots = append(slots, slot{hit: hit, contains: c})
-			continue
+			b = &bucket{}
+			buckets[hit.Doc.Arquivo] = b
+			order = append(order, hit.Doc.Arquivo)
 		}
-		if c && !slots[idx].contains {
-			slots[idx].hit = hit
-			slots[idx].contains = true
+		if containsSearchTerm(hit.Doc.Texto, query) {
+			b.with = append(b.with, hit)
+		} else {
+			b.without = append(b.without, hit)
 		}
 	}
 
 	weightCache := make(map[string]float64)
 	var items []domain.SearchResultItem
-	for _, s := range slots {
-		hit := s.hit
+	for _, arq := range order {
+		frags := append(buckets[arq].with, buckets[arq].without...)
+		primary := *frags[0]
 
-		snippet := buildSnippet(hit, query)
+		snippet := buildSnippet(primary, query)
+		var extras []domain.SearchSnippet
+		for _, h := range frags[1:] {
+			if len(extras) >= maxSnippetsPerNote-1 {
+				break
+			}
+			extras = append(extras, domain.SearchSnippet{
+				Secao: h.Doc.Secao,
+				HTML:  buildSnippet(*h, query),
+			})
+		}
+		extraCount := len(frags) - 1 - len(extras)
 
-		tags := db.TagsToSlice(hit.Doc.Tags)
+		tags := db.TagsToSlice(primary.Doc.Tags)
 		// FilterUserTags remove as tags internas de tipo de editor (drawing,
 		// markmap, tabulator, ...) — o usuário não deve vê-las como tags.
 		userTags := domain.FilterUserTags(tags)
 
-		weight, ok := weightCache[hit.Doc.Arquivo]
+		weight, ok := weightCache[primary.Doc.Arquivo]
 		if !ok {
-			weight = ctx.Store.GetSynapticWeight(hit.Doc.Arquivo)
-			weightCache[hit.Doc.Arquivo] = weight
+			weight = ctx.Store.GetSynapticWeight(primary.Doc.Arquivo)
+			weightCache[primary.Doc.Arquivo] = weight
 		}
 		if weight <= 0.105 {
 			userTags = append(userTags, "esquecida")
@@ -101,24 +118,26 @@ func (ctx *HandlerContext) HandleSearch(w http.ResponseWriter, r *http.Request) 
 			userTags = append(userTags, "fria")
 		}
 
-		noteType := string(domain.DetectNoteType(tags, hit.Doc.Arquivo))
+		noteType := string(domain.DetectNoteType(tags, primary.Doc.Arquivo))
 
-		line := findQueryLineInText(hit.Doc.Texto, query)
+		line := findQueryLineInText(primary.Doc.Texto, query)
 
-		displayTime := hit.Doc.Timestamp
-		if t, err := time.Parse(time.RFC3339, hit.Doc.Timestamp); err == nil {
+		displayTime := primary.Doc.Timestamp
+		if t, err := time.Parse(time.RFC3339, primary.Doc.Timestamp); err == nil {
 			displayTime = t.Local().Format("2006-01-02 15:04:05")
 		}
 
 		items = append(items, domain.SearchResultItem{
-			Arquivo:   hit.Doc.Arquivo,
-			Secao:     hit.Doc.Secao,
-			Tags:      userTags,
-			RawTags:   tags,
-			Snippet:   snippet,
-			Tipo:      noteType,
-			Timestamp: displayTime,
-			Line:      line,
+			Arquivo:    primary.Doc.Arquivo,
+			Secao:      primary.Doc.Secao,
+			Tags:       userTags,
+			RawTags:    tags,
+			Snippet:    snippet,
+			Snippets:   extras,
+			ExtraCount: extraCount,
+			Tipo:       noteType,
+			Timestamp:  displayTime,
+			Line:       line,
 		})
 	}
 

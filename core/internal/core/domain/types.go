@@ -26,12 +26,22 @@ type BacklinksResult struct {
 	Level2 []string
 }
 
+// SearchSnippet é um fragmento ADICIONAL da mesma nota que também casou na
+// busca (ex.: outra linha da planilha Tabulator, outra seção do markdown),
+// com o rótulo da seção e o HTML já destacado.
+type SearchSnippet struct {
+	Secao string
+	HTML  string
+}
+
 type SearchResultItem struct {
 	ID        string
 	Tipo      string
 	Arquivo   string
 	Secao     string
 	Snippet   string
+	Snippets  []SearchSnippet // demais trechos da mesma nota (além do principal)
+	ExtraCount int            // ocorrências restantes fora do teto de exibição
 	Tags      []string
 	RawTags   []string
 	Timestamp string

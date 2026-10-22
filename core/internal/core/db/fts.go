@@ -38,10 +38,15 @@ func (s *Store) IndexFTS(docID, tipo, arquivo, secao, texto, tags string) error 
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 	s.DB.Exec("DELETE FROM docs_fts WHERE doc_id = ?", docID)
+	// Coluna note_type (migração v24): derivada das tags persistidas + caminho
+	// — mesma regra de DeriveNoteType, sem mudar a assinatura (os ~30 call
+	// sites não se importam com o valor; para notas o processo principal é o
+	// ReplaceFileIndexes, que recebe o valor content-aware do processor).
+	noteType := DeriveNoteType(tags, arquivo)
 	_, err := s.DB.Exec(`
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		docID, tipo, arquivo, secao, texto, tags,
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, note_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		docID, tipo, arquivo, secao, texto, tags, noteType,
 	)
 	return err
 }
@@ -62,31 +67,74 @@ func (s *Store) DeleteFTSByFile(arquivo string) error {
 	return err
 }
 
+// noteTypeExclusions monta o trecho WHERE de exclusões das buscas, considerando
+// o filtro por tipo (`tipo:` — coluna note_type, migração v24). Sem filtro, a
+// listagem geral esconde desenhos/PDFs/anexos (não têm texto útil); com filtro
+// explícito essas exclusões mascarariam os resultados (ex: `tipo:pdf` jamais
+// casaria), então só permanece a de `deletar`. Os placeholders de note_type
+// gerados aqui recebem os valores via noteTypeArgs.
+func noteTypeExclusions(noteTypes []string) string {
+	const deletarOnly = "tags NOT LIKE '%deletar%'"
+	if len(noteTypes) == 0 {
+		return deletarOnly + " AND tags NOT LIKE '%drawing%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'"
+	}
+	placeholders := make([]string, len(noteTypes))
+	for i := range noteTypes {
+		placeholders[i] = "note_type = ?"
+	}
+	return deletarOnly + " AND (" + strings.Join(placeholders, " OR ") + ")"
+}
+
+// noteTypeArgs concatena os argumentos SQL de uma query com filtro por tipo:
+// prefix (args antes dos placeholders de note_type) + valores do filtro +
+// tail (LIMIT/OFFSET etc).
+func noteTypeArgs(prefix []interface{}, noteTypes []string, tail ...interface{}) []interface{} {
+	args := make([]interface{}, 0, len(prefix)+len(noteTypes)+len(tail))
+	args = append(args, prefix...)
+	for _, nt := range noteTypes {
+		args = append(args, nt)
+	}
+	args = append(args, tail...)
+	return args
+}
+
 // SearchFTS performs a full-text search using FTS5.
 // Supports operators: +term (mandatory), -term (exclude), "exact phrase", term* (prefix).
 // Pass an empty query or "*" to return all documents.
 func (s *Store) SearchFTS(query string, from, size int) ([]FTSResult, int, error) {
-	return s.SearchFTSWithContext(s.queryCtx(), query, from, size)
+	return s.SearchFTSWithContext(s.queryCtx(), query, from, size, nil)
 }
 
 // SearchFTSWithContext é como SearchFTS, mas respeita o contexto (timeout/cancelamento).
-func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, size int) ([]FTSResult, int, error) {
+//
+// noteTypes restringe a busca aos documentos daqueles tipos (vocabulário do
+// campo `tipo:`: mapa_mental, anexo, nota, ...). Com filtro de tipo ativo as
+// exclusões duras de listagem geral (desenhos, PDFs, anexos) são relaxadas —
+// senão `tipo:pdf` nunca casaria — mantendo apenas a exclusão de `deletar`.
+// Os valores são aplicados também em SQL, como segunda linha de defesa além do
+// predicado note_type:"x" já embutido na query MATCH pelo search.
+func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, size int, noteTypes []string) ([]FTSResult, int, error) {
 	if query == "" || query == "*" {
 		query = ""
 	}
 
-	// Count total (limitado por ftsCountCap — ver constante)
+	exclusions := noteTypeExclusions(noteTypes)
+
+	// Count total (limitado por ftsCountCap — ver constante). Conta ARQUIVOS
+	// distintos (notas), não fragmentos: um card por nota nos resultados, então
+	// "X resultados" tem que contar cards — uma nota Tabulator com 30 linhas
+	// que casando é 1 resultado, não 30.
 	var total int
 	var countErr error
 	if query == "" {
 		countErr = s.DB.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%' LIMIT ?)",
-			ftsCountCap,
+			"SELECT COUNT(*) FROM (SELECT DISTINCT arquivo FROM docs_fts WHERE "+exclusions+" LIMIT ?)",
+			noteTypeArgs(nil, noteTypes, ftsCountCap)...,
 		).Scan(&total)
 	} else {
 		countErr = s.DB.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM (SELECT 1 FROM docs_fts WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%' LIMIT ?)",
-			query, ftsCountCap,
+			"SELECT COUNT(*) FROM (SELECT DISTINCT arquivo FROM docs_fts WHERE docs_fts MATCH ? AND "+exclusions+" LIMIT ?)",
+			noteTypeArgs([]interface{}{query}, noteTypes, ftsCountCap)...,
 		).Scan(&total)
 	}
 	if countErr != nil {
@@ -99,16 +147,16 @@ func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, si
 		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 			FROM docs_fts
-			WHERE tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
+			WHERE `+exclusions+`
 			ORDER BY rowid DESC
-			LIMIT ? OFFSET ?`, size, from)
+			LIMIT ? OFFSET ?`, noteTypeArgs(nil, noteTypes, size, from)...)
 	} else {
 		rows, err = s.DB.QueryContext(ctx, `
 			SELECT doc_id, tipo, arquivo, secao, texto, tags, rank, snippet(docs_fts, 4, '__HL_START__', '__HL_END__', '...', 64) as snippet_text
 			FROM docs_fts
-			WHERE docs_fts MATCH ? AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
+			WHERE docs_fts MATCH ? AND `+exclusions+`
 			ORDER BY rank
-			LIMIT ? OFFSET ?`, query, size, from)
+			LIMIT ? OFFSET ?`, noteTypeArgs([]interface{}{query}, noteTypes, size, from)...)
 	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("fts search: %w", err)
@@ -130,29 +178,32 @@ func (s *Store) SearchFTSWithContext(ctx context.Context, query string, from, si
 // SearchFTSLike is a fallback search using LIKE for fuzzy/wildcard patterns
 // that FTS5 does not handle natively (e.g., mid-word substrings).
 func (s *Store) SearchFTSLike(term string, from, size int) ([]FTSResult, int, error) {
-	return s.SearchFTSLikeWithContext(s.queryCtx(), term, from, size)
+	return s.SearchFTSLikeWithContext(s.queryCtx(), term, from, size, nil)
 }
 
 // SearchFTSLikeWithContext é como SearchFTSLike, mas respeita o contexto.
-func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from, size int) ([]FTSResult, int, error) {
+// noteTypes tem o mesmo papel de SearchFTSWithContext (filtro `tipo:`).
+func (s *Store) SearchFTSLikeWithContext(ctx context.Context, term string, from, size int, noteTypes []string) ([]FTSResult, int, error) {
 	pattern := "%" + strings.ToLower(term) + "%"
+	exclusions := noteTypeExclusions(noteTypes)
 
+	// Mesmo critério do FTS: conta notas (arquivos distintos), não fragmentos.
 	var total int
 	s.DB.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM (
-			SELECT 1 FROM documents
-			WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
+			SELECT DISTINCT arquivo FROM documents
+			WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND `+exclusions+`
 			LIMIT ?
 		)`,
-		pattern, pattern, pattern, ftsCountCap,
+		noteTypeArgs([]interface{}{pattern, pattern, pattern}, noteTypes, ftsCountCap)...,
 	).Scan(&total)
 
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, tipo, arquivo, secao, texto, tags, 0.0 as rank, '' as snippet_text
 		FROM documents
-		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND tags NOT LIKE '%drawing%' AND tags NOT LIKE '%deletar%' AND arquivo NOT LIKE 'pdfs/%' AND arquivo NOT LIKE '%.pdf' AND arquivo NOT LIKE 'attachments/%'
+		WHERE (LOWER(texto) LIKE ? OR LOWER(secao) LIKE ? OR LOWER(arquivo) LIKE ?) AND `+exclusions+`
 		LIMIT ? OFFSET ?`,
-		pattern, pattern, pattern, size, from)
+		noteTypeArgs([]interface{}{pattern, pattern, pattern}, noteTypes, size, from)...)
 	if err != nil {
 		return nil, 0, err
 	}

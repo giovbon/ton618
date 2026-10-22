@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS documents (
     ordem       INTEGER DEFAULT 0,
     timestamp   TEXT DEFAULT '',
     created_at  TEXT DEFAULT '',
-    hash        TEXT DEFAULT ''
+    hash        TEXT DEFAULT '',
+    note_type   TEXT DEFAULT ''
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
@@ -19,6 +20,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
     secao,
     texto,
     tags,
+    note_type,
     tokenize='unicode61'
 );
 

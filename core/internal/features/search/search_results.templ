@@ -33,12 +33,16 @@ func searchResultHref(res domain.SearchResultItem) string {
 templ SearchResults(data domain.SearchResultsData, size int) {
 	<div id="search-metadata" data-stems="" class="hidden"></div>
 	if data.Query != "" {
-		<p class="text-[11px] font-medium text-zinc-500 mb-4 tracking-wide uppercase">
-			{ strconv.Itoa(data.Total) } resultado
-			if data.Total != 1 {
-				{ "s" }
+		{{
+			// Sufixo do plural num bloco Go: o `if` do template injeta
+			// whitespace e renderizava "0 resultado s" com espaço.
+			plural := "s"
+			if data.Total == 1 {
+				plural = ""
 			}
-			para &ldquo;{ data.Query }&rdquo;
+		}}
+		<p class="text-[11px] font-medium text-zinc-500 mb-4 tracking-wide uppercase">
+			{ strconv.Itoa(data.Total) } resultado{ plural } para &ldquo;{ data.Query }&rdquo;
 		</p>
 	}
 	if len(data.Results) > 0 {
@@ -145,6 +149,31 @@ templ searchResultItem(res domain.SearchResultItem, query string) {
 			<div class="text-[14px] leading-relaxed text-zinc-400 font-sans snippet-text">
 				@templ.Raw(res.Snippet)
 			</div>
+			<!-- Demais trechos da mesma nota que também casaram (ex.: outras linhas
+			     da planilha Tabulator) — cada um com o rótulo da sua seção. -->
+			if len(res.Snippets) > 0 {
+				<div class="mt-2 space-y-1.5 border-l border-zinc-800/70 pl-3">
+					for _, s := range res.Snippets {
+						<div class="text-[13px] leading-relaxed text-zinc-500 font-sans snippet-text">
+							if s.Secao != "" {
+								<span class="text-[9px] font-black tracking-widest text-zinc-600 uppercase mr-1.5 search-section-title">{ s.Secao }</span>
+							}
+							@templ.Raw(s.HTML)
+						</div>
+					}
+				</div>
+			}
+			if res.ExtraCount > 0 {
+				{{
+					ocPlural := "s"
+					if res.ExtraCount == 1 {
+						ocPlural = ""
+					}
+				}}
+				<div class="mt-2 text-[11px] text-zinc-600 font-medium">
+					+{ strconv.Itoa(res.ExtraCount) } ocorrência{ ocPlural } nesta nota
+				</div>
+			}
 			if len(res.Tags) > 0 {
 				<div class="mt-3 flex items-center justify-between gap-3">
 					<div class="flex flex-wrap gap-1.5 flex-1 min-w-0">

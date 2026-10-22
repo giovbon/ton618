@@ -29,6 +29,11 @@ type Document struct {
 	Created   string
 	Hash      string
 	Tags      []string
+	// NoteType é o valor canônico do campo `tipo:` da nota de origem
+	// (vocabulário PT snake_case: mapa_mental, anexo, nota, ...). Alimenta a
+	// coluna note_type de documents/docs_fts, usada pelo filtro `tipo:` da
+	// busca global e do Acervo. Vazio = o indexador deriva de tags + caminho.
+	NoteType string
 }
 
 const (
@@ -288,10 +293,20 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 		}
 	}
 
+	// Tipo da nota para a coluna note_type do índice (filtro `tipo:` da busca).
+	// Espelho de DetectNoteType com fallback de conteúdo: tags + caminho + nome
+	// já decidem a maioria; o conteúdo cobre os especiais que só têm o `type:`
+	// no frontmatter (drawing/markmap/tabulator sem tag persistida ainda).
+	noteTipo := domain.FrontmatterTipo(domain.DetectNoteTypeFromContent(fileTags, string(content), filename))
+
 	// Nota Tabulator: indexa o corpo JSON célula a célula (um fragmento por
 	// linha + um com os nomes das colunas) em vez de tratá-lo como markdown.
 	if frontmatterType == "tabulator" {
-		return ProcessTabulatorContent(text, filename, timestampStr, creationStr, fileTags), nil, fileTags
+		tabDocs := ProcessTabulatorContent(text, filename, timestampStr, creationStr, fileTags)
+		for i := range tabDocs {
+			tabDocs[i].NoteType = noteTipo
+		}
+		return tabDocs, nil, fileTags
 	}
 
 	if strings.TrimSpace(text) == "" {
@@ -457,6 +472,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 
 	for i := range docs {
 		docs[i].Tags = fileTags
+		docs[i].NoteType = noteTipo
 	}
 
 	return docs, links, fileTags

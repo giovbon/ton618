@@ -571,7 +571,10 @@ func TestNoteService_UpdateBacklinksOnRename_ZipFile(t *testing.T) {
 		t.Errorf("esperado salvar notes/referenciadora.md, got %q", savedNoteFile)
 	}
 
-	expectedContent := "Link 1: [[novo_arquivo.zip]]\nLink 2: [[attachments/novo_arquivo.zip|Rótulo]]\nLink 3: [Baixar](/file/download?name=attachments/novo_arquivo.zip)"
+	// Todo save passa por processAndSave, que garante o campo `tipo:` no
+	// frontmatter (vocabulário PT) — o corpo com os links atualizados é
+	// preservado depois do bloco.
+	expectedContent := "---\ntipo: nota\n---\nLink 1: [[novo_arquivo.zip]]\nLink 2: [[attachments/novo_arquivo.zip|Rótulo]]\nLink 3: [Baixar](/file/download?name=attachments/novo_arquivo.zip)"
 	if savedNoteContent != expectedContent {
 		t.Errorf("conteúdo inesperado após renomear zip:\nesperado:\n%s\nobtido:\n%s", expectedContent, savedNoteContent)
 	}

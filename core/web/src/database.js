@@ -83,17 +83,25 @@
             .replace(/"/g, "&quot;");
     }
 
-    // Rótulos legíveis por tipo (o servidor manda o código, ex: "pdf").
-    var TYPE_LABELS = {
-        nota: "Nota", pdf: "PDF", epub: "EPUB", anexo: "Anexo", arquivo: "Arquivo",
-        desenho: "Desenho", markmap: "Mapa mental", youtube: "YouTube",
-        artigo: "Artigo", captura: "Captura", semanal: "Semanal", imagem: "Imagem",
-        tabulator: "Tabulator"
+    // Normaliza o valor digitado num filtro `tipo:` para o vocabulário do
+    // frontmatter (PT snake_case: mapa_mental, anexo, ...). Espelha
+    // domain.NormalizeNoteTipo do backend (core/internal/core/domain/note_tipo.go).
+    var TIPO_ALIASES = {
+        mindmap: "mapa_mental", markmap: "mapa_mental",
+        drawing: "desenho",
+        markdown: "nota", md: "nota",
+        capture: "captura",
+        article: "artigo",
+        semana: "semanal", weekly: "semanal",
+        attachment: "anexo", anexos: "anexo",
+        archive: "arquivo", arquivos: "arquivo",
+        image: "imagem", img: "imagem", imagens: "imagem",
+        pdfs: "pdf", epubs: "epub"
     };
 
-    function typeLabel(t) {
-        var key = String(t || "").toLowerCase();
-        return TYPE_LABELS[key] || (key ? key : "—");
+    function normalizeTipoValue(v) {
+        var s = String(v || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
+        return TIPO_ALIASES[s] || s;
     }
 
     // ── Hierarquia de notas (propriedade "pai" do frontmatter) ──
@@ -478,6 +486,9 @@
         // Pré-normaliza os filtros (evita toLowerCase/split repetidos por linha).
         var filters = parsed.filters.map(function (f) {
             var filterVal = String(f.value).toLowerCase();
+            // `tipo:` é normalizado para o vocabulário PT snake_case (marcas
+            // "mapa mental"/"markmap" casam com a coluna "mapa_mental").
+            if (f.key === "type") filterVal = normalizeTipoValue(filterVal);
             return {
                 key: f.key,
                 value: filterVal,
@@ -710,13 +721,14 @@
                         return c;
                     }
 
-                    // type column: ícone + rótulo legível (em vez do código cru).
+                    // type column: APENAS o valor cru do campo `tipo:` do
+                    // frontmatter (mapa_mental, anexo, ...), sem ícone nem
+                    // rótulo — exatamente como gravado na nota.
                     if (c.field === "type") {
                         c.formatter = function (cell) {
-                            var rowData = cell.getRow().getData();
-                            var icon = rowData._icon || noteIconFallback();
-                            return "<span class='db-type'><span class='db-title-icon'>" + icon + "</span>" +
-                                escapeHtml(typeLabel(cell.getValue())) + "</span>";
+                            var v = cell.getValue();
+                            if (v === undefined || v === null || v === "") return "—";
+                            return escapeHtml(String(v));
                         };
                         c.minWidth = 110;
                         return c;
@@ -785,7 +797,7 @@
                     pagination: hasTree ? false : "local",
                     paginationSize: 100,
                     paginationSizeSelector: [100, 200, 500, true],
-                    placeholder: "Nenhuma nota encontrada no Tabulator.",
+                    placeholder: "Nenhuma nota encontrada no Acervo.",
                     initialSort: [{ column: "mtime", dir: "desc" }]
                 });
 

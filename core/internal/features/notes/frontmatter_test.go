@@ -252,14 +252,17 @@ func TestNoteService_Rename_UpdatesWikilinks(t *testing.T) {
 		t.Fatalf("Rename falhou: %v", err)
 	}
 
-	// 4. Verifica o conteúdo atualizado das notas
-	validaNota := func(nomeNota, conteudoEsperado string) {
+	// 4. Verifica o conteúdo atualizado das notas.
+	// Todo save passa por processAndSave, que grava o campo `tipo:` no
+	// frontmatter (vocabulário PT) — o corpo com os wikilinks é preservado.
+	validaNota := func(nomeNota, corpoEsperado string) {
 		content, err := store.GetNote("notes/" + nomeNota + ".md")
 		if err != nil {
 			t.Fatalf("Erro ao ler nota %s: %v", nomeNota, err)
 		}
-		if content != conteudoEsperado {
-			t.Errorf("Conteúdo de %s incorreto.\nEsperado: %s\nObtido: %s", nomeNota, conteudoEsperado, content)
+		esperado := "---\ntipo: nota\n---\n" + corpoEsperado
+		if content != esperado {
+			t.Errorf("Conteúdo de %s incorreto.\nEsperado: %s\nObtido: %s", nomeNota, esperado, content)
 		}
 	}
 
@@ -288,7 +291,9 @@ func TestNoteService_Rename(t *testing.T) {
 	}
 
 	content, _ := store.GetNote("notes/new-name.md")
-	expected := "---\ntitle: new-name\n---\nconteudo antigo"
+	// O save garante o campo `tipo:` no frontmatter (vocabulário PT); o rename
+	// soma o `title:` — chaves ordenadas alfabeticamente pelo yaml.Marshal.
+	expected := "---\ntipo: nota\ntitle: new-name\n---\nconteudo antigo"
 	if content != expected {
 		t.Errorf("conteúdo errado: %q", content)
 	}
@@ -439,7 +444,8 @@ func TestBackupService_Create_ComNotas(t *testing.T) {
 			buf := new(bytes.Buffer)
 			buf.ReadFrom(rc)
 			rc.Close()
-			if buf.String() != "# Backup\n\nEsta nota deve aparecer no ZIP." {
+			// O save garante o campo `tipo:` no frontmatter (vocabulário PT).
+			if buf.String() != "---\ntipo: nota\n---\n# Backup\n\nEsta nota deve aparecer no ZIP." {
 				t.Errorf("conteúdo errado no ZIP: %q", buf.String())
 			}
 		}

@@ -545,6 +545,48 @@ func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 	if err := s.EnsureTypeTags(ctx); err != nil {
 		slog.Error("erro ao garantir tags de tipo", "error", err)
 	}
+
+	// Backfill do campo `tipo:` no frontmatter (vocabulário PT snake_case) —
+	// espelho do DetectNoteType para o filtro `tipo:` na busca/Acervo. Roda
+	// DEPOIS de EnsureTypeTags para que a detecção já veja as tags de tipo
+	// persistidas. Idempotente: notas com o valor correto não são tocadas.
+	if err := s.EnsureNoteTypeField(ctx); err != nil {
+		slog.Error("erro ao garantir campo tipo no frontmatter", "error", err)
+	}
+	return nil
+}
+
+// EnsureNoteTypeField faz o backfill do campo `tipo:` no frontmatter de todas
+// as notas cujo valor difere da detecção (ou que ainda não têm o campo).
+// Cada nota alterada passa por processAndSave — que regrava o frontmatter E
+// reindexa (documents/docs_fts ganham a coluna note_type junto). Idempotente:
+// chamada pelo SyncDatabase no boot; notas já corretas não geram I/O nenhum.
+func (s *NoteService) EnsureNoteTypeField(ctx context.Context) error {
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		return err
+	}
+
+	for filename, mtimeStr := range allNotes {
+		content, getErr := s.notes.GetNote(filename)
+		if getErr != nil || content == "" {
+			continue
+		}
+
+		updated := s.ensureNoteTipoField(filename, content)
+		if updated == content {
+			continue // já tem o valor correto — nada a fazer
+		}
+
+		mtime, err := time.Parse(time.RFC3339, mtimeStr)
+		if err != nil {
+			mtime = time.Now()
+		}
+		slog.Info("Backfill do campo tipo no frontmatter", "file", filename)
+		if err := s.processAndSave(ctx, filename, updated, mtime); err != nil {
+			slog.Error("erro ao gravar campo tipo", "file", filename, "error", err)
+		}
+	}
 	return nil
 }
 
@@ -632,6 +674,37 @@ func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, er
 
 // ── privado ──
 
+// ensureNoteTipoField garante o campo `tipo:` no frontmatter da nota, no
+// vocabulário PT snake_case (mapa_mental, anexo, nota, ...). O valor espelha
+// DetectNoteType — a mesma detecção que decide ícone, rota e coluna do Acervo
+// — usando as tags persistidas (tabela tags) + conteúdo + caminho.
+//
+// Idempotente: devolve o conteúdo intacto quando o valor já está correto, e
+// nunca mexe em frontmatter com YAML inválido (loga e mantém o original).
+func (s *NoteService) ensureNoteTipoField(filename, content string) string {
+	fm, _, ferr := ParseFrontmatter(content)
+	if ferr != nil {
+		return content
+	}
+
+	tags, _ := s.tags.GetFileTags(filename)
+	nt := domain.DetectNoteTypeFromContent(tags, content, filename)
+	want := domain.FrontmatterTipo(nt)
+
+	if fm != nil {
+		if cur, ok := fm["tipo"]; ok && strings.TrimSpace(fmt.Sprint(cur)) == want {
+			return content
+		}
+	}
+
+	updated, err := UpdateFrontmatterProperty(content, "tipo", want)
+	if err != nil {
+		slog.Warn("ensureNoteTipoField: falha ao gravar campo tipo", "file", filename, "error", err)
+		return content
+	}
+	return updated
+}
+
 // processAndSave centraliza o processamento e indexação do markdown.
 // As notas vivem exclusivamente no banco SQLite — content é sempre fornecido pelo caller.
 // O contexto é propagado para ReplaceFileIndexes, permitindo cancelamento.
@@ -639,6 +712,13 @@ func (s *NoteService) processAndSave(ctx context.Context, filename, content stri
 	if content == "" {
 		return fmt.Errorf("processAndSave: conteúdo vazio para %s", filename)
 	}
+
+	// Campo `tipo:` (vocabulário PT snake_case: mapa_mental, anexo, nota, ...):
+	// garante o espelho da detecção de tipo no frontmatter ANTES do
+	// processamento, para que o valor também entre no índice (metaParts do 1º
+	// fragmento). Ponto único de TODO save — editor, rename, duplicação e
+	// editores especiais passam por aqui (ver EnsureNoteTypeField p/ backfill).
+	content = s.ensureNoteTipoField(filename, content)
 
 	docs, links, fileTags := processor.ProcessMarkdownContent(
 		[]byte(content), filename, modTime, modTime,

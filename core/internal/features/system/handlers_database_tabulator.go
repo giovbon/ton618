@@ -24,7 +24,7 @@ import (
 // ── Tabulator Database Handlers ──
 
 func (ctx *HandlerContext) HandleDatabasePage(w http.ResponseWriter, r *http.Request) {
-	notes.Database("Tabulator — TON-618").Render(r.Context(), w)
+	notes.Database("Acervo — TON-618").Render(r.Context(), w)
 }
 
 func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +87,10 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 
 			for k, v := range fm {
 				lowerK := strings.ToLower(k)
-				if lowerK != "tags" && lowerK != "title" && lowerK != "titulo" {
+				// `tipo` (campo do frontmatter) é o MESMO dado da coluna "type"
+				// (Tipo) — não vira coluna dinâmica duplicada; tags/title/titulo
+				// já têm tratamento próprio abaixo.
+				if lowerK != "tags" && lowerK != "title" && lowerK != "titulo" && lowerK != "tipo" {
 					row[k] = v
 				}
 			}
@@ -100,8 +103,21 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 				row["tags"] = ""
 			}
 
-			row["type"] = n.Type
-			row["Type"] = n.Type
+			// Coluna "Tipo" no vocabulário do campo `tipo:` do frontmatter
+			// (PT snake_case: mapa_mental, anexo, ...). Para notas com o campo
+			// já gravado o frontmatter é a fonte; para os demais (e para
+			// arquivos, que não têm frontmatter) vale a detecção por
+			// tags + caminho (n.Type).
+			tipoValue := domain.FrontmatterTipo(domain.NoteType(n.Type))
+			if fm != nil {
+				if v, ok := fm["tipo"]; ok {
+					if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {
+						tipoValue = domain.NormalizeNoteTipo(s)
+					}
+				}
+			}
+			row["type"] = tipoValue
+			row["Type"] = tipoValue
 
 			row["_icon"] = icons.SVGString(icons.GetIcon(n.Type), "w-3.5 h-3.5")
 			openURL, openBlank := domain.NoteOpenTarget(domain.NoteType(n.Type), n.Arquivo)
@@ -232,10 +248,12 @@ func (ctx *HandlerContext) readAllowedColumns() (allowed map[string]bool, cfg bo
 // isDynamicColumnField decide se um campo é dinâmico — isto é, controlável
 // pela aba "Colunas". Campos embutidos/fixos (arquivo, titulo, tags, type,
 // mtime, pai) e campos de configuração interna (markmap) ficam de fora: nunca
-// são colunas dinâmicas, por construção.
+// são colunas dinâmicas, por construção. `tipo` (campo do frontmatter) é o
+// mesmo dado da coluna fixa "type" (Tipo) — também fica de fora, senão viraria
+// uma coluna duplicada.
 func isDynamicColumnField(field string) bool {
 	switch strings.ToLower(field) {
-	case "arquivo", "titulo", "tags", "mtime", "type", "pai", "parent", "markmap":
+	case "arquivo", "titulo", "tags", "mtime", "type", "tipo", "pai", "parent", "markmap":
 		return false
 	}
 	return true

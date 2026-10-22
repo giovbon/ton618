@@ -36,6 +36,11 @@ var (
 	quoteRegex       = regexp.MustCompile(`"([^"]+)"`)
 	singleQuoteRegex = regexp.MustCompile(`'([^']+)'`)
 	tagFilterRegex   = regexp.MustCompile(`\+?tags:("[^"]+"|[^\s]+)`)
+	// tipoFilterRegex casa os filtros de tipo de nota (`tipo:pdf`,
+	// `type:"mapa mental"`, case-insensitive) — alias `type:` aceito.
+	// Vocabulário canônico PT snake_case: domain.NormalizeNoteTipo
+	// (ver note_tipo.go).
+	tipoFilterRegex = regexp.MustCompile(`(?i)\+?(?:tipo|type):("[^"]+"|[^\s]+)`)
 	cleanQueryRe     = regexp.MustCompile(`[\+\*"]`)
 	spacesRe         = regexp.MustCompile(`\s+`)
 	nativeHashtag    = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
@@ -51,6 +56,14 @@ var (
 // em vaults grandes. O `total` continua exato (vem do COUNT), só reduzimos
 // quantos documentos são carregados para re-ranking.
 const maxTagOnlyCandidates = 500
+
+// searchFragmentsPerNote é quantos FRAGMENTOS (docs) da mesma nota a busca
+// carrega por página de RESULTADOS. A página é de notas (cards): o handler
+// agrupa os hits por arquivo e mostra até maxSnippetsPerNote trechos de cada
+// nota (ex.: várias linhas da planilha Tabulator com o termo) — o pool de
+// candidatos e o trim final seguem essa proporção pra não matar os fragmentos
+// extras antes do agrupamento.
+const searchFragmentsPerNote = 5
 
 // sanitizeFTS5Term removes characters that interfere with FTS5 query syntax.
 func sanitizeFTS5Term(term string) string {
@@ -393,35 +406,37 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		return listAll(store, from, size)
 	}
 
-	// Extrai tags e a query restante
-	queryTags, remainingQuery := extractTags(rawQuery)
+	// Extrai tags, filtro de tipo e a query restante
+	noteTipos, withoutTipos := extractNoteTipo(rawQuery)
+	queryTags, remainingQuery := extractTags(withoutTipos)
 	remainingQuery = strings.TrimSpace(remainingQuery)
 
 	// 1. Try FTS5 first
 	ftsQuery := buildFTSQueryWithSynonyms(rawQuery, loadSynonymLookup(store))
-	// Se a busca textual é vazia mas temos tags, o FTS já filtra pela tag;
-	// ampliamos o pool de candidatos para re-ranking, mas de forma limitada
-	// (evita materializar o corpus inteiro — ver maxTagOnlyCandidates).
-	limitSize := size * 3
-	if remainingQuery == "" && len(queryTags) > 0 {
+	// Se a busca textual é vazia mas temos tags ou filtro de tipo, o FTS já
+	// filtra por eles; ampliamos o pool de candidatos para re-ranking, mas de
+	// forma limitada (evita materializar o corpus inteiro — ver
+	// maxTagOnlyCandidates).
+	limitSize := size * searchFragmentsPerNote
+	if remainingQuery == "" && (len(queryTags) > 0 || len(noteTipos) > 0) {
 		limitSize = size * 10
 		if limitSize > maxTagOnlyCandidates {
 			limitSize = maxTagOnlyCandidates
 		}
 	}
-	results, total, err := store.SearchFTSWithContext(ctx, ftsQuery, from, limitSize)
+	results, total, err := store.SearchFTSWithContext(ctx, ftsQuery, from, limitSize, noteTipos)
 	ftsFailed := false
 	if err != nil {
 		log.Printf("[Search] FTS5 error: %v, falling back to LIKE\n", err)
 		ftsFailed = true
-		results, total, _ = store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, limitSize)
+		results, total, _ = store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, limitSize, noteTipos)
 	}
 
 	// 2. Fallback fuzzy (LIKE) SOMENTE quando o FTS não achou nada. Antes
 	// disparava com `total < 3`, forçando um full scan de `documents` (~80ms)
 	// mesmo quando o FTS já tinha 1-2 resultados legítimos.
 	if total == 0 && remainingQuery != "" && !ftsFailed {
-		likeResults, likeTotal, _ := store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, size*3)
+		likeResults, likeTotal, _ := store.SearchFTSLikeWithContext(ctx, remainingQuery, 0, size*3, noteTipos)
 		// total==0 ⇒ a página do FTS está vazia; o conjunto é todo do LIKE.
 		results = likeResults
 		total = likeTotal
@@ -520,9 +535,10 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		return hits[i].FinalScore > hits[j].FinalScore
 	})
 
-	// 5. Trim to requested size
-	if len(hits) > size {
-		hits = hits[:size]
+	// 5. Trim em FRAGMENTOS (não notas): o agrupamento por nota acontece no
+	// handler, que precisa ver todos os fragmentos candidatos da página.
+	if len(hits) > size*searchFragmentsPerNote {
+		hits = hits[:size*searchFragmentsPerNote]
 	}
 
 	return &SearchResults{Hits: hits, Total: total}, nil
@@ -560,11 +576,19 @@ func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string 
 		return ""
 	}
 
-	// Extrai tags e a query restante
-	tags, remaining := extractTags(raw)
+	// Extrai filtro de tipo, tags e a query restante (nessa ordem: o `tipo:`
+	// sai primeiro para não virar termo de conteúdo).
+	tipos, withoutTipos := extractNoteTipo(raw)
+	tags, remaining := extractTags(withoutTipos)
 	remaining = strings.TrimSpace(remaining)
 
 	var parts []string
+
+	// Filtro por tipo de nota (`tipo:mapa_mental`): predicado na coluna
+	// note_type (migração v24). Múltiplos filtros viram OR.
+	if pred := noteTypeFTSPredicate(tipos); pred != "" {
+		parts = append(parts, pred)
+	}
 
 	// Adiciona restrições de tags no formato FTS5 tags:"nome_da_tag"
 	for _, tag := range tags {
@@ -744,6 +768,7 @@ func extractTerms(raw string) []string {
 	}
 
 	clean := tagFilterRegex.ReplaceAllString(remaining, " ")
+	clean = tipoFilterRegex.ReplaceAllString(clean, " ")
 	clean = cleanQueryRe.ReplaceAllString(clean, " ")
 	words := strings.Fields(strings.ToLower(clean))
 
@@ -757,6 +782,7 @@ func extractTerms(raw string) []string {
 }
 
 func cleanQuery(raw string) string {
+	raw = tipoFilterRegex.ReplaceAllString(raw, " ")
 	clean := strings.ToLower(cleanQueryRe.ReplaceAllString(raw, " "))
 	return strings.TrimSpace(spacesRe.ReplaceAllString(clean, " "))
 }
@@ -780,6 +806,51 @@ func extractTags(raw string) (tags []string, remaining string) {
 		}
 	}
 	return tags, remaining
+}
+
+// extractNoteTipo extrai os filtros de tipo de nota da query (`tipo:pdf`,
+// `type:"mapa mental"`) e devolve os valores normalizados para o vocabulário
+// PT snake_case (domain.NormalizeNoteTipo) junto da query sem eles. Múltiplos
+// filtros são unidos por OR no predicado.
+func extractNoteTipo(raw string) (tipos []string, remaining string) {
+	remaining = raw
+	for _, m := range tipoFilterRegex.FindAllStringSubmatch(remaining, -1) {
+		if len(m) < 2 {
+			continue
+		}
+		if v := domain.NormalizeNoteTipo(strings.Trim(m[1], `"`)); v != "" {
+			tipos = append(tipos, v)
+		}
+		remaining = strings.Replace(remaining, m[0], " ", 1)
+	}
+	return tipos, remaining
+}
+
+// noteTypeFTSPredicate monta o predicado FTS5 da coluna note_type. O valor vai
+// entre aspas (frase): "mapa_mental" tokeniza como mapa+mental adjacentes e casa
+// com o texto indexado "mapa_mental". Caracteres fora de letras/dígitos/_ são
+// removidos antes (mesma limpeza das tags).
+func noteTypeFTSPredicate(tipos []string) string {
+	var or []string
+	for _, t := range tipos {
+		t = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+				return r
+			}
+			return -1
+		}, t)
+		if t != "" {
+			or = append(or, `note_type:"`+t+`"`)
+		}
+	}
+	switch len(or) {
+	case 0:
+		return ""
+	case 1:
+		return or[0]
+	default:
+		return "(" + strings.Join(or, " OR ") + ")"
+	}
 }
 
 // HasExplicitTagFilter indica se a query contém um filtro explícito de tag

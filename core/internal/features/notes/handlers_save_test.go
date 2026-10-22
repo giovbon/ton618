@@ -78,7 +78,8 @@ func TestHandleFileSave_ConteudoPersistidoNoBanco(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro ao buscar nota no banco: %v", err)
 	}
-	if content != "Conteudo persistido no banco" {
+	// O save garante o campo `tipo:` no frontmatter (vocabulário PT).
+	if content != "---\ntipo: nota\n---\nConteudo persistido no banco" {
 		t.Errorf("conteudo incorreto no banco: %q", content)
 	}
 }
@@ -167,7 +168,7 @@ func TestHandleNoteSaveJSON_ConteudoPersistidoNoBanco(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro ao buscar nota no banco: %v", err)
 	}
-	if content != "Conteudo via JSON" {
+	if content != "---\ntipo: nota\n---\nConteudo via JSON" {
 		t.Errorf("conteudo incorreto no banco: %q", content)
 	}
 }

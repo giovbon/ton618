@@ -271,6 +271,7 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 			Timestamp: doc.Timestamp,
 			CreatedAt: doc.Created,
 			Hash:      doc.Hash,
+			NoteType:  doc.NoteType,
 		}
 		if err := store.InsertDocument(dbDoc); err != nil {
 			slog.Error("insert doc", "id", doc.ID, "error", err)

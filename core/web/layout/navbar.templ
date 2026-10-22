@@ -146,8 +146,8 @@ templ Navbar() {
                     <span id="todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                 </a>
                 <a id="nav-database" href="/database"
-                    class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Tabulator">
-                    @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator")) Tabulator
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Acervo">
+                    @icons.Icon(icons.GetIcon("acervo"), "w-4 h-4 " + icons.GetColor("acervo")) Acervo
                 </a>
 
                 <!-- Utility icons (cinza conforme especificado) -->
@@ -254,7 +254,7 @@ templ Navbar() {
                         <span id="mobile-todos-badge" hx-get={ "/api/todos/count?r=" + badgeCacheBuster() } hx-trigger="load, todos-updated from:body" hx-swap="innerHTML" hx-sync="this:replace" hx-request='{"timeout": 5000}' hx-on::timeout="todosBadgeOffline(this)" hx-on::sendError="todosBadgeOffline(this)"></span>
                     </a>
                     
-                    <!-- Tabulator: fora do menu mobile de propósito — a tabela
+                    <!-- Acervo: fora do menu mobile de propósito — a tabela
                          (árvore + várias colunas) não é utilizável numa tela de
                          celular. O acesso continua no menu do desktop
                          (#nav-database) e pela URL /database. -->
@@ -316,7 +316,7 @@ templ Navbar() {
                 const mNav = document.getElementById('mobile-nav-todos');
                 if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-amber-400 bg-amber-950/40 border border-amber-500/20 transition-colors';
             } else if (path === '/database') {
-                // Só o item do desktop: o Tabulator saiu do menu mobile de propósito.
+                // Só o item do desktop: o Acervo saiu do menu mobile de propósito.
                 const nav = document.getElementById('nav-database');
                 if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 transition-all';
             }

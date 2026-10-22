@@ -40,6 +40,7 @@ var Config = map[string]IconSpec{
 	"task":      {Icon: "construction", Color: "text-amber-400"},
 	"todos":     {Icon: "construction", Color: "text-amber-400"},
 	"tabulator": {Icon: "container", Color: "#10C809"},
+	"acervo":    {Icon: "database", Color: "#10C809"},
 	"captura":   {Icon: "link", Color: "text-zinc-400"},
 
 	// ── BUSCA E FILTROS ──

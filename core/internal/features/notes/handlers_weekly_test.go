@@ -38,9 +38,17 @@ func TestHandleWeekly_CriaNotaERedireciona(t *testing.T) {
 		t.Fatalf("nota semanal não foi criada: %v", err)
 	}
 
-	// A nota nasce em BRANCO (só a quebra de linha exigida pelo salvamento).
-	if strings.TrimSpace(content) != "" {
-		t.Errorf("nota semanal deveria nascer vazia, got %q", content)
+	// A nota nasce com apenas o campo `tipo:` (injetado pelo caminho de save no
+	// vocabulário PT); o corpo fica vazio, pronto para a semana.
+	fm, body, ferr := ParseFrontmatter(content)
+	if ferr != nil {
+		t.Fatalf("frontmatter da nota semanal inválido: %v", ferr)
+	}
+	if fm == nil || fm["tipo"] != "semanal" {
+		t.Errorf("nota semanal deveria nascer com `tipo: semanal`, got %q", content)
+	}
+	if strings.TrimSpace(body) != "" {
+		t.Errorf("corpo da nota semanal deveria nascer vazio, got %q", body)
 	}
 
 	tags, err := ctx.Store.GetFileTags(filename)
@@ -88,9 +96,12 @@ func TestHandleWeekly_IdempotenteNaMesmaSemana(t *testing.T) {
 		t.Fatalf("status esperado %d, got %d", http.StatusFound, rec.Code)
 	}
 
+	// O save injeta o campo `tipo:` no frontmatter (vocabulário PT) — o corpo
+	// editado pelo usuário é preservado e o segundo acesso não sobrescreve.
+	editedComTipo := "---\ntipo: semanal\n---\n" + edited
 	content, _ := ctx.Store.GetNote(filename)
-	if content != edited {
-		t.Errorf("conteúdo da nota foi sobrescrito.\ngot:  %q\nwant: %q", content, edited)
+	if content != editedComTipo {
+		t.Errorf("conteúdo da nota foi sobrescrito.\ngot:  %q\nwant: %q", content, editedComTipo)
 	}
 
 	// Não deve existir nenhuma outra nota com nome de semana.

@@ -169,7 +169,8 @@ func initSchema(database *sql.DB) error {
 			ordem       INTEGER DEFAULT 0,
 			timestamp   TEXT DEFAULT '',
 			created_at  TEXT DEFAULT '',
-			hash        TEXT DEFAULT ''
+			hash        TEXT DEFAULT '',
+			note_type   TEXT DEFAULT ''
 		);
 	`
 
@@ -181,6 +182,7 @@ func initSchema(database *sql.DB) error {
 		secao,
 		texto,
 		tags,
+		note_type,
 		tokenize='unicode61'
 	);
 
@@ -420,6 +422,32 @@ func migrate(database *sql.DB) {
 			'ollama_model'
 		)`)
 		markApplied(23)
+	}
+
+	// v24: campo `tipo:` — coluna note_type em documents e docs_fts, usada pelo
+	// filtro `tipo:` da busca global e do Acervo (vocabulário PT snake_case:
+	// mapa_mental, anexo, nota, ...). A tabela virtual FTS5 não aceita ALTER
+	// TABLE ADD COLUMN: docs_fts é dropada e recriada com a coluna nova. O
+	// DELETE FROM file_mods força a reindexação completa de arquivos (notas
+	// também são reindexadas: SyncDatabaseWithContext reprocessa as que estão
+	// sem file_mods) — é o que preenche note_type em todas as linhas; junto,
+	// EnsureNoteTypeField faz o backfill do frontmatter das notas.
+	if !isApplied(24) {
+		database.Exec("ALTER TABLE documents ADD COLUMN note_type TEXT DEFAULT ''")
+		database.Exec("DROP TABLE IF EXISTS docs_fts")
+		database.Exec(`
+		CREATE VIRTUAL TABLE docs_fts USING fts5(
+			doc_id,
+			tipo,
+			arquivo,
+			secao,
+			texto,
+			tags,
+			note_type,
+			tokenize='unicode61'
+		)`)
+		database.Exec("DELETE FROM file_mods")
+		markApplied(24)
 	}
 }
 

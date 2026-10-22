@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"strings"
 	"ton618/core/internal/core/db/generated"
+	"ton618/core/internal/core/domain"
 )
 
 // Document represents a single document/chunk stored in the database.
@@ -19,6 +20,9 @@ type Document struct {
 	Timestamp string
 	CreatedAt string
 	Hash      string
+	// NoteType é o valor do campo `tipo:` da nota de origem (coluna note_type,
+	// filtro `tipo:` da busca). Vazio = DeriveNoteType (tags + caminho).
+	NoteType string
 }
 
 // TagsToSlice converts a comma-separated tag string to a slice.
@@ -32,6 +36,15 @@ func TagsToSlice(tags string) []string {
 // SliceToTags joins a tag slice into a comma-separated string.
 func SliceToTags(tags []string) string {
 	return strings.Join(tags, ",")
+}
+
+// DeriveNoteType calcula o valor da coluna note_type (vocabulário `tipo:` do
+// frontmatter) a partir de tags persistidas + caminho do arquivo — o mesmo
+// DetectNoteType do domínio, mapeado para o valor PT (mapa_mental, anexo, ...).
+// Usado quando o processor não informou Document.NoteType (uploads/watcher de
+// binários, onde o tipo é sempre derivável do caminho).
+func DeriveNoteType(tags, arquivo string) string {
+	return domain.FrontmatterTipo(domain.DetectNoteType(TagsToSlice(tags), arquivo))
 }
 
 // fromDBGen converts a dbgen.Document to a db.Document
@@ -55,7 +68,7 @@ func fromDBGen(d dbgen.Document) Document {
 func (s *Store) InsertDocument(doc Document) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	return s.Q.InsertDocument(s.queryCtx(), dbgen.InsertDocumentParams{
+	if err := s.Q.InsertDocument(s.queryCtx(), dbgen.InsertDocumentParams{
 		ID:        doc.ID,
 		Tipo:      sql.NullString{String: doc.Tipo, Valid: true},
 		Arquivo:   sql.NullString{String: doc.Arquivo, Valid: true},
@@ -67,7 +80,19 @@ func (s *Store) InsertDocument(doc Document) error {
 		Timestamp: sql.NullString{String: doc.Timestamp, Valid: true},
 		CreatedAt: sql.NullString{String: doc.CreatedAt, Valid: true},
 		Hash:      sql.NullString{String: doc.Hash, Valid: true},
-	})
+	}); err != nil {
+		return err
+	}
+	// Coluna note_type (migração v24): derivada de tags + caminho. O INSERT do
+	// sqlc (query.sql) não a lista — gravamos logo após, evitando regenerar o
+	// código gerado sem o CLI sqlc no ambiente. Dado derivado: se a escrita
+	// falhar, a próxima reindexação corrige.
+	noteType := doc.NoteType
+	if noteType == "" {
+		noteType = DeriveNoteType(doc.Tags, doc.Arquivo)
+	}
+	_, _ = s.DB.ExecContext(s.queryCtx(), "UPDATE documents SET note_type = ? WHERE id = ?", noteType, doc.ID)
+	return nil
 }
 
 // DeleteDocument removes a single document by ID.

@@ -49,16 +49,16 @@ func (s *Store) ReplaceFileIndexes(
 
 	docStmt, err := tx.PrepareContext(ctx, `
 		INSERT OR REPLACE INTO documents 
-		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, tipo, arquivo, secao, texto, tags, pagina, ordem, timestamp, created_at, hash, note_type) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer docStmt.Close()
 
 	ftsStmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) 
-		VALUES (?, ?, ?, ?, ?, ?)`)
+		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, note_type) 
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -66,14 +66,20 @@ func (s *Store) ReplaceFileIndexes(
 
 	for _, doc := range docs {
 		tagsStr := SliceToTags(doc.Tags)
+		// note_type (campo `tipo:`): o processor informa o valor content-aware
+		// (markdown/tabulator); senão deriva de tags + caminho (binários).
+		noteType := doc.NoteType
+		if noteType == "" {
+			noteType = DeriveNoteType(tagsStr, doc.Arquivo)
+		}
 		if _, err := docStmt.Exec(
 			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
-			doc.Pagina, doc.Ordem, doc.Timestamp, doc.Created, doc.Hash,
+			doc.Pagina, doc.Ordem, doc.Timestamp, doc.Created, doc.Hash, noteType,
 		); err != nil {
 			return err
 		}
 		if _, err := ftsStmt.Exec(
-			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
+			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr, noteType,
 		); err != nil {
 			return err
 		}
