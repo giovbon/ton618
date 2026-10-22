@@ -186,6 +186,20 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 		})
 	}
 	columns = append(columns, map[string]interface{}{"title": "Modificação", "field": "mtime", "editor": false, "visible": false})
+	// Coluna nativa de ações: exclui a NOTA (ou arquivo) correspondente. Fica
+	// por último, é fixa (não ordenável/redimensionável) e o database.js a
+	// renderiza como o botão "×" da nota Tabulator. O usuário não pode ocultá-la
+	// pelo seletor de colunas (ver populateColumnCheckboxes).
+	columns = append(columns, map[string]interface{}{
+		"title":      "",
+		"field":      "_actions",
+		"width":      44,
+		"minWidth":   44,
+		"headerSort": false,
+		"resizable":  false,
+		"hozAlign":   "center",
+		"visible":    true,
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	meta := map[string]interface{}{"hasTree": hasTree, "total": len(noteList)}

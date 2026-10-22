@@ -67,9 +67,16 @@
         return html;
     };
 
-    // Seam de teste: o formatter é puro (recebe a célula e devolve HTML) e não
-    // depende do DOM/Tabulator. Exposto para o teste unitário cobrir o escaping.
-    window.DatabaseUtils = { tagsFormatter: tagsFormatter };
+    // ── Formatter da coluna nativa de excluir registro ──
+    // Mesmo botão "×" da nota Tabulator — mas no Acervo o clique exclui a
+    // NOTA/arquivo da linha (não uma linha de planilha). Ver deleteRowNote.
+    var actionsFormatter = function () {
+        return '<button type="button" class="db-del-btn" title="Excluir registro">&times;</button>';
+    };
+
+    // Seam de teste: os formatters são puros (recebem a célula e devolvem HTML)
+    // e não dependem do DOM/Tabulator. Expostos para os testes unitários.
+    window.DatabaseUtils = { tagsFormatter: tagsFormatter, actionsFormatter: actionsFormatter };
 
     // ── Ícone fallback ──
     // O ícone real (SVG) já vem pronto do servidor no campo _icon de cada linha
@@ -689,6 +696,21 @@
                         c.minWidth = 240;
                     }
 
+                    // Coluna nativa de excluir registro: sempre visível (não é
+                    // controlável pelo seletor de colunas) e sem editor. O
+                    // clique no "×" exclui a nota/arquivo da linha.
+                    if (c.field === "_actions") {
+                        c.visible = true;
+                        c.formatter = actionsFormatter;
+                        c.cellClick = function (e, cell) {
+                            var target = e.target;
+                            if (target && target.classList && target.classList.contains("db-del-btn")) {
+                                deleteRowNote(cell.getRow());
+                            }
+                        };
+                        return c;
+                    }
+
                     // tags column
                     if (c.field === "tags") {
                         c.formatter = tagsFormatter;
@@ -806,9 +828,13 @@
                 var treeActions = document.getElementById("db-tree-actions");
                 if (treeActions) treeActions.style.display = hasTree ? "" : "none";
 
-                // Populate column selector checkboxes (a coluna do toggle da
-                // árvore não pode ser ocultada — ver populateColumnCheckboxes)
-                populateColumnCheckboxes(cols, table, hasTree ? ["titulo"] : null);
+                // Populate column selector checkboxes. A coluna de exclusão é
+                // nativa e sempre visível; no modo árvore, a coluna do título
+                // também não pode ser ocultada (é onde vive o toggle dos filhos).
+                // Ver populateColumnCheckboxes.
+                var lockedColumns = ["_actions"];
+                if (hasTree) lockedColumns.push("titulo");
+                populateColumnCheckboxes(cols, table, lockedColumns);
 
                 // ⚠️ Os listeners de DOM (busca, botão de modo e seletor de
                 // colunas) são registrados UMA vez no bootstrap: initTabulator
@@ -830,6 +856,7 @@
                 table.on("rowDblClick", function (e, row) {
                     var target = /** @type {HTMLElement} */ (e.target);
                     if (target.closest(".tabulator-data-tree-control")) return; // expandir/recolher
+                    if (target.closest(".db-del-btn")) return; // excluir registro
                     if (target.closest("a")) return; // defensivo: qualquer link presente na linha
 
                     var data = row.getData();
@@ -1017,6 +1044,40 @@
         } catch (e) {
             reinit();
         }
+    }
+
+    // ── Excluir a nota da linha (coluna nativa de ações) ──
+    // Reaproveita o endpoint /file/delete, que remove a nota/arquivo e os
+    // registros do índice (inclusive os datasets/ de notas Tabulator). Depois
+    // recarrega a tabela do servidor: apagar uma nota-mãe transforma as filhas
+    // em órfãs e o Tabulator não recalcula a árvore sozinho.
+    function deleteRowNote(row) {
+        var data = row && row.getData ? row.getData() : null;
+        var arquivo = data && data.arquivo;
+        if (!arquivo) return;
+
+        var nome = EditorCommon.getDisplayName(arquivo);
+        if (!window.confirm('Excluir definitivamente "' + nome + '"?')) return;
+
+        var fd = new FormData();
+        fd.append("filename", arquivo);
+
+        fetch("/file/delete", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
+            .then(async function (r) {
+                if (!r.ok) {
+                    var detalhe = await r.text();
+                    throw new Error(detalhe || r.statusText);
+                }
+                // O header HX-Trigger do servidor não é processado por fetch:
+                // avisa a sidebar (HTMX) para recarregar a lista.
+                try {
+                    if (document.body) document.body.dispatchEvent(new Event("reload-sidebar"));
+                } catch (e) { }
+                reloadTable();
+            })
+            .catch(function (err) {
+                alert("Erro ao excluir nota: " + (err && err.message ? err.message : err));
+            });
     }
 
     // ── Search ──

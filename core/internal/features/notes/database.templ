@@ -132,6 +132,23 @@ templ databaseContent() {
         margin-right: 4px;
         margin-bottom: 2px;
     }
+    /* ── Coluna nativa de excluir registro (mesmo botão "×" da nota
+       Tabulator; aqui o clique exclui a NOTA da linha — ver deleteRowNote em
+       database.js). ── */
+    #notes-table .db-del-btn {
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        color: #71717a;
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+        padding: 0 6px;
+    }
+    #notes-table .db-del-btn:hover {
+        background: rgba(127, 29, 29, 0.25);
+        color: #f87171;
+    }
     /* ── Hierarquia de notas (módulo Data Tree) ──
        Controle padrão do Tabulator, recolorido para o dark mode do TON-618.
        ⚠️ Não use dataTreeExpandElement/CollapseElement: o Tabulator substitui o

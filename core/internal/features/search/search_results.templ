@@ -137,11 +137,9 @@ templ searchResultItem(res domain.SearchResultItem, query string) {
 					{ domain.DisplayName(res.Arquivo) }
 				</a>
 			</div>
-			if res.Secao != "" {
-				<div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase search-section-title">
-					@templ.Raw(highlightSpans(res.Secao, query))
-				</div>
-			}
+		<div class="text-[10px] text-zinc-600 font-medium mb-2 tracking-wide uppercase search-section-title">
+				@templ.Raw(highlightSpans(res.Secao, query))
+			</div>
 			<!-- Sem line-clamp: um line-clamp (ex.: 4 linhas) pode cortar VISUALMENTE
 			     o trecho quando a ocorrência está fundo num parágrafo longo — o span de
 			     destaque existe no HTML, mas fica além das linhas exibidas e o termo
