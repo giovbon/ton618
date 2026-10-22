@@ -621,6 +621,11 @@ func TestHandleCleanupImages_RemovesOrphanInImagesDir(t *testing.T) {
 		t.Fatalf("erro ao criar imagem: %v", err)
 	}
 	ctx.Store.SetFileMod(imgName, "2025-01-01T00:00:00Z")
+	// Imagem com pai gravado em file_metadata: a limpeza precisa levar o
+	// metadado junto (senão o pai fica com uma filha fantasma para sempre).
+	if err := ctx.Store.SetFileMetadata(imgName, "pai", "notes/pai.md"); err != nil {
+		t.Fatalf("SetFileMetadata: %v", err)
+	}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/cleanup-images", nil)
@@ -636,6 +641,13 @@ func TestHandleCleanupImages_RemovesOrphanInImagesDir(t *testing.T) {
 	mod, _ := ctx.Store.GetFileMod(imgName)
 	if mod != "" {
 		t.Error("file_mod da imagem deveria ser removido do banco")
+	}
+	meta, err := ctx.Store.GetFileMetadata(imgName)
+	if err != nil {
+		t.Fatalf("GetFileMetadata: %v", err)
+	}
+	if len(meta) != 0 {
+		t.Errorf("file_metadata da imagem deveria ser removido, got %v", meta)
 	}
 }
 

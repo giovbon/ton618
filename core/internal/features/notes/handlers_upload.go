@@ -340,13 +340,13 @@ func (ctx *HandlerContext) HandleCleanupImages(w http.ResponseWriter, r *http.Re
 				continue
 			}
 
-			// Remove registros do DB
-			ctx.Store.DeleteDocumentsByFile(filename)
-			ctx.Store.DeleteFTSByFile(filename)
-			ctx.Store.DeleteFileMod(filename)
-			ctx.Store.ResetPopularity(filename)
-			ctx.Store.SetFileTags(filename, nil)
-			ctx.Store.ClearLinks(filename)
+			// Remove registros do DB pela fonte única de limpeza. Os deletes
+			// seletivos anteriores não tocavam em file_metadata: a imagem saía
+			// do disco/índice, mas o `pai:` continuava contando como filha
+			// fantasma em GetChildrenCounts/GetHierarchy para sempre.
+			if err := ctx.Store.DeleteAllFileRecords(filename); err != nil {
+				errors = append(errors, fmt.Sprintf("%s: erro ao remover registros: %v", name, err))
+			}
 
 			removed = append(removed, name)
 		}
