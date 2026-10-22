@@ -232,8 +232,14 @@ test('uploads via XMLHttpRequest incluem header Authorization (setXHRAuth)', (t)
   const filePath = path.join(SRC_DIR, 'app.js');
   const code = fs.readFileSync(filePath, 'utf8');
 
-  // Endpoints POST protegidos enviados via XMLHttpRequest em src/app.js
+  // Endpoints POST protegidos enviados via XMLHttpRequest em src/app.js.
+  // Eles podem ser abertos direto (xhr.open) ou passados ao helper comum
+  // uploadWithProgress({ url: ... }); nos dois casos o setXHRAuth precisa
+  // acontecer antes do send.
   const xhrEndpoints = ['/upload', '/api/upload-attachment'];
+  const helperIdx = code.indexOf('function uploadWithProgress');
+  const helper = helperIdx === -1 ? '' : code.substring(helperIdx, helperIdx + 2000);
+  const helperHasAuth = helper.includes('setXHRAuth(xhr)');
 
   for (const ep of xhrEndpoints) {
     let found = 0;
@@ -253,19 +259,27 @@ test('uploads via XMLHttpRequest incluem header Authorization (setXHRAuth)', (t)
       idx = openIdx + 1;
     }
 
-    assert.ok(
-      found > 0,
-      `Nenhum XMLHttpRequest para "${ep}" encontrado em ${path.relative(ROOT, filePath)}`
-    );
+    if (found === 0) {
+      const optsIdx = code.indexOf(`url: "${ep}"`);
+      assert.ok(
+        optsIdx !== -1,
+        `Nenhum upload XMLHttpRequest para "${ep}" encontrado em ${path.relative(ROOT, filePath)}`
+      );
+      assert.ok(
+        helperHasAuth,
+        `uploadWithProgress (usado por "${ep}") deve chamar setXHRAuth(xhr) ` +
+          `(senão o upload falha com 401 após o cookie expirar).`
+      );
+    }
   }
 
   // O helper deve delegar ao token compartilhado (EditorCommon) em vez de
   // reimplementar a leitura de localStorage/cookie.
-  const helperIdx = code.indexOf('function setXHRAuth');
-  assert.ok(helperIdx !== -1, 'src/app.js deve definir setXHRAuth');
-  const helper = code.substring(helperIdx, helperIdx + 400);
+  const setAuthIdx = code.indexOf('function setXHRAuth');
+  assert.ok(setAuthIdx !== -1, 'src/app.js deve definir setXHRAuth');
+  const setAuth = code.substring(setAuthIdx, setAuthIdx + 400);
   assert.ok(
-    helper.includes('EditorCommon.getAuthHeaders'),
+    setAuth.includes('EditorCommon.getAuthHeaders'),
     'setXHRAuth deve usar EditorCommon.getAuthHeaders()'
   );
 });

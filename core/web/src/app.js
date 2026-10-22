@@ -14,6 +14,57 @@ function setXHRAuth(xhr) {
     }
 }
 
+// ── Upload via XHR ──
+/**
+ * Envia um FormData por XHR com auth, barra de progresso e estados de erro
+ * comuns aos uploads de PDF e anexo.
+ *
+ * @param {Object} opts
+ * @param {string} opts.url
+ * @param {FormData} opts.formData
+ * @param {HTMLElement | null} opts.link
+ * @param {string} opts.loadingLabel
+ * @param {string} opts.restoreLabel
+ * @param {string} opts.icon
+ * @param {string} opts.errorMessage        falha HTTP
+ * @param {string} [opts.networkErrorMessage] falha de rede (default: errorMessage)
+ */
+function uploadWithProgress(opts) {
+    setButtonLoading(opts.link, true, opts.loadingLabel, opts.icon);
+    showProgressBar(0, false);
+
+    function fail(message) {
+        setButtonLoading(opts.link, false, opts.restoreLabel, opts.icon);
+        hideProgressBar();
+        alert(message);
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", opts.url, true);
+    setXHRAuth(xhr);
+
+    xhr.upload.addEventListener("progress", function (evt) {
+        if (evt.lengthComputable) {
+            var pct = Math.round((evt.loaded / evt.total) * 100);
+            showProgressBar(pct, false);
+        }
+    });
+
+    xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            window.location.href = "/";
+        } else {
+            fail(opts.errorMessage);
+        }
+    };
+
+    xhr.onerror = function () {
+        fail(opts.networkErrorMessage || opts.errorMessage);
+    };
+
+    xhr.send(opts.formData);
+}
+
 // ── PDF Upload ──
 /** @type {HTMLElement | null} */
 var activePdfUploadButton = null;
@@ -26,39 +77,17 @@ document.addEventListener("change", function (e) {
         var link =
             activePdfUploadButton ||
             document.getElementById("pdf-upload-link");
-        setButtonLoading(link, true, "Processando...", "📕");
-        showProgressBar(0, false);
         var fd = new FormData();
         fd.append("file", file);
-        
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "/upload", true);
-        setXHRAuth(xhr);
-        
-        xhr.upload.addEventListener("progress", function (evt) {
-            if (evt.lengthComputable) {
-                var pct = Math.round((evt.loaded / evt.total) * 100);
-                showProgressBar(pct, false);
-            }
+        uploadWithProgress({
+            url: "/upload",
+            formData: fd,
+            link: link,
+            loadingLabel: "Processando...",
+            restoreLabel: "PDF",
+            icon: "📕",
+            errorMessage: "Erro ao fazer upload do PDF.",
         });
-        
-        xhr.onload = function () {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                window.location.href = "/";
-            } else {
-                setButtonLoading(link, false, "PDF", "📕");
-                hideProgressBar();
-                alert("Erro ao fazer upload do PDF.");
-            }
-        };
-        
-        xhr.onerror = function () {
-            setButtonLoading(link, false, "PDF", "📕");
-            hideProgressBar();
-            alert("Erro ao fazer upload do PDF.");
-        };
-        
-        xhr.send(fd);
         target.value = "";
     }
 });
@@ -75,37 +104,16 @@ if (zipInput) {
             fd.append("files", files[i]);
         }
         var link = document.getElementById("zip-upload-link");
-        setButtonLoading(link, true, "ZIPando...", "📦");
-        showProgressBar(0, false);
-
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/upload-attachment", true);
-        setXHRAuth(xhr);
-        
-        xhr.upload.addEventListener("progress", function (evt) {
-            if (evt.lengthComputable) {
-                var pct = Math.round((evt.loaded / evt.total) * 100);
-                showProgressBar(pct, false);
-            }
+        uploadWithProgress({
+            url: "/api/upload-attachment",
+            formData: fd,
+            link: link,
+            loadingLabel: "ZIPando...",
+            restoreLabel: "ANEXO",
+            icon: "📦",
+            errorMessage: "Erro ao criar anexo.",
+            networkErrorMessage: "Erro ao fazer upload.",
         });
-        
-        xhr.onload = function () {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                window.location.href = "/";
-            } else {
-                setButtonLoading(link, false, "ANEXO", "📦");
-                hideProgressBar();
-                alert("Erro ao criar anexo.");
-            }
-        };
-        
-        xhr.onerror = function () {
-            setButtonLoading(link, false, "ANEXO", "📦");
-            hideProgressBar();
-            alert("Erro ao fazer upload.");
-        };
-        
-        xhr.send(fd);
     });
 }
 
