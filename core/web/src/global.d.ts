@@ -56,6 +56,11 @@ interface Window {
     fileNameFromPath: (path: string) => string;
   };
 
+  // database.js — helpers puros expostos para testes unitários
+  DatabaseUtils: {
+    tagsFormatter: (cell: { getValue: () => any }) => string;
+  };
+
   // Editor helpers (editor-common.js)
   generateHash: (data: string) => Promise<string>;
   doSave: () => void;
