@@ -64,6 +64,9 @@ func TestNtfyService(t *testing.T) {
 	store.SetSetting("ntfy_topic", "test_topic")
 	store.SetSetting("ntfy_user", "test_user")
 	store.SetSetting("ntfy_pass", "test_pass")
+	// Fixa o fuso do usuário para o cálculo em UTC abaixo (senão o teste
+	// dependeria do TZ da máquina que roda a suíte).
+	store.SetSetting("agenda_timezone", "UTC")
 
 	svc := NewNtfyService(store)
 
@@ -208,6 +211,7 @@ func TestNtfy_LeadTimePrevisivel(t *testing.T) {
 
 	store.SetSetting("ntfy_url", server.URL)
 	store.SetSetting("ntfy_topic", "test_topic")
+	store.SetSetting("agenda_timezone", "UTC")
 
 	svc := NewNtfyService(store)
 
@@ -294,5 +298,108 @@ func TestNtfy_LeadHours_PadraoEConfiguravel(t *testing.T) {
 	store.SetSetting("agenda_notify_hours", "abc")
 	if got := svc.leadHours(); got != 24 {
 		t.Fatalf("valor inválido deveria cair para 24, got %d", got)
+	}
+}
+
+// TestNtfy_UsaTimeLocalQuandoTimezoneNaoConfigurado é a regressão do bug em que
+// `agenda_timezone` vazio caía para UTC. Como event_date é floating time (relógio
+// local), a oeste de UTC o evento parecia já ter passado e o lembrete NUNCA era
+// enviado (Brasil, UTC-3). Sem configuração, deve usar time.Local.
+func TestNtfy_UsaTimeLocalQuandoTimezoneNaoConfigurado(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("BRT", -3*3600)
+	defer func() { time.Local = oldLocal }()
+
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store.SetSetting("ntfy_url", server.URL)
+	store.SetSetting("ntfy_topic", "test_topic")
+
+	svc := NewNtfyService(store)
+
+	// 14:30 no relógio local (floating time)
+	store.CreateAppointment(domain.Appointment{
+		ID:          "app_local",
+		Description: "Consulta local",
+		EventDate:   "2026-07-08T14:30:00",
+	})
+
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests
+	}
+
+	// 1 segundo antes da janela (14:30 BRT de 07/07 = 17:30 UTC) → não envia
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 7, 17, 29, 59, 0, time.UTC))
+	if c := count(); c != 0 {
+		t.Fatalf("antes da janela deveria ter 0 notificações, got %d", c)
+	}
+
+	// Exatamente evento − 24h no horário local → envia
+	svc.checkAndSendEventRemindersAt(time.Date(2026, 7, 7, 17, 30, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("na janela deveria ter 1 notificação, got %d", c)
+	}
+}
+
+// TestNtfy_ResumoSemanalNoFusoDoUsuario garante que o "domingo" é decidido no
+// fuso do usuário: sábado 23h em São Paulo ainda é sábado (e não domingo 02h UTC).
+func TestNtfy_ResumoSemanalNoFusoDoUsuario(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store.SetSetting("ntfy_url", server.URL)
+	store.SetSetting("ntfy_topic", "test_topic")
+	store.SetSetting("agenda_timezone", "America/Sao_Paulo")
+
+	// Segunda-feira 2026-07-06 às 09:00 no horário local
+	store.CreateAppointment(domain.Appointment{
+		ID:          "app_week",
+		Description: "Planejamento",
+		EventDate:   "2026-07-06T09:00:00",
+	})
+
+	svc := NewNtfyService(store)
+
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests
+	}
+
+	// Sábado 2026-07-04 23:00 BRT == domingo 02:00 UTC → NÃO deve enviar
+	svc.checkAndSendWeeklySummaryAt(time.Date(2026, 7, 5, 2, 0, 0, 0, time.UTC))
+	if c := count(); c != 0 {
+		t.Fatalf("sábado local não deveria enviar resumo semanal, got %d", c)
+	}
+
+	// Domingo 2026-07-05 12:00 BRT → envia e lista o evento da semana seguinte
+	svc.checkAndSendWeeklySummaryAt(time.Date(2026, 7, 5, 15, 0, 0, 0, time.UTC))
+	if c := count(); c != 1 {
+		t.Fatalf("domingo local deveria enviar 1 resumo semanal, got %d", c)
 	}
 }

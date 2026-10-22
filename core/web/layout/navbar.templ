@@ -59,12 +59,6 @@ templ Navbar() {
 
             <div class="hidden md:flex items-center gap-3 text-[11px] font-bold tracking-wide uppercase">
 
-                <!-- 🗓️ NOTA DA SEMANA (acesso direto, só o ícone) -->
-                <a id="nav-semana" href="/semana" title="Nota da semana"
-                    class="flex items-center justify-center p-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all">
-                    @icons.Icon(icons.GetIcon("semanal"), "w-3.5 h-3.5 " + icons.GetColor("semanal"))
-                </a>
-
                 <!-- ＋ CRIAR dropdown -->
                 <div class="relative" id="criar-dropdown-wrapper" x-data="{ open: false }" @click.outside="open = false">
                     <button id="criar-btn"
@@ -79,6 +73,10 @@ templ Navbar() {
                         <a href="/editor" @click="open = false"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota")) <span>+ Nota</span>
+                        </a>
+                        <a id="nav-semana" href="/semana" title="Nota da semana" @click="open = false"
+                            class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
+                            @icons.Icon(icons.GetIcon("semanal"), "w-4 h-4 " + icons.GetColor("semanal")) <span>+ Semana</span>
                         </a>
                         <a href="/drawing"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">

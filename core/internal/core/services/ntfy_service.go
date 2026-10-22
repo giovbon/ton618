@@ -150,9 +150,15 @@ func (s *NtfyService) leadHours() int {
 	return hours
 }
 
-// userLocation retorna o timezone configurado pelo usuário (default UTC).
+// userLocation retorna o timezone configurado pelo usuário.
+//
+// Default: time.Local. Os horários da agenda são "floating time" (sem tz), ou
+// seja, representam o relógio local do usuário. Interpretá-los em UTC quando
+// `agenda_timezone` não está definido desloca todos os lembretes pelo offset do
+// fuso: a oeste de UTC o evento parece já ter passado e o lembrete nunca é
+// enviado (ex.: Brasil, UTC-3).
 func (s *NtfyService) userLocation() *time.Location {
-	loc := time.UTC
+	loc := time.Local
 	if tzName, err := s.store.GetSetting("agenda_timezone"); err == nil && tzName != "" {
 		if parsed, err := time.LoadLocation(tzName); err == nil {
 			loc = parsed
@@ -166,14 +172,20 @@ func (s *NtfyService) CheckAndSendWeeklySummary() {
 }
 
 func (s *NtfyService) checkAndSendWeeklySummaryAt(now time.Time) {
-	// Somente aos domingos
-	if now.Weekday() != time.Sunday {
+	// Resumo semanal é calculado no fuso do usuário (o mesmo usado nos
+	// lembretes). Sem isso, com o servidor em UTC o "domingo" começaria às 21h
+	// de sábado no Brasil e a semana listada ficaria deslocada.
+	loc := s.userLocation()
+	nowLocal := now.In(loc)
+
+	// Somente aos domingos (horário local do usuário)
+	if nowLocal.Weekday() != time.Sunday {
 		return
 	}
 
 	// Identificar próxima semana (segunda a domingo)
-	monday := now.AddDate(0, 0, 1)
-	mondayStart := time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, monday.Location())
+	monday := nowLocal.AddDate(0, 0, 1)
+	mondayStart := time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, loc)
 	nextSundayEnd := mondayStart.AddDate(0, 0, 7) // até segunda que vem as 00:00
 
 	year, week := mondayStart.ISOWeek()
@@ -195,15 +207,17 @@ func (s *NtfyService) checkAndSendWeeklySummaryAt(now time.Time) {
 		if err != nil {
 			continue
 		}
+		// Interpreta o horário flutuante no fuso do usuário (igual aos lembretes)
+		tLocal := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 
-		if (t.Equal(mondayStart) || t.After(mondayStart)) && t.Before(nextSundayEnd) {
-			upcoming = append(upcoming, fmt.Sprintf("- %s: %s", t.Format("02/01 15:04"), a.Description))
+		if (tLocal.Equal(mondayStart) || tLocal.After(mondayStart)) && tLocal.Before(nextSundayEnd) {
+			upcoming = append(upcoming, fmt.Sprintf("- %s: %s", tLocal.Format("02/01 15:04"), a.Description))
 		}
 	}
 
 	if len(upcoming) == 0 {
 		// Mesmo sem agendamentos, registrar para não checar novamente hoje
-		s.store.RecordNotificationSent(logID, "weekly", now.Format(time.RFC3339))
+		s.store.RecordNotificationSent(logID, "weekly", nowLocal.Format(time.RFC3339))
 		return
 	}
 
@@ -214,6 +228,6 @@ func (s *NtfyService) checkAndSendWeeklySummaryAt(now time.Time) {
 	if err != nil {
 		slog.Error("ntfy weekly send failed", "error", err)
 	} else {
-		s.store.RecordNotificationSent(logID, "weekly", now.Format(time.RFC3339))
+		s.store.RecordNotificationSent(logID, "weekly", nowLocal.Format(time.RFC3339))
 	}
 }
