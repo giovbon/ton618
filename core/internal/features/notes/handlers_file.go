@@ -348,9 +348,14 @@ func (ctx *HandlerContext) HandleFileDelete(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Remove from DB (common cleanup for all types, atomically)
+	// Remove from DB (common cleanup for all types, atomically). Se falhar,
+	// NÃO reconcilia datasets: a nota ainda existe no índice e pode continuar
+	// referenciando os arquivos de datasets/ (o Reconcile só ignora OUTRAS
+	// notas, então apagaria arquivos em uso).
 	if err := ctx.Store.DeleteAllFileRecords(filename); err != nil {
 		slog.Error("delete all file records", "file", filename, "error", err)
+		http.Error(w, "erro ao remover registros", http.StatusInternalServerError)
+		return
 	}
 
 	if previousContent != "" {

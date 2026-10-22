@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -681,6 +682,41 @@ func TestHandleFileDelete_ImageInImagesDir(t *testing.T) {
 	mod, _ := ctx.Store.GetFileMod(filename)
 	if mod != "" {
 		t.Error("file_mod da imagem deveria ser removido do banco")
+	}
+}
+
+// Regressão: quando DeleteAllFileRecords falhava, o handler respondia 200 e
+// seguia para ReconcileTabulatorFiles — que podia apagar arquivos de datasets/
+// ainda referenciados pela nota que continuava viva no índice.
+func TestHandleFileDelete_DBErrorRetorna500ESemReconcile(t *testing.T) {
+	ctx := newTestContext(t)
+	imagesDir := filepath.Join(ctx.Cfg.DocsDir, "images")
+	os.MkdirAll(imagesDir, 0755)
+
+	filename := "images/img_99999_db_fail.png"
+	imgPath := filepath.Join(imagesDir, "img_99999_db_fail.png")
+	if err := os.WriteFile(imgPath, []byte("fake image"), 0644); err != nil {
+		t.Fatalf("criar imagem: %v", err)
+	}
+
+	// Fecha o banco para forçar erro em DeleteAllFileRecords. A resolução do
+	// caminho da imagem não consulta o store (só o disco).
+	if err := ctx.Store.Close(); err != nil {
+		t.Fatalf("fechar store: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=" + filename)
+	req := httptest.NewRequest("POST", "/file/delete", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileDelete(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("esperado 500 quando o DB falha, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("HX-Trigger"); got != "" {
+		t.Errorf("não deveria sinalizar reload-sidebar em falha, got %q", got)
 	}
 }
 
