@@ -225,73 +225,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	creationStr := creationTime.UTC().Format(time.RFC3339)
 
 	text := strings.TrimLeft(string(content), " \t\r\n\xef\xbb\xbf")
-	var docs []Document
-	var fileTags []string
-	var links []string
-
-	// Parse frontmatter
-	var metaParts []string
-	var fm map[string]interface{}
-	var frontmatterType string
-	if strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "---\r\n") {
-		endIdx := strings.Index(text[4:], "\n---")
-		if endIdx != -1 {
-			endIdx += 4
-			yamlContent := text[4:endIdx]
-			if err := yaml.Unmarshal([]byte(yamlContent), &fm); err == nil {
-				// Normalize keys to lowercase to allow case-insensitive frontmatter keys
-				cleanFm := make(map[string]interface{})
-				for k, v := range fm {
-					cleanFm[strings.ToLower(k)] = v
-				}
-				fm = cleanFm
-
-				if tRaw, ok := fm["tags"]; ok {
-					if tList, ok := tRaw.([]interface{}); ok {
-						for _, t := range tList {
-							if ts, ok := t.(string); ok {
-								cleanTag := strings.ToLower(strings.TrimSpace(ts))
-								cleanTag = strings.TrimPrefix(cleanTag, "#")
-								if cleanTag != "" {
-									fileTags = append(fileTags, cleanTag)
-								}
-							}
-						}
-					} else if ts, ok := tRaw.(string); ok {
-						for _, t := range strings.Split(ts, ",") {
-							cleanTag := strings.ToLower(strings.TrimSpace(t))
-							cleanTag = strings.TrimPrefix(cleanTag, "#")
-							if cleanTag != "" {
-								fileTags = append(fileTags, cleanTag)
-							}
-						}
-					}
-				}
-				// Serializa demais campos do frontmatter para indexacao FTS
-				for k, v := range fm {
-					if k == "tags" || k == "keywords" {
-						continue
-					}
-					metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
-				}
-
-				// Aplica comportamentos e tag canônica conforme o type: do frontmatter
-				if typeRaw, ok := fm["type"]; ok {
-					if typeStr, ok := typeRaw.(string); ok {
-						frontmatterType = strings.ToLower(strings.TrimSpace(typeStr))
-						fileTags = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
-					}
-				}
-			}
-			afterFrontmatter := endIdx + 4
-			if afterFrontmatter < len(text) && text[afterFrontmatter] == '\n' {
-				afterFrontmatter++
-			}
-			if afterFrontmatter <= len(text) {
-				text = text[afterFrontmatter:]
-			}
-		}
-	}
+	text, metaParts, frontmatterType, fileTags := parseFrontmatterForIndex(text)
 
 	// Tipo da nota para a coluna note_type do índice (filtro `tipo:` da busca).
 	// Espelho de DetectNoteType com fallback de conteúdo: tags + caminho + nome
@@ -310,30 +244,128 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	if strings.TrimSpace(text) == "" {
-		return nil, links, fileTags
+		return nil, nil, fileTags
 	}
 
-	// Extract hashtags from body
-	tagMatches := hashtagRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range tagMatches {
-		if len(m) > 1 {
-			tag := strings.ToLower(m[1])
-			exists := false
-			for _, existing := range fileTags {
-				if existing == tag {
-					exists = true
-					break
-				}
+	fileTags = appendHashtags(fileTags, text)
+	links := extractMarkdownLinks(text)
+	docs := buildMarkdownDocuments(text, filename, timestampStr, creationStr, fileTags, noteTipo)
+
+	// Prepend frontmatter metadata to first document for FTS indexing
+	if len(metaParts) > 0 && len(docs) > 0 {
+		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
+	}
+
+	return docs, links, fileTags
+}
+
+// parseFrontmatterForIndex separa o frontmatter do corpo e devolve os metadados
+// que entram no FTS, o `type:` (normalizado) e as tags declaradas. Em YAML
+// inválido o bloco é descartado, como antes.
+func parseFrontmatterForIndex(text string) (body string, metaParts []string, frontmatterType string, fileTags []string) {
+	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
+		return text, nil, "", nil
+	}
+	endIdx := strings.Index(text[4:], "\n---")
+	if endIdx == -1 {
+		return text, nil, "", nil
+	}
+	endIdx += 4
+
+	var fm map[string]interface{}
+	if err := yaml.Unmarshal([]byte(text[4:endIdx]), &fm); err == nil {
+		// Normalize keys to lowercase to allow case-insensitive frontmatter keys
+		cleanFm := make(map[string]interface{}, len(fm))
+		for k, v := range fm {
+			cleanFm[strings.ToLower(k)] = v
+		}
+		fm = cleanFm
+
+		fileTags = extractFrontmatterTags(fm["tags"])
+		// Serializa demais campos do frontmatter para indexacao FTS
+		for k, v := range fm {
+			if k == "tags" || k == "keywords" {
+				continue
 			}
-			if !exists && tag != "" {
-				fileTags = append(fileTags, tag)
+			metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
+		}
+
+		// Aplica comportamentos e tag canônica conforme o type: do frontmatter
+		if typeRaw, ok := fm["type"]; ok {
+			if typeStr, ok := typeRaw.(string); ok {
+				frontmatterType = strings.ToLower(strings.TrimSpace(typeStr))
+				fileTags = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
 			}
 		}
 	}
 
+	afterFrontmatter := endIdx + 4
+	if afterFrontmatter < len(text) && text[afterFrontmatter] == '\n' {
+		afterFrontmatter++
+	}
+	if afterFrontmatter <= len(text) {
+		text = text[afterFrontmatter:]
+	}
+	return text, metaParts, frontmatterType, fileTags
+}
+
+// extractFrontmatterTags aceita `tags` como lista YAML ou string separada por vírgulas.
+func extractFrontmatterTags(raw interface{}) []string {
+	var tags []string
+	switch v := raw.(type) {
+	case []interface{}:
+		for _, t := range v {
+			if ts, ok := t.(string); ok {
+				tags = appendCleanTag(tags, ts)
+			}
+		}
+	case string:
+		for _, t := range strings.Split(v, ",") {
+			tags = appendCleanTag(tags, t)
+		}
+	}
+	return tags
+}
+
+func appendCleanTag(tags []string, raw string) []string {
+	tag := strings.ToLower(strings.TrimSpace(raw))
+	tag = strings.TrimPrefix(tag, "#")
+	if tag == "" {
+		return tags
+	}
+	return append(tags, tag)
+}
+
+// appendHashtags adiciona ao índice as hashtags do corpo, ignorando repetidas.
+func appendHashtags(tags []string, text string) []string {
+	for _, m := range hashtagRegex.FindAllStringSubmatch(text, -1) {
+		if len(m) > 1 {
+			tag := strings.ToLower(m[1])
+			if tag == "" || containsTag(tags, tag) {
+				continue
+			}
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+func containsTag(tags []string, tag string) bool {
+	for _, existing := range tags {
+		if existing == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// extractMarkdownLinks coleta wikilinks, links de mídia (?name=…) e caminhos
+// relativos (attachments/…), normalizando o que é nota para notes/xxx.md.
+func extractMarkdownLinks(text string) []string {
+	var links []string
+
 	// Extract wikilinks e normaliza: notas markdown ganham prefixo notes/
-	linkMatches := WikilinkRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range linkMatches {
+	for _, m := range WikilinkRegex.FindAllStringSubmatch(text, -1) {
 		if len(m) > 1 {
 			target := strings.TrimSpace(m[1])
 			if target != "" {
@@ -357,8 +389,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract media e download links (?name=...)
-	mediaMatches := mediaLinkRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range mediaMatches {
+	for _, m := range mediaLinkRegex.FindAllStringSubmatch(text, -1) {
 		if len(m) > 1 {
 			target := strings.TrimSpace(m[1])
 			if target != "" {
@@ -371,8 +402,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	// Extract markdown relative links ](attachments/... etc)
-	markdownFileMatches := markdownFileLinkRegex.FindAllStringSubmatch(text, -1)
-	for _, m := range markdownFileMatches {
+	for _, m := range markdownFileLinkRegex.FindAllStringSubmatch(text, -1) {
 		if len(m) > 1 {
 			target := strings.TrimSpace(m[1])
 			if target != "" {
@@ -381,9 +411,13 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 		}
 	}
 
-	// Split by headers
-	activeHeaderRegex := headerRegex
-	matches := activeHeaderRegex.FindAllStringSubmatchIndex(text, -1)
+	return links
+}
+
+// buildMarkdownDocuments divide o corpo por headers, montando a trilha de
+// seções (headerStack) e um Document por trecho não vazio.
+func buildMarkdownDocuments(text, filename, timestampStr, creationStr string, fileTags []string, noteTipo string) []Document {
+	matches := headerRegex.FindAllStringSubmatchIndex(text, -1)
 	ordem := 0
 	headerStack := make([]string, 7)
 
@@ -408,7 +442,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	}
 
 	if len(matches) == 0 {
-		docs = append(docs, Document{
+		return []Document{{
 			ID:        HashFunc(filename + SectionDefault),
 			Tipo:      "markdown",
 			Arquivo:   filename,
@@ -418,68 +452,59 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 			Created:   creationStr,
 			Hash:      CalculateHash(SectionDefault, text, fileTags),
 			Tags:      fileTags,
-		})
-	} else {
-		lastPos := 0
-		currentHeader := SectionDefault
+			NoteType:  noteTipo,
+		}}
+	}
 
-		for _, m := range matches {
-			contentBefore := text[lastPos:m[0]]
-			if strings.TrimSpace(contentBefore) != "" {
-				docs = append(docs, Document{
-					ID:        HashFunc(filename + currentHeader + strconv.Itoa(ordem)),
-					Tipo:      "markdown",
-					Arquivo:   filename,
-					Secao:     currentHeader,
-					Texto:     contentBefore,
-					Timestamp: timestampStr,
-					Created:   creationStr,
-					Hash:      CalculateHash(currentHeader, contentBefore, fileTags),
-					Tags:      fileTags,
-					Ordem:     ordem,
-				})
-				ordem++
-			}
-			levelStr := text[m[2]:m[3]]
-			level := len(levelStr)
-			if level > 6 {
-				level = 6
-			}
-			title := text[m[4]:m[5]]
-			currentHeader = formatSectionTrail(level, title)
-			lastPos = m[0]
+	var docs []Document
+	lastPos := 0
+	currentHeader := SectionDefault
+
+	for _, m := range matches {
+		contentBefore := text[lastPos:m[0]]
+		if strings.TrimSpace(contentBefore) != "" {
+			docs = append(docs, Document{
+				ID:        HashFunc(filename + currentHeader + strconv.Itoa(ordem)),
+				Tipo:      "markdown",
+				Arquivo:   filename,
+				Secao:     currentHeader,
+				Texto:     contentBefore,
+				Timestamp: timestampStr,
+				Created:   creationStr,
+				Hash:      CalculateHash(currentHeader, contentBefore, fileTags),
+				Tags:      fileTags,
+				Ordem:     ordem,
+				NoteType:  noteTipo,
+			})
+			ordem++
 		}
-
-		remaining := text[lastPos:]
-		docs = append(docs, Document{
-			ID:        HashFunc(filename + currentHeader + strconv.Itoa(ordem)),
-			Tipo:      "markdown",
-			Arquivo:   filename,
-			Secao:     currentHeader,
-			Texto:     remaining,
-			Timestamp: timestampStr,
-			Created:   creationStr,
-			Hash:      CalculateHash(currentHeader, remaining, fileTags),
-			Tags:      fileTags,
-			Ordem:     ordem,
-		})
+		levelStr := text[m[2]:m[3]]
+		level := len(levelStr)
+		if level > 6 {
+			level = 6
+		}
+		title := text[m[4]:m[5]]
+		currentHeader = formatSectionTrail(level, title)
+		lastPos = m[0]
 	}
 
-	// Prepend frontmatter metadata to first document for FTS indexing
-	if len(metaParts) > 0 && len(docs) > 0 {
-		docs[0].Texto = strings.Join(metaParts, " | ") + "\n\n" + docs[0].Texto
-	}
-
-	for i := range docs {
-		docs[i].Tags = fileTags
-		docs[i].NoteType = noteTipo
-	}
-
-	return docs, links, fileTags
+	remaining := text[lastPos:]
+	docs = append(docs, Document{
+		ID:        HashFunc(filename + currentHeader + strconv.Itoa(ordem)),
+		Tipo:      "markdown",
+		Arquivo:   filename,
+		Secao:     currentHeader,
+		Texto:     remaining,
+		Timestamp: timestampStr,
+		Created:   creationStr,
+		Hash:      CalculateHash(currentHeader, remaining, fileTags),
+		Tags:      fileTags,
+		Ordem:     ordem,
+		NoteType:  noteTipo,
+	})
+	return docs
 }
 
-// ExtractTitle extrai o título do primeiro heading markdown (linha iniciada com #).
-// Se não houver heading, retorna o nome do arquivo sem extensão.
 func ExtractTitle(content, filename string) string {
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
