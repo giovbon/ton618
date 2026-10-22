@@ -33,6 +33,23 @@ func TestParseTabulatorData_Vazio(t *testing.T) {
 	}
 }
 
+func TestParseTabulatorData_RejeitaLixoAposJSON(t *testing.T) {
+	for _, body := range []string{
+		tabulatorSample + " lixo",
+		tabulatorSample + `{"columns":[]}`,
+		tabulatorSample + "null",
+	} {
+		if _, err := ParseTabulatorData(body); err == nil {
+			t.Errorf("corpo com dados após o JSON deveria falhar: %q", body)
+		}
+	}
+
+	// Espaço em branco no fim continua válido.
+	if _, err := ParseTabulatorData(tabulatorSample + "\n\t "); err != nil {
+		t.Errorf("whitespace final não deveria invalidar: %v", err)
+	}
+}
+
 func TestProcessTabulatorContent_IndexaColunasELinhas(t *testing.T) {
 	now := time.Now()
 	docs := ProcessTabulatorContent(tabulatorSample, "notes/planilha.md", now.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339), []string{"tabulator"})

@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -76,6 +77,11 @@ func ParseTabulatorData(body string) (*TabulatorData, error) {
 	var data TabulatorData
 	if err := dec.Decode(&data); err != nil {
 		return nil, fmt.Errorf("tabulator: JSON inválido: %w", err)
+	}
+	// O decoder lê apenas o primeiro valor. Sem esta checagem, um corpo
+	// truncado seguido de lixo (ou de outro JSON) era indexado como válido.
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("tabulator: dados extras após o JSON")
 	}
 	return &data, nil
 }
