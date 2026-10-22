@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +67,54 @@ func mustWriteFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("escrever %s: %v", path, err)
 	}
+}
+
+// addDirectoryEntryToZip copia src para um novo ZIP e acrescenta uma entrada de
+// diretório (nome terminado em "/"), como fazem ferramentas de arquivamento.
+func addDirectoryEntryToZip(t *testing.T, src, dir string) string {
+	t.Helper()
+
+	in, err := zip.OpenReader(src)
+	if err != nil {
+		t.Fatalf("abrir zip de origem: %v", err)
+	}
+	defer in.Close()
+
+	dst := filepath.Join(t.TempDir(), "com-diretorio.zip")
+	out, err := os.Create(dst)
+	if err != nil {
+		t.Fatalf("criar zip de destino: %v", err)
+	}
+	zw := zip.NewWriter(out)
+	for _, f := range in.File {
+		w, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     f.Name,
+			Method:   f.Method,
+			Modified: f.Modified,
+		})
+		if err != nil {
+			t.Fatalf("copiar cabeçalho %s: %v", f.Name, err)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("abrir entrada %s: %v", f.Name, err)
+		}
+		if _, err := io.Copy(w, rc); err != nil {
+			rc.Close()
+			t.Fatalf("copiar entrada %s: %v", f.Name, err)
+		}
+		rc.Close()
+	}
+	if _, err := zw.Create(dir); err != nil {
+		t.Fatalf("criar diretório %s: %v", dir, err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("fechar zip: %v", err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatalf("fechar arquivo: %v", err)
+	}
+	return dst
 }
 
 // TestFullBackup_RoundTripRestauraEstadoCompleto é o teste central da 3ª opção de
@@ -174,6 +223,37 @@ func TestFullBackup_RoundTripRestauraEstadoCompleto(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(docsDir, "archives", "velha.md")); err != nil {
 		t.Errorf("arquivo de archives/ não restaurado: %v", err)
+	}
+}
+
+// TestFullBackup_RestoreNaoContaDiretorios garante que entradas de diretório do
+// ZIP (ex.: "docs/pdfs/") não inflam RestoreResult.Files. Elas não são arquivos
+// restaurados; antes, o contador somava +1 para cada uma.
+func TestFullBackup_RestoreNaoContaDiretorios(t *testing.T) {
+	store, svc, docsDir, _, _ := newFullBackupFixture(t)
+
+	mtime := time.Now().UTC().Format(time.RFC3339)
+	if err := store.SaveNote("notes/nota.md", "# Nota", mtime); err != nil {
+		t.Fatalf("SaveNote: %v", err)
+	}
+	mustWriteFile(t, filepath.Join(docsDir, "pdfs", "doc.pdf"), "%PDF-1.4")
+
+	var buf bytes.Buffer
+	if err := svc.CreateStream(context.Background(), &buf); err != nil {
+		t.Fatalf("CreateStream: %v", err)
+	}
+	src := filepath.Join(t.TempDir(), "total.zip")
+	if err := os.WriteFile(src, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	zipPath := addDirectoryEntryToZip(t, src, "docs/pdfs/")
+
+	res, err := svc.Restore(context.Background(), zipPath)
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if res.Files != 1 {
+		t.Errorf("Files = %d, esperado 1 (entrada de diretório não conta)", res.Files)
 	}
 }
 

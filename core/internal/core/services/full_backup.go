@@ -211,6 +211,12 @@ func (s *FullBackupService) Restore(ctx context.Context, zipPath string) (*Resto
 			}
 			dbFound = true
 		case strings.HasPrefix(name, backupDocsPrefix):
+			// Entradas de diretório não são arquivos: extractZipEntry já as
+			// ignora, mas o contador somava +1 e o RestoreResult.Files ficava
+			// maior que o número real de arquivos restaurados.
+			if f.FileInfo().IsDir() {
+				continue
+			}
 			rel, err := safeZipRel(name, backupDocsPrefix)
 			if err != nil {
 				return nil, err
