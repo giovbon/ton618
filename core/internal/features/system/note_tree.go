@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"ton618/core/internal/core/domain"
 	"ton618/core/internal/features/notes"
@@ -238,24 +237,7 @@ func preferAsParent(candidate, current noteEntry) bool {
 	if cNotes != curNotes {
 		return cNotes
 	}
-	return mtimeIsNewer(candidate.Mtime, current.Mtime)
-}
-
-// mtimeIsNewer aceita tanto RFC3339 (banco) quanto o formato de exibição do
-// Tabulator ("2006-01-02 15:04:05"), que também é ordenável como string.
-func mtimeIsNewer(a, b string) bool {
-	if a == "" {
-		return false
-	}
-	if b == "" {
-		return true
-	}
-	if ta, errA := time.Parse(time.RFC3339, a); errA == nil {
-		if tb, errB := time.Parse(time.RFC3339, b); errB == nil {
-			return ta.After(tb)
-		}
-	}
-	return a > b
+	return mtimeNewer(candidate.Mtime, current.Mtime)
 }
 
 // hasParentCycle informa se a cadeia de pais de start volta a si mesma.
@@ -436,8 +418,8 @@ func (ctx *HandlerContext) parentRefOf(ix *noteTreeIndex, lowerFile string) stri
 	if err != nil || content == "" {
 		return ""
 	}
-	fm, _, err := notes.ParseFrontmatter(content)
-	if err != nil || fm == nil {
+	fm := notes.ParseFrontmatterOrEmpty(content)
+	if len(fm) == 0 {
 		return ""
 	}
 	return strings.ToLower(ix.resolve(parentRefFromMap(fm)))

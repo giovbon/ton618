@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ── Regressão: ordenação por mtime com formatos mistos ──
@@ -73,6 +74,70 @@ func TestMtimeNewer_ComparesInstantNotString(t *testing.T) {
 			b:    "outra-coisa",
 			want: false,
 		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mtimeNewer(tc.a, tc.b); got != tc.want {
+				t.Errorf("mtimeNewer(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMtimeNewer_FormatoDeExibicao garante que a regra canônica também aceita
+// o formato do Acervo ("2006-01-02 15:04:05", hora local). A árvore usava uma
+// implementação paralela (mtimeIsNewer) só por causa desse formato.
+func TestMtimeNewer_FormatoDeExibicao(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"exibicao mais nova", "2026-06-01 10:00:00", "2026-01-01 10:00:00", true},
+		{"exibicao mais antiga", "2026-01-01 10:00:00", "2026-06-01 10:00:00", false},
+		{"exibicao iguais", "2026-01-01 10:00:00", "2026-01-01 10:00:00", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mtimeNewer(tc.a, tc.b); got != tc.want {
+				t.Errorf("mtimeNewer(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMtimeNewer_FormatosMistos compara o INSTANTE quando um lado vem em
+// RFC3339 (UTC) e o outro no formato de exibição (hora local). As datas são
+// derivadas de time.Local, então o teste independe do fuso da máquina.
+func TestMtimeNewer_FormatosMistos(t *testing.T) {
+	local := time.Date(2026, 8, 17, 15, 55, 0, 0, time.Local)
+	display := local.Format("2006-01-02 15:04:05")
+	depois := local.Add(5 * time.Minute).UTC().Format(time.RFC3339)
+	antes := local.Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+
+	if !mtimeNewer(depois, display) {
+		t.Errorf("RFC3339 5min depois deveria ser mais novo que a exibição local")
+	}
+	if mtimeNewer(antes, display) {
+		t.Errorf("RFC3339 5min antes não pode ser mais novo que a exibição local")
+	}
+	if !mtimeNewer(display, antes) {
+		t.Errorf("exibição local deveria ser mais nova que o RFC3339 5min antes")
+	}
+}
+
+// TestMtimeNewer_Vazios fixa a política de strings vazias (tratadas como
+// inválidas), que a árvore e a sidebar precisam compartilhar.
+func TestMtimeNewer_Vazios(t *testing.T) {
+	const valido = "2026-08-17T15:55:00Z"
+	cases := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"a vazio nunca fica antes", "", valido, false},
+		{"b vazio faz a valido ficar antes", valido, "", true},
+		{"ambos vazios empatam", "", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

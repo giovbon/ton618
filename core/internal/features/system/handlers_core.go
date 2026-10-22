@@ -138,19 +138,37 @@ func filterNotes(noteList []domain.NoteItem, query string) []domain.NoteItem {
 	return nameMatches
 }
 
-// mtimeNewer compara dois mtimes (RFC3339) e retorna true se a é estritamente
-// mais recente que b.
+// parseMtime interpreta os formatos de mtime usados no app:
+//   - RFC3339 com fuso (banco/sidebar, ex.: "2026-08-17T18:55:00Z");
+//   - exibição do Tabulator/Acervo ("2006-01-02 15:04:05", hora local — ver
+//     handlers_database_tabulator.go, que usa t.Local().Format).
+//
+// O segundo formato não carrega fuso; ele é gerado em hora local, então é
+// parseado em time.Local para comparar instantes corretamente.
+func parseMtime(s string) (time.Time, bool) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, true
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+// mtimeNewer compara dois mtimes e retorna true se a é estritamente mais
+// recente que b. É a ÚNICA regra de ordenação por mtime do app — usada pela
+// sidebar (RFC3339) e pelo Acervo/árvore (formato de exibição); antes a árvore
+// tinha uma cópia própria (mtimeIsNewer) que divergia em valores inválidos.
+// Inválidos nunca "vencem": a inválido => false; b inválido => true.
 func mtimeNewer(a, b string) bool {
-	_, errA := time.Parse(time.RFC3339, a)
-	_, errB := time.Parse(time.RFC3339, b)
-	if errA != nil {
+	ta, okA := parseMtime(a)
+	tb, okB := parseMtime(b)
+	if !okA {
 		return false
 	}
-	if errB != nil {
+	if !okB {
 		return true
 	}
-	ta, _ := time.Parse(time.RFC3339, a)
-	tb, _ := time.Parse(time.RFC3339, b)
 	return ta.After(tb)
 }
 

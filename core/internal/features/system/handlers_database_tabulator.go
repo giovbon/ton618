@@ -18,7 +18,6 @@ import (
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/processor"
 	"ton618/core/internal/ui/icons"
-	"ton618/core/internal/watcher"
 )
 
 // ── Tabulator Database Handlers ──
@@ -71,10 +70,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 		} else {
 			content := notesContent[n.Arquivo]
-			fm, _, err := notes.ParseFrontmatter(content)
-			if err != nil {
-				fm = make(map[string]interface{})
-			}
+			fm := notes.ParseFrontmatterOrEmpty(content)
 
 			row = make(map[string]interface{})
 			row["arquivo"] = n.Arquivo
@@ -303,10 +299,7 @@ func (ctx *HandlerContext) collectColumnCandidates(noteList []domain.NoteItem) (
 	set := make(map[string]bool)
 	for _, n := range noteList {
 		content := notesContent[n.Arquivo]
-		fm, _, err := notes.ParseFrontmatter(content)
-		if err != nil {
-			fm = make(map[string]interface{})
-		}
+		fm := notes.ParseFrontmatterOrEmpty(content)
 		for k := range fm {
 			if isDynamicColumnField(k) {
 				set[k] = true
@@ -376,7 +369,7 @@ func displayTitle(arquivo, content string, fm map[string]interface{}) string {
 	if h := strings.TrimSpace(processor.ExtractTitle(content, arquivo)); isMeaningfulName(h) {
 		return h
 	}
-	if t := frontmatterTitle(fm); isMeaningfulName(t) {
+	if t := notes.FrontmatterTitle(fm); isMeaningfulName(t) {
 		return t
 	}
 	return name
@@ -393,23 +386,6 @@ func isMeaningfulName(s string) bool {
 	return false
 }
 
-// frontmatterTitle devolve `titulo:` ou `title:` do frontmatter (a chave
-// canônica do projeto é `titulo`; `title` é aceito por compatibilidade). A
-// comparação é case-insensitive e aceita apenas valor string.
-func frontmatterTitle(fm map[string]interface{}) string {
-	for _, key := range []string{"titulo", "title"} {
-		for k, v := range fm {
-			if !strings.EqualFold(k, key) {
-				continue
-			}
-			if s, ok := v.(string); ok {
-				return strings.TrimSpace(s)
-			}
-		}
-	}
-	return ""
-}
-
 type UpdatePropertyRequest struct {
 	File  string      `json:"file"`
 	Key   string      `json:"key"`
@@ -417,148 +393,13 @@ type UpdatePropertyRequest struct {
 }
 
 func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *http.Request) {
-	var req UpdatePropertyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.File == "" || req.Key == "" {
-		http.Error(w, "file and key are required", http.StatusBadRequest)
+	req, ok := decodeUpdateProperty(w, r)
+	if !ok {
 		return
 	}
 
 	if req.Key == "titulo" {
-		var newValStr string
-		switch v := req.Value.(type) {
-		case string:
-			newValStr = v
-		case float64:
-			newValStr = fmt.Sprintf("%.0f", v)
-		case int:
-			newValStr = strconv.Itoa(v)
-		default:
-			if req.Value != nil {
-				newValStr = fmt.Sprintf("%v", req.Value)
-			}
-		}
-		newValStr = strings.TrimSpace(newValStr)
-		if newValStr == "" {
-			http.Error(w, "invalid title value", http.StatusBadRequest)
-			return
-		}
-		// Um título sem nenhuma letra/dígito (ex: "...") vira um nome de arquivo
-		// inútil e some da leitura da tabela — recusa na origem (ver displayTitle).
-		if !isMeaningfulName(newValStr) {
-			http.Error(w, "o título precisa conter ao menos uma letra ou número", http.StatusBadRequest)
-			return
-		}
-
-		rawOld := req.File
-		rawNew := newValStr
-
-		ext := strings.ToLower(filepath.Ext(rawOld))
-		isNote := ext == ".md" || strings.HasPrefix(rawOld, domain.NotePrefix) || !domain.HasNonNoteFilePrefix(rawOld)
-
-		var oldName, newName string
-
-		if !isNote {
-			basename := filepath.Base(rawOld)
-			newBasename := filepath.Base(rawNew)
-			if ext != "" && !strings.HasSuffix(strings.ToLower(newBasename), ext) {
-				newBasename += ext
-			}
-
-			dir := filepath.Dir(rawOld)
-			if dir == "." || dir == "" {
-				if ext == ".pdf" {
-					dir = domain.PDFDir
-				} else if ext == ".epub" {
-					dir = domain.EPUBDir
-				} else if ext == ".zip" || ext == ".rar" {
-					dir = domain.AttachmentDir
-				} else {
-					dir = domain.NotesDir
-				}
-			}
-
-			oldName = dir + "/" + basename
-			newName = dir + "/" + newBasename
-			oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
-			newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
-
-			if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-				found := false
-				for _, sd := range domain.SearchDirs {
-					testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
-					if _, err := os.Stat(testPath); err == nil {
-						oldName = sd + "/" + basename
-						newName = sd + "/" + newBasename
-						oldPath = testPath
-						newPath = filepath.Join(ctx.Cfg.DocsDir, newName)
-						found = true
-						break
-					}
-				}
-				if !found {
-					http.Error(w, "arquivo não encontrado", http.StatusNotFound)
-					return
-				}
-			}
-
-			// Metadados externos (ex: `pai`) — lidos ANTES do rename porque
-			// DeleteAllFileRecords os remove; restaurados sob o novo caminho.
-			oldMeta, _ := ctx.Store.GetFileMetadata(oldName)
-
-			if err := os.Rename(oldPath, newPath); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
-				slog.Error("delete old file records on rename", "file", oldName, "error", err)
-			}
-
-			info, err := os.Stat(newPath)
-			if err == nil {
-				watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-					Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-				})
-			}
-
-			for k, v := range oldMeta {
-				if err := ctx.Store.SetFileMetadata(newName, k, v); err != nil {
-					slog.Error("restore file metadata on rename", "file", newName, "key", k, "error", err)
-				}
-			}
-			if ctx.Notes != nil {
-				if err := ctx.Notes.UpdateBacklinksOnRename(oldName, newName); err != nil {
-					slog.Error("update backlinks on non-note property rename", "old", oldName, "new", newName, "error", err)
-				}
-			}
-		} else {
-			if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
-				msg := err.Error()
-				if strings.Contains(msg, "já existe uma nota") || strings.Contains(msg, "nota não encontrada") || strings.Contains(msg, "UNIQUE constraint failed") {
-					http.Error(w, msg, http.StatusBadRequest)
-				} else {
-					http.Error(w, msg, http.StatusInternalServerError)
-				}
-				return
-			}
-			newName = notes.NoteFilename(rawNew)
-			oldName = notes.NoteFilename(rawOld)
-		}
-
-		ctx.dbCacheMu.Lock()
-		delete(ctx.dbCache, req.File)
-		delete(ctx.dbCache, oldName)
-		if newName != "" {
-			delete(ctx.dbCache, newName)
-		}
-		ctx.dbCacheMu.Unlock()
-
-		w.WriteHeader(http.StatusOK)
+		ctx.handleTitleRename(w, req)
 		return
 	}
 
@@ -566,47 +407,162 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 	// (`pai`) se aplicam — e o `pai` vive na tabela file_metadata (DECISIONS
 	// §6.24), não no frontmatter (que não existe).
 	if !isNoteFile(req.File) {
-		switch {
-		case strings.EqualFold(req.Key, "tags"):
-			rawVal, _ := req.Value.(string)
-			var tagList []string
-			for _, t := range strings.Split(rawVal, ",") {
-				t = strings.TrimSpace(t)
-				t = strings.TrimPrefix(t, "#")
-				if t != "" {
-					tagList = append(tagList, t)
+		ctx.handleNonNoteProperty(w, req)
+		return
+	}
+
+	ctx.handleNoteProperty(w, req)
+}
+
+func decodeUpdateProperty(w http.ResponseWriter, r *http.Request) (UpdatePropertyRequest, bool) {
+	var req UpdatePropertyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return req, false
+	}
+	if req.File == "" || req.Key == "" {
+		http.Error(w, "file and key are required", http.StatusBadRequest)
+		return req, false
+	}
+	return req, true
+}
+
+// handleTitleRename trata `titulo`: renomeia a nota (ou o arquivo) e invalida
+// as entradas correspondentes do cache da tabela.
+func (ctx *HandlerContext) handleTitleRename(w http.ResponseWriter, req UpdatePropertyRequest) {
+	var newValStr string
+	switch v := req.Value.(type) {
+	case string:
+		newValStr = v
+	case float64:
+		newValStr = fmt.Sprintf("%.0f", v)
+	case int:
+		newValStr = strconv.Itoa(v)
+	default:
+		if req.Value != nil {
+			newValStr = fmt.Sprintf("%v", req.Value)
+		}
+	}
+	newValStr = strings.TrimSpace(newValStr)
+	if newValStr == "" {
+		http.Error(w, "invalid title value", http.StatusBadRequest)
+		return
+	}
+	// Um título sem nenhuma letra/dígito (ex: "...") vira um nome de arquivo
+	// inútil e some da leitura da tabela — recusa na origem (ver displayTitle).
+	if !isMeaningfulName(newValStr) {
+		http.Error(w, "o título precisa conter ao menos uma letra ou número", http.StatusBadRequest)
+		return
+	}
+
+	rawOld := req.File
+	rawNew := newValStr
+
+	ext := strings.ToLower(filepath.Ext(rawOld))
+	isNote := ext == ".md" || strings.HasPrefix(rawOld, domain.NotePrefix) || !domain.HasNonNoteFilePrefix(rawOld)
+
+	var oldName, newName string
+
+	if !isNote {
+		basename := filepath.Base(rawOld)
+		newBasename := filepath.Base(rawNew)
+		if ext != "" && !strings.HasSuffix(strings.ToLower(newBasename), ext) {
+			newBasename += ext
+		}
+
+		dir := filepath.Dir(rawOld)
+		if dir == "." || dir == "" {
+			if ext == ".pdf" {
+				dir = domain.PDFDir
+			} else if ext == ".epub" {
+				dir = domain.EPUBDir
+			} else if ext == ".zip" || ext == ".rar" {
+				dir = domain.AttachmentDir
+			} else {
+				dir = domain.NotesDir
+			}
+		}
+
+		oldName = dir + "/" + basename
+		newName = dir + "/" + newBasename
+		oldPath := filepath.Join(ctx.Cfg.DocsDir, oldName)
+
+		if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+			found := false
+			for _, sd := range domain.SearchDirs {
+				testPath := filepath.Join(ctx.Cfg.DocsDir, sd, basename)
+				if _, err := os.Stat(testPath); err == nil {
+					oldName = sd + "/" + basename
+					newName = sd + "/" + newBasename
+					oldPath = testPath
+					found = true
+					break
 				}
 			}
-			if err := ctx.Store.SetFileTags(req.File, tagList); err != nil {
-				http.Error(w, "error updating tags", http.StatusInternalServerError)
-				return
-			}
-		case isParentKey(req.Key):
-			ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
-			if strings.Contains(ref, ",") {
-				http.Error(w, "um arquivo só pode ter UM pai — remova a vírgula do campo 'Pai'", http.StatusBadRequest)
-				return
-			}
-			// Arquivos são apenas FILHAS: valida que o pai é uma nota e que não
-			// há ciclo (o alvo é resolvido só entre notas — ver §6.24).
-			if err := ctx.validateParentAssignment(req.File, ref); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if err := ctx.Notes.SetFileParent(req.File, ref); err != nil {
-				http.Error(w, "error saving file parent", http.StatusInternalServerError)
+			if !found {
+				http.Error(w, "arquivo não encontrado", http.StatusNotFound)
 				return
 			}
 		}
 
-		ctx.dbCacheMu.Lock()
-		delete(ctx.dbCache, req.File)
-		ctx.dbCacheMu.Unlock()
-
-		w.WriteHeader(http.StatusOK)
-		return
+		if err := notes.RenameNonNoteFile(ctx.Store, ctx.Notes, ctx.Cfg.DocsDir, oldName, newName); err != nil {
+			notes.WriteRenameError(w, err)
+			return
+		}
+	} else {
+		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
+			notes.WriteRenameError(w, err)
+			return
+		}
+		newName = notes.NoteFilename(rawNew)
+		oldName = notes.NoteFilename(rawOld)
 	}
 
+	ctx.invalidateDBCache(req.File, oldName, newName)
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleNonNoteProperty trata tags e `pai` de arquivos (PDF/EPUB/ZIP/...).
+func (ctx *HandlerContext) handleNonNoteProperty(w http.ResponseWriter, req UpdatePropertyRequest) {
+	switch {
+	case strings.EqualFold(req.Key, "tags"):
+		rawVal, _ := req.Value.(string)
+		var tagList []string
+		for _, t := range strings.Split(rawVal, ",") {
+			t = strings.TrimSpace(t)
+			t = strings.TrimPrefix(t, "#")
+			if t != "" {
+				tagList = append(tagList, t)
+			}
+		}
+		if err := ctx.Store.SetFileTags(req.File, tagList); err != nil {
+			http.Error(w, "error updating tags", http.StatusInternalServerError)
+			return
+		}
+	case isParentKey(req.Key):
+		ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
+		if strings.Contains(ref, ",") {
+			http.Error(w, "um arquivo só pode ter UM pai — remova a vírgula do campo 'Pai'", http.StatusBadRequest)
+			return
+		}
+		// Arquivos são apenas FILHAS: valida que o pai é uma nota e que não
+		// há ciclo (o alvo é resolvido só entre notas — ver §6.24).
+		if err := ctx.validateParentAssignment(req.File, ref); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := ctx.Notes.SetFileParent(req.File, ref); err != nil {
+			http.Error(w, "error saving file parent", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	ctx.invalidateDBCache(req.File)
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleNoteProperty grava uma propriedade no frontmatter da nota.
+func (ctx *HandlerContext) handleNoteProperty(w http.ResponseWriter, req UpdatePropertyRequest) {
 	removeLegacyParentKey := false
 	if isParentKey(req.Key) {
 		ref := parentRefFromMap(map[string]interface{}{parentKey: req.Value})
@@ -658,9 +614,16 @@ func (ctx *HandlerContext) HandleUpdateNoteProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
-	ctx.dbCacheMu.Lock()
-	delete(ctx.dbCache, req.File)
-	ctx.dbCacheMu.Unlock()
-
+	ctx.invalidateDBCache(req.File)
 	w.WriteHeader(http.StatusOK)
+}
+
+// invalidateDBCache remove as entradas do cache da tabela. Chaves vazias são
+// ignoradas naturalmente (delete de chave inexistente é no-op).
+func (ctx *HandlerContext) invalidateDBCache(keys ...string) {
+	ctx.dbCacheMu.Lock()
+	for _, k := range keys {
+		delete(ctx.dbCache, k)
+	}
+	ctx.dbCacheMu.Unlock()
 }
