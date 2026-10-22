@@ -280,7 +280,9 @@ func fieldTitle(field string) string {
 	if field == "" {
 		return field
 	}
-	return strings.ToUpper(field[:1]) + field[1:]
+	runes := []rune(field)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
 // collectColumnCandidates devolve a lista ordenada de campos dinâmicos
