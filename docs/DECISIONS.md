@@ -84,6 +84,7 @@ Serve como referência para manter consistência em contribuições futuras.
 - **var, function, sem arrow functions nos fontes do browser**: O build target é es2020 e algumas páginas usam IIFE. Manter compatibilidade.
 - **Ícones Lucide são inline SVG server-side**: Todos os ícones são renderizados como `<svg>` direto no HTML pelo `icons.templ`. **Não depende de JS do lado do cliente.** Ícones não reconhecidos viram um círculo genérico (fallback). O pacote npm `lucide` foi removido — zero dependência de JS para ícones.
 - **Escaping HTML é SSOT em `EditorCommon.escapeHtml`** (`static/editor-common.js`, arquivo manual legado): `database.js`, `tabulator-note.js` e `editor-init.js` delegam para ele (null/undefined → `""`, escapa `& < > " '`). Antes havia 4 cópias com semânticas diferentes (uma não escapava `"`/`'` e outra não tratava null). Teste: `tests/tabulator-note.unit.cjs` carrega o `editor-common.js` real.
+- **Uploads XHR passam por `uploadWithProgress`** (`web/src/app.js`, 22/10/2026): PDF (`POST /upload`) e anexo (`POST /api/upload-attachment`) compartilham auth (`setXHRAuth` → `EditorCommon.getAuthHeaders`), barra de progresso, redirecionamento e mensagens de erro. Coberto por `tests/app-uploads.unit.cjs` (eventos reais em DOM/XHR fake) e pelo guard estático `auth-headers.unit.cjs`.
 
 ### 2.3 Testes
 
