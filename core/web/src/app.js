@@ -1,42 +1,17 @@
-// ── Lucide Icons Rendering (DEPRECATED - ícones são inline SVG via server) ──
-// Mantido como noop para compatibilidade com código legado que chama renderLucideIcons()
-export function renderLucideIcons() {
-    // Icons now rendered server-side in icons.templ - no client-side rendering needed
-}
-
-// @ts-ignore
-window.renderLucideIcons = renderLucideIcons;
-
-if (typeof document !== 'undefined') {
-    document.addEventListener("DOMContentLoaded", function () {
-        renderLucideIcons();
-    });
-    // @ts-ignore
-    if (typeof htmx !== 'undefined') {
-        document.body.addEventListener("htmx:afterSwap", function () {
-            renderLucideIcons();
-        });
-    }
-}
-
 // ── Auth Header helper (para XHR/XMLHttpRequest) ──
-// O restante do app injeta o header Authorization via fetch/HTMX,
-// mas uploads via XHR (PDF/anexo) não fazem isso automaticamente.
-// Sem esse header, quando o cookie ton_auth expira (24h) mas o
-// localStorage ainda tem o token, o servidor responde 401 e o
-// upload falha com "Erro ao criar anexo.".
-function getAuthHeader() {
-    var auth = localStorage.getItem("ton_auth");
-    if (!auth) {
-        var cookieMatch = document.cookie.match(/(?:^|;\s*)ton_auth=([^;]+)/);
-        if (cookieMatch) {
-            var cookieVal = decodeURIComponent(cookieMatch[1]);
-            auth = cookieVal.startsWith("Basic ")
-                ? cookieVal
-                : "Basic " + cookieVal;
-        }
+// O restante do app injeta o header Authorization via fetch/HTMX, mas uploads
+// via XHR (PDF/anexo) não passam por esses patches. Usa o helper compartilhado
+// (EditorCommon.getAuthHeaders) para não duplicar a leitura do token.
+// Sem esse header, quando o cookie ton_auth expira (24h) mas o localStorage
+// ainda tem o token, o servidor responde 401 e o upload falha.
+function setXHRAuth(xhr) {
+    var headers =
+        window.EditorCommon && window.EditorCommon.getAuthHeaders
+            ? window.EditorCommon.getAuthHeaders()
+            : {};
+    if (headers.Authorization) {
+        xhr.setRequestHeader("Authorization", headers.Authorization);
     }
-    return auth;
 }
 
 // ── PDF Upload ──
@@ -58,10 +33,7 @@ document.addEventListener("change", function (e) {
         
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "/upload", true);
-        var auth = getAuthHeader();
-        if (auth) {
-            xhr.setRequestHeader("Authorization", auth);
-        }
+        setXHRAuth(xhr);
         
         xhr.upload.addEventListener("progress", function (evt) {
             if (evt.lengthComputable) {
@@ -108,10 +80,7 @@ if (zipInput) {
 
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/upload-attachment", true);
-        var auth = getAuthHeader();
-        if (auth) {
-            xhr.setRequestHeader("Authorization", auth);
-        }
+        setXHRAuth(xhr);
         
         xhr.upload.addEventListener("progress", function (evt) {
             if (evt.lengthComputable) {

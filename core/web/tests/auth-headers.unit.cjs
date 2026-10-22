@@ -223,12 +223,12 @@ test('http wrappers em editor-common.js incluem auth headers', (t) => {
  *
  * O app injeta o header Authorization em fetch() (monkey-patch) e HTMX
  * (htmx:configRequest), mas uploads via XHR (PDF e anexo ZIP) NÃO herdam isso
- * automaticamente. Sem setRequestHeader("Authorization", getAuthHeader()),
- * quando o cookie ton_auth expira (24h) mas o localStorage ainda tem o token,
- * o servidor responde 401 → "Erro ao criar anexo." / "Erro ao fazer upload
- * do PDF.".
+ * automaticamente. Sem setXHRAuth(xhr) — que delega a
+ * EditorCommon.getAuthHeaders —, quando o cookie ton_auth expira (24h) mas o
+ * localStorage ainda tem o token, o servidor responde 401 → "Erro ao criar
+ * anexo." / "Erro ao fazer upload do PDF.".
  */
-test('uploads via XMLHttpRequest incluem header Authorization (getAuthHeader)', (t) => {
+test('uploads via XMLHttpRequest incluem header Authorization (setXHRAuth)', (t) => {
   const filePath = path.join(SRC_DIR, 'app.js');
   const code = fs.readFileSync(filePath, 'utf8');
 
@@ -243,12 +243,11 @@ test('uploads via XMLHttpRequest incluem header Authorization (getAuthHeader)', 
       if (openIdx === -1) break;
       found++;
 
-      const snippet = code.substring(openIdx, openIdx + 300);
+      const snippet = code.substring(openIdx, openIdx + 200);
       assert.ok(
-        snippet.includes('setRequestHeader("Authorization"') &&
-          snippet.includes('getAuthHeader()'),
-        `xhr.open("POST", "${ep}") deve setar o header Authorization via ` +
-          `getAuthHeader() (senão o upload falha com 401 após o cookie expirar).\n` +
+        snippet.includes('setXHRAuth(xhr)'),
+        `xhr.open("POST", "${ep}") deve chamar setXHRAuth(xhr) ` +
+          `(senão o upload falha com 401 após o cookie expirar).\n` +
           `Código: ${snippet.trim()}`
       );
       idx = openIdx + 1;
@@ -259,5 +258,15 @@ test('uploads via XMLHttpRequest incluem header Authorization (getAuthHeader)', 
       `Nenhum XMLHttpRequest para "${ep}" encontrado em ${path.relative(ROOT, filePath)}`
     );
   }
+
+  // O helper deve delegar ao token compartilhado (EditorCommon) em vez de
+  // reimplementar a leitura de localStorage/cookie.
+  const helperIdx = code.indexOf('function setXHRAuth');
+  assert.ok(helperIdx !== -1, 'src/app.js deve definir setXHRAuth');
+  const helper = code.substring(helperIdx, helperIdx + 400);
+  assert.ok(
+    helper.includes('EditorCommon.getAuthHeaders'),
+    'setXHRAuth deve usar EditorCommon.getAuthHeaders()'
+  );
 });
 
