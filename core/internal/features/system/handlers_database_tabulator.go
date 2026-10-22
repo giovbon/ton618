@@ -2,6 +2,7 @@ package system
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -23,7 +24,11 @@ import (
 // ── Tabulator Database Handlers ──
 
 func (ctx *HandlerContext) HandleDatabasePage(w http.ResponseWriter, r *http.Request) {
-	notes.Database("Acervo — TON-618").Render(r.Context(), w)
+	// Acervo ocupa a largura toda (como a Agenda): a tabela precisa de espaço
+	// para as colunas e não deve depender do hack de 100vw que escondia a
+	// barra de rolagem no canto da tela (ver DECISIONS §20).
+	newCtx := context.WithValue(r.Context(), "is_full_width", true)
+	notes.Database("Acervo — TON-618").Render(newCtx, w)
 }
 
 func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.Request) {

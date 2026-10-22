@@ -9,32 +9,33 @@ templ Database(title string) {
 }
 
 templ databaseContent() {
-<div>
+<div id="database-page" class="flex flex-col">
     @templ.Raw("<script>window.TON_ICON_CONFIG = " + icons.ConfigJSON() + ";</script>")
-    <!-- Header -->
-    <div class="flex flex-col gap-4 mb-6">
-        <div class="flex items-center justify-between">
-            <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
-                @icons.Icon(icons.GetIcon("acervo"), "w-6 h-6 " + icons.GetColor("acervo")) Acervo
+    <!-- Header compacto: a altura da barra de busca é o que mais consumia
+         espaço da tabela (ver DECISIONS §20). -->
+    <div class="flex flex-col gap-2 mb-3 shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h1 class="text-xl font-black tracking-tight text-white flex items-center gap-2">
+                @icons.Icon(icons.GetIcon("acervo"), "w-5 h-5 " + icons.GetColor("acervo")) Acervo
             </h1>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <!-- Contador: apenas QUANTAS notas estão sendo exibidas agora
                      (muda com a busca — ver setStats em database.js) -->
-                <div class="text-sm font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
+                <div class="text-xs font-semibold text-zinc-400 min-w-5 text-center" id="db-stats" title="Notas exibidas na tabela">0</div>
 
                 <!-- Expandir/recolher (botão único) + filtro de hierarquia
                      (só no modo árvore; o JS mostra). O rótulo/ícone reflete a
                      AÇÃO disponível e o estado é persistido no localStorage. -->
                 <div id="db-tree-actions" class="flex items-center gap-1.5" style="display:none">
                     <button id="db-expand-toggle" type="button" aria-pressed="false"
-                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
                         title="Recolher todos os níveis da hierarquia">
                         <span id="db-expand-icon-expand" class="hidden">@icons.Icon("chevron-down", "w-3.5 h-3.5")</span>
                         <span id="db-expand-icon-collapse">@icons.Icon("chevron-right", "w-3.5 h-3.5")</span>
                         <span id="db-expand-label">Recolher</span>
                     </button>
                     <button id="db-hierarchy-toggle" type="button" aria-pressed="false"
-                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
+                        class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden"
                         title="Mostrando todas as notas — clique para exibir só as que participam da hierarquia">
                         <span id="db-hierarchy-icon-all">@icons.Icon("layers", "w-3.5 h-3.5")</span>
                         <span id="db-hierarchy-icon-only" class="hidden">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
@@ -44,7 +45,7 @@ templ databaseContent() {
 
                 <!-- Column Visibility Selector -->
                 <div class="relative" id="column-selector-container">
-                    <button id="column-selector-btn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden">
+                    <button id="column-selector-btn" class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 transition-all focus:outline-hidden">
                         @icons.Icon("columns", "w-3.5 h-3.5")
                         Colunas
                     </button>
@@ -60,11 +61,11 @@ templ databaseContent() {
         </div>
 
         <!-- Search input and filters -->
-        <div class="mt-2 flex items-center gap-2">
+        <div class="flex items-center gap-2">
             <div class="relative flex-1 min-w-0">
                 <input id="db-search" type="text" placeholder="Buscar em qualquer campo..." autocomplete="off"
-                    class="w-full pl-4 pr-10 py-2.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-sky-500 transition-all" />
-                <button id="db-search-clear" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
+                    class="w-full pl-3 pr-9 py-1.5 text-[13px] bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-hidden focus:border-emerald-500/50 transition-all" />
+                <button id="db-search-clear" type="button" class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 hidden transition-colors" title="Limpar busca">
                     @icons.Icon("x", "w-3.5 h-3.5")
                 </button>
             </div>
@@ -72,7 +73,7 @@ templ databaseContent() {
                  "Pai + irmãos": resultado + caminho de pais + irmãs.
                  "Só resultados": apenas as notas que casaram. -->
             <button id="db-search-mode" type="button" aria-pressed="false"
-                class="shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 focus:outline-hidden focus:border-sky-500 transition-all"
+                class="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white hover:border-zinc-700 focus:outline-hidden focus:border-emerald-500/50 transition-all"
                 title="Busca: mostrando o resultado com o caminho de pais e as irmãs — clique para mostrar só as notas que casaram">
                 <span id="db-search-mode-icon-contexto">@icons.Icon("git-fork", "w-3.5 h-3.5")</span>
                 <span id="db-search-mode-icon-resultados" class="hidden">@icons.Icon("search", "w-3.5 h-3.5")</span>
@@ -81,8 +82,12 @@ templ databaseContent() {
         </div>
     </div>
 
-    <!-- Tabulator container -->
-    <div id="notes-table" class="ton-tabulator w-full bg-zinc-950/50 rounded-xl overflow-hidden border border-zinc-800"></div>
+    <!-- Área de resultados: mesmo tema/.ton-tabulator da nota Tabulator, agora
+         com a moldura e o respiro das bordas da página (a barra de rolagem
+         vertical fica visível — ver DECISIONS §20). -->
+    <div id="notes-table-wrap" class="relative flex-1 min-h-0 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950/50">
+        <div id="notes-table" class="ton-tabulator w-full h-full"></div>
+    </div>
 </div>
 
 <!-- Tabulator Assets loaded dynamically below -->
@@ -92,26 +97,30 @@ templ databaseContent() {
        O DESENHO e as CORES da tabela (cabeçalho, linhas, zebra, células em
        edição, filtros, rolagem, foco/ordenação em esmeralda) vêm de
        /static/tabulator-theme.css (classe .ton-tabulator) — a MESMA fonte da
-       nota Tabulator. Aqui ficam só o que é específico desta página: largura
+       nota Tabulator. Aqui ficam só o que é específico desta página: altura
        total, padding das células (a árvore depende dele), controles da
        hierarquia, paginação e as decorações das células. */
 
-    /* Ocupa a largura toda (a página já tem padding próprio). */
+    /* ── Altura da página ────────────────────────────────────────────────
+       Navbar (57px medidos no DOM) + padding vertical do layout (24px em cima
+       e embaixo). O cabeçalho fica shrink-0 e a área de resultados ocupa o
+       resto: a tabela cresce junto com a janela e não depende mais de um
+       "calc(100vh - 190px)" chumbado no database.js. */
+    #database-page {
+        height: calc(100vh - 105px);
+        height: calc(100dvh - 105px);
+        min-height: 320px;
+    }
     #notes-table {
-        width: 100vw;
-        position: relative;
-        left: 50%;
-        right: 50%;
-        margin-left: -50vw;
-        margin-right: -50vw;
-        border-radius: 0 !important;
+        height: 100%;
     }
 
     /* Padding local: o offset das guias da hierarquia (DECISIONS §6.28) sai
        deste padding-left (12px) + meia largura do controle +/- (8px). Não
-       mexer sem revisar as guias. */
+       mexer no horizontal sem revisar as guias. O vertical (6px) é o MESMO da
+       nota Tabulator (DECISIONS §14.8/§20) — mesma densidade de linhas. */
     #notes-table .tabulator-row .tabulator-cell {
-        padding: 8px 12px !important;
+        padding: 6px 12px !important;
     }
 
     /* Células editáveis: dica de hover no acento do tema (esmeralda). */

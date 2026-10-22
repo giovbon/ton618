@@ -1766,15 +1766,16 @@ type: tabulator
 - O desenho/cores da tabela passou a ter **uma única fonte**: `web/static/tabulator-theme.css`,
   aplicada pela classe `.ton-tabulator` no container (que é a própria raiz da tabela — ver 14.6).
   A nota `/tabulator` e a administração `/database` carregam o mesmo arquivo; cada página guarda no
-  seu `<style>` só o que é local (largura total, padding das células, árvore de hierarquia,
+  seu `<style>` só o que é local (altura total, padding das células, árvore de hierarquia,
   paginação e as decorações das células).
 - Motivo: os dois blocos de CSS tinham **divergido** (cabeçalho `#18181b`, linhas `#09090b` e sem
   zebra na `/database` × `#1b1b20`/`#121215` com zebra na nota) e o contraste reforçado existia só
   na nota. Agora ambos usam a mesma paleta: cabeçalho `#1b1b20` com borda inferior de 2px
   `#3f3f46`, linhas `#121215` (zebra `#18181d`), hover `#24242c`, separadores `#26262c` e acento
   esmeralda (`#10b981`/`#34d399`) no foco, na edição e na ordenação.
-- O padding das células **não** é compartilhado: a `/database` depende do `padding-left: 12px` para
-  o deslocamento das guias da hierarquia (§6.28). A nota usa `6px 8px`; a `/database`, `8px 12px`.
+- O padding das células **não** é totalmente compartilhado: a `/database` depende do `padding-left: 12px` para
+  o deslocamento das guias da hierarquia (§6.28). A nota usa `6px 8px`; a `/database`, `6px 12px`
+  (vertical igual, horizontal maior por causa da árvore — ver §20).
 - **Ícone próprio do tipo:** a `/database` monta o ícone de cada linha no servidor
   (`icons.SVGString` → campo `_icon`), enquanto o navbar/sidebar e os templates usam o renderizador
   templ (`icons.Icon`). Os dois switches tinham **divergido** (56 nomes existiam só no template) e
@@ -1953,3 +1954,35 @@ type: tabulator
 - **Frontend**: `_organizeHeadings` do editor é declarado explicitamente (ESM/strict não pode
   atribuir a variável implícita); o formatter de tags do Acervo usa `escapeHtml` (XSS por tag
   de frontmatter). Testes unitários cobrem os dois.
+
+## 20. Acervo — cabeçalho compacto e área de resultados com moldura (22/10/2026)
+
+📍 `core/internal/features/system/handlers_database_tabulator.go` | `core/internal/features/notes/database.templ` | `core/web/src/database.js` | `core/web/tests/database.spec.ts`
+
+**Problema:** o cabeçalho do Acervo (título + contador + botões + busca) consumia ~118px e a
+tabela usava `height: calc(100vh - 190px)` chumbado. A área de resultados era esticada com o hack
+`width: 100vw; left: 50%; margin-left: -50vw` para escapar do `max-w-4xl` do layout — como `100vw`
+inclui a largura da barra de rolagem, a página ganhava overflow horizontal e a **barra de rolagem
+vertical da tabela ficava parcialmente escondida** no canto direito.
+
+**Decisão:**
+
+- **Layout full width de verdade:** `HandleDatabasePage` passa a renderizar com
+  `is_full_width` no contexto (mesmo padrão da Agenda). O layout entrega `w-full px-3 md:px-6`,
+  então a tabela ganha o padding das bordas sem precisar de `100vw` e sem estourar a viewport.
+- **Cabeçalho compacto:** `gap-4 mb-6` → `gap-2 mb-3`, título `text-2xl` → `text-xl`, botões
+  `py-1.5` → `py-1` e busca `py-2.5` → `py-1.5` (foco em esmeralda, o mesmo acento do filtro da
+  nota Tabulator). O cabeçalho é `shrink-0`; a área de resultados é `flex-1 min-h-0` e a tabela usa
+  `height: "100%"`.
+- **Altura sem número mágico no JS:** `#database-page` mede `calc(100dvh - 105px)` (navbar de 57px
+  medido no DOM + `py-6` do layout). Se o cabeçalho crescer (ex.: quebra de linha no mobile), o flex
+  reduz a tabela automaticamente.
+- **Moldura e respiro:** a tabela fica dentro de `#notes-table-wrap` (`rounded-xl`, borda zinc e
+  `overflow-hidden`), que garante o padding lateral da página (12px no mobile, 24px no desktop) e
+  mantém a barra de rolagem vertical inteira visível.
+- **Padronização com a nota Tabulator (§14.8):** o padding vertical das células passou de 8px para
+  **6px** (a nota usa `6px 8px`), mantendo o horizontal em 12px porque as guias da hierarquia
+  dependem dele (§6.28). O resto do desenho continua vindo de `tabulator-theme.css`.
+
+**Regressão:** `database.spec.ts` verifica que a página não tem overflow horizontal, que a moldura
+tem padding real nas bordas e que a área da tabela ocupa a maior parte da viewport.

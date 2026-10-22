@@ -780,7 +780,10 @@
                 table = new Tabulator("#notes-table", {
                     data: baseRows,
                     columns: cols,
-                    height: "calc(100vh - 190px)",
+                    // A área de resultados é um flex item com altura definida
+                    // (#database-page → #notes-table-wrap); 100% acompanha o
+                    // cabeçalho compacto sem um "calc(100vh - 190px)" fixo.
+                    height: "100%",
                     layout: "fitColumns",
                     responsiveLayout: "collapse",
                     columnResizeGuide: true,

@@ -127,3 +127,37 @@ test('usa o tema compartilhado e a coluna Tipo exibe o valor cru sem ícone', as
   await expect(typeCell).toHaveText('tabulator');
   await expect(typeCell.locator('svg')).toHaveCount(0);
 });
+
+// Regressão visual (DECISIONS §20): a área de resultados usa a largura da
+// página com padding real nas bordas. O hack antigo de `100vw` estourava a
+// viewport e escondia parte da barra de rolagem vertical da tabela.
+test('área de resultados respeita as bordas e não gera overflow horizontal', async ({ page }) => {
+  await page.goto('/database');
+  await expect(page.locator('#notes-table .tabulator-header')).toBeVisible({ timeout: 20000 });
+
+  const layout = await page.evaluate(() => {
+    const wrap = document.getElementById('notes-table-wrap') as HTMLElement;
+    const rect = wrap.getBoundingClientRect();
+    const header = (document.querySelector('#database-page > div') as HTMLElement).getBoundingClientRect();
+    return {
+      docWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      leftGap: rect.left,
+      rightGap: window.innerWidth - rect.right,
+      bottomGap: window.innerHeight - rect.bottom,
+      wrapHeight: rect.height,
+      headerHeight: header.height,
+    };
+  });
+
+  // Sem rolagem horizontal: a tabela termina antes da borda da janela.
+  expect(layout.docWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.leftGap).toBeGreaterThan(0);
+  expect(layout.rightGap).toBeGreaterThan(0);
+  expect(layout.bottomGap).toBeGreaterThan(0);
+
+  // Cabeçalho compacto: a tabela fica com a maior parte da altura útil.
+  expect(layout.headerHeight).toBeLessThan(90);
+  expect(layout.wrapHeight / layout.viewportHeight).toBeGreaterThan(0.6);
+});
