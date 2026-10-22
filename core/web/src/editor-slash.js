@@ -23,6 +23,7 @@ var _setSlashPos = null;
 var _slashFilterRef = null;
 var _setSlashFilter = null;
 var _hideSlashMenuFn = null;
+var _organizeHeadings = null;
 
 /**
  * Inicializa o módulo com as referências ao estado compartilhado do IIFE.
