@@ -963,6 +963,33 @@ func TestUpdateParentOnRename_ChaveLegadaParent(t *testing.T) {
 	}
 }
 
+func TestUpdateParentOnRename_PreservaTagsAoTrocarChaveLegada(t *testing.T) {
+	notas := map[string]string{
+		"notes/filha.md": "---\nparent: velho-pai\ntags: [a, b]\n---\nTexto\n",
+	}
+	svc, saved := newMockServiceForParent(t, notas)
+
+	if err := svc.UpdateParentOnRename("notes/velho-pai.md", "notes/novo-pai.md"); err != nil {
+		t.Fatalf("UpdateParentOnRename: %v", err)
+	}
+
+	got := (*saved)["notes/filha.md"]
+	fm, _, err := ParseFrontmatter(got)
+	if err != nil {
+		t.Fatalf("frontmatter inválido após rename: %v\n%s", err, got)
+	}
+	if v, _ := fm["pai"].(string); v != "novo-pai" {
+		t.Errorf("pai = %q; want %q", v, "novo-pai")
+	}
+	if _, hasLegacy := fm["parent"]; hasLegacy {
+		t.Errorf("chave legada 'parent' ainda presente:\n%s", got)
+	}
+	tags, _ := fm["tags"].([]interface{})
+	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+		t.Errorf("tags perdidas/alteradas: %#v\n%s", tags, got)
+	}
+}
+
 func TestUpdateParentOnRename_IgnoraNotasSemPai(t *testing.T) {
 	semPai := "notes/sem-pai.md"
 	notas := map[string]string{

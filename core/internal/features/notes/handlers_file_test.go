@@ -752,6 +752,45 @@ func TestHandleFileRename_ArchiveSuccess(t *testing.T) {
 	}
 }
 
+// Regressão: o rename de arquivo pelo editor perdia os metadados externos
+// (em especial o `pai:` da tabela file_metadata), que o DeleteAllFileRecords
+// remove no meio do caminho.
+func TestHandleFileRename_ArchivePreservaMetadados(t *testing.T) {
+	ctx := newTestContext(t)
+	archiveDir := filepath.Join(ctx.Cfg.DocsDir, "archives")
+	os.MkdirAll(archiveDir, 0755)
+
+	oldName := "archives/old-meta.zip"
+	os.WriteFile(filepath.Join(ctx.Cfg.DocsDir, oldName), []byte("fake zip"), 0644)
+	ctx.Store.SetFileMod(oldName, "2026-01-01T00:00:00Z")
+	if err := ctx.Store.SetFileMetadata(oldName, "pai", "nota-mae"); err != nil {
+		t.Fatalf("SetFileMetadata: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("old=" + oldName + "&new=archives/new-meta")
+	req := httptest.NewRequest("POST", "/file/rename", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleFileRename(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("esperado 200, got %d — body: %s", rec.Code, rec.Body.String())
+	}
+
+	newName := "archives/new-meta.zip"
+	if _, err := os.Stat(filepath.Join(ctx.Cfg.DocsDir, newName)); err != nil {
+		t.Fatalf("arquivo renomeado deveria existir: %v", err)
+	}
+	meta, err := ctx.Store.GetFileMetadata(newName)
+	if err != nil {
+		t.Fatalf("GetFileMetadata: %v", err)
+	}
+	if meta["pai"] != "nota-mae" {
+		t.Errorf("metadado pai deveria ser preservado, got %v", meta)
+	}
+}
+
 func TestHandleFileDelete_ImageFile(t *testing.T) {
 	ctx := newTestContext(t)
 	notesDir := filepath.Join(ctx.Cfg.DocsDir, "notes")

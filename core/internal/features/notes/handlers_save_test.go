@@ -328,6 +328,36 @@ func TestHandleDuplicateNote_NotaComFrontmatterTitle_PrefixaTitle(t *testing.T) 
 	}
 }
 
+// Regressão: `Title:` (maiúscula) não era reconhecido pelo caminho
+// case-sensitive de HandleDuplicateNote, e a cópia ficava sem o prefixo.
+func TestHandleDuplicateNote_FrontmatterComTitleMaiusculo(t *testing.T) {
+	ctx := newTestContext(t)
+	content := "---\nTitle: Minha Nota\n---\n\n# Conteudo"
+	saveTestNote(t, ctx, "notes/nota-com-title-maiusculo.md", content, "")
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader("filename=notes/nota-com-title-maiusculo.md")
+	req := httptest.NewRequest("POST", "/file/duplicate", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	ctx.HandleDuplicateNote(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("esperado 200 ao duplicar, got %d", rec.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(rec.Body).Decode(&resp)
+	newFilename, _ := resp["new_filename"].(string)
+
+	copiedContent, err := ctx.Store.GetNote(newFilename)
+	if err != nil {
+		t.Fatalf("erro ao buscar nota copiada: %v", err)
+	}
+	if !strings.Contains(copiedContent, "copia-Minha Nota") {
+		t.Errorf("esperado title 'copia-Minha Nota' no frontmatter, got nota: %q", copiedContent)
+	}
+}
+
 // TestHandleDuplicateNote_PreservaTagsDoBanco cobre a gravação ÚNICA do
 // HandleDuplicateNote: a tabela `tags` é reconstruída a partir do frontmatter na
 // reindexação, então uma tag que só existe no banco (sem frontmatter) precisa ser

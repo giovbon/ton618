@@ -77,6 +77,12 @@ func ParentRefOfContent(content string) string {
 	if err != nil || fm == nil {
 		return ""
 	}
+	return parentRefFromMap(fm)
+}
+
+// parentRefFromMap é a leitura de `pai:`/`parent:` sobre um frontmatter já
+// parseado — evita reparsear o conteúdo em loops (ex: UpdateParentOnRename).
+func parentRefFromMap(fm map[string]interface{}) string {
 	for _, key := range []string{domain.ParentKey, domain.ParentKeyLegacy} {
 		for k, v := range fm {
 			if !strings.EqualFold(k, key) || v == nil {

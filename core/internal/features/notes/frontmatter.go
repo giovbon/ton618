@@ -40,6 +40,54 @@ func ParseFrontmatter(content string) (map[string]interface{}, string, error) {
 	return fm, body, nil
 }
 
+// ParseFrontmatterOrEmpty é a leitura tolerante do frontmatter: em erro (YAML
+// inválido) devolve um mapa vazio em vez de propagar o erro. Use só onde
+// "frontmatter inválido" significa "sem propriedades"; quem precisa preservar
+// o conteúdo original deve usar ParseFrontmatter e tratar o erro.
+func ParseFrontmatterOrEmpty(content string) map[string]interface{} {
+	fm, _, err := ParseFrontmatter(content)
+	if err != nil || fm == nil {
+		return map[string]interface{}{}
+	}
+	return fm
+}
+
+// ── Título do frontmatter ──
+//
+// `titulo` é a chave canônica do projeto; `title` é aceita por compatibilidade.
+// A leitura é sempre case-insensitive: um frontmatter com `Title:` precisa ser
+// reconhecido igualmente pelo Acervo, pela duplicação e pelo rename — antes
+// cada caminho tinha a sua própria regra e dois deles eram case-sensitive.
+
+// IsFrontmatterTitleKey informa se key é uma chave de título (`titulo` ou
+// `title`, case-insensitive).
+func IsFrontmatterTitleKey(key string) bool {
+	return strings.EqualFold(key, "titulo") || strings.EqualFold(key, "title")
+}
+
+// FrontmatterTitleKey devolve a chave real (como aparece no mapa, ex.: "Title")
+// e o valor do título. A precedência é `titulo` sobre `title`; só valores
+// string contam. Retorna ("", "") quando não há título.
+func FrontmatterTitleKey(fm map[string]interface{}) (key, value string) {
+	for _, want := range []string{"titulo", "title"} {
+		for k, v := range fm {
+			if !strings.EqualFold(k, want) {
+				continue
+			}
+			if s, ok := v.(string); ok {
+				return k, strings.TrimSpace(s)
+			}
+		}
+	}
+	return "", ""
+}
+
+// FrontmatterTitle devolve apenas o valor do título (ver FrontmatterTitleKey).
+func FrontmatterTitle(fm map[string]interface{}) string {
+	_, value := FrontmatterTitleKey(fm)
+	return value
+}
+
 func toFlowStyleNode(val interface{}) interface{} {
 	var list []string
 
@@ -76,6 +124,12 @@ func UpdateFrontmatterProperty(content string, key string, value interface{}) (s
 	if err != nil {
 		return "", err
 	}
+	return updateFrontmatterPropertyIn(fm, body, key, value)
+}
+
+// updateFrontmatterPropertyIn aplica a alteração a um frontmatter já parseado.
+// Usado em loops (ex: UpdateParentOnRename) para não reparsear o mesmo conteúdo.
+func updateFrontmatterPropertyIn(fm map[string]interface{}, body, key string, value interface{}) (string, error) {
 	if fm == nil {
 		fm = make(map[string]interface{})
 	}

@@ -272,6 +272,40 @@ func TestNoteService_Rename_UpdatesWikilinks(t *testing.T) {
 	validaNota("ref4", "Link case-insensitive: [[novo-alvo]]") // Note que a caixa mudará para a do newTitle (novo-alvo)
 }
 
+// TestFrontmatterTitle_ChavesVariantes fixa o leitor único: `title`/`titulo`
+// em qualquer caixa, só valor string, com precedência de `titulo`.
+func TestFrontmatterTitle_ChavesVariantes(t *testing.T) {
+	cases := []struct {
+		name string
+		fm   map[string]interface{}
+		want string
+	}{
+		{"title minusculo", map[string]interface{}{"title": "Alpha"}, "Alpha"},
+		{"Title maiusculo", map[string]interface{}{"Title": "Beta"}, "Beta"},
+		{"TITLE caixa alta com espacos", map[string]interface{}{"TITLE": " Gama "}, "Gama"},
+		{"titulo canonico", map[string]interface{}{"titulo": "Delta"}, "Delta"},
+		{"Titulo capitalizado", map[string]interface{}{"Titulo": "Epsilon"}, "Epsilon"},
+		{"titulo tem precedencia", map[string]interface{}{"title": "Title", "titulo": "Titulo"}, "Titulo"},
+		{"valor nao-string e ignorado", map[string]interface{}{"title": 42}, ""},
+		{"ausente", map[string]interface{}{"tags": "x"}, ""},
+		{"sem frontmatter", nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := FrontmatterTitle(tc.fm); got != tc.want {
+				t.Errorf("FrontmatterTitle(%v) = %q, want %q", tc.fm, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFrontmatterTitleKey_DevolveChaveReal(t *testing.T) {
+	key, value := FrontmatterTitleKey(map[string]interface{}{"Title": "Beta"})
+	if key != "Title" || value != "Beta" {
+		t.Errorf("FrontmatterTitleKey = (%q, %q), want (Title, Beta)", key, value)
+	}
+}
+
 func TestNoteService_Rename(t *testing.T) {
 	svc, _, store, cleanup := newTestService(t)
 	defer cleanup()
@@ -296,6 +330,27 @@ func TestNoteService_Rename(t *testing.T) {
 	expected := "---\ntipo: nota\ntitle: new-name\n---\nconteudo antigo"
 	if content != expected {
 		t.Errorf("conteúdo errado: %q", content)
+	}
+}
+
+// Regressão: com `Title:` (maiúscula), o rename não reconhecia a chave e o
+// título antigo permanecia no frontmatter.
+func TestNoteService_Rename_FrontmatterComTitleMaiusculo(t *testing.T) {
+	svc, _, store, cleanup := newTestService(t)
+	defer cleanup()
+
+	svc.Save("old-name", "---\nTitle: Antigo\n---\nconteudo antigo", nil)
+
+	if err := svc.Rename("old-name", "new-name"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	content, _ := store.GetNote("notes/new-name.md")
+	if !strings.Contains(content, "title: new-name") {
+		t.Errorf("esperado title atualizado para new-name, got %q", content)
+	}
+	if strings.Contains(content, "Antigo") {
+		t.Errorf("título antigo não deveria permanecer, got %q", content)
 	}
 }
 

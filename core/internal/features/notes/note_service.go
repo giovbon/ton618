@@ -74,16 +74,23 @@ func (s *NoteService) Save(filename, content string, rawTags []string) error {
 	return s.SaveWithContext(context.Background(), filename, content, rawTags)
 }
 
+// normalizeNoteFilename garante o formato canônico de uma NOTA: extensão .md e
+// prefixo notes/. NoteFilename (handlers_file.go) é para caminhos de arquivo em
+// geral e aceita outros prefixos.
+func normalizeNoteFilename(name string) string {
+	if !strings.HasSuffix(name, ".md") {
+		name += ".md"
+	}
+	if !strings.HasPrefix(name, domain.NotePrefix) {
+		name = domain.NotePrefix + name
+	}
+	return name
+}
+
 // SaveWithContext é como Save, mas aceita um contexto para propagar
 // cancelamento (ex: cliente desconectou) até a camada de banco.
 func (s *NoteService) SaveWithContext(ctx context.Context, filename, content string, rawTags []string) error {
-	// Garante o formato do filename
-	if !strings.HasSuffix(filename, ".md") {
-		filename += ".md"
-	}
-	if !strings.HasPrefix(filename, domain.NotePrefix) {
-		filename = domain.NotePrefix + filename
-	}
+	filename = normalizeNoteFilename(filename)
 
 	mtime := time.Now().UTC()
 	return s.processAndSave(ctx, filename, content, mtime)
@@ -114,18 +121,8 @@ func (s *NoteService) Delete(filename string) error {
 
 // Rename renomeia uma nota e atualiza todos os índices.
 func (s *NoteService) Rename(oldName, newName string) error {
-	if !strings.HasPrefix(oldName, domain.NotePrefix) {
-		oldName = domain.NotePrefix + oldName
-	}
-	if !strings.HasSuffix(oldName, ".md") {
-		oldName += ".md"
-	}
-	if !strings.HasPrefix(newName, domain.NotePrefix) {
-		newName = domain.NotePrefix + newName
-	}
-	if !strings.HasSuffix(newName, ".md") {
-		newName += ".md"
-	}
+	oldName = normalizeNoteFilename(oldName)
+	newName = normalizeNoteFilename(newName)
 
 	if oldName == newName {
 		return nil
@@ -188,23 +185,22 @@ func (s *NoteService) Rename(oldName, newName string) error {
 			}
 		}
 
-		// Atualiza as propriedades 'title' e 'titulo' no frontmatter da nota no banco
+		// Atualiza todas as chaves de título existentes (title/titulo, em
+		// qualquer caixa); se não houver nenhuma, cria `title`.
 		if fm, _, err := ParseFrontmatter(content); err == nil && fm != nil {
-			if _, hasTitle := fm["title"]; hasTitle {
+			updated := false
+			for key := range fm {
+				if !IsFrontmatterTitleKey(key) {
+					continue
+				}
+				if newContent, err := UpdateFrontmatterProperty(content, key, newTitle); err == nil {
+					content = newContent
+				}
+				updated = true
+			}
+			if !updated {
 				if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
 					content = newContent
-				}
-			}
-			if _, hasTitulo := fm["titulo"]; hasTitulo {
-				if newContent, err := UpdateFrontmatterProperty(content, "titulo", newTitle); err == nil {
-					content = newContent
-				}
-			}
-			if _, hasTitle := fm["title"]; !hasTitle {
-				if _, hasTitulo := fm["titulo"]; !hasTitulo {
-					if newContent, err := UpdateFrontmatterProperty(content, "title", newTitle); err == nil {
-						content = newContent
-					}
 				}
 			}
 		} else {
@@ -413,7 +409,7 @@ func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
 			continue
 		}
 
-		fm, _, fmErr := ParseFrontmatter(refContent)
+		fm, body, fmErr := ParseFrontmatter(refContent)
 		if fmErr != nil || fm == nil {
 			continue
 		}
@@ -421,22 +417,25 @@ func (s *NoteService) UpdateParentOnRename(oldName, newName string) error {
 		// Compara já na forma canônica (nome-base minúsculo): a mesma regra usada
 		// na leitura da hierarquia (hierarchy.go), tanto para a chave `pai` quanto
 		// para a legada `parent`, e tolerando [[]], aspas, alias e caminho.
-		if ParentCompareKey(ParentRefOfContent(refContent)) != strings.ToLower(oldShort) {
+		if ParentCompareKey(parentRefFromMap(fm)) != strings.ToLower(oldShort) {
 			continue // esta nota não é filha do alvo
 		}
 
 		// Grava sempre a forma canônica (nome curto, sem extensão, sem pasta)
-		updated, updErr := UpdateFrontmatterProperty(refContent, domain.ParentKey, newShort)
+		updated, updErr := updateFrontmatterPropertyIn(fm, body, domain.ParentKey, newShort)
 		if updErr != nil {
 			slog.Error("UpdateParentOnRename: update frontmatter", "file", refFile, "error", updErr)
 			continue
 		}
 
-		// Remove chave legada `parent:` se existir
+		// Remove chave legada `parent:` se existir. Em erro, mantém o conteúdo
+		// já atualizado (não salva vazio).
 		if _, hasLegacy := fm[domain.ParentKeyLegacy]; hasLegacy {
-			updated, updErr = UpdateFrontmatterProperty(updated, domain.ParentKeyLegacy, "")
-			if updErr != nil {
-				slog.Error("UpdateParentOnRename: remove legacy parent key", "file", refFile, "error", updErr)
+			withoutLegacy, legacyErr := updateFrontmatterPropertyIn(fm, body, domain.ParentKeyLegacy, "")
+			if legacyErr != nil {
+				slog.Error("UpdateParentOnRename: remove legacy parent key", "file", refFile, "error", legacyErr)
+			} else {
+				updated = withoutLegacy
 			}
 		}
 

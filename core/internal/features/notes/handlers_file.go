@@ -373,7 +373,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ft, oldName, oldFullPath, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, rawOld)
+	ft, oldName, _, found := resolveFileInfoStrict(ctx.Cfg.DocsDir, rawOld)
 	if !found {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
@@ -390,12 +390,7 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 
 		// Note: delega para o NoteService
 		if err := ctx.Notes.Rename(rawOld, rawNew); err != nil {
-			msg := err.Error()
-			if strings.Contains(msg, "já existe uma nota") || strings.Contains(msg, "nota não encontrada") || strings.Contains(msg, "UNIQUE constraint failed") {
-				http.Error(w, msg, http.StatusBadRequest)
-			} else {
-				http.Error(w, msg, http.StatusInternalServerError)
-			}
+			WriteRenameError(w, err)
 			return
 		}
 		w.Header().Set("HX-Trigger", "reload-sidebar")
@@ -419,31 +414,11 @@ func (ctx *HandlerContext) HandleFileRename(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	sd := filepath.Dir(oldName)
-	newName := sd + "/" + newBasename
-	newPath := filepath.Join(ctx.Cfg.DocsDir, newName)
+	newName := filepath.Dir(oldName) + "/" + newBasename
 
-	if err := os.Rename(oldFullPath, newPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := RenameNonNoteFile(ctx.Store, ctx.Notes, ctx.Cfg.DocsDir, oldName, newName); err != nil {
+		WriteRenameError(w, err)
 		return
-	}
-
-	// Update DB: delete old indexes
-	if err := ctx.Store.DeleteAllFileRecords(oldName); err != nil {
-		slog.Error("delete old file records on rename", "file", oldName, "error", err)
-	}
-
-	info, err := os.Stat(newPath)
-	if err == nil {
-		watcher.ProcessFile(ctx.Store, watcher.FileEvent{
-			Path: newPath, Filename: newName, ModTime: info.ModTime(), Type: "create",
-		})
-	}
-
-	if ctx.Notes != nil {
-		if err := ctx.Notes.UpdateBacklinksOnRename(oldName, newName); err != nil {
-			slog.Error("update backlinks on non-note file rename", "old", oldName, "new", newName, "error", err)
-		}
 	}
 
 	w.Header().Set("HX-Trigger", "reload-sidebar")
@@ -506,22 +481,13 @@ func (ctx *HandlerContext) HandleDuplicateNote(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		// Update title in frontmatter if present
+		// Prefixa o título no frontmatter, se presente. O leitor é
+		// case-insensitive e devolve a chave real (title/titulo).
 		fm, _, err := ParseFrontmatter(content)
 		if err == nil && fm != nil {
-			if titleVal, ok := fm["title"]; ok {
-				if titleStr, ok := titleVal.(string); ok {
-					newContent, err := UpdateFrontmatterProperty(content, "title", "copia-"+titleStr)
-					if err == nil {
-						content = newContent
-					}
-				}
-			} else if titleVal, ok := fm["titulo"]; ok {
-				if titleStr, ok := titleVal.(string); ok {
-					newContent, err := UpdateFrontmatterProperty(content, "titulo", "copia-"+titleStr)
-					if err == nil {
-						content = newContent
-					}
+			if key, title := FrontmatterTitleKey(fm); key != "" {
+				if newContent, err := UpdateFrontmatterProperty(content, key, "copia-"+title); err == nil {
+					content = newContent
 				}
 			}
 		}
