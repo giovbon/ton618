@@ -61,11 +61,15 @@
             var trimmed = t.trim();
             var lt = trimmed.toLowerCase();
             if (trimmed && lt !== "drawing" && lt !== "mindmap" && lt !== "markmap") {
-                html += '<span class="tag-pill">#' + trimmed + "</span>";
+                html += '<span class="tag-pill">#' + escapeHtml(trimmed) + "</span>";
             }
         });
         return html;
     };
+
+    // Seam de teste: o formatter é puro (recebe a célula e devolve HTML) e não
+    // depende do DOM/Tabulator. Exposto para o teste unitário cobrir o escaping.
+    window.DatabaseUtils = { tagsFormatter: tagsFormatter };
 
     // ── Ícone fallback ──
     // O ícone real (SVG) já vem pronto do servidor no campo _icon de cada linha
