@@ -172,18 +172,39 @@ func CalculateHash(secao, texto string, tags []string) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
-// applyFrontmatterType aplica comportamentos específicos de tipo baseado no campo "type:" do frontmatter.
+// frontmatterTypeValue devolve o tipo declarado no frontmatter, aceitando a
+// chave canônica `tipo` (gravada pelo app) e a legada `type`, ambas já com
+// chaves minúsculas. O valor sai normalizado por domain.NormalizeNoteTipo
+// (Drawing → desenho, mindmap → mapa_mental, ...).
+func frontmatterTypeValue(fm map[string]interface{}) (string, bool) {
+	for _, key := range []string{"tipo", "type"} {
+		raw, ok := fm[key]
+		if !ok {
+			continue
+		}
+		s, ok := raw.(string)
+		if !ok || strings.TrimSpace(s) == "" {
+			continue
+		}
+		return domain.NormalizeNoteTipo(s), true
+	}
+	return "", false
+}
+
+// applyFrontmatterType aplica comportamentos específicos de tipo. Recebe o
+// valor JÁ normalizado por domain.NormalizeNoteTipo (desenho, mapa_mental,
+// tabulator, ...), não o texto cru do frontmatter.
 // Retorna as fileTags atualizadas.
-func applyFrontmatterType(typeStr string, text *string, metaParts *[]string, fileTags []string) []string {
+func applyFrontmatterType(tipo string, text *string, metaParts *[]string, fileTags []string) []string {
 	// Tag canônica a garantir; tipos binários também limpam o texto
 	var canonicalTag string
 	clearText := false
 
-	switch typeStr {
-	case "drawing":
+	switch tipo {
+	case "desenho":
 		canonicalTag = "drawing"
 		clearText = true
-	case "markmap", "mindmap":
+	case "mapa_mental":
 		canonicalTag = "markmap"
 	case "tabulator":
 		// Nota Tabulator: o corpo (JSON da planilha) É indexado — ver
@@ -290,12 +311,12 @@ func parseFrontmatterForIndex(text string) (body string, metaParts []string, fro
 			metaParts = append(metaParts, fmt.Sprintf("%v: %v", k, v))
 		}
 
-		// Aplica comportamentos e tag canônica conforme o type: do frontmatter
-		if typeRaw, ok := fm["type"]; ok {
-			if typeStr, ok := typeRaw.(string); ok {
-				frontmatterType = strings.ToLower(strings.TrimSpace(typeStr))
-				fileTags = applyFrontmatterType(typeStr, &text, &metaParts, fileTags)
-			}
+		// Aplica comportamentos e tag canônica conforme o tipo do frontmatter.
+		// `tipo` é a chave canônica gravada pelo app; `type` é aceita por
+		// compatibilidade. A normalização é a mesma da coluna note_type/filtros.
+		if tipo, ok := frontmatterTypeValue(fm); ok {
+			frontmatterType = tipo
+			fileTags = applyFrontmatterType(tipo, &text, &metaParts, fileTags)
 		}
 	}
 

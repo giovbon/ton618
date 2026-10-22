@@ -125,6 +125,28 @@ func TestProcessMarkdownContent_Tabulator(t *testing.T) {
 	}
 }
 
+// A exportação CSV precisa reconhecer a chave canônica `tipo:` e não pode se
+// deixar enganar por "tabulator" citado em outro campo do frontmatter.
+func TestTabulatorCSVFromNote_TipoCanonico(t *testing.T) {
+	for _, fm := range []string{"tipo: tabulator", "type: tabulator", "type: TABULATOR"} {
+		content := "---\n" + fm + "\n---\n" + tabulatorSample
+		csv, ok := TabulatorCSVFromNote(content)
+		if !ok {
+			t.Fatalf("%s: esperado CSV válido", fm)
+		}
+		if !strings.Contains(string(csv), "Nome") || !strings.Contains(string(csv), "Ana") {
+			t.Errorf("%s: CSV não contém cabeçalho/valores esperados: %q", fm, string(csv))
+		}
+	}
+}
+
+func TestTabulatorCSVFromNote_TabulatorEmOutroCampoNaoDetecta(t *testing.T) {
+	content := "---\ndescription: 'type: tabulator'\n---\n" + tabulatorSample
+	if _, ok := TabulatorCSVFromNote(content); ok {
+		t.Error("descrição contendo 'type: tabulator' não deveria classificar a nota como Tabulator")
+	}
+}
+
 func TestTabulatorToCSV(t *testing.T) {
 	data, _ := ParseTabulatorData(tabulatorSample)
 	out := TabulatorToCSV(data)

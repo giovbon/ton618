@@ -114,6 +114,61 @@ func TestProcessMarkdown_TypeMarkmapGaranteTagCanonica(t *testing.T) {
 	}
 }
 
+// O tipo do frontmatter é normalizado uma única vez, aceitando `tipo:` (chave
+// canônica gravada pelo app) e `type:` (legado), em qualquer caixa. Antes,
+// `type: Drawing` não limpava o JSON do Excalidraw e `tipo: tabulator` não
+// disparava a indexação célula a célula.
+func TestProcessMarkdownContent_FrontmatterTipoNormalizado(t *testing.T) {
+	now := time.Now()
+
+	cases := []struct {
+		name           string
+		fm             string
+		body           string
+		wantTag        string
+		wantDocs       bool
+		wantDefaultSec bool
+	}{
+		{"type Drawing", "type: Drawing", `{"elements":[]}`, "drawing", false, false},
+		{"tipo desenho", "tipo: desenho", `{"elements":[]}`, "drawing", false, false},
+		{"type TABULATOR", "type: TABULATOR", tabulatorSample, "tabulator", true, false},
+		{"tipo tabulator", "tipo: tabulator", tabulatorSample, "tabulator", true, false},
+		{"tipo mapa mental", "tipo: mapa mental", "# Titulo\n- Topico", "markmap", true, false},
+		{"tipo desconhecido", "tipo: foo", "conteudo comum", "", true, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			content := "---\n" + tc.fm + "\n---\n" + tc.body
+			docs, _, tags := ProcessMarkdownContent([]byte(content), "notes/teste.md", now, now)
+
+			if tc.wantTag != "" {
+				found := false
+				for _, tag := range tags {
+					if tag == tc.wantTag {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("esperado tag canônica %q, got %v", tc.wantTag, tags)
+				}
+			}
+			if tc.wantDocs && len(docs) == 0 {
+				t.Error("esperado documentos indexados, got 0")
+			}
+			if !tc.wantDocs && len(docs) != 0 {
+				t.Errorf("esperado 0 documentos (corpo limpo), got %d", len(docs))
+			}
+			for _, d := range docs {
+				if d.Secao == SectionDefault && !tc.wantDefaultSec {
+					t.Errorf("JSON/corpo especial não deveria ser indexado como markdown (seção %q)", d.Secao)
+				}
+			}
+		})
+	}
+}
+
 func TestProcessMarkdown_Wikilinks(t *testing.T) {
 	dir := t.TempDir()
 	fp := filepath.Join(dir, "wikilinks.md")

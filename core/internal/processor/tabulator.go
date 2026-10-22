@@ -340,30 +340,14 @@ func TabulatorCSVFromNote(content string) ([]byte, bool) {
 }
 
 // tabulatorBodyFromNote extrai o corpo JSON de uma nota cujo frontmatter declara
-// "type: tabulator".
+// o tipo tabulator (`tipo:` canônico ou `type:` legado, case-insensitive).
+// Usa o mesmo parser/normalização do indexador, em vez de procurar a substring
+// "tabulator" no YAML (que casava até `description: "type: tabulator"`).
 func tabulatorBodyFromNote(content string) (string, bool) {
 	text := strings.TrimLeft(content, " \t\r\n\xef\xbb\xbf")
-	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
+	body, _, tipo, _ := parseFrontmatterForIndex(text)
+	if tipo != "tabulator" {
 		return "", false
 	}
-
-	endIdx := strings.Index(text[4:], "\n---")
-	if endIdx == -1 {
-		return "", false
-	}
-	endIdx += 4
-
-	yamlContent := strings.ToLower(text[4:endIdx])
-	if !strings.Contains(yamlContent, "tabulator") {
-		return "", false
-	}
-
-	after := endIdx + 4
-	if after < len(text) && text[after] == '\r' {
-		after++
-	}
-	if after < len(text) && text[after] == '\n' {
-		after++
-	}
-	return strings.TrimSpace(text[after:]), true
+	return strings.TrimSpace(body), true
 }
