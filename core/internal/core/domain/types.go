@@ -35,17 +35,17 @@ type SearchSnippet struct {
 }
 
 type SearchResultItem struct {
-	ID        string
-	Tipo      string
-	Arquivo   string
-	Secao     string
-	Snippet   string
-	Snippets  []SearchSnippet // demais trechos da mesma nota (além do principal)
-	ExtraCount int            // ocorrências restantes fora do teto de exibição
-	Tags      []string
-	RawTags   []string
-	Timestamp string
-	Line      int
+	ID         string
+	Tipo       string
+	Arquivo    string
+	Secao      string
+	Snippet    string
+	Snippets   []SearchSnippet // demais trechos da mesma nota (além do principal)
+	ExtraCount int             // ocorrências restantes fora do teto de exibição
+	Tags       []string
+	RawTags    []string
+	Timestamp  string
+	Line       int
 }
 
 type ArchiveInfo struct {
