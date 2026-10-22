@@ -34,6 +34,17 @@ func newStoreAndBackup(t *testing.T) (*db.Store, *BackupService, string) {
 	return store, svc, docsDir
 }
 
+// Regressão: o erro de GetAllNotes era descartado e o backup saía sem as notas,
+// com status 200 (perda silenciosa). Agora o erro é propagado ao handler.
+func TestBackup_PropagaErroAoCarregarNotas(t *testing.T) {
+	store, svc, _ := newStoreAndBackup(t)
+	store.Close()
+
+	if _, err := svc.Create(false); err == nil {
+		t.Fatal("esperava erro quando GetAllNotes falha, got nil")
+	}
+}
+
 func TestBackup_QuickCreatesZip(t *testing.T) {
 	store, svc, docsDir := newStoreAndBackup(t)
 

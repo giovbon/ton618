@@ -10,11 +10,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"ton618/core/internal/core/domain"
 	"ton618/core/internal/processor"
 	"ton618/core/internal/repository"
 
@@ -145,7 +145,12 @@ func (s *BackupService) CreateStreamContext(ctx context.Context, out io.Writer, 
 		return err
 	}
 
-	allNotes, _ := s.notes.GetAllNotes()
+	allNotes, err := s.notes.GetAllNotes()
+	if err != nil {
+		// Sem isso o backup saía vazio (só com dados de arquivos) e o handler
+		// respondia 200 — perda silenciosa.
+		return fmt.Errorf("backup: carregar notas: %w", err)
+	}
 
 	zw := zip.NewWriter(out)
 	seen := make(map[string]bool)
@@ -337,13 +342,7 @@ func (s *BackupService) writeNotesParallel(ctx context.Context, zw *zip.Writer, 
 		return err
 	}
 
-	workers := runtime.GOMAXPROCS(0)
-	if workers > 4 {
-		workers = 4
-	}
-	if workers < 1 {
-		workers = 1
-	}
+	workers := domain.NormalizeWorkers(0, len(entries))
 	if len(entries) < 2 {
 		workers = 1
 	}
