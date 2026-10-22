@@ -67,7 +67,14 @@ test('editor-init.js dispara o evento depois de salvar', () => {
 });
 
 test('o bundle servido contém o evento (estático rebuildado)', () => {
-  const estatico = ler(path.join(STATIC_DIR, 'editor-init.js'));
+  const bundle = path.join(STATIC_DIR, 'editor-init.js');
+  assert.ok(
+    fs.existsSync(bundle),
+    `bundle não encontrado: ${bundle} — rode "node build.js" antes dos testes ` +
+      '(os estáticos são artefatos de build e não são versionados)'
+  );
+
+  const estatico = ler(bundle);
   assert.ok(
     estatico.includes(EVENTO),
     `web/static/editor-init.js está desatualizado: rode "node build.js" (o evento ${EVENTO} não está lá)`

@@ -234,6 +234,10 @@ jobs:
           NODE_OPTIONS: "--no-network-family-autoselection"
         run: |
           npm ci --legacy-peer-deps
+          # Os bundles de `static/` são gitignored e alguns testes unitários os
+          # leem (query-panel/todos-badge). Num checkout limpo é preciso buildar
+          # antes, senão os testes falham com ENOENT.
+          node build.js --dev
           npm test
 
       - name: 🔧 Setup QEMU (binfmt)

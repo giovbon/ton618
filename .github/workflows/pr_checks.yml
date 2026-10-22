@@ -80,16 +80,23 @@ jobs:
           NODE_OPTIONS: "--no-network-family-autoselection"
         run: npm ci --legacy-peer-deps
 
-      - name: 🧪 Typecheck + testes unitários do web
+      - name: 🧪 Typecheck do frontend (tsc --noEmit)
         working-directory: ./core/web
-        run: |
-          npm run typecheck
-          npm test
+        run: npm run typecheck
 
       - name: 🔨 Build web (esbuild + Tailwind)
         # Roda node build.js: é onde erros de DEPENDÊNCIA NÃO-RESOLVIDA no bundle
         # aparecem (ex.: auto-merge que atualizou @tiptap/extension-* para 3.32 sem
         # @tiptap/extensions / core alinhado). Sem este passo, a quebra só
         # estourava no build Docker.
+        #
+        # ⚠️ Precisa vir ANTES dos testes unitários: os bundles de `static/` são
+        # artefatos de build (gitignored) e há guardas que leem
+        # `static/editor-init.js` e `static/js/app.js` (ex.: query-panel/todos-badge).
+        # Num checkout limpo eles não existem até este passo rodar.
         working-directory: ./core/web
         run: node build.js --dev
+
+      - name: 🧪 Testes unitários do web
+        working-directory: ./core/web
+        run: npm test
