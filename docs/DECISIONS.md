@@ -1927,3 +1927,29 @@ type: tabulator
   pode se repetir entre páginas quando as linhas de uma nota atravessam a borda do offset (era
   possível antes também); corrigir isso de verdade exige paginar por `GROUP BY arquivo` no FTS,
   o que muda a semântica do ranking e fica para uma iteração futura se incomodar.
+
+## 19. Correções de consistência do ciclo de refatoração (22/10/2026)
+
+- **Tipo do frontmatter**: o indexador lê `tipo:` (canônico, gravado pelo app) e `type:`
+  (legado), em qualquer caixa, e normaliza **uma única vez** por `domain.NormalizeNoteTipo`.
+  `applyFrontmatterType` passa a receber o valor canônico (`desenho`, `mapa_mental`,
+  `tabulator`, ...) em vez do texto cru: `type: Drawing` agora limpa o JSON do Excalidraw e
+  `tipo: tabulator`/`tipo: desenho` disparam o comportamento especial. A detecção de nota
+  Tabulator (`tabulatorBodyFromNote`) usa o mesmo parser de frontmatter — não procura mais a
+  substring `tabulator` no YAML (que casava até `description: "type: tabulator"`).
+- **JSON do Tabulator**: `ParseTabulatorData` exige `io.EOF` após o primeiro valor. Corpo
+  truncado seguido de lixo/outro JSON não é mais aceito como planilha válida.
+- **Filtro de tags**: a chave de comparação é `normalizeTagKey` (minúscula + `RemoveAccents`),
+  usada na query FTS, em `extractTags` e no filtro Go de segunda linha. `tags:saude` casa com
+  a tag `saúde` (antes o FTS casava e o filtro Go descartava).
+- **Limpeza de imagens**: usa `DeleteAllFileRecords` (fonte única) em vez de seis deletes
+  seletivos. Isso remove também `file_metadata`, evitando que uma imagem apagada continue
+  contando como filha fantasma (`pai:`) em `GetChildrenCounts`/`GetHierarchy`.
+- **Delete de arquivo/nota**: se `DeleteAllFileRecords` falhar, o handler responde 500 e
+  **não** executa `ReconcileTabulatorFiles`. Antes, a nota continuava viva no índice e a
+  reconciliação podia apagar arquivos de `datasets/` ainda referenciados.
+- **Restore de backup total**: entradas de diretório do ZIP são ignoradas no `RestoreResult.Files`
+  (só arquivos contam). `extractZipEntry` já as ignorava; o contador somava +1.
+- **Frontend**: `_organizeHeadings` do editor é declarado explicitamente (ESM/strict não pode
+  atribuir a variável implícita); o formatter de tags do Acervo usa `escapeHtml` (XSS por tag
+  de frontmatter). Testes unitários cobrem os dois.
