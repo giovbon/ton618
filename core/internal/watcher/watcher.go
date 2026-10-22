@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -34,24 +33,14 @@ func MarkRecentlyProcessed(filename string) {
 }
 
 // isRecentlyProcessed checks if a file was processed recently (within 3 seconds).
-// If so, it removes the entry to avoid permanent skipping.
+// A entrada é sempre removida (dentro ou fora da janela) para não pular o
+// arquivo para sempre.
 func isRecentlyProcessed(filename string) bool {
-	recentlyProcessedMu.RLock()
-	t, ok := recentlyProcessed[filename]
-	recentlyProcessedMu.RUnlock()
-	if !ok {
-		return false
-	}
-	if time.Since(t) < 3*time.Second {
-		recentlyProcessedMu.Lock()
-		delete(recentlyProcessed, filename)
-		recentlyProcessedMu.Unlock()
-		return true
-	}
 	recentlyProcessedMu.Lock()
+	t, ok := recentlyProcessed[filename]
 	delete(recentlyProcessed, filename)
 	recentlyProcessedMu.Unlock()
-	return false
+	return ok && time.Since(t) < 3*time.Second
 }
 
 // MonitoredSubDirs are the subdirectories inside docs/ that the watcher monitors.
@@ -137,23 +126,10 @@ func ProcessBatchParallel(store *db.Store, events []FileEvent, workers int) erro
 	return nil
 }
 
-// normalizeWorkers resolve o número de workers do pool de processamento.
-// workers <= 0 → automático (GOMAXPROCS, no máximo 4 — adequado a ARMv7 de 4
-// núcleos sem estourar memória). Nunca retorna menos que 1 nem mais que n.
+// normalizeWorkers mantém o nome local usado pelo watcher; a regra é a mesma
+// do backup (domain.NormalizeWorkers).
 func normalizeWorkers(workers, n int) int {
-	if workers <= 0 {
-		workers = runtime.GOMAXPROCS(0)
-		if workers > 4 {
-			workers = 4
-		}
-	}
-	if workers > n {
-		workers = n
-	}
-	if workers < 1 {
-		workers = 1
-	}
-	return workers
+	return domain.NormalizeWorkers(workers, n)
 }
 
 // ProcessFile processes a single file event: reads, parses, and indexes the content.
@@ -173,7 +149,7 @@ func processImageFile(filename string, modTime time.Time, creationTime time.Time
 		Texto:     "",
 		Timestamp: modTime.UTC().Format(time.RFC3339),
 		Created:   creationTime.UTC().Format(time.RFC3339),
-		Hash:      processor.CalculateHash("img", "", nil),
+		Hash:      processor.CalculateHash("img", filename, nil),
 		Tags:      nil,
 	}}
 }
@@ -181,7 +157,6 @@ func processImageFile(filename string, modTime time.Time, creationTime time.Time
 // processFileLocked é a implementação compartilhada entre ProcessFile e ProcessBatch.
 // REQUER que processMu já esteja lockado pelo caller.
 func processFileLocked(store *db.Store, ev FileEvent) error {
-
 	filename := ev.Filename
 	ext := strings.ToLower(filepath.Ext(filename))
 	tipo, ok := supportedExts[ext]
@@ -190,50 +165,13 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 	}
 
 	if ev.Type == "delete" {
-		store.DeleteDocumentsByFile(filename)
-		store.DeleteFTSByFile(filename)
-		store.DeleteFileMod(filename)
-		store.ResetPopularity(filename)
-		store.SetFileTags(filename, nil) // limpa tags
-		store.ClearLinks(filename)       // limpa links
-		slog.Info("Arquivo removido do índice", "file", filename)
+		removeFileFromIndex(store, filename)
 		return nil
 	}
 
 	// Anexos (ZIPs): nao deleta docs/FTS — foram criados pelo upload handler
 	if tipo == "attachment" {
-		// Verifica se o arquivo ja estava registrado (existia file_mod).
-		// Usamos isso para detectar perda de dados por race condition:
-		// se file_mod existe mas docs nao, algo deletou os docs e precisamos
-		// recriar o registro básico.
-		existingMod, _ := store.GetFileMod(filename)
-
-		store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
-
-		// Recovery: se o arquivo ja estava registrado mas perdeu os documentos
-		// (ex: race condition no pollAll que deletou docs mas nao o zip fisico)
-		if existingMod != "" {
-			existingDocs, _ := store.GetDocumentsByFile(filename)
-			if len(existingDocs) == 0 {
-				basename := filepath.Base(filename)
-				if strings.HasSuffix(strings.ToLower(basename), ".zip") {
-					docID := processor.HashFunc("att-" + basename)
-					doc := db.Document{
-						ID:        docID,
-						Tipo:      "attachment",
-						Arquivo:   filename,
-						Secao:     "\U0001f4e6 " + basename,
-						Texto:     "Anexo ZIP: " + basename,
-						Timestamp: ev.ModTime.UTC().Format(time.RFC3339),
-						CreatedAt: ev.ModTime.UTC().Format(time.RFC3339),
-						Hash:      processor.CalculateHash("att", basename, nil),
-					}
-					store.InsertDocument(doc)
-					store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
-					slog.Info("Documento de anexo recriado pelo watcher", "file", filename)
-				}
-			}
-		}
+		handleAttachmentEvent(store, filename, ev)
 		return nil
 	}
 
@@ -241,23 +179,87 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 	store.DeleteDocumentsByFile(filename)
 	store.DeleteFTSByFile(filename)
 
-	var docs []processor.Document
-	var links []string
-	var fileTags []string
+	docs, links, fileTags := processFileByType(ev, tipo, filename)
+	insertDocuments(store, docs)
 
-	creationTime := ev.ModTime
-
-	switch tipo {
-	case "markdown":
-		docs, links, fileTags = processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
-	case "pdf":
-		docs, links, fileTags = processor.ProcessPDF(ev.Path, filename, ev.ModTime)
-	case "imagem":
-		docs = processImageFile(filename, ev.ModTime, creationTime)
-	case "epub":
-		// Não cria documentos (evita indexação de busca e geração de embeddings)
+	for _, link := range links {
+		store.AddLink(filename, link)
 	}
 
+	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo
+	// (apenas para markdown). Sem tags, limpa as existentes.
+	if tipo == "markdown" {
+		storeFileTags(store, filename, fileTags)
+	}
+
+	// Track file mod (apenas para arquivos que não são imagens isoladas)
+	if tipo != "imagem" {
+		store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
+	}
+
+	return nil
+}
+
+func removeFileFromIndex(store *db.Store, filename string) {
+	store.DeleteDocumentsByFile(filename)
+	store.DeleteFTSByFile(filename)
+	store.DeleteFileMod(filename)
+	store.ResetPopularity(filename)
+	store.SetFileTags(filename, nil) // limpa tags
+	store.ClearLinks(filename)       // limpa links
+	slog.Info("Arquivo removido do índice", "file", filename)
+}
+
+// handleAttachmentEvent registra o ZIP e, se o arquivo já era conhecido mas
+// perdeu os documentos (race condition no pollAll), recria o stub.
+func handleAttachmentEvent(store *db.Store, filename string, ev FileEvent) {
+	existingMod, _ := store.GetFileMod(filename)
+	store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
+
+	if existingMod == "" {
+		return
+	}
+	existingDocs, _ := store.GetDocumentsByFile(filename)
+	if len(existingDocs) != 0 {
+		return
+	}
+
+	basename := filepath.Base(filename)
+	if !strings.HasSuffix(strings.ToLower(basename), ".zip") {
+		return
+	}
+	docID := processor.HashFunc("att-" + basename)
+	doc := db.Document{
+		ID:        docID,
+		Tipo:      "attachment",
+		Arquivo:   filename,
+		Secao:     "\U0001f4e6 " + basename,
+		Texto:     "Anexo ZIP: " + basename,
+		Timestamp: ev.ModTime.UTC().Format(time.RFC3339),
+		CreatedAt: ev.ModTime.UTC().Format(time.RFC3339),
+		Hash:      processor.CalculateHash("att", basename, nil),
+	}
+	store.InsertDocument(doc)
+	store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
+	slog.Info("Documento de anexo recriado pelo watcher", "file", filename)
+}
+
+// processFileByType delega ao parser do tipo; EPUB não gera documentos (evita
+// indexação de busca).
+func processFileByType(ev FileEvent, tipo, filename string) (docs []processor.Document, links []string, fileTags []string) {
+	creationTime := ev.ModTime
+	switch tipo {
+	case "markdown":
+		return processor.ProcessMarkdown(ev.Path, filename, ev.ModTime, creationTime)
+	case "pdf":
+		return processor.ProcessPDF(ev.Path, filename, ev.ModTime)
+	case "imagem":
+		return processImageFile(filename, ev.ModTime, creationTime), nil, nil
+	}
+	return nil, nil, nil
+}
+
+func insertDocuments(store *db.Store, docs []processor.Document) {
 	for _, doc := range docs {
 		dbDoc := db.Document{
 			ID:        doc.ID,
@@ -281,35 +283,16 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 			slog.Error("index fts", "id", doc.ID, "error", err)
 		}
 	}
-
-	// Store links
-	for _, link := range links {
-		store.AddLink(filename, link)
-	}
-
-	// Store tags: usa as tags extraídas do frontmatter/hashtags do arquivo (apenas para markdown)
-	if tipo == "markdown" {
-		cleanTags := fileTags
-		if len(cleanTags) > 0 {
-			store.SetFileTags(filename, cleanTags)
-		} else {
-			// Se o arquivo não tem tags, limpa as tags existentes
-			store.SetFileTags(filename, nil)
-		}
-	}
-
-	// Track file mod (apenas para arquivos que não são imagens isoladas)
-	if tipo != "imagem" {
-		store.SetFileMod(filename, ev.ModTime.UTC().Format(time.RFC3339))
-	}
-
-	return nil
 }
 
-// ── Internal loops ──
+func storeFileTags(store *db.Store, filename string, fileTags []string) {
+	if len(fileTags) > 0 {
+		store.SetFileTags(filename, fileTags)
+		return
+	}
+	store.SetFileTags(filename, nil)
+}
 
-// ScanAndIndexAll varre os diretórios monitorados e indexa tudo que encontrar.
-// Chamado uma vez na inicialização do servidor. Usa workers automáticos.
 func ScanAndIndexAll(store *db.Store, docsDir string) {
 	ScanAndIndexAllParallel(store, docsDir, 0)
 }

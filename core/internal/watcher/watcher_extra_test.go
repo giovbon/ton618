@@ -57,6 +57,18 @@ func TestProcessImageFile(t *testing.T) {
 	}
 }
 
+// Regressão: todas as imagens geravam o MESMO hash ("img" + vazio + vazio),
+// impedindo distinguir os documentos de imagem no índice. O caminho entra no
+// hash, como já acontece com anexos.
+func TestProcessImageFile_HashDistingueArquivos(t *testing.T) {
+	now := time.Now()
+	a := processImageFile("notes/img_a.png", now, now)
+	b := processImageFile("notes/img_b.png", now, now)
+	if a[0].Hash == b[0].Hash {
+		t.Errorf("imagens diferentes não podem ter o mesmo hash: %q", a[0].Hash)
+	}
+}
+
 func TestMarkRecentlyProcessed_Expiracao(t *testing.T) {
 	MarkRecentlyProcessed("notes/expirada.md")
 	if !isRecentlyProcessed("notes/expirada.md") {
