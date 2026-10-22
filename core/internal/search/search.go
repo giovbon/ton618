@@ -41,10 +41,10 @@ var (
 	// Vocabulário canônico PT snake_case: domain.NormalizeNoteTipo
 	// (ver note_tipo.go).
 	tipoFilterRegex = regexp.MustCompile(`(?i)\+?(?:tipo|type):("[^"]+"|[^\s]+)`)
-	cleanQueryRe     = regexp.MustCompile(`[\+\*"]`)
-	spacesRe         = regexp.MustCompile(`\s+`)
-	nativeHashtag    = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
-	ftsUnsafeRe      = regexp.MustCompile(`[\^~()]`) // chars que interferem com sintaxe FTS5
+	cleanQueryRe    = regexp.MustCompile(`[\+\*"]`)
+	spacesRe        = regexp.MustCompile(`\s+`)
+	nativeHashtag   = regexp.MustCompile(`(?:\s|^)#([a-zA-Z0-9_À-ÿ\-]+)([?!]*)`)
+	ftsUnsafeRe     = regexp.MustCompile(`[\^~()]`) // chars que interferem com sintaxe FTS5
 	// quotedTermsRegex é compilado uma vez (antes era recompilado a cada
 	// chamada de extractTerms, que roda em loop no gate da busca híbrida).
 	quotedTermsRegex = regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
@@ -406,13 +406,12 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 		return listAll(store, from, size)
 	}
 
-	// Extrai tags, filtro de tipo e a query restante
-	noteTipos, withoutTipos := extractNoteTipo(rawQuery)
-	queryTags, remainingQuery := extractTags(withoutTipos)
-	remainingQuery = strings.TrimSpace(remainingQuery)
+	// Decompõe a query UMA vez: filtro de tipo, tags e texto restante.
+	pq := parseQuery(rawQuery)
+	noteTipos, queryTags, remainingQuery := pq.noteTipos, pq.tags, pq.remaining
 
 	// 1. Try FTS5 first
-	ftsQuery := buildFTSQueryWithSynonyms(rawQuery, loadSynonymLookup(store))
+	ftsQuery := buildFTSQueryWithParsed(pq, loadSynonymLookup(store))
 	// Se a busca textual é vazia mas temos tags ou filtro de tipo, o FTS já
 	// filtra por eles; ampliamos o pool de candidatos para re-ranking, mas de
 	// forma limitada (evita materializar o corpus inteiro — ver
@@ -445,6 +444,9 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 	// 3. Convert to SearchHits and re-rank
 	heuristicTerms := extractTerms(rawQuery)
 	cleanedQuery := cleanQuery(rawQuery)
+	// Os termos de evidência são normalizados UMA vez; HasContentEvidence
+	// reparseava a query e renormalizava cada termo a cada hit.
+	evidence := newEvidenceMatcherFromTerms(heuristicTerms)
 
 	// ── Batch-load timestamps para evitar N+1 ──
 	docIDs := make([]string, len(results))
@@ -494,7 +496,7 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 			ID:              r.DocID,
 			Score:           r.Rank,
 			Doc:             doc,
-			HasOriginalTerm: HasContentEvidence(doc, rawQuery),
+			HasOriginalTerm: evidence.matches(doc),
 		}
 
 		// Cache para peso sináptico
@@ -570,17 +572,45 @@ func buildFTSQuery(raw string) string {
 
 // buildFTSQueryWithSynonyms é buildFTSQuery com uma função de expansão de
 // sinônimos fornecida (embarcada ou configurada pelo usuário).
+// columnClause monta o OR entre as colunas indexadas para um termo FTS5 já
+// sanitizado (ex.: "foo*" ou "\"frase exata\""). O conjunto de colunas é o
+// mesmo em toda a construção da query; centralizar evita cópias divergentes.
+func columnClause(term string) string {
+	return `(tags:` + term + ` OR arquivo:` + term + ` OR secao:` + term + ` OR texto:` + term + `)`
+}
+
+// parsedQuery é a query decomposta uma única vez por busca: filtros de tipo,
+// tags e o texto restante. Antes cada etapa (FTS, fallback LIKE e evidência)
+// repetia o mesmo parsing sobre a query crua.
+type parsedQuery struct {
+	raw       string
+	noteTipos []string
+	tags      []string
+	remaining string
+}
+
+func parseQuery(raw string) parsedQuery {
+	// Nessa ordem: o `tipo:` sai primeiro para não virar termo de conteúdo.
+	tipos, withoutTipos := extractNoteTipo(raw)
+	tags, remaining := extractTags(withoutTipos)
+	return parsedQuery{
+		raw:       raw,
+		noteTipos: tipos,
+		tags:      tags,
+		remaining: strings.TrimSpace(remaining),
+	}
+}
+
 func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	return buildFTSQueryWithParsed(parseQuery(raw), lookup)
+}
+
+func buildFTSQueryWithParsed(p parsedQuery, lookup func(string) []string) string {
+	if strings.TrimSpace(p.raw) == "" {
 		return ""
 	}
 
-	// Extrai filtro de tipo, tags e a query restante (nessa ordem: o `tipo:`
-	// sai primeiro para não virar termo de conteúdo).
-	tipos, withoutTipos := extractNoteTipo(raw)
-	tags, remaining := extractTags(withoutTipos)
-	remaining = strings.TrimSpace(remaining)
+	tipos, tags, remaining := p.noteTipos, p.tags, p.remaining
 
 	var parts []string
 
@@ -613,7 +643,7 @@ func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string 
 				phClean := sanitizeFTS5Term(strings.TrimSpace(q[1]))
 				if phClean != "" {
 					ph := `"` + phClean + `"`
-					parts = append(parts, `(tags:`+ph+` OR arquivo:`+ph+` OR secao:`+ph+` OR texto:`+ph+`)`)
+					parts = append(parts, columnClause(ph))
 				}
 			}
 			remaining = strings.Replace(remaining, q[0], " ", 1)
@@ -670,7 +700,7 @@ func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string 
 					if len(tv) > 2 {
 						tv += "*"
 					}
-					orParts = append(orParts, `(tags:`+tv+` OR arquivo:`+tv+` OR secao:`+tv+` OR texto:`+tv+`)`)
+					orParts = append(orParts, columnClause(tv))
 				}
 				parts = append(parts, "("+strings.Join(orParts, " OR ")+")")
 			} else {
@@ -678,7 +708,7 @@ func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string 
 				if len(wStar) > 2 {
 					wStar += "*"
 				}
-				parts = append(parts, `(tags:`+wStar+` OR arquivo:`+wStar+` OR secao:`+wStar+` OR texto:`+wStar+`)`)
+				parts = append(parts, columnClause(wStar))
 			}
 		}
 	}
@@ -699,7 +729,7 @@ func buildProximityExpression(phrase string) string {
 		if w == "" || stopwords[strings.ToLower(w)] {
 			return ""
 		}
-		return `(tags:` + w + ` OR arquivo:` + w + ` OR secao:` + w + ` OR texto:` + w + `)`
+		return columnClause(w)
 	}
 
 	// FTS5 nao suporta NEAR. Usa AND simples para que o LIKE fallback
@@ -730,7 +760,7 @@ func buildProximityExpression(phrase string) string {
 			break
 		}
 		if single != "" {
-			return `(tags:` + single + ` OR arquivo:` + single + ` OR secao:` + single + ` OR texto:` + single + `)`
+			return columnClause(single)
 		}
 	}
 	if len(colQueries) > 0 {
@@ -867,25 +897,43 @@ func HasExplicitTagFilter(rawQuery string) bool {
 // evidência: docs que casam no FTS só por tag/hashtag precisam de aval semântico.
 // Retorna true quando a query não tem termos verificáveis (ex: só stopwords),
 // para não filtrar indevidamente a busca vazia/lista completa.
-func HasContentEvidence(doc db.Document, rawQuery string) bool {
-	terms := extractTerms(rawQuery)
-	if len(terms) == 0 {
+// evidenceMatcher pré-computa os termos da query (normalizados) uma única vez.
+// `hasTerms` preserva a semântica original: query sem termos ⇒ tudo é evidência.
+type evidenceMatcher struct {
+	terms    []string
+	hasTerms bool
+}
+
+func newEvidenceMatcherFromTerms(terms []string) evidenceMatcher {
+	normalized := make([]string, 0, len(terms))
+	for _, term := range terms {
+		t := removeAccents(strings.ToLower(term))
+		if stopwords[t] || len(t) < 2 {
+			continue
+		}
+		normalized = append(normalized, t)
+	}
+	return evidenceMatcher{terms: normalized, hasTerms: len(terms) > 0}
+}
+
+func (m evidenceMatcher) matches(doc db.Document) bool {
+	if !m.hasTerms {
 		return true
 	}
 	// Remove hashtags do texto antes da verificação (rótulo ≠ menção real).
 	texto := nativeHashtag.ReplaceAllString(removeAccents(strings.ToLower(doc.Texto)), " ")
 	secao := removeAccents(strings.ToLower(doc.Secao))
 	arquivo := removeAccents(strings.ToLower(doc.Arquivo))
-	for _, term := range terms {
-		t := removeAccents(strings.ToLower(term))
-		if stopwords[t] || len(t) < 2 {
-			continue
-		}
+	for _, t := range m.terms {
 		if strings.Contains(texto, t) || strings.Contains(secao, t) || strings.Contains(arquivo, t) {
 			return true
 		}
 	}
 	return false
+}
+
+func HasContentEvidence(doc db.Document, rawQuery string) bool {
+	return newEvidenceMatcherFromTerms(extractTerms(rawQuery)).matches(doc)
 }
 
 var accentReplacer = strings.NewReplacer(
@@ -898,12 +946,18 @@ var accentReplacer = strings.NewReplacer(
 	"Á", "a", "À", "a", "Â", "a", "Ã", "a", "Ä", "a",
 	"É", "e", "È", "e", "Ê", "e", "Ë", "e",
 	"Í", "i", "Ì", "i", "Î", "i", "Ï", "i",
-	"Ó", "o", "Ò", "o", "Ô", "o", "õ", "o", "Ö", "o",
+	"Ó", "o", "Ò", "o", "Ô", "o", "Õ", "o", "Ö", "o",
 	"Ú", "u", "Ù", "u", "Û", "u", "Ü", "u",
 	"Ç", "c",
 )
 
-// removeAccents remove acentos e diacríticos de uma string.
-func removeAccents(s string) string {
+// RemoveAccents remove acentos e diacríticos de uma string. É o SSOT dessa
+// normalização — o pacote features/search reutiliza em vez de manter a tabela
+// duplicada (que já divergia: faltava mapear "Õ").
+func RemoveAccents(s string) string {
 	return accentReplacer.Replace(s)
+}
+
+func removeAccents(s string) string {
+	return RemoveAccents(s)
 }

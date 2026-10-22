@@ -28,9 +28,9 @@ func containsSearchTerm(texto, query string) bool {
 	if texto == "" {
 		return false
 	}
-	low := removeAccents(strings.ToLower(texto))
+	low := search.RemoveAccents(strings.ToLower(texto))
 	for _, t := range extractSearchTerms(query) {
-		if len(t) > 1 && strings.Contains(low, removeAccents(strings.ToLower(t))) {
+		if len(t) > 1 && strings.Contains(low, search.RemoveAccents(strings.ToLower(t))) {
 			return true
 		}
 	}
@@ -78,25 +78,6 @@ func extractSearchTerms(query string) []string {
 	return terms
 }
 
-var accentReplacer = strings.NewReplacer(
-	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
-	"é", "e", "è", "e", "ê", "e", "ë", "e",
-	"í", "i", "ì", "i", "î", "i", "ï", "i",
-	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
-	"ú", "u", "ù", "u", "û", "u", "ü", "u",
-	"ç", "c",
-	"Á", "a", "À", "a", "Â", "a", "Ã", "a", "Ä", "a",
-	"É", "e", "È", "e", "Ê", "e", "Ë", "e",
-	"Í", "i", "Ì", "i", "Î", "i", "Ï", "i",
-	"Ó", "o", "Ò", "o", "Ô", "o", "Õ", "o", "Ö", "o",
-	"Ú", "u", "Ù", "u", "Û", "u", "Ü", "u",
-	"Ç", "c",
-)
-
-func removeAccents(s string) string {
-	return accentReplacer.Replace(s)
-}
-
 func buildSnippet(hit search.SearchHit, query string) string {
 	snippet := ""
 	hasFTSMatchInText := false
@@ -135,7 +116,7 @@ func findQueryLineInText(text, query string) int {
 
 	var normalizedTerms []string
 	for _, term := range terms {
-		normalizedTerms = append(normalizedTerms, removeAccents(strings.ToLower(term)))
+		normalizedTerms = append(normalizedTerms, search.RemoveAccents(strings.ToLower(term)))
 	}
 
 	lines := strings.Split(text, "\n")
@@ -150,7 +131,7 @@ func findQueryLineInText(text, query string) int {
 	}
 
 	for i := startIdx; i < len(lines); i++ {
-		lineNormalized := removeAccents(strings.ToLower(lines[i]))
+		lineNormalized := search.RemoveAccents(strings.ToLower(lines[i]))
 		allMatch := true
 		for _, term := range normalizedTerms {
 			if !strings.Contains(lineNormalized, term) {
@@ -164,7 +145,7 @@ func findQueryLineInText(text, query string) int {
 	}
 
 	for i := startIdx; i < len(lines); i++ {
-		lineNormalized := removeAccents(strings.ToLower(lines[i]))
+		lineNormalized := search.RemoveAccents(strings.ToLower(lines[i]))
 		if strings.Contains(lineNormalized, normalizedTerms[0]) {
 			return i + 1
 		}
