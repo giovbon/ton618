@@ -1986,3 +1986,37 @@ vertical da tabela ficava parcialmente escondida** no canto direito.
 
 **Regressão:** `database.spec.ts` verifica que a página não tem overflow horizontal, que a moldura
 tem padding real nas bordas e que a área da tabela ocupa a maior parte da viewport.
+
+## 21. Nota markdown — botão de baixar o `.md` exato (24/10/2026)
+
+📍 `core/internal/features/notes/editor.templ` | `core/internal/ui/icons/config.go` | `core/web/src/editor-init.js` | `core/web/static/editor-common.js` | `core/web/src/global.d.ts` | `core/web/tests/editor-common.unit.cjs` | `core/web/tests/notes.spec.ts`
+
+**Problema:** a nota markdown só tinha "Duplicar" e "Excluir". Não havia como exportar o markdown
+da nota: o conteúdo vive dentro do editor (TipTap + painel de frontmatter separado) e
+`/file/download` devolve o arquivo do **disco**, que pode estar atrasado em relação ao autosave
+(debounce de 2s) — um download logo após editar sairia velho.
+
+**Decisão:**
+
+- **Botão ao lado de duplicar** (`#download-editor-btn`, `onclick="downloadCurrentNote()"`), com
+  o mesmo estilo/título dos vizinhos. Fica **só** em `editor.templ`, que é usado exclusivamente
+  por `/editor` (`handlers_editor.go`): tabulator, desenho, mapa mental e demais tipos têm
+  template próprio e não mudaram.
+- **Fonte única do conteúdo:** `buildCurrentMarkdown()` no `editor-init.js` concentra o pipeline
+  que antes estava escrito **duas vezes** (`doSave` e `doRename`): markdown do TipTap →
+  `stripNbspParagraphs` → frontmatter do painel reanexado → `wikilinksToMarkdown`. Salvar,
+  renomear e baixar leem da mesma função, então o `.md` baixado é o mesmo que seria gravado,
+  inclusive com alterações ainda não salvas.
+- **Download 100% no cliente:** `EditorCommon.downloadMarkdown(filename, content)` cria um `Blob`
+  (`text/markdown;charset=utf-8`), monta um `<a download>` temporário e revoga a object URL em
+  seguida. Usa só o **basename** (o prefixo `notes/` não faz sentido no disco do usuário) e ganha
+  `.md` se faltar. Nenhuma rota nova no backend.
+- **Ícone:** chaves `baixar`/`download` no `icons.Config` apontando para o Lucide `download` — sem
+  a chave, `GetIcon("baixar")` caía no fallback `sticky-note`. Herda `text-zinc-500`, a cor dos
+  botões de ação da nota; o teste de paridade de ícones cobre o novo caso nos dois renderizadores.
+
+**Regressão:** `editor-common.unit.cjs` cobre o download (conteúdo intacto, MIME, basename,
+`.md` automático e revogação da URL) — `npm test` **74/74**; `notes.spec.ts` ganhou um teste E2E
+que baixa a nota com frontmatter preenchido e confere `tags:` + corpo no arquivo baixado e o nome
+`.md`. `templ generate`, `gofmt`, `go vet`, `go test ./...` e `node build.js --dev` verdes.
+⚠️ Reiniciar o servidor para o `staticver` servir os estáticos novos.

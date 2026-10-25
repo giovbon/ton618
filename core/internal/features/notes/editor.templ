@@ -32,6 +32,14 @@ templ editorContent(data domain.EditorData) {
             @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
         </button>
         <button
+            id="download-editor-btn"
+            onclick="downloadCurrentNote()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Baixar o Markdown desta nota"
+        >
+            @icons.Icon(icons.GetIcon("baixar"), "w-4 h-4 " + icons.GetColor("baixar"))
+        </button>
+        <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
             class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"

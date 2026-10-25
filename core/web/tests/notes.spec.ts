@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
 
 test.beforeEach(async ({ page }) => {
   // Block all external network requests to prevent hangs offline
@@ -63,6 +64,48 @@ test.describe('Note Lifecycle', () => {
     ]);
 
     // Should redirect to root
+    expect(new URL(page.url()).pathname).toBe('/');
+  });
+
+  test('downloads the exact markdown of the note', async ({ page }) => {
+    // Aceita o confirm() do excluir no final do teste
+    page.on('dialog', dialog => dialog.accept());
+
+    await page.goto('/editor');
+    const editor = page.locator('#editor-content .ProseMirror');
+    await expect(editor).toBeVisible({ timeout: 10000 });
+
+    // Frontmatter preenchido no painel: precisa sair no .md baixado
+    await page.click('#toggle-fm-btn');
+    await page.fill('#frontmatter-area', 'tags: [teste-download]');
+
+    await editor.click();
+    await page.keyboard.type('Conteudo exato para download');
+    await expect(page.locator('#editor-status')).toHaveText('✓', { timeout: 15000 });
+
+    const downloadBtn = page.locator('#download-editor-btn');
+    await expect(downloadBtn).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      downloadBtn.click(),
+    ]);
+
+    // Só o basename, com extensão .md
+    expect(download.suggestedFilename()).toMatch(/\.md$/);
+    expect(download.suggestedFilename()).not.toContain('/');
+
+    const content = fs.readFileSync((await download.path()) as string, 'utf8');
+
+    // Frontmatter do painel + corpo do editor, na mesma ordem do save
+    expect(content).toMatch(/^---\ntags: \[teste-download\]\n---\n/);
+    expect(content).toContain('Conteudo exato para download');
+
+    // Limpa a nota criada pelo teste
+    await Promise.all([
+      page.waitForNavigation(),
+      page.click('#delete-editor-btn'),
+    ]);
     expect(new URL(page.url()).pathname).toBe('/');
   });
 });

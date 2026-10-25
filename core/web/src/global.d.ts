@@ -68,6 +68,7 @@ interface Window {
   doRename: () => void;
   deleteCurrentNote: () => void;
   duplicateCurrentNote: () => void;
+  downloadCurrentNote: () => void;
 }
 
 // ── Globals de terceiros ──
@@ -110,6 +111,11 @@ declare namespace EditorCommon {
   function getDisplayName(filename: string): string;
   function deleteCurrentNote(filenameInput: HTMLInputElement, confirmMsg?: string): void;
   function duplicateCurrentNote(filenameInput: HTMLInputElement, redirectBase?: string, confirmMsg?: string): void;
+  /**
+   * Baixa `content` como arquivo `.md` (Blob + link temporário).
+   * Usa só o basename do filename e devolve o nome usado no download.
+   */
+  function downloadMarkdown(filename: string, content: string): string;
   function doRenameContent(filenameInput: HTMLInputElement, getContentFn: (() => string) | null, redirectBase?: string, opts?: { setStatus?: (s: string) => void; tags?: string; onSaved?: (content: string, filename: string) => void }): Promise<void>;
   function setupRenameListeners(filenameInput: HTMLInputElement, opts?: { getContent?: () => string; redirectBase?: string; setStatus?: (s: string) => void; tags?: string }): void;
   function setupCtrlS(saveFn: () => void): void;

@@ -658,13 +658,9 @@ import { initHierarchy } from './editor-hierarchy.js';
     // ── Calcula hash inicial do conteúdo (extraído para evitar race condition) ──
     async function computeInitialHash() {
         if (!editor) return;
-        var md = "";
-        try { md = editor.storage.markdown.getMarkdown(); } catch (e) { md = editor.getHTML(); }
-        md = EditorCommon.stripNbspParagraphs(md);
-        var fm = document.getElementById("frontmatter-area").value.trim();
-        var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
-        finalContent = EditorCommon.wikilinksToMarkdown(finalContent);
-        lastSavedHash = await generateHash(finalContent);
+        // Mesma fonte do save/rename/download: se o hash inicial divergir do
+        // pipeline, a nota abriria "suja" sem motivo nenhum.
+        lastSavedHash = await generateHash(buildCurrentMarkdown());
     }
 
     // ── Limpeza no destroy ──
@@ -1300,6 +1296,26 @@ import { initHierarchy } from './editor-hierarchy.js';
         EditorCommon.setStatus(statusEl, s);
     }
 
+    // ── buildCurrentMarkdown: fonte ÚNICA do markdown exato da nota ──
+    // Mesmo pipeline do save/rename: corpo vindo do TipTap (markdown), `&nbsp;`
+    // de passagem removido, frontmatter do painel reanexado e links convertidos
+    // de volta para [[wikilinks]]. Salvar, renomear e baixar usam esta função,
+    // então o arquivo baixado é byte a byte o que seria gravado no disco.
+    function buildCurrentMarkdown() {
+        var md = "";
+        try {
+            md = editor.storage.markdown.getMarkdown();
+        } catch (e) {
+            md = editor.getHTML();
+        }
+        md = EditorCommon.stripNbspParagraphs(md);
+        var fmArea = /** @type {HTMLTextAreaElement} */(document.getElementById("frontmatter-area"));
+        var fm = fmArea ? fmArea.value.trim() : "";
+        var content = fm ? "---\n" + fm + "\n---\n" + md : md;
+        // Converte links do editor de volta para [[wikilinks]]
+        return EditorCommon.wikilinksToMarkdown(content);
+    }
+
     // ── Save ──
     async function saveNow() {
         if (saveTimer) clearTimeout(saveTimer);
@@ -1309,17 +1325,7 @@ import { initHierarchy } from './editor-hierarchy.js';
     async function doSave() {
         if (!editor || currentStatus === "saving") return;
         setStatus("saving");
-        var md = "";
-        try {
-            md = editor.storage.markdown.getMarkdown();
-        } catch (e) {
-            md = editor.getHTML();
-        }
-        md = EditorCommon.stripNbspParagraphs(md);
-        var fm = (/** @type {HTMLTextAreaElement} */(document.getElementById("frontmatter-area"))).value.trim();
-        var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
-        // Converte links do editor de volta para [[wikilinks]]
-        finalContent = EditorCommon.wikilinksToMarkdown(finalContent);
+        var finalContent = buildCurrentMarkdown();
 
         var currentHash = await generateHash(finalContent);
         if (currentHash === lastSavedHash) {
@@ -1387,17 +1393,7 @@ import { initHierarchy } from './editor-hierarchy.js';
         if (saveTimer) clearTimeout(saveTimer);
         setStatus("saving");
 
-        var md = "";
-        try {
-            md = editor.storage.markdown.getMarkdown();
-        } catch (e) {
-            md = editor.getHTML();
-        }
-        md = EditorCommon.stripNbspParagraphs(md);
-        var fm = document.getElementById("frontmatter-area").value.trim();
-        var finalContent = fm ? "---\n" + fm + "\n---\n" + md : md;
-        // Converte links do editor de volta para [[wikilinks]]
-        finalContent = EditorCommon.wikilinksToMarkdown(finalContent);
+        var finalContent = buildCurrentMarkdown();
 
         try {
             if (originalFilename !== "notes/" + newName) {
@@ -1481,6 +1477,18 @@ import { initHierarchy } from './editor-hierarchy.js';
     // ── Duplicate current note ──
     function duplicateCurrentNote() {
         EditorCommon.duplicateCurrentNote(filenameInput, "/editor");
+    }
+
+    // ── Download current note as exact markdown ──
+    // Usa buildCurrentMarkdown (a mesma fonte do save), então o .md baixado é
+    // exatamente o conteúdo da nota — frontmatter incluso — inclusive se ainda
+    // houver alterações não salvas (o autosave é debounced).
+    function downloadCurrentNote() {
+        if (!editor) return;
+        EditorCommon.downloadMarkdown(
+            EditorCommon.getCurrentFilename(filenameInput),
+            buildCurrentMarkdown()
+        );
     }
 
     // ── Ctrl+S ──
@@ -1575,6 +1583,7 @@ import { initHierarchy } from './editor-hierarchy.js';
     setStatus("saved");
     window.deleteCurrentNote = deleteCurrentNote;
     window.duplicateCurrentNote = duplicateCurrentNote;
+    window.downloadCurrentNote = downloadCurrentNote;
     window.toggleToc = toggleToc;
     window.toggleBacklinks = toggleBacklinks;
     window.updateToc = doUpdateToc;

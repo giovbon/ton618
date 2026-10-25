@@ -357,6 +357,30 @@
                 });
         },
 
+        // ── downloadMarkdown: baixa `content` como arquivo .md ──
+        // Fonte única do download de nota (botão "baixar" do editor markdown):
+        // monta um Blob com o markdown exato e dispara o download com o nome do
+        // arquivo (só o basename — o "notes/" não faz sentido no disco do usuário).
+        // Retorna o nome usado, para teste.
+        downloadMarkdown: function (filename, content) {
+            var name = String(filename || "").split("/").pop() || "nota.md";
+            if (!/\.md$/i.test(name)) name += ".md";
+
+            var blob = new Blob([content == null ? "" : String(content)], {
+                type: "text/markdown;charset=utf-8",
+            });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = name;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+            return name;
+        },
+
         // ── doRenameContent: renomeia + salva conteúdo, comum a todos os tipos ──
         doRenameContent: async function (filenameInput, getContentFn, redirectBase, opts) {
             if (filenameInput._isRenaming) return;

@@ -387,3 +387,70 @@ test('stripNbspParagraphs tolera entrada vazia/nula', (t) => {
   assert.strictEqual(EditorCommon.stripNbspParagraphs(null), null);
   assert.strictEqual(EditorCommon.stripNbspParagraphs(undefined), undefined);
 });
+
+// ── downloadMarkdown: botão de baixar o .md exato da nota ──
+
+test('downloadMarkdown baixa o conteúdo exato com o basename do arquivo', async (t) => {
+  const OrigBlob = global.Blob;
+  const OrigURL = global.URL;
+  const cap = { blobs: [], anchors: [], revoked: [], appended: 0, removed: 0 };
+
+  global.Blob = class Blob {
+    constructor(parts, opts) {
+      this.content = parts.join('');
+      this.type = (opts && opts.type) || '';
+      cap.blobs.push(this);
+    }
+  };
+  global.URL = {
+    createObjectURL: () => 'blob:fake-nota',
+    revokeObjectURL: (u) => cap.revoked.push(u),
+  };
+  global.document.createElement = (tag) => {
+    const a = {
+      tagName: tag,
+      style: {},
+      clicked: false,
+      click() { this.clicked = true; },
+    };
+    cap.anchors.push(a);
+    return a;
+  };
+  global.document.body = {
+    appendChild: () => { cap.appended++; },
+    removeChild: () => { cap.removed++; },
+  };
+
+  try {
+    const conteudo = '---\ntipo: nota\ntags: [a, b]\n---\n# Título\n\n[[outra-nota]]';
+    const nome = EditorCommon.downloadMarkdown('notes/minha nota.md', conteudo);
+
+    // Só o basename vai para o disco do usuário (sem o prefixo notes/).
+    assert.strictEqual(nome, 'minha nota.md');
+
+    // O conteúdo é passado intacto, com MIME de markdown.
+    assert.strictEqual(cap.blobs[0].content, conteudo);
+    assert.strictEqual(cap.blobs[0].type, 'text/markdown;charset=utf-8');
+
+    const a = cap.anchors[0];
+    assert.strictEqual(a.download, 'minha nota.md');
+    assert.strictEqual(a.href, 'blob:fake-nota');
+    assert.strictEqual(a.clicked, true);
+    assert.strictEqual(cap.appended, 1);
+    assert.strictEqual(cap.removed, 1);
+
+    // Extensão ausente ganha .md; filename vazio cai no padrão.
+    assert.strictEqual(EditorCommon.downloadMarkdown('relatorio', 'x'), 'relatorio.md');
+    assert.strictEqual(EditorCommon.downloadMarkdown('', 'x'), 'nota.md');
+
+    // O blob é liberado depois do clique (sem vazar memória): um por download.
+    await new Promise((r) => setTimeout(r, 5));
+    assert.strictEqual(cap.revoked.length, 3);
+    assert.deepStrictEqual([...new Set(cap.revoked)], ['blob:fake-nota']);
+  } finally {
+    global.Blob = OrigBlob;
+    global.URL = OrigURL;
+    delete global.document.createElement;
+    delete global.document.body;
+  }
+});
