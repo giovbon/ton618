@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"ton618/core/internal/features/appointments"
+	"ton618/core/internal/features/dayplan"
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/features/search"
 	"ton618/core/internal/features/system"
@@ -14,7 +15,7 @@ import (
 )
 
 // SetupRoutes registra todas as rotas no chi.Router.
-func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext) {
+func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, todosCtx *todos.HandlerContext, searchCtx *search.HandlerContext, appointmentsCtx *appointments.HandlerContext, dayplanCtx *dayplan.HandlerContext) {
 	// Rate limiters para endpoints pesados
 	searchLimiter := middleware.NewRateLimiter(30, time.Minute)
 
@@ -105,4 +106,13 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/appointments/update", appointmentsCtx.HandleUpdateAppointment)
 	mux.Delete("/api/appointments/delete", appointmentsCtx.HandleDeleteAppointment)
 	mux.Delete("/api/appointments/purge-old", appointmentsCtx.HandlePurgeOldAppointments)
+
+	// ROTINA (atividades do dia, uso pessoal)
+	mux.Get("/rotina", dayplanCtx.HandleRotinaPage)
+	mux.Get("/api/rotina/schedule", dayplanCtx.HandleRotinaSchedule)
+	mux.Post("/api/rotina/create", dayplanCtx.HandleCreateDayActivity)
+	mux.Post("/api/rotina/update", dayplanCtx.HandleUpdateDayActivity)
+	mux.Delete("/api/rotina/delete", dayplanCtx.HandleDeleteDayActivity)
+	mux.Get("/api/settings/rotina", dayplanCtx.HandleGetRotinaSetting)
+	mux.Post("/api/settings/rotina", dayplanCtx.HandlePostRotinaSetting)
 }

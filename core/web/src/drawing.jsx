@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Excalidraw, serializeAsJSON, restore, getSceneVersion } from '@excalidraw/excalidraw';
+import { Excalidraw, serializeAsJSON, restore, getSceneVersion, exportToBlob } from '@excalidraw/excalidraw';
 import '../node_modules/@excalidraw/excalidraw/dist/prod/index.css';
 
 const safeGetSceneVersion = (elements) => {
@@ -81,6 +81,12 @@ function DrawingEditor({ initialState, onChange, onReady }) {
         </div>
     );
 }
+
+// A API imperativa do Excalidraw não expõe `exportToBlob` nem `serializeAsJSON`.
+// O bundle já carrega os dois, então os publicamos para a nota de desenho
+// conseguir baixar o estado atual (.excalidraw) e a imagem (.png) sem carregar
+// uma segunda cópia da biblioteca.
+window.excalidrawExport = { exportToBlob, serializeAsJSON };
 
 /**
  * Inicializa o componente DrawingEditor dentro de um container HTML.

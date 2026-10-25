@@ -54,7 +54,10 @@ type queryReader struct {
 	hierErr  error
 }
 
-func newQueryReader(store *db.Store) *queryReader { return &queryReader{store: store} }
+// NewQueryReader expõe o leitor de consultas para consumidores fora da feature
+// de notas (hoje o servidor MCP). Devolve a interface query.Reader de propósito:
+// o motor de consultas só conhece operações de leitura.
+func NewQueryReader(store *db.Store) query.Reader { return &queryReader{store: store} }
 
 // Files devolve (uma vez por requisição) arquivo + mtime + tags de todo o acervo.
 func (q *queryReader) Files() ([]db.FileModTag, error) {

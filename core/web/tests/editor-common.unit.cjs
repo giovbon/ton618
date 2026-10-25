@@ -454,3 +454,124 @@ test('downloadMarkdown baixa o conteúdo exato com o basename do arquivo', async
     delete global.document.body;
   }
 });
+
+// ── downloadSvgPng: export do mapa mental renderizado como PNG ──
+
+test('svgPngScale: 2x por padrão, com piso de resolução e teto de pixels', (t) => {
+  // Padrão: já há resolução de sobra, mantém a ampliação 2x.
+  assert.strictEqual(EditorCommon.svgPngScale(1200, 900, {}), 2);
+
+  // Mapa pequeno: sobe a escala até o piso (1600px no maior lado).
+  const boost = EditorCommon.svgPngScale(396, 296, {});
+  assert.ok(boost > 2, 'a escala deve ser ampliada até o piso de resolução');
+  assert.ok(Math.abs(296 * boost - 1600) < 1e-6, 'maior lado atinge o piso');
+
+  // Teto: nenhum lado ultrapassa maxEdge.
+  const capped = EditorCommon.svgPngScale(6000, 4000, { scale: 10, maxEdge: 8192 });
+  assert.ok(Math.abs(6000 * capped - 8192) < 1e-6, 'lado maior bate no teto');
+  assert.ok(4000 * capped <= 8192, 'lado menor fica dentro do teto');
+
+  // Entrada inválida cai em 1 (nunca NaN/Infinity).
+  assert.strictEqual(EditorCommon.svgPngScale(0, 100, {}), 1);
+  assert.strictEqual(EditorCommon.svgPngScale(NaN, 100, {}), 1);
+});
+
+test('downloadSvgPng: viewBox do conteúdo, escala ampliada e nome .png', async (t) => {
+  const OrigBlob = global.Blob;
+  const OrigURL = global.URL;
+  const cap = {
+    clicked: 0, appended: 0, removed: 0,
+    blobs: [], blobTypes: [], canvases: [], drawn: [], dataUrl: null,
+  };
+
+  global.Blob = class Blob {
+    constructor(parts, opts) { this.content = parts.join(''); this.type = (opts && opts.type) || ''; cap.blobs.push(this); }
+  };
+  global.URL = { createObjectURL: () => 'blob:fake-png', revokeObjectURL: () => {} };
+  global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+  global.XMLSerializer = class { serializeToString(el) { return '<svg viewBox="' + el.attrs.viewBox + '"></svg>'; } };
+  global.Image = class {
+    set src(v) { cap.dataUrl = v; setTimeout(() => this.onload && this.onload(), 0); }
+    get src() { return cap.dataUrl; }
+  };
+
+  const clone = {
+    style: {},
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    firstChild: null,
+    insertBefore() { throw new Error('não deve haver inserção de estilo quando as fontes não são embutidas'); },
+  };
+  const svgEl = {
+    getBBox: () => ({ x: 10, y: 20, width: 300, height: 200 }),
+    cloneNode: () => clone,
+    querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ width: 0, height: 0 }),
+  };
+
+  global.document.createElement = (tag) => {
+    if (tag === 'canvas') {
+      const canvas = {
+        width: 0, height: 0,
+        getContext: () => ({
+          fillStyle: '',
+          fillRect: () => {},
+          drawImage: (img, x, y, w, h) => cap.drawn.push([w, h]),
+        }),
+        toBlob: (cb, type) => { cap.blobTypes.push(type); cb(new Blob(['png'], { type })); },
+      };
+      cap.canvases.push(canvas);
+      return canvas;
+    }
+    return {
+      style: {}, href: '', download: '',
+      click() { cap.clicked++; },
+    };
+  };
+  global.document.body = {
+    appendChild: () => { cap.appended++; },
+    removeChild: () => { cap.removed++; },
+  };
+
+  try {
+    const nome = await EditorCommon.downloadSvgPng(svgEl, { filename: 'notes/meu mapa.md' });
+
+    // Só o basename vira nome de arquivo, com extensão .png.
+    assert.strictEqual(nome, 'meu mapa.png');
+
+    // viewBox cobre o bbox + margem padrão de 48px em todos os lados.
+    assert.strictEqual(clone.attrs.viewBox, '-38 -28 396 296');
+    assert.strictEqual(clone.attrs.xmlns, 'http://www.w3.org/2000/svg');
+    // A raiz não pinta fundo: o canvas é que pinta (imagem isolada).
+    assert.strictEqual(clone.style.background, 'transparent');
+
+    // Escala ampliada até o piso de resolução, aplicada ao SVG e ao canvas.
+    const vbW = 396, vbH = 296;
+    const scale = EditorCommon.svgPngScale(vbW, vbH, {});
+    const outW = Math.round(vbW * scale), outH = Math.round(vbH * scale);
+    assert.strictEqual(clone.style.width, outW + 'px');
+    assert.strictEqual(clone.style.height, outH + 'px');
+    assert.strictEqual(cap.canvases[0].width, outW);
+    assert.strictEqual(cap.canvases[0].height, outH);
+    assert.deepStrictEqual(cap.drawn[0], [outW, outH]);
+
+    // PNG de verdade, servido via data URL → canvas → blob → link temporário.
+    assert.strictEqual(cap.blobTypes[0], 'image/png');
+    assert.ok(cap.dataUrl.startsWith('data:image/svg+xml;charset=utf-8,'), 'SVG serializado como data URL');
+    assert.strictEqual(cap.clicked, 1);
+    assert.strictEqual(cap.appended, 1);
+    assert.strictEqual(cap.removed, 1);
+  } finally {
+    global.Blob = OrigBlob;
+    global.URL = OrigURL;
+    delete global.requestAnimationFrame;
+    delete global.XMLSerializer;
+    delete global.Image;
+    delete global.document.createElement;
+    delete global.document.body;
+  }
+});
+
+test('downloadSvgPng sem SVG devolve null (não tenta renderizar)', async (t) => {
+  assert.strictEqual(await EditorCommon.downloadSvgPng(null, {}), null);
+});

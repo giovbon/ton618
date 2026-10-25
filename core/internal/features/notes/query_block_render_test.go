@@ -29,7 +29,7 @@ func TestQueryReader_MemoizaLeituras(t *testing.T) {
 	saveTestNote(t, ctx, "notes/a.md", "# A\n", "livros")
 	saveTestNote(t, ctx, "notes/b.md", "# B\n", "livros")
 
-	r := newQueryReader(ctx.Store)
+	r := NewQueryReader(ctx.Store)
 
 	f1, err := r.Files()
 	if err != nil {
@@ -60,7 +60,7 @@ func TestQueryReader_MemoizaLeituras(t *testing.T) {
 	}
 
 	// Requisição nova → leitor novo → snapshot novo (fatias diferentes).
-	r2 := newQueryReader(ctx.Store)
+	r2 := NewQueryReader(ctx.Store)
 	f4, _ := r2.Files()
 	if len(f4) > 0 && &f4[0] == &f1[0] {
 		t.Errorf("leitores distintos não deveriam compartilhar o snapshot")

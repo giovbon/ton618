@@ -2020,3 +2020,253 @@ da nota: o conteúdo vive dentro do editor (TipTap + painel de frontmatter separ
 que baixa a nota com frontmatter preenchido e confere `tags:` + corpo no arquivo baixado e o nome
 `.md`. `templ generate`, `gofmt`, `go vet`, `go test ./...` e `node build.js --dev` verdes.
 ⚠️ Reiniciar o servidor para o `staticver` servir os estáticos novos.
+
+## 22. Nota markmap — botões de baixar o `.md` e o mapa mental em PNG (25/10/2026)
+
+📍 `core/internal/features/notes/mindmap.templ` | `core/internal/ui/icons/{icons.go,icons.templ,config.go}` | `core/web/static/editor-common.js` | `core/web/src/global.d.ts` | `core/web/tests/editor-common.unit.cjs` | `core/web/tests/mindmap-download.unit.cjs`
+
+**Problema:** a nota markmap só tinha "Duplicar" e "Excluir" (§21 deu o botão de download só para
+`/editor`). Não havia como levar o conteúdo markdown para fora nem como obter uma imagem do mapa
+mental — e copiar o `<svg>` à mão não serve: ele é estilizado pelo CSS **da página** e pelas
+`<style>`/`<defs>` internas, então uma cópia serializada sai sem cor, sem fonte e sem o HTML dos
+`<foreignObject>` do markmap.
+
+**Decisão:**
+
+- **Dois botões ao lado de duplicar**, na topbar da `mindmap.templ`: `#download-md-btn`
+  (`onclick="downloadCurrentNote()"`) e `#download-image-btn`
+  (`onclick="downloadMindmapImage()"`), mesmo estilo/título dos vizinhos; a ordem ficou
+  duplicar → markdown → imagem → excluir. Ficam **só** nesse template (desenho, tabulator etc.
+  têm template próprio e não mudaram).
+- **Markdown = fonte única do save:** `downloadCurrentNote()` chama
+  `EditorCommon.downloadMarkdown(filename, ensureMindmapFrontmatter(jar.toString()))` — exatamente
+  o que `doSave`/`doRename` gravam, inclusive com alterações ainda não salvas (autosave com
+  debounce). Reaproveita o helper do §21; nenhuma rota nova.
+- **PNG 100% no cliente** em `EditorCommon.downloadSvgPng(svgEl, opts)`:
+  1. mede o **bbox do conteúdo** (`getBBox()` já inclui o `transform` do zoom/pan aplicado por
+     markmap no `<g>` raiz) e monta `viewBox = bbox + 48px` de margem;
+  2. clona o SVG e **inline o CSS computado** de cada elemento (e do HTML dentro de cada
+     `foreignObject`) — a imagem é renderizada isolada, sem o CSS da página;
+  3. embute as `@font-face` **realmente usadas** (`/static/fonts/fonts.css` → `data:` URL,
+     best-effort: falhou, exporta sem);
+  4. serializa → `Image` → canvas com fundo `#09090b` → `toBlob("image/png")` → `<a download>`.
+- **Resolução padrão, com piso e teto:** `EditorCommon.svgPngScale(vbW, vbH, opts)` é a fonte
+  única do cálculo — **2x** por padrão, **ampliado** até o piso de **1600px** no maior lado
+  (mapas pequenos saem nítidos) e **reduzido** para nunca passar de **8192px** por lado (teto
+  seguro para canvas). Retorna `basename.png` (só o basename, como no §21).
+- **Guardas:** sem prévia renderizada (`mmWrapper` nulo — mobile) o botão avisa em vez de
+  exportar um SVG vazio; `SecurityError` do canvas (imagem externa "suja") vira mensagem em
+  português. Erros caem no `.catch` e viram `alert`.
+- **Ícone:** nova chave `baixar-imagem` → Lucide `image-down`, com o case adicionado **nos dois**
+  renderizadores (`icons.go` e `icons.templ`) — o teste de paridade (§6.9) falha se faltar um.
+
+**Regressão:** `editor-common.unit.cjs` ganhou os testes de `svgPngScale` (2x, piso, teto,
+entradas inválidas) e do fluxo `downloadSvgPng` (viewBox do conteúdo + margem, escala aplicada ao
+SVG e ao canvas, `image/png`, data URL, basename `.png`); `mindmap-download.unit.cjs` trava os
+dois botões, a ordem na topbar, os handlers globais e que o `.md` usa a mesma fonte do save —
+`npm test` **80/80**. `templ generate` (CLI pinado v0.3.1070), `go build -tags sqlite_fts5`,
+`go test ./internal/ui/icons ./internal/features/notes` e `tsc --noEmit` verdes.
+⚠️ Reiniciar o servidor para o `staticver` servir os estáticos novos.
+
+## 23. MCP local somente leitura — qualquer IA acessa as notas (25/10/2026)
+
+📍 `core/cmd/server/{main.go,mcp.go}` | `core/internal/mcp/{server.go,tools.go,format.go}` |
+`core/internal/core/db/db.go` (`NewReaderStore`) | `core/internal/features/notes/query_reader.go`
+(`NewQueryReader`) | `docs/mcp.md`
+
+**Problema:** não havia uma porta padrão para IA. A API HTTP existente não serve: `/search` e
+`/api/query` devolvem HTML (HTMX), a única credencial é a senha única que também autoriza
+`POST /api/restore` e exclusões, e dar o diretório do banco a um agente não estabelece escopo
+nem formato. O acesso precisava ser universal (qualquer cliente MCP), local e **sem poder
+alterar o acervo**.
+
+**Decisão:**
+
+- **Subcomando `ton618 mcp`**, despachado no topo de `main()` **antes** do bootstrap HTTP. O
+  protocolo usa `stdout`; por isso o subcomando troca o `slog` para `stderr` e não chama
+  `EnsureDirs`, `NewStore`, migração nem indexação. Flags: `--db` e `--docs`; sem `--db`, resolve
+  `DB_PATH` → `./data/ton618.db` → `<binário>/data/ton618.db`, com erro que lista os caminhos
+  tentados.
+- **`db.NewReaderStore(path)`**: abre o banco existente com `mode=ro` e `_busy_timeout=5000`, sem
+  `backupBeforeMigration` nem `initSchema`. `Ping()` no boot falha cedo com mensagem clara
+  (em vez de o erro aparecer na primeira tool). Como o SQLite em `mode=ro` rejeita escrita, a
+  garantia não depende das tools: é do driver.
+- **Cinco tools, todas `readOnlyHint: true`** — nenhuma tool de escrita é registrada:
+  `search_notes`, `get_note`, `list_notes`, `query_notes`, `backlinks`.
+- **Reuso, não reimplementação:** `search.Search` (busca rankeada) com
+  `Store.GetBacklinkCount`/`GetSynapticWeight`; o mesmo `query.Engine` dos blocos de consulta do
+  editor, via `processor.ParseQuery` + `query.Run`; `NoteService.GetMany`/`GetBacklinks` para
+  listagem e links. O único código novo é apresentação (agrupamento de fragmentos por nota, trecho
+  de 280 caracteres, JSON indentado).
+- **Leitura do conteúdo vem do SQLite** (`notes.content`), não do disco — decisão do §14/§6.24:
+  notas vivem no banco. `get_note` pagina com `offset`/`max_chars` (padrão 50k, teto 200k) para
+  não estourar o contexto em notas Tabulator.
+- **Padronização de nomes e tipos:** `notes.NoteFilename` normaliza `nome` → `notes/nome.md`;
+  `..` e `\` são rejeitados. O `tipo` devolvido é sempre o vocabulário do frontmatter
+  (`domain.FrontmatterTipo`/`NormalizeNoteTipo`): `nota`, `mapa_mental`, `desenho`, `tabulator`…
+- **Instruções do servidor** (enviadas no `initialize`) explicam o modelo de dados, os filtros,
+  o vocabulário `tipo:` e a limitação do FTS (corpo de desenho/markmap/tabulator não indexado).
+- **Descoberta do leitor de consultas:** `notes.newQueryReader` virou `notes.NewQueryReader`,
+  devolvendo `query.Reader` — a interface só tem operações de leitura. O painel HTML e os testes
+  usam a mesma função.
+
+**Não implementado (de propósito):** transporte HTTP/remoto, token, OAuth e tools de escrita. Para
+IA fora da máquina seria preciso um transporte remoto com Bearer token read-only, TLS/túnel e rate
+limit; a senha do app continua sendo a única credencial com poder de escrita/restauração.
+
+**Regressão:** `internal/mcp/tools_test.go` sobe um acervo temporário com `db.NewStore` +
+`NoteService.Save`, conecta um cliente MCP em memória e cobre busca, filtro por tag, paginação,
+nota inexistente, listagem, consulta YAML por texto/tag, erro de consulta, backlinks e a ausência
+de tools fora da allowlist. `internal/core/db/db_reader_test.go` prova que `NewReaderStore` não
+cria arquivo, lê o banco e rejeita `SaveNote`. `go test -tags sqlite_fts5 ./...`, `go vet` e
+`gofmt` verdes. Instruções de uso em [`docs/mcp.md`](mcp.md).
+
+## 24. `/help` — índice navegável gerado dos próprios títulos (25/10/2026)
+
+📍 `core/internal/features/system/{help_toc.go,help.templ,handlers_help.go,handlers_help_test.go,help_toc_test.go}`
+
+**Problema:** o `/help` virou um documento longo (14 seções, 69 subseções). Sem índice, achar um
+assunto exige rolar tudo ou usar o Ctrl+F do navegador, que não mostra a estrutura. Um índice
+escrito à mão no `HELP.md` resolveria hoje e apodreceria na primeira seção nova — a lista e o
+documento passariam a discordar sem ninguém notar.
+
+**Decisão:**
+
+- **O índice não existe no markdown: é derivado a cada requisição.** `HandleHelpPage` parseia o
+  `HELP.md` **uma vez** com goldmark e usa a mesma árvore para duas coisas: dar `id` aos títulos
+  (`helpHeadingIDs`) e renderizar o HTML. Nenhuma lista paralela para manter; seção nova aparece
+  sozinha no índice.
+- **Estrutura:** `h2` = seção, `h3` = subseção. Um `h3` antes de qualquer `h2` entra como raiz,
+  para não sumir do índice. `helpHeadingText` extrai o texto puro do título (nós `Text`/`String`):
+  um título que no markdown tem crase em volta de `/database` chega ao índice sem a crase.
+- **Âncoras determinísticas:** `helpSlug` gera minúsculas ASCII sem acento (`helpAccents`), com
+  hífen no lugar da pontuação (`4.5 Nota semanal` → `4-5-nota-semanal`); letras não latinas ficam
+  de fora para o `href` não virar percent-encoding. Títulos repetidos recebem sufixo numérico
+  (`-2`, `-3`) via `helpUniqueID`, com um mapa compartilhado pela varredura — o link é o mesmo em
+  toda requisição. Cada título recebe também `style="scroll-margin-top:5.5rem"` inline (não numa
+  classe) porque a navbar é `sticky top-0` e cobriria o alvo do salto.
+- **Ponto de inserção:** `handlers_help.go` corta o HTML no primeiro `<h2>`; o índice entra entre a
+  apresentação e a seção 1. Em `help.templ`, o layout é `HelpPage(title, intro, toc, body)` e o
+  `<nav>` usa `not-prose`, senão o plugin de tipografia estiliza a lista como se fosse conteúdo.
+- **Filtro do índice compara só o título da entrada**, não o texto da seção. A primeira versão
+  comparava a seção inteira: buscar `restauração` casava com a seção 9 e mantinha as 5 subseções
+  visíveis (inclusive "Sinônimos" e "Colunas"), que era exatamente o "mostra um monte de coisa
+  nada a ver" relatado. Regras atuais: sem acento e sem caixa (`configuracoes` acha
+  "Configurações"); vários termos = todos precisam aparecer (`backup nota`); só ficam visíveis as
+  subseções cujo próprio título casa; contador ao vivo ("2 de 14 seções", voltando para
+  "14 seções · 69 subseções" ao limpar) e estado vazio. O placeholder diz "Buscar por título…",
+  deixando claro que o campo filtra o índice, não o documento.
+- **Tamanho do índice:** `helpTOCLabel`/`helpTOCSize` geram o resumo do cabeçalho sem contagem
+  escrita à mão.
+
+**Regressão:** `help_toc_test.go` cobre slug (acentos, pontuação, não latino, vazio) e ids únicos;
+`handlers_help_test.go` ganhou `GeraIndiceComAncoras`, `IndiceAcompanhaNovasSecoes` (documento
+temporário com seção inventada) e `TitulosRepetidosGanhamAncoraUnica`. No documento real: 14
+seções, 69 subseções, 83 links, 0 quebrados; 15 `<hr>`, 37 tabelas e 56 `<pre>` preservados. Filtro
+validado em navegador real: `backup` → seção 9 (só 9.2 e 9.3) e seção 12 (2 itens); `configuracoes`
+→ seção 9 (só 9.1); `agenda` → só a seção 7; `zzzz` → 0 e mensagem de vazio.
+
+## 25. Nota de desenho — baixar o `.excalidraw` e o `.png` do estado atual (25/10/2026)
+
+📍 `core/internal/features/notes/drawing.templ` | `core/web/src/drawing.jsx` | `core/web/src/global.d.ts` | `core/web/tests/drawing-download.unit.cjs` | `core/HELP.md` (§4.6)
+
+**Problema:** a nota de desenho só tinha "Duplicar" e "Excluir" (§21/§22 deram download ao editor
+markdown e ao markmap, cada um no seu template). Não havia como levar o desenho para fora nem
+como obter uma imagem dele. Baixar o `.md` do disco também não serve: o corpo da nota é **JSON do
+Excalidraw embutido no markdown**, não um arquivo `.excalidraw`, e o autosave é debounced — um
+download logo após editar sairia velho.
+
+**Decisão:**
+
+- **Dois botões ao lado de duplicar** na topbar de `drawing.templ`: `#download-excalidraw-btn`
+  (`onclick="downloadCurrentDrawing()"`) e `#download-png-btn`
+  (`onclick="downloadDrawingImage()"`), mesmo estilo/título dos vizinhos; ordem duplicar →
+  `.excalidraw` → `.png` → excluir. Ícones: `baixar` (download) e `baixar-imagem` (`image-down`,
+  criado no §22, com o case nos dois renderizadores).
+- **Fonte dos dois downloads é o estado VIVO do editor** — `getSceneElements()`/`getAppState()`/
+  `getFiles()` da API imperativa do `drawing.jsx` —, e não o último snapshot salvo: alterações
+  ainda não gravadas (debounce de ~1,5 s) entram no arquivo.
+- **`.excalidraw`:** `serializeAsJSON(elements, appState, files, "local")`, MIME
+  `application/vnd.excalidraw+json`, nome derivado do arquivo atual sem o `.md` (só o basename,
+  como no §21). É o JSON nativo, que pode ser aberto no próprio Excalidraw.
+- **`.png`:** `exportToBlob({ elements, appState, files, mimeType: "image/png" })` **sem**
+  `maxWidthOrHeight` nem `scale` — resolução padrão do Excalidraw (tamanho natural do desenho, com
+  o fundo e a margem do `appState`). Diferente do §22, não há inlining de CSS: quem renderiza a
+  cena é o próprio Excalidraw, não um SVG da página.
+- **Os helpers não estão na API imperativa.** `exportToBlob`/`serializeAsJSON` não aparecem em
+  `ExcalidrawImperativeAPI`, então `drawing.jsx` publica
+  `window.excalidrawExport = { exportToBlob, serializeAsJSON }` a partir do **mesmo bundle** —
+  sem carregar uma segunda cópia da biblioteca e sem rota nova no servidor.
+- **Guardas:** PNG antes de o editor terminar de carregar avisa em português em vez de exportar
+  vazio; erros de exportação caem no `.catch` e viram `alert`.
+- **Documentação:** `HELP.md` §4.6 cita os dois downloads e que eles usam o estado do editor,
+  inclusive o que ainda não foi salvo.
+
+**Regressão:** `drawing-download.unit.cjs` (4 testes) trava os dois botões, a ordem na topbar, os
+handlers globais, o uso do estado vivo, o MIME/nome do `.excalidraw`, o `mimeType: "image/png"`, a
+ausência de `maxWidthOrHeight`/`scale` e a publicação de `window.excalidrawExport`. Validado em
+navegador real (Playwright, com download salvo em disco): `.excalidraw` de 1.216 bytes com
+`type: excalidraw`, `version: 2` e 1 elemento; `.png` de 316×24 com assinatura PNG válida.
+`templ generate` + `node build.js`, `go build -tags sqlite_fts5`, `go test ./internal/features/notes`,
+`tsc --noEmit` e os 84 testes JS verdes.
+⚠️ Reiniciar o servidor: `drawing_templ.go` e `static/drawing.js` mudaram.
+
+---
+
+## 26. Rotina — linha do tempo do dia, pessoal e opcional (25/10/2026)
+
+**Problema:** a Agenda (`/agenda`) guarda compromissos com data e hora, mas o dia a dia não é feito
+só de compromissos: academia, almoço, foco, deslocamento. Não havia onde enxergar **o dia inteiro
+como uma faixa de tempo contínua** nem saber quanto dele está ocupado e quanto sobra. O projeto de
+referência em `New/` (CasalAgenda) já resolvia isso com um **gantt Mermaid** por pessoa e um resumo
+de ocupação — mas era multi-usuário ("casal"), o que não serve ao TON-618.
+
+**Decisão:** portar a ideia como **Rotina** (`/rotina`), **pessoa única**, com o visual do app.
+
+- **Nome e escopo:** "Rotina", rota `/rotina`, pacote `core/internal/features/dayplan`, tabela
+  `day_activities`. Nada de usuário/dono: a única credencial é o dono do cofre (BasicAuth). O modelo
+  é `domain.DayActivity{ID, Day, StartTime, EndTime, Description, CreatedAt, UpdatedAt}` — **sem**
+  coluna de usuário. Um teste de guarda de schema (`TestDayActivities_SchemaSemDono`) falha se
+  alguém introduzir `user`/`owner`/`account_id`/etc.
+- **Persistência:** `CREATE TABLE IF NOT EXISTS day_activities` no schema de boot (e em
+  `schema.sql`), de modo que bancos existentes ganham a tabela sem migração manual. CRUD em **SQL
+  cru** (`internal/core/db/day_activities.go`), não sqlc: a tabela é pequena e o gerador não está
+  disponível no build. Escritas usam um lock próprio, `dayPlanMu`, no mesmo padrão dos appointments
+  e settings — o domínio não participa das transações de notas/FTS e por isso não bloqueia nem é
+  bloqueado pelo `WriteMu` do núcleo.
+- **Resumo:** o tempo ocupado é a **união dos intervalos** (duas atividades sobrepostas contam uma
+  vez), com livres = `24h − ocupado`, porcentagem para a barra e um contador de atividades que se
+  sobrepõem — aviso informativo, nunca soma dupla. Intervalos inválidos (fim ≤ início, hora fora de
+  00:00–23:59) são ignorados no cálculo e rejeitados na entrada, para o resumo não quebrar com dado
+  antigo.
+- **Linha do tempo:** gantt Mermaid com uma única seção `Rotina`, barras `sky-500` (`#0ea5e9`, o azul
+  da Agenda) e `dateFormat YYYY-MM-DD HH:mm` (sem `HH:mm` o Mermaid desenha barras de largura zero).
+  Uma tarefa-fantasma `edge :edge0, <dia> 00:00, <dia> 23:59` força o eixo a cobrir o dia inteiro; o
+  JS esconde a barra e redesenha as horas no rodapé. A descrição é sanitizada antes de entrar na
+  fonte (sem vírgula/dois-pontos/aspas, colapsando espaços, truncando em 80 caracteres). Mermaid
+  v10.9.1 vendorizado em `static/js/vendor/mermaid.min.js` — o app continua funcionando offline.
+- **Tela:** um único fragmento `#rotina-schedule` (resumo + timeline + lista + formulário). Criar,
+  editar e excluir devolvem **esse fragmento pronto**; o JS troca o elemento e re-renderiza o
+  Mermaid. Sem estado de cliente além do formulário de edição. Formulário valida `HH:MM`, fim
+  depois do início e descrição ≤ 200 caracteres. Modal "Ampliar" mostra o dia inteiro; no cartão,
+  telas ≤ 820 px compactam o eixo para o intervalo real (folga de 2 h, mínimo de 8 h).
+- **Navegação e flag:** ícone **Rotina** (`calendar-clock`) no cabeçalho **ao lado da Agenda**
+  (desktop e menu mobile), com destaque quando ativo. Novo pacote
+  `internal/core/featureflags` com `Manager` cacheado sobre a tabela `settings`
+  (`rotina_enabled`, padrão **ligado**) e middleware `WithFeatureFlags` injetando o retrato no
+  contexto; a Navbar decide **no servidor** (`display:none`) se renderiza o ícone. Nova aba
+  **Rotina** em Configurações com toggle: desligar persiste, esconde o ícone ao vivo
+  (`window.applyRotinaNav`) e, se você estiver em `/rotina`, volta para a home. `/rotina` com a flag
+  desligada redireciona (303) para `/`; nenhuma atividade é apagada.
+- **Rotas:** `GET /rotina`, `GET /api/rotina/schedule`, `POST /api/rotina/create|update`,
+  `DELETE /api/rotina/delete`, `GET|POST /api/settings/rotina`.
+- **Documentação:** `HELP.md` §7.4 explica o resumo, a timeline, o modal e o desligamento; a tabela
+  de abas (§9.1) ganhou a linha **Rotina**.
+
+**Regressão:** testes Go de `dayplan` (resumo/união/sobreposição, gantt/ordem/sanitização, handlers
+incluindo validação, 404 e flag desligada), de `featureflags`, do middleware e do schema
+single-owner; `rotina.unit.cjs` (5 testes) trava `tightenSource`, o formulário/fragmento/Mermaid e a
+integração com a Navbar e as Configurações. `templ generate` (v0.3.1070), `node build.js`,
+`gofmt`, `go vet`, `go test -tags sqlite_fts5 ./...`, `tsc --noEmit` e os 89 testes JS verdes.
+⚠️ Reiniciar o servidor: `rotina_templ.go`, `navbar_templ.go`, `settings_modal_templ.go` e o bundle
+`static/rotina.js` são novos/mudaram.

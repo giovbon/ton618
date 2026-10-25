@@ -61,6 +61,21 @@ type SearchResultsData struct {
 	Results []SearchResultItem
 }
 
+// DayActivity represents one activity in the owner's daily routine (Rotina).
+//
+// O TON-618 é de uso pessoal: não existe coluna de usuário/dono — toda a tabela
+// pertence ao dono do cofre (a única credencial do BasicAuth). O guard de
+// schema em internal/core/db garante isso.
+type DayActivity struct {
+	ID          string `json:"id"`
+	Day         string `json:"date"` // YYYY-MM-DD
+	StartTime   string `json:"start_time"`
+	EndTime     string `json:"end_time"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 // Appointment represents a task or appointment
 type Appointment struct {
 	ID          string `json:"id"`

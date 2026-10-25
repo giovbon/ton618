@@ -1,8 +1,16 @@
 package layout
 
 import "ton618/core/internal/ui/icons"
+import "ton618/core/internal/core/featureflags"
 
 templ Navbar() {
+    {{
+        flags := featureflags.FromContext(ctx)
+        rotinaStyle := ""
+        if !flags.Rotina {
+            rotinaStyle = "display:none"
+        }
+    }}
     <nav x-data="{ mobileMenuOpen: false }" class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-xs sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
             <div class="flex flex-col shrink-0 items-start">
@@ -128,6 +136,10 @@ templ Navbar() {
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Agenda">
                     @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 " + icons.GetColor("agenda")) Agenda
                 </a>
+                <a id="nav-rotina" href="/rotina" data-nav-rotina style={ rotinaStyle }
+                    class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Rotina">
+                    @icons.Icon(icons.GetIcon("rotina"), "w-4 h-4 " + icons.GetColor("rotina")) Rotina
+                </a>
                 <a id="nav-todos" href="/todos"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 transition-colors" title="Task">
                     @icons.Icon(icons.GetIcon("task"), "w-4 h-4 " + icons.GetColor("task")) Task
@@ -244,6 +256,12 @@ templ Navbar() {
                         @icons.Icon(icons.GetIcon("agenda"), "w-4 h-4 " + icons.GetColor("agenda"))
                         <span class="text-[11px] font-bold tracking-wider">AGENDA</span>
                     </a>
+
+                    <a id="mobile-nav-rotina" href="/rotina" data-nav-rotina style={ rotinaStyle } @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
+                        @icons.Icon(icons.GetIcon("rotina"), "w-4 h-4 " + icons.GetColor("rotina"))
+                        <span class="text-[11px] font-bold tracking-wider">ROTINA</span>
+                    </a>
                     
                     <a id="mobile-nav-todos" href="/todos" @click="mobileMenuOpen = false"
                         class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-zinc-900/50 transition-colors">
@@ -307,6 +325,11 @@ templ Navbar() {
                 const nav = document.getElementById('nav-agenda');
                 if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-400 flex items-center gap-1.5 transition-all';
                 const mNav = document.getElementById('mobile-nav-agenda');
+                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sky-400 bg-sky-950/40 border border-sky-500/20 transition-colors';
+            } else if (path === '/rotina') {
+                const nav = document.getElementById('nav-rotina');
+                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-400 flex items-center gap-1.5 transition-all';
+                const mNav = document.getElementById('mobile-nav-rotina');
                 if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sky-400 bg-sky-950/40 border border-sky-500/20 transition-colors';
             } else if (path === '/todos') {
                 const nav = document.getElementById('nav-todos');

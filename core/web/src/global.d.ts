@@ -20,6 +20,19 @@ declare const Tabulator: any;
 interface Window {
   // drawing.jsx
   initDrawing: (containerEl: HTMLElement, options: { initialState?: any; onChange: Function; onReady?: Function }) => any;
+  // Helpers de export do bundle do Excalidraw (a API imperativa não os expõe).
+  excalidrawExport: {
+    exportToBlob: (opts: {
+      elements: readonly any[];
+      appState?: any;
+      files: any;
+      mimeType?: string;
+      quality?: number;
+      exportPadding?: number;
+      maxWidthOrHeight?: number;
+    }) => Promise<Blob>;
+    serializeAsJSON: (elements: readonly any[], appState: any, files: any, source: string) => string;
+  };
 
   // editor.js (TipTap)
   TipTapEditor: any;
@@ -116,6 +129,16 @@ declare namespace EditorCommon {
    * Usa só o basename do filename e devolve o nome usado no download.
    */
   function downloadMarkdown(filename: string, content: string): string;
+  /**
+   * Escala de ampliação do export SVG → PNG: 2x por padrão, com piso de
+   * resolução (minEdge) e teto de pixels do canvas (maxEdge).
+   */
+  function svgPngScale(vbW: number, vbH: number, opts?: { scale?: number; minEdge?: number; maxEdge?: number }): number;
+  /**
+   * Exporta um SVG (ex.: o mapa mental) como PNG em alta resolução, embutindo
+   * estilos computados e fontes. Devolve o nome do arquivo baixado.
+   */
+  function downloadSvgPng(svgEl: SVGElement, opts?: { filename?: string; background?: string; padding?: number; scale?: number; minEdge?: number; maxEdge?: number }): Promise<string | null>;
   function doRenameContent(filenameInput: HTMLInputElement, getContentFn: (() => string) | null, redirectBase?: string, opts?: { setStatus?: (s: string) => void; tags?: string; onSaved?: (content: string, filename: string) => void }): Promise<void>;
   function setupRenameListeners(filenameInput: HTMLInputElement, opts?: { getContent?: () => string; redirectBase?: string; setStatus?: (s: string) => void; tags?: string }): void;
   function setupCtrlS(saveFn: () => void): void;
@@ -150,4 +173,18 @@ declare namespace EditorCommon {
     base?: string;
     titlePrefix?: string;
   }): string;
+}
+
+// ── Rotina (web/src/rotina.js + settings_modal.templ) ──
+interface Window {
+  /** Mermaid UMD vendorizado (/static/js/vendor/mermaid.min.js). */
+  mermaid: any;
+  rotinaEdit: (button: HTMLElement | null) => void;
+  rotinaDelete: (button: HTMLElement | null) => void;
+  rotinaInternals: {
+    tightenSource: (src: string) => string;
+    postProcess: (scope: Element | null) => void;
+  };
+  /** Definida em settings_modal.templ: esconde/mostra o ícone da Rotina. */
+  applyRotinaNav: (enabled: boolean) => void;
 }

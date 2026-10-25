@@ -63,7 +63,7 @@ func (ctx *HandlerContext) queryBlocos(arquivo, conteudo string) ([]QueryBloco, 
 	}
 
 	agora := time.Now()
-	leitor := newQueryReader(ctx.Store)
+	leitor := NewQueryReader(ctx.Store)
 
 	blocos := make([]QueryBloco, 0, len(encontrados))
 	for _, b := range encontrados {

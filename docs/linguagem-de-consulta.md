@@ -54,7 +54,7 @@ Veja o que eu tenho de livros por ler:
 ```consulta
 tipo: notas
 tags: [livros]
-onde: !("lido" in n.tags)
+onde: '!("lido" in n.tags)'
 ```
 
 E o total de notas do acervo:
@@ -262,9 +262,10 @@ n.tags.filter(t, t.startsWith("proj")).size() >= 2
 | `endsWith` | `n.titulo.endsWith(".pdf")` | |
 | `matches` | `n.caminho.matches("^notes/2026-\\d\\d")` | **RE2** (Go) — sem *backtracking* |
 | `size` | `n.titulo.size() > 60` | comprimento em caracteres |
-| `lowerAscii` / `upperAscii` | `n.titulo.lowerAscii().contains("ata")` | normalização simples |
 
-Para busca **sem acento/radical**, prefira o atalho `texto:` (FTS5) em vez de `matches`.
+`lowerAscii`/`upperAscii` **não** estão disponíveis: o ambiente CEL do app não habilita
+`ext.Strings()`. Para busca **sem acento/radical ou sem diferenciar caixa**, prefira o atalho
+`texto:` (FTS5) em vez de `matches`/`contains`.
 
 ### 7.4 Tempo e datas
 
@@ -486,7 +487,7 @@ Consequências visíveis destas guardas:
 ```consulta
 tipo: notas
 tags: [livros]
-onde: !("lido" in n.tags)
+onde: '!("lido" in n.tags)'
 ordenar: mtime asc
 limite: 10
 mostrar: lista
@@ -666,7 +667,7 @@ O bloco é YAML. Três regras resolvem 95% dos problemas:
 | Lista de tags | `tags: [a, b]` ou em bloco (`- a` em linhas seguintes) |
 | String que é só número (`"2026"`) | Use aspas para não virar inteiro: `onde: n.titulo == "2026"` |
 | Regex com `\` | Barra dupla: `n.caminho.matches("^notes/\\d{4}")` |
-| `[` no começo da expressão | Ponha entre aspas: `onde: '["a","b"].exists(t, t in n.tags)'` — evita conflito com lista YAML |
+| A expressão começa com `!` ou `[` | Ponha entre aspas: `onde: '!(...)'` ou `onde: '["a","b"].exists(t, t in n.tags)'` — `!` e `[` no início do valor quebram o YAML |
 
 Erros de YAML aparecem como: `bloco: YAML inválido (linha 4) — …`.
 
@@ -718,7 +719,7 @@ de: Nome da nota
 ```
 Operadores:  && || !  == != < <= > >=  + - * / %  in  ( )
 Macros:      exists  all  exists_one  map  filter  has  size
-Texto:       contains startsWith endsWith matches size lowerAscii upperAscii
+Texto:       contains startsWith endsWith matches size
 Tempo:       agora  duration("720h")  timestamp("2026-01-01T00:00:00Z")
 App:         dias(ts)  horas(ts)
 n:           caminho titulo pasta classe tags mtime pai pai_resolvido filhas

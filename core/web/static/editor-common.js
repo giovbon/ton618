@@ -381,6 +381,230 @@
             return name;
         },
 
+        // ── svgPngScale: escala de ampliação do export de SVG → PNG ──
+        // Fonte única do cálculo (testável sem DOM): 2x por padrão, ampliada
+        // quando o resultado ficaria pequeno demais (piso minEdge) e reduzida
+        // quando estouraria o teto de pixels do canvas (maxEdge).
+        // vbW/vbH são as dimensões do viewBox em unidades do SVG.
+        svgPngScale: function (vbW, vbH, opts) {
+            opts = opts || {};
+            var scale = opts.scale > 0 ? opts.scale : 2;
+            if (!(vbW > 0) || !(vbH > 0) || !isFinite(vbW) || !isFinite(vbH)) return 1;
+
+            var minEdge = opts.minEdge > 0 ? opts.minEdge : 1600;
+            var maxEdge = opts.maxEdge > 0 ? opts.maxEdge : 8192;
+
+            var boost = Math.max(minEdge / vbW, minEdge / vbH);
+            if (scale < boost) scale = boost;
+            if (scale * vbW > maxEdge) scale = maxEdge / vbW;
+            if (scale * vbH > maxEdge) scale = maxEdge / vbH;
+
+            return scale > 0 && isFinite(scale) ? scale : 1;
+        },
+
+        // ── _inlineComputedStyles: copia o CSS resolvido para a cópia do SVG ──
+        // O SVG serializado é renderizado como imagem isolada, SEM acesso ao CSS
+        // da página — então cada elemento precisa carregar os estilos computados
+        // (incluindo o HTML dentro dos <foreignObject> do markmap). As duas árvores
+        // são cópias fiéis, então o pareamento por ordem de documento é seguro.
+        _inlineComputedStyles: function (srcRoot, dstRoot) {
+            if (!srcRoot || !dstRoot || typeof window.getComputedStyle !== "function") return;
+            var src = [srcRoot].concat(Array.prototype.slice.call(srcRoot.querySelectorAll("*")));
+            var dst = [dstRoot].concat(Array.prototype.slice.call(dstRoot.querySelectorAll("*")));
+            for (var i = 0; i < src.length && i < dst.length; i++) {
+                var cs;
+                try { cs = window.getComputedStyle(src[i]); } catch (e) { continue; }
+                if (!cs) continue;
+                var css = "";
+                for (var j = 0; j < cs.length; j++) {
+                    var prop = cs[j];
+                    var val = cs.getPropertyValue(prop);
+                    if (val) css += prop + ":" + val + ";";
+                }
+                if (css) dst[i].setAttribute("style", css);
+            }
+        },
+
+        // ── _usedFontFamilies: famílias (em aspas) presentes nos estilos do SVG ──
+        _usedFontFamilies: function (srcRoot) {
+            var out = {};
+            if (!srcRoot || typeof window.getComputedStyle !== "function") return out;
+            var els = [srcRoot].concat(Array.prototype.slice.call(srcRoot.querySelectorAll("*")));
+            for (var i = 0; i < els.length; i++) {
+                var ff = "";
+                try { ff = window.getComputedStyle(els[i]).fontFamily || ""; } catch (e) { continue; }
+                var re = /"([^"]+)"|'([^']+)'/g;
+                var m;
+                while ((m = re.exec(ff))) {
+                    var name = (m[1] || m[2] || "").trim().toLowerCase();
+                    if (name) out[name] = true;
+                }
+            }
+            return out;
+        },
+
+        // ── _fontUrlToDataUrl: baixa um arquivo de fonte e devolve data URL ──
+        // Caminhos relativos de /static/fonts/fonts.css são resolvidos aqui.
+        _fontUrlToDataUrl: async function (rel) {
+            var url = rel;
+            if (!/^data:|^https?:/i.test(rel)) {
+                url = (/^\//.test(rel) ? "" : "/static/fonts/") + rel;
+            }
+            try {
+                var r = await fetch(url);
+                if (!r.ok) return "";
+                var bytes = new Uint8Array(await r.arrayBuffer());
+                var chunk = 0x8000;
+                var parts = [];
+                for (var i = 0; i < bytes.length; i += chunk) {
+                    parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)));
+                }
+                return "data:font/woff2;base64," + btoa(parts.join(""));
+            } catch (e) {
+                return "";
+            }
+        },
+
+        // ── _embedFonts: embute as @font-face usadas como data URL (best-effort) ──
+        // A imagem isolada não carrega /static/fonts/fonts.css: sem isto o texto
+        // sairia na fonte de sistema. Só as famílias realmente presentes no SVG
+        // são baixadas; qualquer falha devolve "" e a exportação segue sem elas.
+        _embedFonts: async function (srcRoot) {
+            try {
+                var resp = await fetch("/static/fonts/fonts.css");
+                if (!resp.ok) return "";
+                var css = await resp.text();
+                var families = this._usedFontFamilies(srcRoot);
+                var blocks = css.match(/@font-face\s*\{[^}]*\}/g) || [];
+                var kept = [];
+                for (var i = 0; i < blocks.length; i++) {
+                    var block = blocks[i];
+                    var m = block.match(/font-family:\s*['"]?([^'";]+)['"]?/i);
+                    if (!m || !families[m[1].trim().toLowerCase()]) continue;
+
+                    var urls = block.match(/url\([^)]+\)/g) || [];
+                    var inline = block;
+                    for (var u = 0; u < urls.length; u++) {
+                        var raw = urls[u].replace(/^url\(/, "").replace(/\)$/, "").trim().replace(/^['"]|['"]$/g, "");
+                        var dataUrl = await this._fontUrlToDataUrl(raw);
+                        if (!dataUrl) { inline = ""; break; }
+                        inline = inline.replace(urls[u], "url(" + dataUrl + ")");
+                    }
+                    if (inline) kept.push(inline);
+                }
+                return kept.join("\n");
+            } catch (e) {
+                console.warn("[export] fontes não embutidas:", e);
+                return "";
+            }
+        },
+
+        // ── downloadSvgPng: exporta um SVG (ex.: o mapa mental) como PNG ──
+        // O viewBox passa a cobrir o bbox do conteúdo + margem (bbox já inclui o
+        // transform do zoom/pan do markmap) e o canvas é ampliado — 2x por padrão,
+        // com piso de resolução e teto de pixels via svgPngScale. Estilos e fontes
+        // são embutidos porque a imagem é renderizada isolada, sem a página.
+        // Retorna (Promise) o nome do arquivo baixado, ou null se não há SVG.
+        downloadSvgPng: async function (svgEl, opts) {
+            opts = opts || {};
+            if (!svgEl) return null;
+
+            var background = opts.background || "#09090b";
+            var padding = opts.padding != null ? opts.padding : 48;
+            var baseName = String(opts.filename || "").split("/").pop().replace(/\.md$/i, "") || "mapa-mental";
+            var fileName = baseName + ".png";
+
+            // Deixa o browser terminar layout e fontes antes de medir.
+            try {
+                if (document.fonts && document.fonts.ready) await document.fonts.ready;
+            } catch (e) { /* segue mesmo sem Font Loading API */ }
+            await new Promise(function (resolve) {
+                requestAnimationFrame(function () { requestAnimationFrame(resolve); });
+            });
+
+            // 1. Limites do conteúdo.
+            var rect = null;
+            try {
+                var b = svgEl.getBBox();
+                if (b && b.width > 0 && b.height > 0 && isFinite(b.width) && isFinite(b.height)) {
+                    rect = { x: b.x, y: b.y, width: b.width, height: b.height };
+                }
+            } catch (e) { rect = null; }
+            if (!rect) {
+                var cr = svgEl.getBoundingClientRect ? svgEl.getBoundingClientRect() : null;
+                rect = { x: 0, y: 0, width: (cr && cr.width) || 800, height: (cr && cr.height) || 600 };
+            }
+
+            var vbW = rect.width + padding * 2;
+            var vbH = rect.height + padding * 2;
+            var scale = this.svgPngScale(vbW, vbH, opts);
+            var outW = Math.max(1, Math.round(vbW * scale));
+            var outH = Math.max(1, Math.round(vbH * scale));
+
+            // 2. Cópia isolada, com estilos computados inlinados.
+            var clone = svgEl.cloneNode(true);
+            this._inlineComputedStyles(svgEl, clone);
+            clone.setAttribute("viewBox",
+                (rect.x - padding) + " " + (rect.y - padding) + " " + vbW + " " + vbH);
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            clone.style.width = outW + "px";
+            clone.style.height = outH + "px";
+            // O fundo é pintado no canvas (garantido), não depende do background
+            // da raiz do SVG — que pode não ser pintado em modo imagem isolada.
+            clone.style.background = "transparent";
+
+            // 3. Fontes embutidas (best-effort).
+            var fontCss = await this._embedFonts(svgEl);
+            if (fontCss) {
+                var styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                styleEl.textContent = fontCss;
+                clone.insertBefore(styleEl, clone.firstChild);
+            }
+
+            // 4. Serializa e renderiza no canvas ampliado.
+            var svgStr = new XMLSerializer().serializeToString(clone);
+            var dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+            var img = await new Promise(function (resolve, reject) {
+                var im = new Image();
+                im.onload = function () { resolve(im); };
+                im.onerror = function () { reject(new Error("não foi possível renderizar o SVG exportado")); };
+                im.src = dataUrl;
+            });
+
+            var canvas = document.createElement("canvas");
+            canvas.width = outW;
+            canvas.height = outH;
+            var ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("canvas 2D indisponível");
+            ctx.fillStyle = background;
+            ctx.fillRect(0, 0, outW, outH);
+            ctx.drawImage(img, 0, 0, outW, outH);
+
+            var blob = await new Promise(function (resolve, reject) {
+                try {
+                    canvas.toBlob(function (b) {
+                        if (b) resolve(b);
+                        else reject(new Error("falha ao gerar o PNG"));
+                    }, "image/png");
+                } catch (e) {
+                    reject(e && e.name === "SecurityError"
+                        ? new Error("a nota usa imagens externas que impedem a exportação da imagem")
+                        : e);
+                }
+            });
+
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+            return fileName;
+        },
+
         // ── doRenameContent: renomeia + salva conteúdo, comum a todos os tipos ──
         doRenameContent: async function (filenameInput, getContentFn, redirectBase, opts) {
             if (filenameInput._isRenaming) return;

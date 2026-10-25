@@ -33,6 +33,22 @@ templ mindmapContent(data domain.EditorData) {
             @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
         </button>
         <button
+            id="download-md-btn"
+            onclick="downloadCurrentNote()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Baixar o Markdown desta nota"
+        >
+            @icons.Icon(icons.GetIcon("baixar"), "w-4 h-4 " + icons.GetColor("baixar"))
+        </button>
+        <button
+            id="download-image-btn"
+            onclick="downloadMindmapImage()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Baixar o mapa mental renderizado como imagem (PNG)"
+        >
+            @icons.Icon(icons.GetIcon("baixar-imagem"), "w-4 h-4 " + icons.GetColor("baixar-imagem"))
+        </button>
+        <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
             class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
@@ -581,6 +597,36 @@ templ mindmapContent(data domain.EditorData) {
             EditorCommon.duplicateCurrentNote(filenameInput, "/mindmap", 'Duplicar esta nota "' + EditorCommon.getCurrentFilename(filenameInput) + '"?');
         }
 
+        // ── Download do Markdown da nota (ao lado de duplicar) ──
+        // Usa a MESMA fonte do save (ensureMindmapFrontmatter + jar.toString()),
+        // então o .md baixado é exatamente o que estaria salvo — inclusive com
+        // alterações ainda não salvas (o autosave é debounced).
+        function downloadCurrentNote() {
+            EditorCommon.downloadMarkdown(
+                EditorCommon.getCurrentFilename(filenameInput),
+                ensureMindmapFrontmatter(jar.toString())
+            );
+        }
+
+        // ── Download do mapa mental renderizado como PNG ──
+        // Exporta o SVG da pré-visualização em alta resolução (2x por padrão,
+        // com piso de resolução e teto de pixels), embutindo estilos e fontes —
+        // o SVG serializado é renderizado isolado, sem o CSS da página.
+        function downloadMindmapImage() {
+            if (!mmWrapper) {
+                alert("A pré-visualização do mapa mental não está disponível neste dispositivo — a imagem só pode ser exportada no desktop.");
+                return Promise.resolve(null);
+            }
+            return EditorCommon.downloadSvgPng(svgEl, {
+                filename: EditorCommon.getCurrentFilename(filenameInput),
+                background: "#09090b"
+            }).catch(function (err) {
+                console.error("Erro ao exportar o mapa mental:", err);
+                alert("Erro ao exportar a imagem: " + (err && err.message ? err.message : err));
+                return null;
+            });
+        }
+
         EditorCommon.setupRenameListeners(filenameInput, {
             getContent: function () {
                 return ensureMindmapFrontmatter(jar.toString());
@@ -612,6 +658,8 @@ templ mindmapContent(data domain.EditorData) {
         window.saveMindmap = doSave;
         window.deleteCurrentNote = deleteCurrentNote;
         window.duplicateCurrentNote = duplicateCurrentNote;
+        window.downloadCurrentNote = downloadCurrentNote;
+        window.downloadMindmapImage = downloadMindmapImage;
     })();
 </script>
 }

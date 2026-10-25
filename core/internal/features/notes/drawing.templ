@@ -32,6 +32,22 @@ templ drawingContent(data domain.EditorData) {
             @icons.Icon(icons.GetIcon("duplicar"), "w-4 h-4 " + icons.GetColor("duplicar"))
         </button>
         <button
+            id="download-excalidraw-btn"
+            onclick="downloadCurrentDrawing()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Baixar o desenho atual (.excalidraw)"
+        >
+            @icons.Icon(icons.GetIcon("baixar"), "w-4 h-4 " + icons.GetColor("baixar"))
+        </button>
+        <button
+            id="download-png-btn"
+            onclick="downloadDrawingImage()"
+            class="text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
+            title="Baixar a imagem do desenho (PNG)"
+        >
+            @icons.Icon(icons.GetIcon("baixar-imagem"), "w-4 h-4 " + icons.GetColor("baixar-imagem"))
+        </button>
+        <button
             id="delete-editor-btn"
             onclick="deleteCurrentNote()"
             class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 p-1.5 rounded-md hover:bg-zinc-900/60"
@@ -191,6 +207,80 @@ templ drawingContent(data domain.EditorData) {
             EditorCommon.duplicateCurrentNote(filenameInput, "/drawing", 'Duplicar este desenho "' + EditorCommon.getCurrentFilename(filenameInput) + '"?' );
         }
 
+        // ── Downloads do desenho atual (ao lado de duplicar) ──
+        // Os dois usam o estado VIVO do editor (getSceneElements/getAppState/
+        // getFiles), e não o último snapshot gravado: alterações ainda não
+        // salvas (o autosave é debounced em 1,5 s) entram no arquivo.
+        function drawingBaseName() {
+            var name = EditorCommon.getCurrentFilename(filenameInput) || filenameInput.value || "desenho";
+            name = name.split("/").pop().replace(/\.md$/i, "");
+            return name || "desenho";
+        }
+
+        function saveBlob(blob, name) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = name;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+        }
+
+        // .excalidraw é o JSON nativo do Excalidraw (o mesmo usado no save da
+        // nota, mas gerado na hora para incluir o que ainda não foi gravado).
+        function currentDrawingJSON() {
+            var api = editorInstance;
+            var exp = window.excalidrawExport;
+            if (api && exp && typeof exp.serializeAsJSON === "function") {
+                return exp.serializeAsJSON(
+                    api.getSceneElements(),
+                    api.getAppState(),
+                    api.getFiles(),
+                    "local"
+                );
+            }
+            return JSON.stringify(currentSnapshot || {}, null, 2);
+        }
+
+        function downloadCurrentDrawing() {
+            try {
+                saveBlob(
+                    new Blob([currentDrawingJSON()], {
+                        type: "application/vnd.excalidraw+json;charset=utf-8"
+                    }),
+                    drawingBaseName() + ".excalidraw"
+                );
+            } catch (e) {
+                console.error("Erro ao exportar o desenho:", e);
+                alert("Erro ao baixar o desenho: " + (e && e.message ? e.message : e));
+            }
+        }
+
+        // PNG na resolução padrão do Excalidraw: escala 1 (tamanho natural do
+        // desenho), com a margem e o fundo do appState atual.
+        function downloadDrawingImage() {
+            var api = editorInstance;
+            var exp = window.excalidrawExport;
+            if (!api || !exp || typeof exp.exportToBlob !== "function") {
+                alert("O editor de desenho ainda não terminou de carregar. Tente novamente em instantes.");
+                return;
+            }
+            exp.exportToBlob({
+                elements: api.getSceneElements(),
+                appState: api.getAppState(),
+                files: api.getFiles(),
+                mimeType: "image/png"
+            }).then(function (blob) {
+                saveBlob(blob, drawingBaseName() + ".png");
+            }).catch(function (err) {
+                console.error("Erro ao exportar a imagem do desenho:", err);
+                alert("Erro ao baixar a imagem: " + (err && err.message ? err.message : err));
+            });
+        }
+
         async function doRename() {
             function getDrawingContent() {
                 return initialFrontmatter + JSON.stringify(currentSnapshot || {});
@@ -236,6 +326,8 @@ templ drawingContent(data domain.EditorData) {
         window.saveDrawing = doSave;
         window.deleteCurrentNote = deleteCurrentNote;
         window.duplicateCurrentNote = duplicateCurrentNote;
+        window.downloadCurrentDrawing = downloadCurrentDrawing;
+        window.downloadDrawingImage = downloadDrawingImage;
     })();
 </script>
 }

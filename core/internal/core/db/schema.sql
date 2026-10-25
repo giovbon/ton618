@@ -89,6 +89,24 @@ CREATE TABLE IF NOT EXISTS appointments (
     created_at TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS day_activities (
+    id TEXT PRIMARY KEY,
+    day TEXT DEFAULT '',
+    start_time TEXT DEFAULT '',
+    end_time TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_day_activities_day ON day_activities(day);
+
+CREATE TABLE IF NOT EXISTS day_activity_seeds (
+    day TEXT PRIMARY KEY,
+    source_day TEXT DEFAULT '',
+    copied INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT DEFAULT ''

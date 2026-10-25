@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,11 @@ type Store struct {
 	// update de agenda (appointmentsMu).
 	settingsMu     sync.Mutex
 	appointmentsMu sync.Mutex
+	// dayPlanMu protege a tabela day_activities (Rotina), outro domínio
+	// independente do núcleo: criar/editar/excluir uma atividade nunca participa
+	// das transações de notas/FTS, então não bloqueia nem é bloqueado pelo
+	// WriteMu.
+	dayPlanMu sync.Mutex
 
 	// cancelMu + queryPending registram os cancel() dos contextos criados por
 	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;
@@ -153,6 +159,42 @@ func NewStore(path string) (*Store, error) {
 	return &Store{DB: database, Q: q}, nil
 }
 
+// NewReaderStore abre um banco EXISTENTE em modo somente leitura, sem backup
+// pré-migração e sem aplicar migrations. É o construtor para consumidores que
+// não podem alterar o acervo (ex.: o servidor MCP) e ainda assim precisam das
+// mesmas queries do Store.
+//
+// Diferenças em relação a NewStore:
+//   - falha cedo com mensagem clara quando o arquivo não existe (NewStore cria);
+//   - usa mode=ro, então qualquer tentativa de escrita é rejeitada pelo SQLite;
+//   - não roda initSchema nem backupBeforeMigration.
+func NewReaderStore(path string) (*Store, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("db inexistente %q: %w", path, err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("db %q é um diretório, não um arquivo SQLite", path)
+	}
+
+	dsn := "file:" + path + "?mode=ro&_busy_timeout=5000"
+	database, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("db open (read-only): %w", err)
+	}
+	database.SetMaxOpenConns(8)
+	database.SetMaxIdleConns(4)
+
+	// sql.Open é lazy: sem Ping o erro de arquivo/DSN só apareceria na primeira
+	// query, já dentro de uma tool MCP. Falhar no boot é mais fácil de diagnosticar.
+	if err := database.Ping(); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("db open (read-only) %q: %w", path, err)
+	}
+
+	return &Store{DB: database, Q: dbgen.New(database)}, nil
+}
+
 // initSchema cria as tabelas necessárias se ainda não existirem.
 func initSchema(database *sql.DB) error {
 	// NOTE: FTS5 table is created below with IF NOT EXISTS.
@@ -258,6 +300,24 @@ func initSchema(database *sql.DB) error {
 		year INTEGER DEFAULT 0,
 		month INTEGER DEFAULT 0,
 		week_number INTEGER DEFAULT 0,
+		created_at TEXT DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS day_activities (
+		id TEXT PRIMARY KEY,
+		day TEXT DEFAULT '',
+		start_time TEXT DEFAULT '',
+		end_time TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		created_at TEXT DEFAULT '',
+		updated_at TEXT DEFAULT ''
+	);
+	CREATE INDEX IF NOT EXISTS idx_day_activities_day ON day_activities(day);
+
+	CREATE TABLE IF NOT EXISTS day_activity_seeds (
+		day TEXT PRIMARY KEY,
+		source_day TEXT DEFAULT '',
+		copied INTEGER DEFAULT 0,
 		created_at TEXT DEFAULT ''
 	);
 

@@ -1,0 +1,225 @@
+package dayplan
+
+import "ton618/core/internal/core/staticver"
+import "ton618/core/internal/ui/icons"
+import "ton618/core/web/layout"
+
+templ RotinaPage(data PageData) {
+	@layout.Layout("Rotina", false, rotinaContent(data))
+}
+
+templ rotinaContent(data PageData) {
+	<div class="w-full max-w-4xl mx-auto flex flex-col gap-3 pb-8">
+		<!-- Cabeçalho: título + navegação de data -->
+		<div class="flex flex-wrap items-center gap-2 pt-1">
+			<h1 class="text-sm font-bold text-zinc-200 flex items-center gap-2 mr-auto">
+				@icons.Icon(icons.GetIcon("rotina"), "w-4 h-4 " + icons.GetColor("rotina"))
+				Rotina
+				<span class="text-[11px] font-normal text-zinc-500">
+					{ data.Schedule.Weekday }, { data.Schedule.DateLabel }
+				</span>
+			</h1>
+			<div class="flex items-center gap-1.5">
+				<a href={ templ.URL("/rotina?date=" + data.PrevDate) } title="Dia anterior"
+					class="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-zinc-400 hover:text-sky-400 hover:border-zinc-700 transition-colors">
+					@icons.Icon("chevron-left", "w-4 h-4")
+				</a>
+				<a href="/rotina"
+					class="px-3 h-8 flex items-center rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-[11px] font-bold text-zinc-300 hover:text-sky-400 hover:border-zinc-700 transition-colors">
+					Hoje
+				</a>
+				<input type="date" value={ data.Schedule.Date }
+					onchange="location.href='/rotina?date='+encodeURIComponent(this.value)"
+					class="h-8 px-2 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-[11px] text-zinc-300 focus:outline-hidden focus:border-sky-500 transition-colors"
+					style="color-scheme: dark;" />
+				<a href={ templ.URL("/rotina?date=" + data.NextDate) } title="Próximo dia"
+					class="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-zinc-400 hover:text-sky-400 hover:border-zinc-700 transition-colors">
+					@icons.Icon("chevron-right", "w-4 h-4")
+				</a>
+			</div>
+		</div>
+
+		@RotinaSchedule(data.Schedule)
+	</div>
+
+	@rotinaZoomModal()
+
+	<script src={ staticver.URL("/static/js/vendor/mermaid.min.js") }></script>
+	<script type="module" src={ staticver.URL("/static/rotina.js") }></script>
+}
+
+// RotinaSchedule é o bloco trocado depois de criar/editar/excluir: resumo,
+// linha do tempo, lista e formulário. O JS o substitui inteiro pelo HTML
+// devolvido pelos endpoints de mutação.
+templ RotinaSchedule(s ScheduleData) {
+	<div id="rotina-schedule" data-date={ s.Date } class="flex flex-col gap-3">
+		<!-- Resumo do dia -->
+		<section class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4">
+			<div class="flex items-center justify-between gap-2 mb-2.5">
+				<h2 class="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-2">
+					@icons.Icon("clock", "w-3.5 h-3.5 text-sky-400") Resumo do dia
+				</h2>
+				<span class="text-[10px] text-zinc-500">{ s.Summary.ActivityCountLabel() }</span>
+			</div>
+
+			<div class="h-1.5 w-full rounded-full bg-zinc-800/90 overflow-hidden mb-2.5">
+				<div class="h-full rounded-full bg-sky-500 transition-all duration-500"
+					{ styleAttr("width: " + s.Summary.OccupiedWidth())... }></div>
+			</div>
+
+			<p class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px] text-zinc-400">
+				<span>Ocupado: <strong class="text-zinc-100 font-semibold">{ s.Summary.Occupied() }</strong></span>
+				<span>Livre: <strong class="text-zinc-100 font-semibold">{ s.Summary.Free() }</strong></span>
+				<span class="text-zinc-500">de 24h</span>
+			</p>
+
+			if s.Summary.Overlapping > 0 {
+				<p class="mt-2 text-[11px] text-amber-400 flex items-center gap-1.5">
+					@icons.Icon("alert-circle", "w-3.5 h-3.5") { s.Summary.OverlapNote() }
+				</p>
+			}
+		</section>
+
+		<!-- Linha do tempo (Mermaid) -->
+		<section class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl overflow-hidden">
+			<div class="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-zinc-800/70">
+				<h2 class="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-2">
+					@icons.Icon("clock", "w-3.5 h-3.5 text-sky-400") Linha do tempo
+				</h2>
+				if s.HasActivities() {
+					<button type="button" id="rotina-zoom-btn"
+						class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-[10px] font-bold text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors cursor-pointer"
+						title="Ampliar a linha do tempo">
+						@icons.Icon("search", "w-3 h-3") Ampliar
+					</button>
+				}
+			</div>
+
+			if s.HasActivities() {
+				<div class="px-2 py-3 bg-zinc-950/40 overflow-x-auto">
+					<template id="rotina-mermaid-src">{ s.MermaidSrc }</template>
+					<div id="rotina-mermaid" class="mermaid w-full">{ s.MermaidSrc }</div>
+				</div>
+			} else {
+				<div class="flex flex-col items-center justify-center gap-2 py-9 text-center">
+					@icons.Icon("calendar-clock", "w-6 h-6 text-zinc-600")
+					<p class="text-[12px] text-zinc-500">Sem atividades para este dia. Adicione a primeira abaixo.</p>
+				</div>
+			}
+		</section>
+
+		<!-- Lista de atividades -->
+		<section class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl overflow-hidden">
+			<div class="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-zinc-800/70">
+				<h2 class="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-2">
+					@icons.Icon("list-todo", "w-3.5 h-3.5 text-sky-400") Atividades
+				</h2>
+			</div>
+
+			if s.HasActivities() {
+				<ul class="divide-y divide-zinc-800/60">
+					for _, a := range s.Activities {
+						<li class="group flex items-start gap-3 px-4 py-2.5 hover:bg-zinc-800/20 transition-colors">
+							<div class="w-14 shrink-0 text-right font-mono text-[11px] leading-tight text-zinc-300">
+								<div>{ a.StartTime }</div>
+								<div class="text-zinc-600">{ a.EndTime }</div>
+							</div>
+							<div class="flex-1 min-w-0">
+								<p class="text-[13px] text-zinc-200 break-words">{ a.Description }</p>
+								if s.OverlappingIDs[a.ID] {
+									<span class="inline-flex items-center gap-1 mt-0.5 text-[10px] text-amber-400">
+										@icons.Icon("alert-circle", "w-3 h-3") sobreposição
+									</span>
+								}
+							</div>
+							<div class="flex items-center gap-1 shrink-0 opacity-70 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+								<button type="button"
+									data-id={ a.ID } data-start={ a.StartTime } data-end={ a.EndTime } data-description={ a.Description }
+									onclick="window.rotinaEdit(this)"
+									class="p-1.5 rounded-md text-zinc-500 hover:text-sky-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+									title="Editar atividade">
+									@icons.Icon("pencil", "w-3.5 h-3.5")
+								</button>
+								<button type="button"
+									data-id={ a.ID } data-date={ s.Date }
+									onclick="window.rotinaDelete(this)"
+									class="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+									title="Excluir atividade">
+									@icons.Icon("trash-2", "w-3.5 h-3.5")
+								</button>
+							</div>
+						</li>
+					}
+				</ul>
+			} else {
+				<p class="px-4 py-6 text-center text-[12px] text-zinc-500">Nenhuma atividade cadastrada.</p>
+			}
+		</section>
+
+		<!-- Formulário (criar/editar) -->
+		<section class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4">
+			<h2 id="rotina-form-title" class="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-2 mb-3">
+				@icons.Icon("plus", "w-3.5 h-3.5 text-sky-400") <span id="rotina-form-title-text">Nova atividade</span>
+			</h2>
+
+			<form id="rotina-form" class="flex flex-col gap-3">
+				<input type="hidden" name="id" value="" />
+				<input type="hidden" name="date" value={ s.Date } />
+
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+					<label class="flex flex-col gap-1">
+						<span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Início</span>
+						<input type="time" name="start_time" value={ s.DefaultStart } required
+							class="w-full px-2.5 py-2 rounded-lg bg-zinc-950/60 border border-zinc-800 text-[12px] text-zinc-200 focus:outline-hidden focus:border-sky-500 transition-colors"
+							style="color-scheme: dark;" />
+					</label>
+					<label class="flex flex-col gap-1">
+						<span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Fim</span>
+						<input type="time" name="end_time" value={ s.DefaultEnd } required
+							class="w-full px-2.5 py-2 rounded-lg bg-zinc-950/60 border border-zinc-800 text-[12px] text-zinc-200 focus:outline-hidden focus:border-sky-500 transition-colors"
+							style="color-scheme: dark;" />
+					</label>
+					<label class="col-span-2 flex flex-col gap-1">
+						<span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Descrição</span>
+						<input type="text" name="description" maxlength="200" required
+							placeholder="Ex: Academia, reunião, almoço..."
+							class="w-full px-2.5 py-2 rounded-lg bg-zinc-950/60 border border-zinc-800 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-hidden focus:border-sky-500 transition-colors" />
+					</label>
+				</div>
+
+				<div id="rotina-form-error" class="hidden text-[11px] text-red-400"></div>
+
+				<div class="flex items-center gap-2">
+					<button type="submit" id="rotina-submit"
+						class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[12px] font-bold transition-colors cursor-pointer">
+						<span id="rotina-submit-label">Adicionar</span>
+					</button>
+					<button type="button" id="rotina-cancel"
+						class="hidden px-3 py-2 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-[12px] font-semibold text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors cursor-pointer">
+						Cancelar
+					</button>
+				</div>
+			</form>
+		</section>
+	</div>
+}
+
+// rotinaZoomModal é o modal "dia inteiro" para ver a linha do tempo grande.
+templ rotinaZoomModal() {
+	<div id="rotina-zoom-modal"
+		class="hidden fixed inset-0 z-[100] items-center justify-center bg-black/70 backdrop-blur-xs p-3 md:p-8">
+		<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+			<div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+				<h2 class="text-[12px] font-bold text-zinc-200 flex items-center gap-2">
+					@icons.Icon("clock", "w-3.5 h-3.5 text-sky-400") Linha do tempo — dia inteiro
+				</h2>
+				<button type="button" data-rotina-zoom-close
+					class="text-zinc-500 hover:text-white transition-colors text-xl leading-none cursor-pointer"
+					title="Fechar">
+					&times;
+				</button>
+			</div>
+			<div id="rotina-zoom-holder" class="flex-1 overflow-auto p-3 bg-zinc-950/40 min-h-[240px]"></div>
+		</div>
+	</div>
+}

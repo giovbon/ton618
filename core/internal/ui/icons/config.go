@@ -37,6 +37,7 @@ var Config = map[string]IconSpec{
 
 	// ── NAVEGAÇÃO & HEADER ──
 	"agenda":    {Icon: "calendar", Color: "text-sky-400"},
+	"rotina":    {Icon: "calendar-clock", Color: "text-sky-400"},
 	"task":      {Icon: "construction", Color: "text-amber-400"},
 	"todos":     {Icon: "construction", Color: "text-amber-400"},
 	"tabulator": {Icon: "container", Color: "#10C809"},
@@ -64,8 +65,10 @@ var Config = map[string]IconSpec{
 	"duplicar": {Icon: "copy", Color: "text-zinc-500"},
 	"baixar":   {Icon: "download", Color: "text-zinc-500"},
 	"download": {Icon: "download", Color: "text-zinc-500"},
-	"excluir":  {Icon: "trash", Color: "text-zinc-500"},
-	"delete":   {Icon: "trash", Color: "text-zinc-500"},
+	// Exportar o mapa mental renderizado como imagem (PNG).
+	"baixar-imagem": {Icon: "image-down", Color: "text-zinc-500"},
+	"excluir":       {Icon: "trash", Color: "text-zinc-500"},
+	"delete":        {Icon: "trash", Color: "text-zinc-500"},
 
 	// ── HIERARQUIA DE NOTAS (pai/filhas) ──
 	"pai":      {Icon: "workflow", Color: "text-sky-400"},
@@ -84,6 +87,7 @@ var Config = map[string]IconSpec{
 	"marcadores":            {Icon: "pin", Color: "text-purple-400"},
 	"settings-marcadores":   {Icon: "pin", Color: "text-purple-400"},
 	"settings-agenda":       {Icon: "calendar", Color: "text-cyan-400"},
+	"settings-rotina":       {Icon: "calendar-clock", Color: "text-cyan-400"},
 	"ntfy":                  {Icon: "bell", Color: "text-rose-400"},
 	"settings-ntfy":         {Icon: "bell", Color: "text-rose-400"},
 	"colunas":               {Icon: "columns", Color: "text-sky-400"},

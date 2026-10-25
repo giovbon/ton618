@@ -2,14 +2,123 @@ package system
 
 import "ton618/core/web/layout"
 
-templ HelpPage(title string, html string) {
-    @layout.Layout(title, false, helpDoc(html))
+templ HelpPage(title string, intro string, toc []HelpTOCEntry, body string) {
+    @layout.Layout(title, false, helpDoc(intro, toc, body))
 }
 
 // helpDoc renderiza o markdown da ajuda já convertido para HTML pelo servidor
 // (goldmark). O wrapper `prose` usa o plugin de tipografia do Tailwind.
-templ helpDoc(html string) {
+//
+// `intro` é o conteúdo antes do primeiro <h2> e `body` o restante: o índice
+// entra entre os dois, logo depois da apresentação e antes da seção 1.
+templ helpDoc(intro string, toc []HelpTOCEntry, body string) {
     <article class="prose prose-invert prose-zinc max-w-none">
-        @templ.Raw(html)
+        @templ.Raw(intro)
+        if len(toc) > 0 {
+            @helpTOC(toc)
+        }
+        @templ.Raw(body)
     </article>
+}
+
+// helpTOC é o índice gerado a partir dos títulos do HELP.md. Ele não existe no
+// markdown: é montado a cada requisição, então seções novas entram sozinhas.
+templ helpTOC(entries []HelpTOCEntry) {
+    <nav class="not-prose mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/40" aria-label="Índice da ajuda">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 px-4 py-3">
+            <span class="text-sm font-bold text-zinc-200">Índice</span>
+            <span id="help-toc-count" class="text-[11px] text-zinc-500">{ helpTOCLabel(entries) }</span>
+        </div>
+        <div class="p-4">
+            <input id="help-toc-filter" type="search" placeholder="Buscar por título…" autocomplete="off"
+                aria-label="Buscar no índice por título"
+                class="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-sky-500/50 focus:outline-hidden" />
+            <p id="help-toc-empty" class="mt-3 hidden text-xs text-zinc-500">Nenhuma seção corresponde ao filtro.</p>
+            <ol id="help-toc-list" class="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                for _, e := range entries {
+                    <li>
+                        <a href={ "#" + e.ID }
+                            class="text-[13px] font-semibold text-zinc-200 transition-colors hover:text-sky-400">{ e.Text }</a>
+                        if len(e.Children) > 0 {
+                            <ul class="mt-1.5 space-y-1 border-l border-zinc-800 pl-3">
+                                for _, c := range e.Children {
+                                    <li>
+                                        <a href={ "#" + c.ID }
+                                            class="text-xs text-zinc-400 transition-colors hover:text-sky-400">{ c.Text }</a>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </li>
+                }
+            </ol>
+        </div>
+    </nav>
+    <script>
+        // Filtro do índice. Compara o termo com o título de cada entrada — e não
+        // com o texto da seção inteira — senão buscar "restauração" manteria a
+        // seção 9 toda visível, com todas as subseções que não têm nada a ver.
+        //
+        // Regras:
+        //  - sem acento e sem diferenciar maiúsculas ("configuracoes" acha
+        //    "configurações");
+        //  - vários termos = todos precisam aparecer ("backup nota");
+        //  - só ficam visíveis as subseções cujo próprio título casa: achar a
+        //    seção não é motivo para mostrar as subseções que não têm o termo.
+        (function () {
+            var input = document.getElementById("help-toc-filter");
+            var list = document.getElementById("help-toc-list");
+            var empty = document.getElementById("help-toc-empty");
+            var contador = document.getElementById("help-toc-count");
+            if (!input || !list) return;
+
+            var total = list.children.length;
+            var rotuloOriginal = contador ? contador.textContent : "";
+
+            function normaliza(texto) {
+                return (texto || "")
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .toLowerCase();
+            }
+
+            function combina(texto, termos) {
+                for (var i = 0; i < termos.length; i++) {
+                    if (texto.indexOf(termos[i]) === -1) return false;
+                }
+                return true;
+            }
+
+            function filtrar() {
+                var termos = normaliza(input.value).split(/\s+/).filter(Boolean);
+                var visiveis = 0;
+
+                Array.prototype.forEach.call(list.children, function (li) {
+                    var titulo = li.querySelector(":scope > a");
+                    var subs = li.querySelectorAll(":scope > ul > li");
+                    var secaoOk = termos.length === 0 || combina(normaliza(titulo && titulo.textContent), termos);
+                    var algumaSub = false;
+
+                    Array.prototype.forEach.call(subs, function (sub) {
+                        var ok = termos.length === 0 || combina(normaliza(sub.textContent), termos);
+                        sub.classList.toggle("hidden", !ok);
+                        if (ok) algumaSub = true;
+                    });
+
+                    var mostrar = secaoOk || algumaSub;
+                    li.classList.toggle("hidden", !mostrar);
+                    if (mostrar) visiveis++;
+                });
+
+                if (empty) empty.classList.toggle("hidden", visiveis > 0);
+                if (contador) {
+                    contador.textContent = termos.length === 0
+                        ? rotuloOriginal
+                        : visiveis + " de " + total + " seções";
+                }
+            }
+
+            input.addEventListener("input", filtrar);
+        })();
+    </script>
 }

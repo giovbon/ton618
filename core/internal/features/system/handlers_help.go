@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
 )
 
 // resolveHelpDocPath encontra o arquivo markdown do help (/help). Ordem de
@@ -45,7 +48,7 @@ func (ctx *HandlerContext) HandleHelpPage(w http.ResponseWriter, r *http.Request
 		HelpPage("Ajuda — TON-618",
 			"<p><em>Arquivo de ajuda não encontrado.</em></p>"+
 				"<p>Crie um arquivo <code>HELP.md</code> na raiz do projeto, ou aponte "+
-				"<code>HELP_DOC</code> para o seu caminho.</p>").Render(r.Context(), w)
+				"<code>HELP_DOC</code> para o seu caminho.</p>", nil, "").Render(r.Context(), w)
 		return
 	}
 
@@ -56,12 +59,28 @@ func (ctx *HandlerContext) HandleHelpPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// GFM habilita tabelas, riscado, listas de tarefas e autolinks — o HELP.md
+	// usa tabelas de referência em quase todas as seções.
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
+
+	// O documento é interpretado uma vez: a mesma árvore serve para gerar o
+	// índice (e os `id` das âncoras) e para renderizar o HTML final.
+	doc := md.Parser().Parse(text.NewReader(content))
+	toc := helpHeadingIDs(doc, content)
+
 	var buf bytes.Buffer
-	if err := goldmark.New().Convert(content, &buf); err != nil {
+	if err := md.Renderer().Render(&buf, content, doc); err != nil {
 		slog.Error("ajuda: erro ao converter markdown", "error", err)
 		http.Error(w, "erro ao renderizar ajuda", http.StatusInternalServerError)
 		return
 	}
 
-	HelpPage("Ajuda — TON-618", buf.String()).Render(r.Context(), w)
+	// O índice entra entre a apresentação e a primeira seção (antes do
+	// primeiro <h2>), que é o ponto natural de leitura.
+	intro, body := buf.String(), ""
+	if i := strings.Index(intro, "<h2"); i >= 0 {
+		intro, body = intro[:i], intro[i:]
+	}
+
+	HelpPage("Ajuda — TON-618", intro, toc, body).Render(r.Context(), w)
 }

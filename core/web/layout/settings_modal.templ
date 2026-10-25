@@ -1,8 +1,12 @@
 package layout
 
 import "ton618/core/internal/ui/icons"
+import "ton618/core/internal/core/featureflags"
 
 templ SettingsModal() {
+    {{
+        flags := featureflags.FromContext(ctx)
+    }}
     <!-- Settings Modal -->
     <div id="settings-modal" x-data x-show="$store.settings.open" x-cloak
         class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-xs">
@@ -48,6 +52,11 @@ templ SettingsModal() {
                         :class="$store.settings.activeTab === 'agenda' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
                         class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
                         @icons.Icon(icons.GetIcon("settings-agenda"), "w-4 h-4 " + icons.GetColor("settings-agenda")) Agenda
+                    </button>
+                    <button @click="$store.settings.openTab('rotina')"
+                        :class="$store.settings.activeTab === 'rotina' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
+                        class="px-4 py-2 md:px-3.5 md:py-2 text-sm font-semibold border-l-2 border-b-0 md:text-left transition-all flex items-center gap-2 rounded-none">
+                        @icons.Icon(icons.GetIcon("settings-rotina"), "w-4 h-4 " + icons.GetColor("settings-rotina")) Rotina
                     </button>
                     <button @click="$store.settings.openTab('ntfy')"
                         :class="$store.settings.activeTab === 'ntfy' ? 'text-white border-sky-500 bg-sky-500/5' : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800/30'"
@@ -353,6 +362,40 @@ templ SettingsModal() {
                     </div>
                 </div>
 
+                <!-- Rotina Tab -->
+                <div x-show="$store.settings.activeTab === 'rotina'" class="space-y-6">
+                    <p class="text-sm text-zinc-400">
+                        A Rotina é a linha do tempo das atividades do seu dia. Aqui você pode
+                        desligá-la temporariamente: o ícone some do cabeçalho e a página
+                        <code class="text-sky-400">/rotina</code> deixa de abrir. Nenhuma atividade
+                        é apagada — ao religar, tudo volta como estava.
+                    </p>
+
+                    <div x-data="rotinaConfig()" data-rotina-enabled={ featureflags.BoolString(flags.Rotina) }
+                        class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 space-y-3">
+                        <div class="flex items-center justify-between gap-4">
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-zinc-200">Habilitar Rotina</p>
+                                <p class="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                                    Exibe o ícone no cabeçalho, ao lado da Agenda, e libera a página
+                                    com a linha do tempo do dia.
+                                </p>
+                            </div>
+                            <button type="button" role="switch" :aria-checked="enabled.toString()"
+                                @click="toggle()" :disabled="saving"
+                                :class="enabled ? 'bg-sky-600' : 'bg-zinc-700'"
+                                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                :title="enabled ? 'Desligar Rotina' : 'Ligar Rotina'">
+                                <span :class="enabled ? 'translate-x-5' : 'translate-x-0.5'"
+                                    class="inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform"></span>
+                            </button>
+                        </div>
+
+                        <p x-show="saved" x-transition.duration.300ms class="text-[11px] text-emerald-400 text-right">✓ Salvo!</p>
+                        <p x-show="error" x-text="errorMsg" class="text-[11px] text-red-400 text-right"></p>
+                    </div>
+                </div>
+
                 <!-- Ntfy Tab -->
                 <div x-show="$store.settings.activeTab === 'ntfy'" class="space-y-6">
                     <p class="text-sm text-zinc-400">
@@ -553,7 +596,65 @@ templ SettingsModal() {
                     .finally(() => { this.saving = false; });
                 }
             }));
+
+            // Rotina (aba "Rotina"): o estado inicial vem do servidor
+            // (data-rotina-enabled), então não há fetch ao abrir a página.
+            Alpine.data('rotinaConfig', () => ({
+                enabled: true,
+                saving: false,
+                saved: false,
+                error: false,
+                errorMsg: '',
+                init() {
+                    this.enabled = this.$el.dataset.rotinaEnabled !== '0';
+                },
+                toggle() {
+                    if (this.saving) return;
+                    this.save(!this.enabled);
+                },
+                save(next) {
+                    this.saving = true;
+                    this.saved = false;
+                    this.error = false;
+                    var body = new URLSearchParams();
+                    body.append('enabled', next ? '1' : '0');
+                    fetch('/api/settings/rotina', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    })
+                    .then(async r => {
+                        const data = await r.json().catch(() => ({}));
+                        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+                        this.enabled = !!data.enabled;
+                        if (typeof window.applyRotinaNav === 'function') {
+                            window.applyRotinaNav(this.enabled);
+                        }
+                        this.saved = true;
+                        setTimeout(() => this.saved = false, 3000);
+                        // Desligar enquanto está na própria página: sai para a home.
+                        if (!this.enabled && window.location.pathname === '/rotina') {
+                            window.location.href = '/';
+                        }
+                    })
+                    .catch(e => {
+                        this.error = true;
+                        this.errorMsg = e.message || 'Erro ao salvar';
+                        setTimeout(() => this.error = false, 5000);
+                    })
+                    .finally(() => { this.saving = false; });
+                }
+            }));
         });
+
+        // Mostra/esconde o ícone da Rotina no cabeçalho (desktop e mobile) sem
+        // recarregar a página. O elemento é renderizado sempre; o servidor já
+        // marca display:none quando a flag está desligada.
+        window.applyRotinaNav = function (enabled) {
+            document.querySelectorAll('[data-nav-rotina]').forEach(function (el) {
+                el.style.display = enabled ? '' : 'none';
+            });
+        };
 
         // Lead time de notificação da agenda (horas antes do evento)
         window.saveAgendaNotifyHours = function (hours) {

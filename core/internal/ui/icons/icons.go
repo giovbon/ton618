@@ -38,6 +38,8 @@ func SVGString(name string, class string) string {
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
 	case "download", "file-down", "exportar":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`
+	case "image-down", "image":
+		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`
 	case "trash-2", "delete":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`
 	case "list-todo", "task", "todos":
@@ -54,6 +56,8 @@ func SVGString(name string, class string) string {
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<circle cx="12" cy="18" r="3"/> <circle cx="6" cy="6" r="3"/> <circle cx="18" cy="6" r="3"/> <path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"/> <path d="M12 13v2"/>` + `</svg>`
 	case "calendar-range", "calendar", "agenda":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<rect width="18" height="18" x="3" y="4" rx="2"/> <path d="M16 2v4"/> <path d="M8 2v4"/> <path d="M3 10h18"/> <path d="M17 14h-6"/> <path d="M13 18H7"/>` + `</svg>`
+	case "calendar-clock", "rotina":
+		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="M8 2v4"/> <path d="M16 2v4"/> <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/> <path d="M3 10h5"/> <path d="M17.5 17.5 16 16.3V14"/> <circle cx="16" cy="16" r="6"/>` + `</svg>`
 	case "container":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-8.6-5c-.4-.2-1-.2-1.4 0l-8.6 5c-.4.3-.8.9-.8 1.5v8.6c0 .6.4 1.2.8 1.5l8.6 5c.2.1.5.2.7.2s.5-.1.7-.2l8.6-5c.4-.3.8-.9.8-1.5z"/> <path d="M12 22V12"/> <path d="m12 12 9.6-5.3"/> <path d="m12 12-9.6-5.3"/> <path d="M4.5 10.5 12 15l7.5-4.5"/>` + `</svg>`
 	case "layers":
@@ -72,6 +76,8 @@ func SVGString(name string, class string) string {
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="M12 20h9"/> <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>` + `</svg>`
 	case "chevron-down":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="m6 9 6 6 6-6"/>` + `</svg>`
+	case "chevron-left":
+		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="m15 18-6-6 6-6"/>` + `</svg>`
 	case "chevron-right":
 		return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="` + class + `">` + `<path d="m9 18 6-6-6-6"/>` + `</svg>`
 	case "search":

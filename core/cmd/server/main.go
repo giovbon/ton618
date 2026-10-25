@@ -15,9 +15,11 @@ import (
 
 	"ton618/core/internal/core/config"
 	"ton618/core/internal/core/db"
+	"ton618/core/internal/core/featureflags"
 	"ton618/core/internal/core/services"
 	"ton618/core/internal/core/staticver"
 	"ton618/core/internal/features/appointments"
+	"ton618/core/internal/features/dayplan"
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/features/search"
 	"ton618/core/internal/features/system"
@@ -27,6 +29,12 @@ import (
 )
 
 func main() {
+	// Subcomando MCP: precisa rodar ANTES do bootstrap HTTP e sem escrever nada
+	// no stdout (que pertence ao protocolo JSON-RPC).
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		os.Exit(runMCP(os.Args[2:]))
+	}
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	slog.Info("TON-618 iniciando...")
 
@@ -92,6 +100,8 @@ func main() {
 	todosCtx := todos.NewHandlerContext(cfg, store)
 	searchCtx := search.NewHandlerContext(cfg, store)
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
+	flagsManager := featureflags.NewManager(store)
+	dayplanCtx := dayplan.NewHandlerContext(cfg, store, flagsManager)
 
 	go func() {
 		slog.Info("Sincronizando notas do banco de dados em segundo plano...")
@@ -107,6 +117,7 @@ func main() {
 	r.Use(middleware.Recovery)
 	r.Use(middleware.SecurityHeadersMiddleware)
 	r.Use(middleware.WithRequestContext) // propaga contexto HTTP para cancelamento de queries
+	r.Use(middleware.WithFeatureFlags(flagsManager))
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
 	// Rotas públicas (estáticos) e, em seguida, as rotas dinâmicas protegidas por
@@ -118,7 +129,7 @@ func main() {
 			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
 		})
 		r.Mount("/debug", chimiddleware.Profiler())
-		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx)
+		SetupRoutes(r, sysCtx, notesCtx, todosCtx, searchCtx, appointmentsCtx, dayplanCtx)
 	})
 
 	srv := &http.Server{
