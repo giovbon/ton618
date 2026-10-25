@@ -144,7 +144,7 @@ templ searchResultItem(res domain.SearchResultItem, query string) {
 			     o trecho quando a ocorrência está fundo num parágrafo longo — o span de
 			     destaque existe no HTML, mas fica além das linhas exibidas e o termo
 			     "some". Sem clamp o trecho inteiro é mostrado e o destaque fica visível. -->
-			<div class="text-[14px] leading-relaxed text-zinc-400 font-sans snippet-text">
+			<div class="text-[14px] leading-relaxed text-zinc-400 font-sans snippet-text overflow-hidden">
 				@templ.Raw(res.Snippet)
 			</div>
 			<!-- Demais trechos da mesma nota que também casaram (ex.: outras linhas
@@ -152,7 +152,7 @@ templ searchResultItem(res domain.SearchResultItem, query string) {
 			if len(res.Snippets) > 0 {
 				<div class="mt-2 space-y-1.5 border-l border-zinc-800/70 pl-3">
 					for _, s := range res.Snippets {
-						<div class="text-[13px] leading-relaxed text-zinc-500 font-sans snippet-text">
+						<div class="text-[13px] leading-relaxed text-zinc-500 font-sans snippet-text overflow-hidden">
 							if s.Secao != "" {
 								<span class="text-[9px] font-black tracking-widest text-zinc-600 uppercase mr-1.5 search-section-title">{ s.Secao }</span>
 							}
