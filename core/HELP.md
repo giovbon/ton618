@@ -670,7 +670,7 @@ Abra pelo ícone **Rotina** no cabeçalho, ao lado de **Agenda** (ou pela URL `/
 | Parte | O que mostra |
 |---|---|
 | **Resumo do dia** | Minutos **ocupados**, **livres** e a barra de ocupação sobre 24 h |
-| **Linha do tempo** | Gráfico de Gantt (Mermaid) com uma barra por atividade |
+| **Linha do tempo** | Barras proporcionais ao horário, com sobreposições em raias separadas |
 | **Atividades** | Lista em ordem de horário, com editar/excluir |
 | **Nova atividade** | Início, fim e descrição; salva e atualiza tudo na hora |
 
@@ -678,11 +678,20 @@ Detalhes que valem saber:
 
 - O tempo **ocupado** é a **união** dos intervalos: duas atividades que se sobrepõem contam uma vez
   só, e o app avisa quando há sobreposição (sem somar o tempo duas vezes).
-- **Ampliar** abre a linha do tempo do **dia inteiro**; no cartão, telas pequenas compactam o eixo
-  para o intervalo real das atividades (com folga de 2 h, mínimo de 8 h).
+- A linha do tempo é **nativa** (DOM), sem carregar o Mermaid. Clique em uma barra para editar; passe
+  o mouse (ou foque com o teclado) para ver descrição, horário e duração. Sobreposições ficam em
+  raias empilhadas, com borda âmbar.
+- **Ajustar** encaixa o dia na largura; **+ / −** (ou Ctrl+scroll) ampliam; arraste na horizontal para
+  rolar. Em telas pequenas o gráfico mantém uma largura mínima legível e rola em vez de espremer 24 h.
+- **Ampliar** abre a mesma linha do tempo em um modal maior, com o dia inteiro e barras mais altas.
 - As setas ‹ › e o seletor de data navegam entre os dias; **Hoje** volta para a data atual.
+- **Cópia automática:** ao iniciar o dia (e também ao abrir a Rotina), as atividades do **mesmo dia
+  da semana anterior** são copiadas para hoje. Se aquele dia estiver vazio, nada é copiado; a cópia
+  acontece uma única vez por dia, mesmo que o servidor seja reiniciado.
 - A Rotina pode ser **desligada** em **Configurações → Rotina**: o ícone some do cabeçalho e
   `/rotina` redireciona para a home. Nenhuma atividade é apagada — ao religar, tudo volta.
+- Em **Configurações → Rotina** também há o toggle **Linha do tempo nativa**. Desligá-lo volta ao
+  gantt Mermaid (carregando ~3 MB) só para comparação; a página recarrega ao trocar.
 
 ---
 

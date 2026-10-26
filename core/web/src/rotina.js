@@ -1,18 +1,33 @@
 /**
- * rotina.js — linha do tempo da Rotina (Mermaid gantt).
+ * rotina.js — interação da Rotina (linha do tempo + formulário).
  *
- * O servidor entrega o bloco #rotina-schedule pronto (resumo + lista + form).
- * Toda mutação devolve o bloco atualizado, que substitui o anterior; depois
- * disso o Mermaid é renderizado de novo. Nada de estado no cliente além do
- * formulário de edição.
+ * A linha do tempo padrão é a nativa (rotina-timeline.js, DOM puro). O gantt
+ * do Mermaid continua disponível atrás da flag de comparação
+ * (`rotina_timeline_native` nas Configurações) e só carrega o vendor quando
+ * escolhido. O servidor entrega o bloco #rotina-schedule pronto (resumo +
+ * timeline + lista + form); toda mutação devolve o bloco atualizado, que
+ * substitui o anterior. Nada de estado no cliente além do formulário de edição.
  */
 
 import { tightenSource } from "./rotina-utils.js";
+import {
+  mount as mountNativeTimeline,
+  unmountAll as unmountNativeTimelines,
+  unmountWithin as unmountNativeTimelinesWithin,
+  openZoom as openNativeZoom,
+  hasNativeTimeline
+} from "./rotina-timeline.js";
 
 (function () {
   "use strict";
 
   var initialized = false;
+  // Cada abertura do modal ganha um token; se o usuário fechar (ou abrir de
+  // novo) antes do render terminar, o resultado antigo é descartado.
+  var zoomRenderToken = 0;
+  // Largura mínima do gráfico no modal: em telas pequenas o dia inteiro não
+  // cabe em 350 px, então o SVG é ampliado e o modal rola na horizontal.
+  var ZOOM_MIN_CANVAS_WIDTH = 1100;
 
   function isNarrow() {
     return !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
@@ -195,9 +210,26 @@ import { tightenSource } from "./rotina-utils.js";
   // Em telas pequenas o eixo acompanha o intervalo real das atividades (com
   // folga de 2h, mínimo de 8h) em vez de espremer 24h. O modal continua com o
   // dia inteiro. A função pura vive em rotina-utils.js (testável sem DOM).
+  //
+  // O modo nativo (padrão) não passa por aqui: ele desenha o próprio canvas e
+  // cuida de zoom/rolagem. O caminho Mermaid fica atrás da flag de comparação.
   function renderTimeline() {
+    unmountNativeTimelines();
+
+    var nativeRoot = document.getElementById("rotina-timeline");
+    if (nativeRoot) {
+      mountNativeTimeline(nativeRoot);
+      return;
+    }
+
     var el = document.getElementById("rotina-mermaid");
     if (!el || !initMermaid()) return;
+
+    // Guarda a fonte completa no próprio nó. O modal usa o <template>, que é
+    // a fonte canônica, mas este atributo é um fallback caso o template seja
+    // removido/alterado por outro script antes do clique em "Ampliar".
+    var fullSource = (el.textContent || "").trim();
+    if (fullSource.indexOf("gantt") === 0) el.setAttribute("data-mermaid-src", fullSource);
 
     if (isNarrow()) {
       var src = (el.textContent || "").trim();
@@ -228,6 +260,8 @@ import { tightenSource } from "./rotina-utils.js";
   function replaceSchedule(html) {
     var current = document.getElementById("rotina-schedule");
     if (!current) return;
+    closeZoom();
+    unmountNativeTimelines();
     current.outerHTML = html;
     setFormError("");
     renderTimeline();
@@ -345,46 +379,135 @@ import { tightenSource } from "./rotina-utils.js";
 
   // ── Zoom (modal com o dia inteiro) ───────────────────────────────────────
 
-  function sourceFromTemplate() {
+  function sourceForZoom() {
     var tmpl = /** @type {HTMLTemplateElement|null} */ (document.getElementById("rotina-mermaid-src"));
-    if (!tmpl) return "";
-    return ((tmpl.content && tmpl.content.textContent) || tmpl.textContent || "").trim();
+    var source = "";
+    if (tmpl) {
+      source = (tmpl.content && tmpl.content.textContent) || tmpl.textContent || "";
+    }
+    if (!source.trim()) {
+      var timeline = document.getElementById("rotina-mermaid");
+      source = (timeline && timeline.getAttribute("data-mermaid-src")) || "";
+    }
+    return source.trim();
   }
 
+  /** @param {HTMLElement} holder @param {string} message */
+  function showZoomError(holder, message) {
+    holder.innerHTML = "";
+    var p = document.createElement("p");
+    p.className = "text-xs text-red-400";
+    p.textContent = message;
+    holder.appendChild(p);
+  }
+
+  /**
+   * Abre o modal e renderiza a fonte completa (dia inteiro). O modal aparece
+   * de imediato, antes do render assíncrono, para o clique nunca parecer
+   * "morto"; o gráfico recebe uma largura mínima para realmente ampliar.
+   */
   function openZoom() {
     var modal = document.getElementById("rotina-zoom-modal");
     var holder = document.getElementById("rotina-zoom-holder");
-    var source = sourceFromTemplate();
-    if (!modal || !holder || !source || !initMermaid()) return;
+    if (!modal || !holder) return;
 
     modal.classList.remove("hidden");
     modal.classList.add("flex");
-    holder.innerHTML = '<p class="text-xs text-zinc-500">Renderizando…</p>';
+    modal.setAttribute("aria-hidden", "false");
 
-    window.mermaid.render("rotina-zoom-" + Date.now(), source)
+    // Modo nativo: o próprio renderer monta a versão ampliada no holder.
+    if (hasNativeTimeline()) {
+      openNativeZoom(holder);
+      return;
+    }
+
+    var source = sourceForZoom();
+    if (!source) {
+      showZoomError(holder, "Não foi possível localizar a linha do tempo. Recarregue a página e tente de novo.");
+      return;
+    }
+    if (!initMermaid()) {
+      showZoomError(holder, "O Mermaid não carregou. Recarregue a página e tente de novo.");
+      return;
+    }
+
+    // O Gantt do Mermaid usa a largura do elemento pai para montar o viewBox.
+    // Por isso o canvas é criado antes do render, já com a largura ampliada
+    // (e não redimensionado depois, o que distorceria texto e barras).
+    var cs = window.getComputedStyle(holder);
+    var padding = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    var canvasWidth = Math.max(ZOOM_MIN_CANVAS_WIDTH, Math.floor(holder.clientWidth - padding));
+    holder.innerHTML = "";
+    var canvas = document.createElement("div");
+    canvas.style.width = canvasWidth + "px";
+    canvas.style.minWidth = canvasWidth + "px";
+    canvas.innerHTML = '<p class="text-xs text-zinc-500">Renderizando…</p>';
+    holder.appendChild(canvas);
+
+    var token = ++zoomRenderToken;
+    window.mermaid.render("rotina-zoom-" + Date.now(), source, canvas)
       .then(function (result) {
-        holder.innerHTML = result.svg;
-        postProcess(holder);
+        if (token !== zoomRenderToken) return;
+        var svg = result && result.svg ? result.svg : "";
+        if (!svg) throw new Error("SVG vazio");
+        canvas.innerHTML = svg;
+        postProcess(canvas);
+        centerZoomOnActivities(holder, canvas);
       })
       .catch(function (err) {
-        holder.innerHTML = '<p class="text-xs text-red-400">Erro ao gerar o gráfico: ' +
-          String(err).slice(0, 120).replace(/[<>&]/g, "") + "</p>";
+        if (token !== zoomRenderToken) return;
+        showZoomError(holder, "Erro ao gerar o gráfico: " + String(err).slice(0, 160));
       });
   }
 
+  /**
+   * Em telas pequenas o gráfico ampliado rola na horizontal. Centraliza a
+   * rolagem no intervalo das atividades para o usuário não abrir o modal em
+   * 0h e precisar procurar as barras.
+   * @param {HTMLElement} holder
+   * @param {HTMLElement} canvas
+   */
+  function centerZoomOnActivities(holder, canvas) {
+    var tasks = canvas.querySelectorAll('rect.task[id^="c"]');
+    if (!tasks.length) {
+      holder.scrollLeft = 0;
+      return;
+    }
+    var canvasLeft = canvas.getBoundingClientRect().left;
+    var minX = Infinity;
+    var maxX = -Infinity;
+    tasks.forEach(function (task) {
+      var rect = task.getBoundingClientRect();
+      var left = rect.left - canvasLeft;
+      minX = Math.min(minX, left);
+      maxX = Math.max(maxX, left + rect.width);
+    });
+    holder.scrollLeft = Math.max(0, (minX + maxX) / 2 - holder.clientWidth / 2);
+  }
+
   function closeZoom() {
+    zoomRenderToken++;
     var modal = document.getElementById("rotina-zoom-modal");
     var holder = document.getElementById("rotina-zoom-holder");
     if (modal) {
       modal.classList.add("hidden");
       modal.classList.remove("flex");
+      modal.setAttribute("aria-hidden", "true");
     }
-    if (holder) holder.innerHTML = "";
+    if (holder) {
+      unmountNativeTimelinesWithin(holder);
+      holder.innerHTML = "";
+    }
   }
+
+  // Exposto para o onclick do botão no template. O listener delegado abaixo é
+  // só compatibilidade com HTML antigo (sem onclick), não chama duas vezes.
+  window.rotinaZoom = openZoom;
 
   document.addEventListener("click", function (ev) {
     var target = /** @type {Element|null} */ (ev.target);
-    if (target && target.closest("#rotina-zoom-btn")) {
+    var zoomBtn = target && target.closest("#rotina-zoom-btn");
+    if (zoomBtn && !zoomBtn.hasAttribute("onclick")) {
       openZoom();
       return;
     }

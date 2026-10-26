@@ -372,6 +372,7 @@ templ SettingsModal() {
                     </p>
 
                     <div x-data="rotinaConfig()" data-rotina-enabled={ featureflags.BoolString(flags.Rotina) }
+                        data-rotina-native={ featureflags.BoolString(flags.RotinaNativeTimeline) }
                         class="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 space-y-3">
                         <div class="flex items-center justify-between gap-4">
                             <div class="min-w-0">
@@ -391,8 +392,29 @@ templ SettingsModal() {
                             </button>
                         </div>
 
+                        <div class="flex items-center justify-between gap-4 pt-3 border-t border-zinc-700/50">
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-zinc-200">Linha do tempo nativa</p>
+                                <p class="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                                    Desenha o gráfico sem o Mermaid (economiza ~3 MB por visita).
+                                    Desligue para comparar com a versão antiga; a página recarrega
+                                    ao trocar.
+                                </p>
+                            </div>
+                            <button type="button" role="switch" :aria-checked="native.toString()"
+                                @click="toggleNative()" :disabled="nativeSaving"
+                                :class="native ? 'bg-sky-600' : 'bg-zinc-700'"
+                                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                :title="native ? 'Usar o Mermaid (versão antiga)' : 'Usar a linha do tempo nativa'">
+                                <span :class="native ? 'translate-x-5' : 'translate-x-0.5'"
+                                    class="inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform"></span>
+                            </button>
+                        </div>
+
                         <p x-show="saved" x-transition.duration.300ms class="text-[11px] text-emerald-400 text-right">✓ Salvo!</p>
+                        <p x-show="nativeSaved" x-transition.duration.300ms class="text-[11px] text-emerald-400 text-right">✓ Renderer atualizado!</p>
                         <p x-show="error" x-text="errorMsg" class="text-[11px] text-red-400 text-right"></p>
+                        <p x-show="nativeError" x-text="nativeErrorMsg" class="text-[11px] text-red-400 text-right"></p>
                     </div>
                 </div>
 
@@ -598,19 +620,30 @@ templ SettingsModal() {
             }));
 
             // Rotina (aba "Rotina"): o estado inicial vem do servidor
-            // (data-rotina-enabled), então não há fetch ao abrir a página.
+            // (data-rotina-enabled / data-rotina-native), então não há fetch ao
+            // abrir a página.
             Alpine.data('rotinaConfig', () => ({
                 enabled: true,
+                native: true,
                 saving: false,
+                nativeSaving: false,
                 saved: false,
                 error: false,
                 errorMsg: '',
+                nativeSaved: false,
+                nativeError: false,
+                nativeErrorMsg: '',
                 init() {
                     this.enabled = this.$el.dataset.rotinaEnabled !== '0';
+                    this.native = this.$el.dataset.rotinaNative !== '0';
                 },
                 toggle() {
                     if (this.saving) return;
                     this.save(!this.enabled);
+                },
+                toggleNative() {
+                    if (this.nativeSaving) return;
+                    this.saveNative(!this.native);
                 },
                 save(next) {
                     this.saving = true;
@@ -643,6 +676,36 @@ templ SettingsModal() {
                         setTimeout(() => this.error = false, 5000);
                     })
                     .finally(() => { this.saving = false; });
+                },
+                saveNative(next) {
+                    this.nativeSaving = true;
+                    this.nativeSaved = false;
+                    this.nativeError = false;
+                    var body = new URLSearchParams();
+                    body.append('native', next ? '1' : '0');
+                    fetch('/api/settings/rotina', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    })
+                    .then(async r => {
+                        const data = await r.json().catch(() => ({}));
+                        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+                        this.native = !!data.timeline_native;
+                        this.nativeSaved = true;
+                        setTimeout(() => this.nativeSaved = false, 3000);
+                        // O renderer é escolhido no servidor (inclusive qual
+                        // script carregar), então só um reload aplica a troca.
+                        if (window.location.pathname === '/rotina') {
+                            window.location.reload();
+                        }
+                    })
+                    .catch(e => {
+                        this.nativeError = true;
+                        this.nativeErrorMsg = e.message || 'Erro ao salvar';
+                        setTimeout(() => this.nativeError = false, 5000);
+                    })
+                    .finally(() => { this.nativeSaving = false; });
                 }
             }));
         });

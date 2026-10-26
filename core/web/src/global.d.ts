@@ -181,6 +181,7 @@ interface Window {
   mermaid: any;
   rotinaEdit: (button: HTMLElement | null) => void;
   rotinaDelete: (button: HTMLElement | null) => void;
+  rotinaZoom: () => void;
   rotinaInternals: {
     tightenSource: (src: string) => string;
     postProcess: (scope: Element | null) => void;

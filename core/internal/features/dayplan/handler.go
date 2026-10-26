@@ -42,6 +42,7 @@ type ScheduleData struct {
 	Activities     []domain.DayActivity
 	Summary        Summary
 	MermaidSrc     string
+	TimelineNative bool
 	OverlappingIDs map[string]bool
 	DefaultStart   string
 	DefaultEnd     string
@@ -196,47 +197,108 @@ func (ctx *HandlerContext) HandleDeleteDayActivity(w http.ResponseWriter, r *htt
 	ctx.renderSchedule(w, r, day)
 }
 
-// HandleGetRotinaSetting devolve o estado atual da flag.
+// HandleGetRotinaSetting devolve o estado atual das flags da Rotina.
 func (ctx *HandlerContext) HandleGetRotinaSetting(w http.ResponseWriter, r *http.Request) {
+	flags := ctx.currentFlags(r)
 	httputil.WriteJSON(w, map[string]any{
-		"enabled": ctx.Flags.Get().Rotina,
+		"enabled":         flags.Rotina,
+		"timeline_native": flags.RotinaNativeTimeline,
 	})
 }
 
-// HandlePostRotinaSetting liga/desliga a Rotina. O estado em memória só muda
-// depois que a escrita em `settings` tem sucesso.
+// HandlePostRotinaSetting liga/desliga a Rotina e escolhe o renderer da linha
+// do tempo. O estado em memória só muda depois que a escrita em `settings` tem
+// sucesso. Aceita JSON ({enabled, timeline_native}) ou form (enabled, native).
 func (ctx *HandlerContext) HandlePostRotinaSetting(w http.ResponseWriter, r *http.Request) {
-	raw := ""
+	var enabled, native *bool
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		var body struct {
-			Enabled *bool `json:"enabled"`
+			Enabled        *bool `json:"enabled"`
+			TimelineNative *bool `json:"timeline_native"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Enabled != nil {
-			raw = featureflags.BoolString(*body.Enabled)
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			enabled = body.Enabled
+			native = body.TimelineNative
 		}
 	} else {
 		_ = r.ParseForm()
-		raw = r.FormValue("enabled")
+		if r.Form.Has("enabled") {
+			v := featureflags.ParseBool(r.FormValue("enabled"), false)
+			enabled = &v
+		}
+		if r.Form.Has("native") {
+			v := featureflags.ParseBool(r.FormValue("native"), false)
+			native = &v
+		}
 	}
-	if strings.TrimSpace(raw) == "" {
-		http.Error(w, "enabled obrigatório", http.StatusBadRequest)
+	if enabled == nil && native == nil {
+		http.Error(w, "enabled ou native obrigatório", http.StatusBadRequest)
 		return
 	}
 
-	enabled := featureflags.ParseBool(raw, false)
-	if err := ctx.Flags.SetRotinaEnabled(enabled); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if enabled != nil {
+		if err := ctx.Flags.SetRotinaEnabled(*enabled); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if native != nil {
+		if err := ctx.Flags.SetRotinaNativeTimeline(*native); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
+	flags := ctx.currentFlags(r)
 	httputil.WriteJSON(w, map[string]any{
-		"ok":      true,
-		"enabled": enabled,
+		"ok":              true,
+		"enabled":         flags.Rotina,
+		"timeline_native": flags.RotinaNativeTimeline,
 	})
+}
+
+// currentFlags prefere o Manager (fonte da verdade em produção) e cai no
+// contexto da requisição quando o handler roda sem Manager.
+func (ctx *HandlerContext) currentFlags(r *http.Request) featureflags.Flags {
+	if ctx.Flags != nil {
+		return ctx.Flags.Get()
+	}
+	return featureflags.FromContext(r.Context())
 }
 
 func (ctx *HandlerContext) enabled() bool {
 	return ctx.Flags == nil || ctx.Flags.RotinaEnabled()
+}
+
+// nativeTimeline informa se a Rotina deve usar o renderer nativo. Sem Manager
+// (testes/uso isolado) assume o padrão novo.
+func (ctx *HandlerContext) nativeTimeline() bool {
+	if ctx.Flags == nil {
+		return true
+	}
+	return ctx.Flags.Get().RotinaNativeTimeline
+}
+
+// SeedToday garante a cópia automática da Rotina ao iniciar o dia: a agenda de
+// hoje recebe as atividades do MESMO dia da semana anterior (hoje − 7 dias).
+// Se a origem estiver vazia, nada é copiado. A operação é idempotente: o
+// marcador em day_activity_seeds impede que o mesmo dia seja copiado duas
+// vezes, mesmo com o servidor reiniciado no meio do dia.
+func (ctx *HandlerContext) SeedToday() {
+	ctx.seedDay(time.Now().Format(dateLayout))
+}
+
+// seedDay é o núcleo testável de SeedToday: recebe o dia de destino pronto
+// (YYYY-MM-DD) e copia a agenda de sete dias antes. Respeita a flag da Rotina.
+func (ctx *HandlerContext) seedDay(day string) {
+	if !ctx.enabled() {
+		return
+	}
+	source := shiftDay(day, -7)
+	if _, err := ctx.Store.EnsureDayCopied(day, source); err != nil {
+		slog.Error("rotina: falha ao copiar a agenda da semana anterior",
+			"day", day, "source", source, "error", err)
+	}
 }
 
 func (ctx *HandlerContext) scheduleFor(day string) (ScheduleData, error) {
@@ -246,13 +308,19 @@ func (ctx *HandlerContext) scheduleFor(day string) (ScheduleData, error) {
 	}
 
 	start, end := defaultTimes(day)
+	native := ctx.nativeTimeline()
+	mermaid := ""
+	if !native {
+		mermaid = Gantt(day, activities)
+	}
 	return ScheduleData{
 		Date:           day,
 		DateLabel:      DateLabel(day),
 		Weekday:        WeekdayLabel(day),
 		Activities:     activities,
 		Summary:        Summarize(activities),
-		MermaidSrc:     Gantt(day, activities),
+		MermaidSrc:     mermaid,
+		TimelineNative: native,
 		OverlappingIDs: overlappingIDs(activities),
 		DefaultStart:   start,
 		DefaultEnd:     end,

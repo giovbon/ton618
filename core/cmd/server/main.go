@@ -102,6 +102,10 @@ func main() {
 	appointmentsCtx := appointments.NewHandlerContext(cfg, store)
 	flagsManager := featureflags.NewManager(store)
 	dayplanCtx := dayplan.NewHandlerContext(cfg, store, flagsManager)
+	// Cópia automática da Rotina ao iniciar o dia: hoje recebe a agenda do mesmo
+	// dia da semana anterior. As rotas também chamam SeedToday, o que cobre a
+	// virada do dia com o servidor já em execução.
+	dayplanCtx.SeedToday()
 
 	go func() {
 		slog.Info("Sincronizando notas do banco de dados em segundo plano...")

@@ -77,6 +77,118 @@ func TestDayActivities_NotFound(t *testing.T) {
 	}
 }
 
+// TestEnsureDayCopied cobre a cópia automática da Rotina: o dia de destino
+// recebe as atividades do mesmo dia da semana anterior, com ids/timestamps
+// novos, uma única vez.
+func TestEnsureDayCopied(t *testing.T) {
+	s := newTestStore(t)
+
+	source := "2026-10-18"
+	target := "2026-10-25"
+	for _, a := range []domain.DayActivity{
+		{ID: "src-1", Day: source, StartTime: "09:00", EndTime: "10:00", Description: "Academia"},
+		{ID: "src-2", Day: source, StartTime: "08:00", EndTime: "08:30", Description: "Café"},
+	} {
+		if err := s.CreateDayActivity(a); err != nil {
+			t.Fatalf("CreateDayActivity %s: %v", a.ID, err)
+		}
+	}
+
+	n, err := s.EnsureDayCopied(target, source)
+	if err != nil {
+		t.Fatalf("EnsureDayCopied: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("copiou %d atividades, want 2", n)
+	}
+
+	got, err := s.GetDayActivities(target)
+	if err != nil {
+		t.Fatalf("GetDayActivities: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("destino tem %d atividades, want 2", len(got))
+	}
+	if got[0].Description != "Café" || got[1].Description != "Academia" {
+		t.Fatalf("ordem/conteúdo copiado errado: %+v", got)
+	}
+	if got[0].StartTime != "08:00" || got[0].EndTime != "08:30" {
+		t.Fatalf("horários copiados errados: %+v", got[0])
+	}
+	if got[0].ID == "src-2" || got[1].ID == "src-1" || got[0].ID == got[1].ID {
+		t.Fatalf("a cópia deve gerar ids novos: %+v", got)
+	}
+	if got[0].CreatedAt == "" || got[0].UpdatedAt == "" {
+		t.Fatal("timestamps da cópia não foram preenchidos")
+	}
+
+	// A origem continua intacta.
+	if src, _ := s.GetDayActivities(source); len(src) != 2 {
+		t.Fatalf("origem foi alterada: %d atividades", len(src))
+	}
+
+	// Segunda chamada não duplica.
+	n, err = s.EnsureDayCopied(target, source)
+	if err != nil || n != 0 {
+		t.Fatalf("segunda cópia = (%d, %v), want (0, nil)", n, err)
+	}
+	if got, _ = s.GetDayActivities(target); len(got) != 2 {
+		t.Fatalf("destino duplicou: %d atividades", len(got))
+	}
+
+	// Mesmo que a origem ganhe atividades depois, o dia já processado não muda.
+	if err := s.CreateDayActivity(domain.DayActivity{
+		ID: "src-3", Day: source, StartTime: "11:00", EndTime: "12:00", Description: "Almoço",
+	}); err != nil {
+		t.Fatalf("CreateDayActivity src-3: %v", err)
+	}
+	if n, err = s.EnsureDayCopied(target, source); err != nil || n != 0 {
+		t.Fatalf("cópia retroativa = (%d, %v), want (0, nil)", n, err)
+	}
+	if got, _ = s.GetDayActivities(target); len(got) != 2 {
+		t.Fatalf("cópia retroativa alterou o destino: %d atividades", len(got))
+	}
+}
+
+// TestEnsureDayCopied_OrigemVazia garante o requisito "se tiver coisas copia,
+// se não, não copia": a origem vazia não cria nada, mas marca o dia como
+// processado (evitando consultas repetidas e cópia retroativa).
+func TestEnsureDayCopied_OrigemVazia(t *testing.T) {
+	s := newTestStore(t)
+
+	source := "2026-10-18"
+	target := "2026-10-25"
+
+	n, err := s.EnsureDayCopied(target, source)
+	if err != nil || n != 0 {
+		t.Fatalf("cópia de origem vazia = (%d, %v), want (0, nil)", n, err)
+	}
+	if got, _ := s.GetDayActivities(target); len(got) != 0 {
+		t.Fatalf("origem vazia criou %d atividades", len(got))
+	}
+
+	var copied int
+	if err := s.DB.QueryRow(`SELECT copied FROM day_activity_seeds WHERE day = ?`, target).Scan(&copied); err != nil {
+		t.Fatalf("marcador não foi gravado: %v", err)
+	}
+	if copied != 0 {
+		t.Fatalf("copied = %d, want 0", copied)
+	}
+
+	// A origem ganhar atividades depois não dispara cópia retroativa.
+	if err := s.CreateDayActivity(domain.DayActivity{
+		ID: "src-1", Day: source, StartTime: "09:00", EndTime: "10:00", Description: "Academia",
+	}); err != nil {
+		t.Fatalf("CreateDayActivity: %v", err)
+	}
+	if n, err = s.EnsureDayCopied(target, source); err != nil || n != 0 {
+		t.Fatalf("cópia retroativa = (%d, %v), want (0, nil)", n, err)
+	}
+	if got, _ := s.GetDayActivities(target); len(got) != 0 {
+		t.Fatalf("cópia retroativa criou %d atividades", len(got))
+	}
+}
+
 // TestDayActivities_SchemaSemDono garante o requisito de uso pessoal: a tabela
 // não pode ter coluna de usuário/dono. A única credencial é o dono do cofre.
 func TestDayActivities_SchemaSemDono(t *testing.T) {

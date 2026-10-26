@@ -35,3 +35,165 @@
     }
   }
 }
+
+/* ── Rotina: linha do tempo nativa ──────────────────────────────────────────
+   Desenhada em DOM (sem Mermaid). O canvas cresce conforme o zoom; o viewport
+   rola na horizontal e as barras são posicionadas por tempo. */
+.rotina-timeline {
+  position: relative;
+}
+
+.rotina-timeline-viewport {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+.rotina-timeline-viewport.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.rotina-timeline-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.rotina-offhours {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(24, 24, 27, 0.55);
+  pointer-events: none;
+}
+
+.rotina-hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(63, 63, 70, 0.35);
+  pointer-events: none;
+}
+
+.rotina-hour-line.is-major {
+  background: rgba(82, 82, 91, 0.65);
+}
+
+.rotina-hour-label {
+  position: absolute;
+  bottom: 3px;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.rotina-hour-label.is-first {
+  left: 2px;
+  transform: none;
+}
+
+.rotina-bar {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid #38bdf8;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.rotina-bar:hover,
+.rotina-bar:focus-visible {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+  outline: none;
+}
+
+.rotina-bar.is-overlap {
+  border-color: #fbbf24;
+}
+
+.rotina-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rotina-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: #ef4444;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.rotina-now-label {
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #f87171;
+  white-space: nowrap;
+}
+
+.rotina-now.is-right .rotina-now-label {
+  left: auto;
+  right: 5px;
+}
+
+.rotina-tooltip {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.rotina-tooltip[hidden] {
+  display: none;
+}
+
+.rotina-tooltip-title {
+  font-weight: 700;
+  color: #f4f4f5;
+  overflow-wrap: anywhere;
+}
+
+.rotina-tooltip-time {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.rotina-tooltip-hint {
+  font-size: 10px;
+  color: #52525b;
+}

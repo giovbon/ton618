@@ -2260,13 +2260,62 @@ de ocupação — mas era multi-usuário ("casal"), o que não serve ao TON-618.
   desligada redireciona (303) para `/`; nenhuma atividade é apagada.
 - **Rotas:** `GET /rotina`, `GET /api/rotina/schedule`, `POST /api/rotina/create|update`,
   `DELETE /api/rotina/delete`, `GET|POST /api/settings/rotina`.
-- **Documentação:** `HELP.md` §7.4 explica o resumo, a timeline, o modal e o desligamento; a tabela
-  de abas (§9.1) ganhou a linha **Rotina**.
+- **Cópia automática da semana anterior (25/10/2026):** ao iniciar o dia, a agenda de hoje recebe
+  as atividades do **mesmo dia da semana anterior** (`hoje − 7 dias`) — segunda copia segunda,
+  terça copia terça, e assim por diante. Se a origem estiver vazia, nada é criado. A cópia é feita
+  por `EnsureDayCopied(target, source)` em uma transação e registrada em `day_activity_seeds` por
+  dia de destino, então rodar de novo no mesmo dia (ou reiniciar o servidor) não duplica nem copia
+  retroativamente. `HandlerContext.SeedToday()` é chamado no boot do servidor e nas rotas
+  `/rotina` e `/api/rotina/schedule`, cobrindo tanto o início do app quanto a virada do dia com o
+  processo já em execução. A cópia respeita a flag `rotina_enabled`: com a Rotina desligada, nada é
+  copiado. Ids e timestamps das cópias são novos: a rotina do dia é independente da origem.
+- **Documentação:** `HELP.md` §7.4 explica o resumo, a timeline, o modal, a cópia automática e o
+  desligamento; a tabela de abas (§9.1) ganhou a linha **Rotina**.
 
 **Regressão:** testes Go de `dayplan` (resumo/união/sobreposição, gantt/ordem/sanitização, handlers
 incluindo validação, 404 e flag desligada), de `featureflags`, do middleware e do schema
-single-owner; `rotina.unit.cjs` (5 testes) trava `tightenSource`, o formulário/fragmento/Mermaid e a
-integração com a Navbar e as Configurações. `templ generate` (v0.3.1070), `node build.js`,
-`gofmt`, `go vet`, `go test -tags sqlite_fts5 ./...`, `tsc --noEmit` e os 89 testes JS verdes.
+single-owner; `EnsureDayCopied`/`SeedToday` têm testes próprios de cópia, origem vazia,
+idempotência e flag desligada. `rotina.unit.cjs` (5 testes) trava `tightenSource`, o
+formulário/fragmento/Mermaid e a integração com a Navbar e as Configurações. `templ generate`
+(v0.3.1070), `node build.js`, `gofmt`, `go vet`, `go test -tags sqlite_fts5 ./...`,
+`tsc --noEmit` e os 89 testes JS verdes.
 ⚠️ Reiniciar o servidor: `rotina_templ.go`, `navbar_templ.go`, `settings_modal_templ.go` e o bundle
 `static/rotina.js` são novos/mudaram.
+
+---
+
+## Rotina: linha do tempo nativa (26/10/2026)
+
+**Problema:** o gantt do Mermaid custava **3,2 MB** de JS por visita e obrigava a uma camada de
+compensações: tarefa-fantasma `edge` para forçar o eixo de 24 h, `sanitizeMermaid` para o texto não
+quebrar a sintaxe, `postProcess`/`relabelAxis` para repintar barras e mover horas no SVG, e
+`tightenSource` para reescrever a fonte no mobile. O SVG também não dava clique, tooltip, zoom ou
+arrastar.
+
+**Decisão:** a Rotina passa a desenhar a própria linha do tempo em DOM, no mesmo padrão da Agenda
+(`web/static/js/agenda/timeline.js`), mas especializada em um dia:
+
+- **Servidor:** `ScheduleData.TimelineNative` escolhe o renderer. No modo nativo o Go não gera mais
+  Mermaid (`MermaidSrc` fica vazio) e o template entrega as atividades como JSON
+  (`templ.JSONScript("rotina-timeline-data", s.Activities)`). O Mermaid só é carregado quando a flag
+  de comparação está desligada.
+- **Cliente:** `web/src/rotina-timeline.js` converte tempo→pixel, distribui sobreposições em raias
+  (greedy), desenha eixo de horas, sombreamento fora do dia útil, linha do "agora" (atualizada a cada
+  minuto) e barras clicáveis. `layoutBars`/`parseClock`/`formatDuration` são puras e testadas no Node.
+- **Interação:** clique na barra preenche o formulário (`window.rotinaEdit`); hover/focus mostra
+  tooltip com horário e duração; `+`/`−`/`Ajustar` e Ctrl+scroll dão zoom; arrastar (mouse) rola;
+  no toque vale o scroll nativo. O modal "Ampliar" monta uma segunda instância com barras maiores.
+- **Flag:** `rotina_timeline_native` (padrão **ligado**) em `settings`, exposta na aba Rotina das
+  Configurações. Desligar volta ao Mermaid e recarrega a página, permitindo comparar os dois antes
+  de remover o vendor. `GET|POST /api/settings/rotina` passam a devolver/aceitar
+  `timeline_native`/`native`, sem quebrar o `enabled` existente.
+- **Custo:** `static/rotina.js` fica em ~19,5 KB (6,9 KB gzip) e a página deixa de baixar o vendor de
+  3,2 MB no modo padrão. O Mermaid continua no repositório apenas para a comparação.
+
+**Regressão:** testes Go de `dayplan` cobrem o renderer padrão (sem Mermaid), a flag desligada
+(gera Mermaid) e o endpoint de settings; `featureflags` cobre o padrão e a persistência da nova
+flag. `rotina.unit.cjs` ganhou testes de `parseClock`, `formatDuration` e `layoutBars` (posição,
+raias, sobreposição, largura mínima) e de integração do template/JSON. Verificado no Chromium
+(Playwright) em desktop e mobile: barras, tooltip, edição por clique, zoom, ajuste, modal e
+re-render após criar/excluir. `templ generate` (v0.3.1070), `go test`, `tsc --noEmit`, `node
+build.js` e os 96 testes JS verdes.

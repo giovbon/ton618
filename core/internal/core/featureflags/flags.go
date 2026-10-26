@@ -15,6 +15,11 @@ import (
 // RotinaEnabledKey é a chave em `settings` que guarda o estado da Rotina.
 const RotinaEnabledKey = "rotina_enabled"
 
+// RotinaNativeTimelineKey guarda qual renderer a Rotina usa: "1" (padrão) para
+// a linha do tempo nativa, "0" para o Mermaid legado. A chave existe para
+// permitir comparar os dois lado a lado antes de remover o vendor do Mermaid.
+const RotinaNativeTimelineKey = "rotina_timeline_native"
+
 // SettingStore é o subconjunto do Store usado pelo Manager (permite testar sem
 // SQLite).
 type SettingStore interface {
@@ -25,11 +30,15 @@ type SettingStore interface {
 // Flags é o retrato das funcionalidades opcionais no momento da requisição.
 type Flags struct {
 	Rotina bool
+	// RotinaNativeTimeline escolhe o renderer da linha do tempo da Rotina.
+	// true = nativo (sem Mermaid); false = Mermaid legado.
+	RotinaNativeTimeline bool
 }
 
 // Default é o estado de fábrica: tudo habilitado. Uma instalação que nunca
-// tocou na flag continua vendo a Rotina no cabeçalho.
-func Default() Flags { return Flags{Rotina: true} }
+// tocou na flag continua vendo a Rotina no cabeçalho, já com a linha do tempo
+// nativa (o Mermaid fica só como opção de comparação).
+func Default() Flags { return Flags{Rotina: true, RotinaNativeTimeline: true} }
 
 type flagsContextKey struct{}
 
@@ -98,6 +107,9 @@ func (m *Manager) Reload() Flags {
 		if raw, err := m.store.GetSetting(RotinaEnabledKey); err == nil {
 			flags.Rotina = ParseBool(raw, true)
 		}
+		if raw, err := m.store.GetSetting(RotinaNativeTimelineKey); err == nil {
+			flags.RotinaNativeTimeline = ParseBool(raw, true)
+		}
 	}
 	if m != nil {
 		m.mu.Lock()
@@ -131,6 +143,21 @@ func (m *Manager) SetRotinaEnabled(enabled bool) error {
 	}
 	m.mu.Lock()
 	m.flags.Rotina = enabled
+	m.mu.Unlock()
+	return nil
+}
+
+// SetRotinaNativeTimeline escolhe o renderer da linha do tempo. Mesmo contrato
+// do SetRotinaEnabled: só atualiza o cache depois de persistir.
+func (m *Manager) SetRotinaNativeTimeline(native bool) error {
+	if m == nil || m.store == nil {
+		return nil
+	}
+	if err := m.store.SetSetting(RotinaNativeTimelineKey, BoolString(native)); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.flags.RotinaNativeTimeline = native
 	m.mu.Unlock()
 	return nil
 }

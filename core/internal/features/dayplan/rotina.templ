@@ -44,7 +44,9 @@ templ rotinaContent(data PageData) {
 
 	@rotinaZoomModal()
 
-	<script src={ staticver.URL("/static/js/vendor/mermaid.min.js") }></script>
+	if !data.Schedule.TimelineNative {
+		<script src={ staticver.URL("/static/js/vendor/mermaid.min.js") }></script>
+	}
 	<script type="module" src={ staticver.URL("/static/rotina.js") }></script>
 }
 
@@ -80,26 +82,54 @@ templ RotinaSchedule(s ScheduleData) {
 			}
 		</section>
 
-		<!-- Linha do tempo (Mermaid) -->
+		<!-- Linha do tempo (nativa; Mermaid legado atrás da flag) -->
 		<section class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl overflow-hidden">
 			<div class="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-zinc-800/70">
 				<h2 class="text-[11px] uppercase tracking-wider font-bold text-zinc-400 flex items-center gap-2">
 					@icons.Icon("clock", "w-3.5 h-3.5 text-sky-400") Linha do tempo
 				</h2>
 				if s.HasActivities() {
-					<button type="button" id="rotina-zoom-btn"
-						class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-[10px] font-bold text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors cursor-pointer"
-						title="Ampliar a linha do tempo">
-						@icons.Icon("search", "w-3 h-3") Ampliar
-					</button>
+					<div class="flex items-center gap-1.5">
+						if s.TimelineNative {
+							<div class="hidden sm:flex items-center rounded-lg bg-zinc-800/60 border border-zinc-700/50 overflow-hidden">
+								<button type="button" data-rotina-zoom-out
+									class="px-2 h-6 text-[13px] leading-none text-zinc-400 hover:text-white hover:bg-zinc-700/60 transition-colors cursor-pointer"
+									title="Diminuir zoom">−</button>
+								<button type="button" data-rotina-zoom-fit
+									class="px-2 h-6 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-700/60 transition-colors cursor-pointer border-x border-zinc-700/50"
+									title="Ajustar o dia à largura">Ajustar</button>
+								<button type="button" data-rotina-zoom-in
+									class="px-2 h-6 text-[13px] leading-none text-zinc-400 hover:text-white hover:bg-zinc-700/60 transition-colors cursor-pointer"
+									title="Aumentar zoom">+</button>
+							</div>
+						}
+						<button type="button" id="rotina-zoom-btn"
+							onclick="window.rotinaZoom()"
+							aria-haspopup="dialog" aria-controls="rotina-zoom-modal"
+							class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-[10px] font-bold text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors cursor-pointer"
+							title="Ampliar a linha do tempo">
+							@icons.Icon("search", "w-3 h-3") Ampliar
+						</button>
+					</div>
 				}
 			</div>
 
 			if s.HasActivities() {
-				<div class="px-2 py-3 bg-zinc-950/40 overflow-x-auto">
-					<template id="rotina-mermaid-src">{ s.MermaidSrc }</template>
-					<div id="rotina-mermaid" class="mermaid w-full">{ s.MermaidSrc }</div>
-				</div>
+				if s.TimelineNative {
+					<div class="px-2 py-3 bg-zinc-950/40">
+						<div id="rotina-timeline" class="rotina-timeline" data-date={ s.Date }>
+							<div class="rotina-timeline-viewport" data-rotina-viewport>
+								<div class="rotina-timeline-canvas" data-rotina-canvas></div>
+							</div>
+						</div>
+					</div>
+					@templ.JSONScript("rotina-timeline-data", s.Activities)
+				} else {
+					<div class="px-2 py-3 bg-zinc-950/40 overflow-x-auto">
+						<template id="rotina-mermaid-src">{ s.MermaidSrc }</template>
+						<div id="rotina-mermaid" class="mermaid w-full">{ s.MermaidSrc }</div>
+					</div>
+				}
 			} else {
 				<div class="flex flex-col items-center justify-center gap-2 py-9 text-center">
 					@icons.Icon("calendar-clock", "w-6 h-6 text-zinc-600")
@@ -206,11 +236,12 @@ templ RotinaSchedule(s ScheduleData) {
 
 // rotinaZoomModal é o modal "dia inteiro" para ver a linha do tempo grande.
 templ rotinaZoomModal() {
-	<div id="rotina-zoom-modal"
+	<div id="rotina-zoom-modal" role="dialog" aria-modal="true" aria-hidden="true"
+		aria-labelledby="rotina-zoom-title"
 		class="hidden fixed inset-0 z-[100] items-center justify-center bg-black/70 backdrop-blur-xs p-3 md:p-8">
 		<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
 			<div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-				<h2 class="text-[12px] font-bold text-zinc-200 flex items-center gap-2">
+				<h2 id="rotina-zoom-title" class="text-[12px] font-bold text-zinc-200 flex items-center gap-2">
 					@icons.Icon("clock", "w-3.5 h-3.5 text-sky-400") Linha do tempo — dia inteiro
 				</h2>
 				<button type="button" data-rotina-zoom-close

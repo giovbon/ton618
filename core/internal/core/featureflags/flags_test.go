@@ -55,6 +55,9 @@ func TestManager_DefaultEnabled(t *testing.T) {
 	if !m.RotinaEnabled() {
 		t.Fatal("sem configuração, a Rotina deve vir habilitada")
 	}
+	if !m.Get().RotinaNativeTimeline {
+		t.Fatal("sem configuração, a linha do tempo nativa deve ser o padrão")
+	}
 }
 
 func TestManager_SetPersistsAndReloads(t *testing.T) {
@@ -88,6 +91,9 @@ func TestFromContext_Default(t *testing.T) {
 	if !FromContext(nil).Rotina {
 		t.Fatal("contexto nil deve cair no padrão habilitado")
 	}
+	if !FromContext(nil).RotinaNativeTimeline {
+		t.Fatal("contexto nil deve cair na timeline nativa")
+	}
 	if !FromContext(t.Context()).Rotina {
 		t.Fatal("contexto sem flags deve cair no padrão habilitado")
 	}
@@ -95,5 +101,32 @@ func TestFromContext_Default(t *testing.T) {
 	ctx := WithFlags(t.Context(), Flags{Rotina: false})
 	if FromContext(ctx).Rotina {
 		t.Fatal("flags injetadas não foram lidas")
+	}
+}
+
+func TestManager_NativeTimelinePersists(t *testing.T) {
+	store := newMemSettings()
+	m := NewManager(store)
+
+	if err := m.SetRotinaNativeTimeline(false); err != nil {
+		t.Fatalf("SetRotinaNativeTimeline(false): %v", err)
+	}
+	if m.Get().RotinaNativeTimeline {
+		t.Fatal("cache deveria refletir o Mermaid legado")
+	}
+	if raw, _ := store.GetSetting(RotinaNativeTimelineKey); raw != "0" {
+		t.Fatalf("setting = %q, want 0", raw)
+	}
+
+	reloaded := NewManager(store)
+	if reloaded.Get().RotinaNativeTimeline {
+		t.Fatal("novo Manager deveria ler a escolha do Mermaid")
+	}
+
+	if err := reloaded.SetRotinaNativeTimeline(true); err != nil {
+		t.Fatalf("SetRotinaNativeTimeline(true): %v", err)
+	}
+	if !NewManager(store).Get().RotinaNativeTimeline {
+		t.Fatal("novo Manager deveria ler a timeline nativa")
 	}
 }

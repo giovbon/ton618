@@ -1,1 +1,0 @@
-ok, em relação a essa nova feature de rotina quero que a cada dia ele automaticamente copie automaticamente, ao iniciar o dia, a agenda de rotinas do dia da semana anterior, por exemplo se hoje for segunda deve copiar a rotina da segunda passada, se tiver coisas na segunda anterior copia, se não, nao copia... e assim por diante, pra todos os dias da semana
