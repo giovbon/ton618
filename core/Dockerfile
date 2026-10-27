@@ -24,7 +24,18 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-RUN go install github.com/a-h/templ/cmd/templ@latest
+# Pina o CLI do templ à MESMA versão declarada no go.mod (mesma lógica do
+# run.sh e dos workflows). ⚠️ `@latest` quebra o build assim que sai uma versão
+# nova: o código gerado por um templ mais novo usa APIs de runtime que ainda não
+# existem na versão de github.com/a-h/templ fixada no go.mod (ex.: v0.3.1100
+# gera templruntime.NewAttributeExpression, ausente na v0.3.1070) — e o
+# `go mod tidy` abaixo NÃO atualiza essa dependência, então o `go build` falha.
+RUN TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)" && \
+    if [ -n "$TEMPL_REQ" ]; then \
+      go install "github.com/a-h/templ/cmd/templ@${TEMPL_REQ}"; \
+    else \
+      go install github.com/a-h/templ/cmd/templ@latest; \
+    fi
 
 ARG TARGETARCH
 ARG TARGETVARIANT
