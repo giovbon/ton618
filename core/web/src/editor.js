@@ -19,6 +19,7 @@ import { Markdown } from "tiptap-markdown";
 import { marked } from "marked";
 import CodeBlockLowlightExt from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
+import { CalcBlock } from "./editor-calc.js";
 
 // ⚠️ NÃO reintroduzir o serializador de parágrafo que escrevia "&nbsp;" no
 // markdown (existiu aqui até 17/09/2026): o placeholder do parágrafo vazio é
@@ -79,6 +80,7 @@ const CodeBlockLangLabel = CodeBlockLowlightExt.extend({
  * @property {Object} marked - Biblioteca marked
  * @property {Object} CodeBlockLowlightExt - Bloco de código com syntax highlight
  * @property {Object} lowlight - Instância lowlight para highlight
+ * @property {Object} CalcBlock - Bloco de cálculo (/calculator, resultados efêmeros)
  */
 window.TipTapEditor = {
   Editor,
@@ -98,5 +100,6 @@ window.TipTapEditor = {
   marked,
   CodeBlockLowlightExt: CodeBlockLangLabel,
   lowlight,
+  CalcBlock,
 };
 

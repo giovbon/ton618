@@ -369,6 +369,10 @@ import { initHierarchy } from './editor-hierarchy.js';
                 transformPastedText: true,
                 transformCopiedText: false,
             }),
+            // Antes do CodeBlockLowlight: as regras de parseHTML não conflitam
+            // (calcBlock lê div.calc-block, codeBlock lê <pre>), mas a ordem
+            // mantém o <pre> do codeBlock como último fallback.
+            T.CalcBlock,
             T.CodeBlockLowlightExt.configure({
                 lowlight: T.lowlight,
                 defaultLanguage: null,

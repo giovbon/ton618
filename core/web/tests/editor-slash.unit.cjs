@@ -45,3 +45,17 @@ test('scoreSlashCommand prioriza palavra-chave exata', async () => {
     scoreSlashCommand(cmd, 'organize') > scoreSlashCommand(cmd, 'org')
   );
 });
+
+test('comando calc (Calculadora) existe e ganha action em buildSlashActions', async () => {
+  const { initSlash, buildSlashActions, SLASH_COMMANDS, scoreSlashCommand } =
+    await import(modulePath);
+  const calc = SLASH_COMMANDS.find((c) => c.id === 'calc');
+  assert.ok(calc, 'entrada calc deve existir no catálogo');
+  assert.strictEqual(calc.label, 'Calculadora');
+  assert.ok(scoreSlashCommand(calc, 'calc') > 0);
+  assert.ok(scoreSlashCommand(calc, 'calculadora') > 0);
+
+  initSlash(fakeDeps());
+  buildSlashActions();
+  assert.strictEqual(typeof calc.action, 'function');
+});

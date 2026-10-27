@@ -530,6 +530,48 @@ templ editorContent(data domain.EditorData) {
         bottom: 0;
         pointer-events: none;
     }
+    /* ── Calculadora (bloco /calculator, nó calcBlock) ─────────────────────
+       Cada linha é um <p>; o resultado entra como widget decoration no fim
+       da linha e é alinhado à direita com flex + margin-left:auto. Os
+       resultados são efêmeros (nunca vão para o markdown).
+       O flex só é aplicado quando o <p> tem widget: o Chromium NÃO pinta o
+       caret em contêiner flex vazio (linha nova ficaria sem cursor). */
+    .ProseMirror .calc-block {
+        margin: 0.6em 0;
+        padding: 0.5em 0.75em;
+        border: 1px dashed #3f3f46;
+        border-radius: 8px;
+        background: #18181b;
+    }
+    .ProseMirror .calc-block p {
+        min-height: 1.7em;
+        margin: 0.1em 0;
+        color: #d4d4d8;
+        font-family: var(--font-mono);
+        font-size: 0.92em;
+        line-height: 1.7;
+    }
+    .ProseMirror .calc-block p:has(> .calc-result),
+    .ProseMirror .calc-block p:has(> .calc-error) {
+        display: flex;
+        align-items: baseline;
+    }
+    .ProseMirror .calc-block .calc-result {
+        margin-left: auto;
+        padding-left: 1.5em;
+        color: #4ade80;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        user-select: all;
+    }
+    .ProseMirror .calc-block .calc-error {
+        margin-left: auto;
+        padding-left: 1.5em;
+        max-width: 60%;
+        color: #f87171;
+        font-size: 0.85em;
+        text-align: right;
+    }
     .wikilink-item {
         display: flex;
         align-items: center;

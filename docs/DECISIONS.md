@@ -1358,6 +1358,46 @@ Melhorias de legibilidade da tabela (Fase 1 — só apresentação, sem mudança
 
 ---
 
+## 6.31 Calculadora nas notas — bloco ` ```calc ` com avaliação no cliente (27/10/2026)
+
+📍 (novos) `core/web/src/calc-engine.js` (motor puro) | `core/web/src/editor-calc.js` (nó TipTap `calcBlock` + decorações) | `core/web/tests/calc-engine.unit.cjs` · (alterados) `core/web/src/editor-slash.js` (comando `/calculator`) | `core/web/src/editor.js` · `core/web/src/editor-init.js` (registro da extensão) | `core/internal/features/notes/editor.templ` (CSS) · (docs) `core/HELP.md` §4.12
+
+**Problema:** pedido do usuário — "ao digitar `/` deve aparecer o Calculator… avaliar expressões numéricas e definir o resultado na mesma linha, à direita" (ex.: `var1 = 10`, `var2 = 20`, `var1 + var2` → `30` ao lado), como existe no Logseq. O app tinha slash menu, blocos com linguagem (`data-language`) e o motor CEL das consultas (§6.29), mas **nada avaliava aritmética dentro do texto**.
+
+**Decisão (5 pontos):**
+1. **Bloco dedicado ` ```calc `** — `/` → Calculadora (id `calc` no catálogo de `editor-slash.js`) insere o nó TipTap `calcBlock` (`content: paragraph+`, uma expressão por linha). Escopo de variáveis = o bloco, avaliado sequencialmente de cima para baixo. Round-trip markdown é **grátis**: serializa como fenced block com a linguagem `calc` (spec em `storage.markdown`) e reparseia via `parse.updateDOM`, que converte o `<pre><code class="language-calc">` do markdown-it em `<div class="calc-block">` com um `<p>` por linha — **antes** do ProseMirror ver o DOM, então não há conflito com a regra `<pre>` do `codeBlock`.
+2. **Avaliação no cliente** (`calc-engine.js`): tokenizer + parser Pratt + interpretador de AST. Gramática fechada: números (vírgula **ou** ponto, notação científica), `+ - * / % ^`, parênteses, atribuição `nome = expr`, ~14 funções, constantes `pi`/`e`, comentários `#`. Isso **escopo deliberado do §6.29.3**: aquela decisão é sobre a linguagem de *consulta* (CEL, lê notas no servidor); esta é aritmética pura, sem acesso a dados, sem rede, e a única forma de resultado **instantâneo** (o pedido é ver o resultado mudar enquanto se digita — debounce + ida ao servidor mataria a UX). Registrado aqui justamente para não virar "segundo avaliador" não documentado: **não avalia as duas coisas** — CEL continua sendo a única linguagem sobre notas.
+3. **Resultados são decorações ProseMirror, efêmeros por decisão** — um plugin (`PluginKey("calcResults")`) itera os `calcBlock`, avalia as linhas e injeta um widget no fim de cada `<p>`. `state.doc` nunca contém resultado ⇒ não vai para o markdown, não vai para o FTS, não aciona o watcher (mesma regra do §6.29.4). Cache em `WeakMap` por `doc`: só recalcula quando o documento muda.
+4. **Layout à direita na mesma linha** — cada linha é um `<p>` flex com `margin-left:auto` no widget (`.ProseMirror .calc-block`, CSS no `editor.templ` junto dos demais estilos do editor). Erro em vermelho com a mensagem em pt-BR + posição; resultado em `= 30` na cor de sucesso.
+5. **Sem `eval`/`new Function`** — a CSP restritiva e a regra "não executa código de usuário" seguem intactas: o interpretador só anda no AST que ele mesmo construiu.
+
+**Alternativas descartadas:**
+- **Servidor (reaproveitar o CEL do §6.29 via `/api/calc`)** — mantém "um avaliador só", mas impõe debounce + rede por tecla e exigiria declarar variáveis dinamicamente no `cel.Env` (CEL não tem atribuição) e normalizar literais `int`/`double` (CEL não converte implicitamente): meio caminho de parser do mesmo jeito, com latência no lugar. Fica como plano B: se um dia a calculadora precisar ler notas (ex.: `n.tags.size()`), ela **vai para CEL no servidor** — aí sim é a mesma linguagem.
+- **`codeBlock` com `language=calc` + decorations dentro do `<pre>`** — round-trip igual, mas alinhar a direita em texto cru vira `float` frágil (quebra com linha quebrada/scroll). O nó com `<p>` por linha dá layout previsível.
+- **Linhas ambiente (qualquer linha `x = …` na nota toda)** — mágico, mas falso positivo em texto corrido com `=` e alinhamento imperfeito em parágrafo longo; se vier, será fase 2 reutilizando este motor, com escopo por nota/seção.
+- **Biblioteca pronta (`mathjs`/`expr-eval`)** — ~dezenas de KB no bundle e superfície de execução maior que a gramática que queremos; o parser próprio é ~300 LOC cobertos por teste.
+- **`eval`/`new Function`** — proibido pela CSP e pela regra de não executar código.
+
+**Guardas e limites:**
+
+| Guarda | Valor |
+| :--- | :--- |
+| Sem `eval`/`new Function` | interpretador de AST só |
+| Símbolos por linha | 200 |
+| Aninhamento | 32 níveis |
+| Linhas por bloco | 1000 |
+| Aritmética | sem I/O, sem laços, sem funções do usuário |
+| Resultado no `.md` | **nunca** (decorations não fazem parte do estado) |
+| Escopo | por bloco, sequencial |
+| Erro | sempre conteúdo em pt-BR com posição, nunca exceção no editor |
+| Recalculo | cache `WeakMap<doc>` — só quando o documento muda |
+
+**Guardas de teste:** `calc-engine.unit.cjs` (precedência, `^` à direita, unário, escopo sequencial com redefinição, erros pt-BR: variável não definida, divisão por zero, falta de operador com posição, função desconhecida listando as disponíveis, limites de símbolos/aninhamento **nunca travando**, vírgula decimal, comentários/vazios → nada, `formatResult` com ruído de ponto flutuante `0.1 + 0.2 → "0,3"`) + asserção no `editor-slash.unit.cjs` de que o comando `calc` existe e ganha `action` em `buildSlashActions`.
+
+**Documentação:** `core/HELP.md` §4.12 (tabela expressão→resultado, operadores, funções, limites, "resultados não são salvos") e o bullet em §4.2. Sem ADR: a alternativa (CEL no servidor) está registrada aqui como plano B e não foi construída.
+
+---
+
 ## 7. Modo Perguntar & Síntese RAG via Ollama (14/10/2026) — ❌ REMOVIDO (16/10/2026)
 
 > ❌ **Tudo removido:** as rotas `POST /api/ask` e `POST /api/ask/synthesize`, os handlers

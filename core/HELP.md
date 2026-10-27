@@ -288,6 +288,9 @@ O editor é WYSIWYG (TipTap), mas grava markdown de verdade. Os principais recur
   mesclar e dividir células.
 - **Imagens** — `/` → Imagem envia o arquivo para `docs/images/` e insere a referência.
 - **Blocos de código** — `Tab` dentro do bloco insere indentação; o app tenta detectar a linguagem.
+- **Calculadora** — `/` → Calculadora insere um bloco de cálculo: escreva `var1 = 10` e, na
+  linha de baixo, `var1 + var2` — o resultado aparece **à direita, na mesma linha**, e
+  recalcula enquanto você digita (seção 4.12).
 - **Sumário (TOC)** — o botão de sumário lista os títulos da nota. No painel do TOC, `Tab` muda o
   nível, apagar a linha remove o título e `Ctrl+clique` (ou `Cmd+clique`) pula até o trecho.
 - **Frontmatter** — a seta ao lado do painel abre/fecha o YAML. O painel sugere tags existentes.
@@ -446,6 +449,121 @@ usam a data de modificação. A tag é removida na próxima aplicação se a not
 
 O botão **Limpar imagens órfãs** remove de `docs/images/` as imagens que não são mais referenciadas
 por nenhuma nota.
+
+### 4.12 Calculadora de expressões
+
+`/` → **Calculadora** (ou digite `/calc`) insere um bloco de cálculo — um bloco ` ```calc `
+com uma expressão por linha. O resultado aparece **à direita, na mesma linha da expressão** e
+é recalculado em tempo real enquanto você digita:
+
+| Você escreve | Você vê à direita |
+|---|---|
+| `var1 = 10` | `= 10` |
+| `var2 = 20` | `= 20` |
+| `var1 + var2` | `= 30` |
+
+#### O que você pode escrever
+
+**Números**
+
+| Exemplo | Observação |
+|---|---|
+| `123` | inteiro |
+| `12,5` ou `12.5` | decimal — aceita **vírgula ou ponto** na entrada |
+| `.5` | decimal sem zero à esquerda |
+| `1e6`, `2E+9` | notação científica |
+
+**Operadores** — `+` `-` `*` `/` `%` (resto/módulo) `^` (potência) e parênteses.
+
+- precedência tradicional: `2 + 3 * 4 = 14`;
+- `^` é associativo à direita: `2^3^2 = 512` (= `2^(3^2)`);
+- unário mais frouxo que `^`: `-2^2 = -4`;
+- `1 / 0` e `1 % 0` param com erro (não retornam Infinity).
+
+**Variáveis** — `nome = expressão` define a variável e mostra o valor na linha. O escopo é o
+**bloco**, avaliado de cima para baixo: quem redefine uma variável vale para as linhas
+seguintes. Quem usa uma variável antes de defini-la recebe o erro na própria linha. Nomes
+aceitam letras com acento (`área = 10`) e maiúsculas/minúsculas são diferentes
+(`Total` ≠ `total`).
+
+**Funções** — a maioria tem aridade fixa (chamar com a quantidade errada de valores é erro);
+`med` aceita **quantos valores você quiser**:
+
+| Função | Valores | O que faz |
+|---|---|---|
+| `sqrt(x)` | 1 | raiz quadrada |
+| `cbrt(x)` | 1 | raiz cúbica (aceita negativos) |
+| `abs(x)` | 1 | valor absoluto |
+| `round(x)` | 1 | arredonda para o inteiro mais próximo |
+| `floor(x)` | 1 | arredonda para baixo |
+| `ceil(x)` | 1 | arredonda para cima |
+| `min(a, b)` · `max(a, b)` | 2 | menor / maior valor |
+| `pow(a, b)` | 2 | potência (mesmo que `a^b`) |
+| `log(x)` | 1 | logaritmo de base 10 |
+| `ln(x)` | 1 | logaritmo natural |
+| `sin(x)` · `cos(x)` · `tan(x)` | 1 | trigonometria **em radianos** |
+| `med(a, b, …)` | 1 ou mais | **média aritmética** de todos os valores dados |
+
+`med` é a única função de aridade livre — passe de 1 a 64 valores, misturando números,
+variáveis e expressões:
+
+```calc
+nota1 = 8
+nota2 = 6
+nota3 = 9
+med(nota1, nota2, nota3)
+```
+
+**Constantes** — `pi` (3,14159…) e `e` (2,71828…). Não são variáveis: `pi = 3` é permitido e
+passa a valer só para as linhas de baixo do bloco.
+
+**Comentários e linhas vazias** — linha que começa com `#` é ignorada; linha vazia não mostra
+nada. Serve para separar seções dentro do bloco:
+
+```calc
+# compras do mês
+preco = 12,5
+qtd = 4
+preco * qtd
+```
+
+#### Formato de saída
+
+- inteiro sai sem casas decimais (`sqrt(9)` → `= 3`);
+- decimal sai com **vírgula** (pt-BR) e sem separador de milhar, até 12 casas
+  (`1 / 8` → `= 0,125`);
+- o texto do resultado **seleciona inteiro com um clique** (basta `Ctrl+C` para copiar);
+- o resultado nunca é reconvertido em conta: ele é só exibição.
+
+#### Erros
+
+Aparecem em vermelho no fim da própria linha, em português e com a posição quando ajuda:
+
+| Erro | Quando acontece |
+|---|---|
+| `divisão por zero` / `módulo por zero` | `5 / 0` |
+| `"var3" não foi definida — defina antes com var3 = valor` | usar variável antes de definir |
+| `função desconhecida "sqr" — disponíveis: sqrt, cbrt, …` | nome de função errado (a lista vem na mensagem) |
+| `"sqrt" espera 1 valor, recebeu 2` | aridade errada nas funções fixas |
+| `"med" espera ao menos 1 valor, recebeu 0` | `med()` sem valores |
+| `resultado inválido (NaN) — confira raízes de negativos e logaritmos` | `sqrt(-4)`, `log(-1)` |
+| `resultado fora do intervalo (infinito) — confira divisões e potências` | `ln(0)`, `pow(10, 400)` |
+| `falta um operador antes de "2"` | expressão mal formada (`2 2`) |
+| `expressão incompleta` / `esperado ")"` | parêntese aberto sem fechar |
+| `caractere não permitido "$"` | símbolo fora da gramática (sem strings, sem `;`, sem atribuição composta) |
+
+#### Limites e segurança
+
+- Cálculo **local no navegador**, sem rede e sem `eval` — o motor é um interpretador de uma
+  gramática fechada (sem laços, sem I/O, sem funções definidas pelo usuário).
+- Limite por linha: 200 símbolos e 32 níveis de aninhamento; por bloco, 1000 linhas;
+  no máximo 64 argumentos por chamada. Toda expressão termina — não há como travar o editor.
+- **Resultados não são salvos** — a nota guarda só as expressões (o bloco vira ` ```calc `
+  no markdown); ao reabrir, tudo é recalculado. É a mesma regra efêmera do bloco de
+  consulta (seção 8).
+
+**Não é** a linguagem de consulta da seção 8: aquela filtra notas no servidor (`onde:` em CEL);
+esta só faz contas dentro do próprio bloco.
 
 
 ---

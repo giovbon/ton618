@@ -62,6 +62,15 @@ function makeSlashAction(cmd, attrs) {
             case "taskList": chain.toggleTaskList(); break;
             case "blockquote": chain.toggleBlockquote(); break;
             case "codeBlock": chain.toggleCodeBlock(); break;
+            case "calcBlock":
+                // /calculator → insere o bloco de cálculo e posiciona o cursor
+                // na primeira linha (pos+1 = dentro do primeiro <p>).
+                chain.insertContent({
+                    type: "calcBlock",
+                    content: [{ type: "paragraph" }],
+                });
+                if (slashPos !== null) chain.setTextSelection(slashPos + 1);
+                break;
             case "horizontalRule": chain.setHorizontalRule(); break;
             case "addRowBefore": chain.addRowBefore(); break;
             case "addRowAfter": chain.addRowAfter(); break;
@@ -85,6 +94,7 @@ export var SLASH_COMMANDS = [
     { id: "ordered", icon: "1.", label: "Lista numerada", keywords: ["ordered", "numerada", "numero", "ol", "1.", "lista numerada"], action: null },
     { id: "quote", icon: "❝", label: "Citação", keywords: ["quote", "citacao", "blockquote", ">"], action: null },
     { id: "code", icon: "⎔", label: "Bloco de código", keywords: ["code", "codigo", "codeblock", "bloco de codigo", "script"], action: null },
+    { id: "calc", icon: "∑", label: "Calculadora", keywords: ["calc", "calculadora", "calculator", "calculo", "expressao", "expressoes", "matematica", "conta", "resultado", "numero", "soma", "formula", "divisao", "multiplicacao"], action: null },
     {
         id: "table", icon: "⊞", label: "Tabela", keywords: ["table", "tabela", "grid", "grade"],
         action: function () {
@@ -168,6 +178,7 @@ export function buildSlashActions() {
         ordered: makeSlashAction("orderedList"),
         quote: makeSlashAction("blockquote"),
         code: makeSlashAction("codeBlock"),
+        calc: makeSlashAction("calcBlock"),
         hr: makeSlashAction("horizontalRule"),
         addRowBefore: makeSlashAction("addRowBefore"),
         addRowAfter: makeSlashAction("addRowAfter"),
