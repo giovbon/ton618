@@ -112,7 +112,6 @@ jobs:
       - name: 🔢 Calcular Próxima Versão (SemVer via Conventional Commits)
         id: version
         run: |
-          # 1. Se foi informado manualmente via workflow_dispatch
           if [ -n "${{ inputs.tag }}" ]; then
             echo "Usando tag manual informada: ${{ inputs.tag }}"
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
@@ -121,7 +120,6 @@ jobs:
             exit 0
           fi
 
-          # 2. Se o push já foi uma tag git (ex: git push origin v2.1.0)
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             CURRENT_TAG="${GITHUB_REF#refs/tags/}"
             echo "Usando tag do evento push: $CURRENT_TAG"
@@ -131,17 +129,6 @@ jobs:
             exit 0
           fi
 
-          # 3. Auto-incremento SemVer para pushes na branch main.
-          #    A regra deriva o tipo de bump dos commits desde a última tag,
-          #    seguindo Conventional Commits:
-          #      - "BREAKING CHANGE" no corpo ou "tipo!:" no assunto -> MAJOR (X.0.0)
-          #      - assunto começando com "feat:"                       -> MINOR (0.X.0)
-          #      - "fix:" e demais (refactor, perf, ...)               -> PATCH (0.0.X)
-          #    Commits que NÃO geram release (chore, docs, ci, test,
-          #    style, build e bumps de dependência "Bump ...") são
-          #    relevantes apenas se houver algum outro tipo junto — se
-          #    TODOS os commits forem desse tipo, nenhuma tag é criada
-          #    (só a imagem :latest é reconstruída).
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Última versão encontrada: $LAST_TAG"
 
@@ -150,12 +137,10 @@ jobs:
           MINOR=$(echo "$CLEAN_VER" | cut -d. -f2)
           PATCH=$(echo "$CLEAN_VER" | cut -d. -f3)
 
-          # Trata caso a tag não siga exatamente major.minor.patch
           MAJOR="${MAJOR:-0}"
           MINOR="${MINOR:-0}"
           PATCH="${PATCH:-0}"
 
-          # Commits desde a última tag (se a tag existir)
           if git rev-parse -q --verify "refs/tags/${LAST_TAG}" >/dev/null 2>&1; then
             RANGE="${LAST_TAG}..HEAD"
           else
@@ -164,10 +149,6 @@ jobs:
           SUBJECTS="$(git log "$RANGE" --format='%s' 2>/dev/null || true)"
           COMMITS="$(git log "$RANGE" --format='%s%n%b' 2>/dev/null || true)"
 
-          # 3a. Há mudança "releasable"? Se TODOS os commits forem do padrão
-          #     que não gera versão nova (chore/docs/ci/test/style/build,
-          #     "Bump ..." de dependências ou merges), não cria tag — a
-          #     imagem :latest é reconstruída mesmo assim.
           NONREL='^(chore|docs|ci|test|style|build)(\([^)]*\))?!?:|^bump |^merge '
           if [ -n "$SUBJECTS" ] && printf '%s\n' "$SUBJECTS" | grep -qviE "$NONREL"; then
             RELEASE="true"
@@ -184,7 +165,6 @@ jobs:
             exit 0
           fi
 
-          # 3b. Tipo do bump (precedência: MAJOR > MINOR > PATCH)
           if printf '%s\n' "$COMMITS" | grep -qiE 'BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:'; then
             BUMP="major"
           elif printf '%s\n' "$SUBJECTS" | grep -qiE '^feat(\([^)]*\))?:'; then
@@ -205,7 +185,6 @@ jobs:
           echo "bump=$BUMP" >> $GITHUB_OUTPUT
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-          # Configura autor e cria tag no repositório
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$NEW_TAG" -m "Release $NEW_TAG [skip ci]"
@@ -220,6 +199,22 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v7
 
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: core/go.sum
+
+      - name: 🔨 Gerar templates Templ
+        working-directory: ./core
+        run: |
+          TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
+          if [ -n "$TEMPL_REQ" ]; then
+            go run github.com/a-h/templ/cmd/templ@"$TEMPL_REQ" generate
+          else
+            go run github.com/a-h/templ/cmd/templ@latest generate
+          fi
+
       - name: 🟢 Setup Node
         uses: actions/setup-node@v7
         with:
@@ -227,17 +222,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: core/web/package-lock.json
 
-      - name: 🧪 Rodar testes unitários JS
+      - name: 🧪 Rodar testes unitários e Build JS
         working-directory: ./core/web
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
           NODE_OPTIONS: "--no-network-family-autoselection"
         run: |
           npm ci --legacy-peer-deps
-          # Os bundles de `static/` são gitignored e alguns testes unitários os
-          # leem (query-panel/todos-badge). Num checkout limpo é preciso buildar
-          # antes, senão os testes falham com ENOENT.
-          node build.js --dev
+          node build.js
           npm test
 
       - name: 🔧 Setup QEMU (binfmt)
@@ -266,8 +258,6 @@ jobs:
       - name: 🏷️ Definir tags da imagem
         id: imagetags
         run: |
-          # Com release: envia :vX.Y.Z + :latest. Sem release (só bumps de
-          # dependência/chore): envia apenas :latest.
           if [ -n "${{ needs.bump-version.outputs.tag }}" ]; then
             echo "tags=${IMAGE_NAME}:${{ needs.bump-version.outputs.tag }},${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
           else
