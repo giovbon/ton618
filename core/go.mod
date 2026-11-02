@@ -3,7 +3,7 @@ module ton618/core
 go 1.26.3
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.2
 	codeberg.org/readeck/go-readability v0.0.0-20251125211941-0f57a445e5f1
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/a-h/templ v0.3.1070
