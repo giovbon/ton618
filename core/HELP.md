@@ -154,7 +154,7 @@ O app grava e normaliza alguns campos:
 |---|---|
 | `title` / `titulo` | Título amigável; atualizado no rename |
 | `tags` | Lista de tags (aceita `[a, b]` ou lista em bloco) |
-| `tipo` / `type` | Tipo canônico da nota (`nota`, `desenho`, `mapa_mental`, `tabulator`, `semanal`, `pdf`, `anexo`, `artigo`, `captura`) |
+| `tipo` / `type` | Tipo canônico da nota (`nota`, `desenho`, `mapa_mental`, `tabulator`, `calculo`, `pdf`, `anexo`, `artigo`, `captura`) |
 | `pai` / `parent` | Nota-mãe na hierarquia (`parent` é aceito por compatibilidade, mas o app grava `pai`) |
 
 Campos personalizados que você inventar (`autor:`, `status:`, `fonte:`) também são indexados e
@@ -226,7 +226,7 @@ editor mostra a lista, e a busca global também usa a contagem de citações no 
 | `desenho` | Criar → + Desenho | Excalidraw | Não (só metadados) |
 | `mapa_mental` | Criar → + Markmap | Markmap | Não (só metadados) |
 | `tabulator` | Criar → + Tabulator | Planilha | Sim, linha a linha |
-| `semanal` | Criar → + Semana | Editor de texto | Sim |
+| `calculo` | Criar → + Cálculo | Editor de texto (bloco `calc`) | Sim |
 | `pdf` | Captura → Upload PDF | Leitor do navegador | Só metadados |
 | `epub` | Captura → Upload EPUB | Leitor embutido | Só metadados |
 | `anexo` | Captura → Upload Anexo | Download | Lista de arquivos do ZIP |
@@ -271,7 +271,7 @@ identificador da nota.
 
 Para criar os outros tipos, use o mesmo menu:
 
-- **+ Semana** — nota semanal da semana ISO atual;
+- **+ Cálculo** — nota com um bloco ` ```calc ` pronto para contas;
 - **+ Desenho** — tela do Excalidraw;
 - **+ Markmap** — mapa mental a partir de títulos markdown;
 - **+ Tabulator** — planilha de dados.
@@ -330,14 +330,15 @@ no meio de uma frase, ele continua como estava.
 Excluir é definitivo (não há lixeira de notas). Se quiser guardar sem manter na lista, use
 **Arquivar** (seção 4.9).
 
-### 4.5 Nota semanal
+### 4.5 Nota de cálculo
 
-**Criar → + Semana** cria (ou abre, se já existir) a nota da semana ISO atual, no formato
-`notes/2026-S38.md`. A nota nasce em branco, de propósito: o tipo `semanal` vem do nome do arquivo,
-então não é preciso tag nem frontmatter. Clicar de novo na mesma semana abre a mesma nota — não
-duplica.
+**Criar → + Cálculo** cria uma nota markdown comum já com a tag interna `calculo` e um bloco
+` ```calc ` vazio — o mesmo bloco da calculadora (seção 4.12). É só digitar as expressões: o
+resultado aparece à direita, recalculado em tempo real, e o arquivo guarda apenas as expressões.
 
-Use-a como diário semanal, registro de decisões ou ponto de partida para revisões.
+Use-a para orçamentos, listas de compras, conversões ou qualquer conta recorrente que você queira
+manter junto das demais notas. A nota abre no editor de texto normal e pode receber títulos, tags e
+texto ao redor do bloco.
 
 ### 4.6 Desenho (Excalidraw)
 
@@ -600,9 +601,6 @@ Detalhes que ajudam no dia a dia:
 - **Palavras curtas:** termos de uma única letra não ajudam e são ignorados no destaque dos trechos;
   palavras com mais de 2 letras casam também por prefixo (`proj` encontra `projeto`).
 - **Stopwords:** palavras como `de`, `a`, `o`, `com`, `para` são ignoradas.
-- **Sinônimos:** quando a consulta tem **uma única palavra de conteúdo**, o app expande com o mapa
-  embutido e com os sinônimos que você cadastrou em **Configurações → Sinônimos**. Em consultas com
-  várias palavras, não há expansão (para não perder precisão).
 - **Tags e tipos** podem ser combinados com texto livre: `tipo:artigo foco` procura “foco” apenas
   em artigos.
 - **Não existe operador de exclusão:** `-palavra` não exclui nada — o hífen é tratado como separador
@@ -610,7 +608,7 @@ Detalhes que ajudam no dia a dia:
   com `onde: '!(...)'`.
 
 Os resultados são agrupados por nota. Cada cartão mostra até **5 trechos** e indica quantas
-ocorrências existem além disso. O termo exato aparece em azul; variações e sinônimos, em roxo.
+ocorrências existem além disso. O termo exato aparece em azul; variações por prefixo, em roxo.
 
 A busca global tem limite de **30 consultas por minuto**. O campo dispara 300 ms depois que você
 para de digitar.
@@ -1101,7 +1099,7 @@ Tudo aparece dentro do cartão, com a posição quando o CEL a informa. Nunca é
 > `n.interacao` e não `n.abertura`.
 
 Valores de `n.classe`: `nota` (markdown), `desenho`, `markmap`, `youtube`, `artigo`, `captura`,
-`semanal`, `tabulator`, `pdf`, `epub`, `anexo`, `imagem`, `arquivo`.
+`calculo`, `tabulator`, `pdf`, `epub`, `anexo`, `imagem`, `arquivo`.
 
 **Campos de `t`:**
 
@@ -1448,7 +1446,6 @@ Erros de YAML aparecem como `bloco: YAML inválido (linha 4) — …`.
 | **Rotina** | Liga/desliga o ícone e a página da rotina diária |
 | **Ntfy** | Servidor, tópico e credenciais das notificações |
 | **Colunas** | Quais campos do frontmatter podem virar colunas no Acervo |
-| **Sinônimos** | Regras `termo → sinônimos` usadas na busca |
 
 ### 9.2 Os três backups
 
@@ -1474,15 +1471,7 @@ importar de volta.
 Se o arquivo não tiver o `manifest.json` ou o banco esperado, a restauração é recusada — isso evita
 aplicar um ZIP qualquer por engano.
 
-### 9.4 Sinônimos
-
-A busca global expande sinônimos quando a consulta tem **uma única palavra de conteúdo**. O mapa
-embutido já cobre termos comuns; o que você salva em **Configurações → Sinônimos** é somado e tem
-prioridade.
-
-Exemplo: `pc → computador, máquina` faz `pc` encontrar notas que só falam “computador”.
-
-### 9.5 Colunas
+### 9.4 Colunas
 
 **Configurações → Colunas** controla quais campos do frontmatter aparecem como colunas no Acervo.
 Desmarcar um campo o esconde da tabela (o dado continua na nota). A coluna **Título** é especial:
@@ -1530,7 +1519,7 @@ protocolo JSON-RPC; logs vão para `stderr`.
 
 | Ferramenta | Para quê | Parâmetros |
 |---|---|---|
-| `search_notes` | Busca global (FTS5, sinônimos, acentos) com filtros `tags:` e `tipo:` | `query`, `limit` (1–50, padrão 10) |
+| `search_notes` | Busca global (FTS5, acentos) com filtros `tags:` e `tipo:` | `query`, `limit` (1–50, padrão 10) |
 | `get_note` | Conteúdo completo de uma nota, com título, tipo, tags e mtime | `file`, `offset`, `max_chars` (padrão 50000, máx. 200000) |
 | `list_notes` | Metadados de todas as notas | `tipo`, `tag`, `ordenar` (`recentes`, `antigas`, `nome`), `limit` (1–200) |
 | `query_notes` | Executa a linguagem de consulta | `consulta` (YAML), `nota` (raiz, para hierarquia) |
@@ -1783,7 +1772,7 @@ A busca por nome é por arquivo; a global é por conteúdo indexado. Verifique:
 
 ### O `tipo:` da busca não encontra a nota
 
-Use o vocabulário canônico: `nota`, `desenho`, `mapa_mental`, `tabulator`, `semanal`, `pdf`,
+Use o vocabulário canônico: `nota`, `desenho`, `mapa_mental`, `tabulator`, `calculo`, `pdf`,
 `epub`, `anexo`, `artigo`, `captura`, `imagem`, `arquivo`. Aliases como `markmap`, `mindmap`,
 `drawing` e `article` são normalizados, mas o valor gravado é o canônico.
 

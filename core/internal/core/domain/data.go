@@ -1,13 +1,9 @@
 package domain
 
 import (
-	"fmt"
 	"net/url"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
-	"time"
 	"ton618/core/internal/ui/icons"
 )
 
@@ -23,7 +19,7 @@ const (
 	NoteTypeYoutube    NoteType = "youtube"
 	NoteTypeArticle    NoteType = "artigo"
 	NoteTypeCapture    NoteType = "captura"
-	NoteTypeSemanal    NoteType = "semanal"
+	NoteTypeCalculo    NoteType = "calculo"
 	NoteTypePDF        NoteType = "pdf"
 	NoteTypeAttachment NoteType = "anexo"
 	NoteTypeArchive    NoteType = "arquivo"
@@ -32,57 +28,22 @@ const (
 	NoteTypeTabulator  NoteType = "tabulator"
 )
 
-// ── Nota Semanal ──
+// ── Nota de Cálculo ──
 //
-// A nota semanal é uma nota markdown comum, porém com nome DETERMINÍSTICO
-// derivado da semana ISO-8601: "notes/<ano>-S<semana>.md" (ex: notes/2026-S38.md).
-// Como o nome é estável dentro da semana, abrir o recurso várias vezes sempre
-// reusa a MESMA nota — o usuário cria no máximo uma nota por semana.
-//
-// O tipo é detectado SEMPRE pelo nome do arquivo (heurística determinística),
-// de modo que a nota já nasce com o ícone/tipo corretos antes mesmo do primeiro
-// save. A tag canônica "semanal" também é aceita (ver NoteTypeCanonicalTag).
+// A nota de cálculo é uma nota markdown comum que nasce com um bloco ```calc
+// (o mesmo nó calcBlock do editor markdown, via /calculator) e com a tag
+// canônica "calculo". O tipo existe para dar ícone/rótulo próprios e um atalho
+// de criação (+ Cálculo) sem duplicar o motor de avaliação: os resultados
+// continuam efêmeros e o markdown guarda apenas as expressões.
 
-// weeklyNoteRegex reconhece o nome canônico de uma nota semanal (sem prefixo de
-// diretório e sem extensão), ex: "2026-S38".
-var weeklyNoteRegex = regexp.MustCompile(`^(\d{4})-S(\d{2})$`)
+// CalculoTag é a tag canônica do tipo "nota de cálculo".
+const CalculoTag = "calculo"
 
-// WeeklyNoteFilename retorna o nome canônico da nota semanal que contém a data
-// informada: "notes/<ano>-S<semana>.md". Usa o ano-semana ISO-8601 (ISOWeek),
-// que é o único que garante 1..53 semanas consistentes com a segunda-feira.
-func WeeklyNoteFilename(t time.Time) string {
-	year, week := t.ISOWeek()
-	return fmt.Sprintf("notes/%d-S%02d.md", year, week)
-}
-
-// WeeklyNoteEmptyContent é o conteúdo inicial da nota semanal recém-criada: uma
-// nota EM BRANCO — sem frontmatter, sem título e sem tag.
-//
-// É apenas uma quebra de linha porque NoteService.Save recusa conteúdo vazio
-// ("processAndSave: conteúdo vazio"). Essa proteção impede sobrescrever notas com
-// conteúdo em branco e NÃO deve ser afrouxada só por causa da nota semanal.
-//
-// Por que sem título e sem tag:
-//   - a nota nasce em branco (o nome exibido vem do próprio nome do arquivo);
-//   - o tipo "semanal" é derivado do NOME do arquivo (IsWeeklyNoteFilename), então
-//     persistir a tag canônica é redundante — ver NoteTypeCanonicalTag.
-const WeeklyNoteEmptyContent = "\n"
-
-// IsWeeklyNoteFilename informa se o nome/path de arquivo segue o padrão de nota
-// semanal ("notes/2026-S38.md" ou "2026-S38.md"), validando a faixa da semana.
-func IsWeeklyNoteFilename(name string) bool {
-	base := strings.TrimPrefix(name, "notes/")
-	base = strings.TrimSuffix(base, ".md")
-	m := weeklyNoteRegex.FindStringSubmatch(base)
-	if m == nil {
-		return false
-	}
-	week, err := strconv.Atoi(m[2])
-	if err != nil {
-		return false
-	}
-	return week >= 1 && week <= 53
-}
+// CalculoNoteEmptyContent é o conteúdo inicial de uma nota de cálculo: a tag
+// canônica (necessária para a detecção do tipo) e um bloco ```calc vazio.
+// A linha em branco entre as cercas vira um parágrafo vazio no editor, pronto
+// para digitar a primeira expressão.
+const CalculoNoteEmptyContent = "---\ntags: [" + CalculoTag + "]\n---\n\n```calc\n\n```\n"
 
 // InternalTypeTags são as tags usadas para denotar o tipo do editor
 // que NÃO devem ser exibidas ao usuário na interface.
@@ -91,6 +52,7 @@ var InternalTypeTags = map[string]bool{
 	"markmap":   true,
 	"mindmap":   true,
 	"tabulator": true,
+	"calculo":   true,
 }
 
 // EditorRoute retorna a rota de URL do editor correto para este tipo de nota.
@@ -130,8 +92,8 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 			return NoteTypeArticle
 		case "captura", "capture":
 			return NoteTypeCapture
-		case "semanal", "semana", "weekly":
-			return NoteTypeSemanal
+		case "calculo", "cálculo", "calc", "calculation":
+			return NoteTypeCalculo
 		case "tabulator":
 			return NoteTypeTabulator
 		}
@@ -160,9 +122,6 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 	}
 
 	// 3. Nome de arquivo como heurística adicional
-	if IsWeeklyNoteFilename(arquivo) {
-		return NoteTypeSemanal
-	}
 	lowerFile := strings.ToLower(arquivo)
 	if strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
 		return NoteTypeMindmap
@@ -200,6 +159,11 @@ func DetectNoteTypeFromContent(tags []string, content, arquivo string) NoteType 
 		if strings.Contains(lowerContent, "type: tabulator") {
 			return NoteTypeTabulator
 		}
+		if strings.Contains(lowerContent, "type: calculo") ||
+			strings.Contains(lowerContent, "tipo: calculo") ||
+			strings.Contains(lowerContent, "tipo: cálculo") {
+			return NoteTypeCalculo
+		}
 	}
 
 	return nt
@@ -220,8 +184,8 @@ func NoteTypeCanonicalTag(t NoteType) string {
 		return "artigo"
 	case NoteTypeCapture:
 		return "captura"
-	case NoteTypeSemanal:
-		return "semanal"
+	case NoteTypeCalculo:
+		return CalculoTag
 	case NoteTypeTabulator:
 		return "tabulator"
 	}
@@ -457,13 +421,4 @@ func NoteIconColor(iconName string) string {
 type AutoTagRule struct {
 	Days int    `json:"days"`
 	Tag  string `json:"tag"`
-}
-
-// SynonymRule define uma entrada editável de sinônimos (aba "Sinônimos" nas
-// configurações): um termo e seus sinônimos. O termo e os sinônimos são
-// normalizados (minúsculas + sem acento) no momento do lookup em
-// internal/search; aqui ficam como o usuário digitou.
-type SynonymRule struct {
-	Termo     string   `json:"termo"`
-	Sinonimos []string `json:"sinonimos"`
 }

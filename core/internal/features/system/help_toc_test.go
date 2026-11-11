@@ -6,7 +6,7 @@ import "testing"
 // estável, sem acentos e sem pontuação — senão o link do índice não fecha.
 func TestHelpSlug(t *testing.T) {
 	casos := []struct{ entrada, esperado string }{
-		{"4.5 Nota semanal", "4-5-nota-semanal"},
+		{"4.5 Nota de cálculo", "4-5-nota-de-calculo"},
 		{"8.8 Expressões (`onde:`) — CEL", "8-8-expressoes-onde-cel"},
 		{"Conexões & Ajustes", "conexoes-ajustes"},
 		{"O que é isto?", "o-que-e-isto"},

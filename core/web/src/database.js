@@ -98,7 +98,7 @@
         markdown: "nota", md: "nota",
         capture: "captura",
         article: "artigo",
-        semana: "semanal", weekly: "semanal",
+        calc: "calculo", calculos: "calculo", "cálculo": "calculo",
         attachment: "anexo", anexos: "anexo",
         archive: "arquivo", arquivos: "arquivo",
         image: "imagem", img: "imagem", imagens: "imagem",

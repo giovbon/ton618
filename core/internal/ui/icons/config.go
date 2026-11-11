@@ -31,9 +31,9 @@ var Config = map[string]IconSpec{
 	"youtube":    {Icon: "video", Color: "text-red-500"},
 	"artigo":     {Icon: "newspaper", Color: "text-blue-400"},
 	"article":    {Icon: "newspaper", Color: "text-blue-400"},
-	"semanal":    {Icon: "calendar-days", Color: "#14B8A6"},
-	"semana":     {Icon: "calendar-days", Color: "#14B8A6"},
-	"weekly":     {Icon: "calendar-days", Color: "#14B8A6"},
+	"calculo":    {Icon: "calculator", Color: "#F97316"},
+	"cálculo":    {Icon: "calculator", Color: "#F97316"},
+	"calc":       {Icon: "calculator", Color: "#F97316"},
 
 	// ── NAVEGAÇÃO & HEADER ──
 	"agenda":    {Icon: "calendar", Color: "text-sky-400"},
@@ -92,8 +92,6 @@ var Config = map[string]IconSpec{
 	"settings-ntfy":         {Icon: "bell", Color: "text-rose-400"},
 	"colunas":               {Icon: "columns", Color: "text-sky-400"},
 	"settings-colunas":      {Icon: "columns", Color: "text-sky-400"},
-	"sinonimos":             {Icon: "shuffle", Color: "text-violet-400"},
-	"settings-sinonimos":    {Icon: "shuffle", Color: "text-violet-400"},
 	"semantica":             {Icon: "sparkles", Color: "text-violet-400"},
 	"settings-semantica":    {Icon: "sparkles", Color: "text-violet-400"},
 }

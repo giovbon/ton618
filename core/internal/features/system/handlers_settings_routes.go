@@ -180,41 +180,6 @@ func (ctx *HandlerContext) HandlePostColumnsSettings(w http.ResponseWriter, r *h
 	}
 }
 
-// ── Sinônimos (aba "Sinônimos" no modal de configurações) ──
-
-// HandleGetSynonymSettings devolve as regras salvas de sinônimos como JSON. O
-// mapa embarcado de sinônimos continua como base — aqui só as entradas que o
-// usuário adicionou/sobrescreveu (o lookup em internal/search dá prioridade às
-// regras do usuário e cai para o embarcado quando não houver entrada).
-func (ctx *HandlerContext) HandleGetSynonymSettings(w http.ResponseWriter, r *http.Request) {
-	val := "[]"
-	if raw, err := ctx.Store.GetSetting("synonyms_config"); err == nil && raw != "" {
-		val = raw
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(val))
-}
-
-func (ctx *HandlerContext) HandlePostSynonymSettings(w http.ResponseWriter, r *http.Request) {
-	var rules []domain.SynonymRule
-	if err := json.NewDecoder(r.Body).Decode(&rules); err != nil {
-		http.Error(w, "json invalido", http.StatusBadRequest)
-		return
-	}
-
-	configJSON, err := json.Marshal(rules)
-	if err != nil {
-		http.Error(w, "erro ao processar dados", http.StatusInternalServerError)
-		return
-	}
-	if err := ctx.Store.SetSetting("synonyms_config", string(configJSON)); err != nil {
-		http.Error(w, "erro ao salvar", http.StatusInternalServerError)
-		return
-	}
-
-	httputil.WriteJSON(w, map[string]string{"status": "success"})
-}
-
 func (ctx *HandlerContext) HandleApplyAutoTag(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		bodyBytes, err := io.ReadAll(r.Body)

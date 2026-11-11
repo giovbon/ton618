@@ -40,15 +40,13 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/settings/auto-tag/apply", sysCtx.HandleApplyAutoTag)
 	mux.Get("/api/settings/columns", sysCtx.HandleGetColumnsSettings)
 	mux.Post("/api/settings/columns", sysCtx.HandlePostColumnsSettings)
-	mux.Get("/api/settings/synonyms", sysCtx.HandleGetSynonymSettings)
-	mux.Post("/api/settings/synonyms", sysCtx.HandlePostSynonymSettings)
 
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)
 	mux.Get("/drawing", notesCtx.HandleDrawing)
 	mux.Get("/mindmap", notesCtx.HandleMindmap)
 	mux.Get("/tabulator", notesCtx.HandleTabulator)
-	mux.Get("/semana", notesCtx.HandleWeekly)
+	mux.Get("/calculo", notesCtx.HandleCalculo)
 
 	mux.Get("/file", notesCtx.HandleFile)
 	mux.Get("/epub/reader", notesCtx.HandleEpubReader)

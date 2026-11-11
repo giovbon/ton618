@@ -642,7 +642,7 @@ func isTypeTaggedNoteType(t domain.NoteType) bool {
 		domain.NoteTypeMindmap,
 		domain.NoteTypeTabulator,
 		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
-		domain.NoteTypeSemanal,
+		domain.NoteTypeCalculo,
 		domain.NoteTypePDF, domain.NoteTypeAttachment, domain.NoteTypeArchive, domain.NoteTypeEPUB:
 		return true
 	}

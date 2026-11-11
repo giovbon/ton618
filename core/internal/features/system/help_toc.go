@@ -89,7 +89,7 @@ func helpHeadingText(h *ast.Heading, src []byte) string {
 }
 
 // helpSlug transforma o título num id ASCII: minúsculas, sem acentos, com
-// hífens no lugar da pontuação. `4.5 Nota semanal` vira `4-5-nota-semanal`.
+// hífens no lugar da pontuação. `4.5 Nota de cálculo` vira `4-5-nota-de-calculo`.
 func helpSlug(texto string) string {
 	var b strings.Builder
 	ultimoHifen := false

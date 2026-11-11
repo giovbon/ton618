@@ -19,7 +19,7 @@ func TestFrontmatterTipo(t *testing.T) {
 		{NoteTypeYoutube, "youtube"},
 		{NoteTypeArticle, "artigo"},
 		{NoteTypeCapture, "captura"},
-		{NoteTypeSemanal, "semanal"},
+		{NoteTypeCalculo, "calculo"},
 	}
 	for _, tt := range tests {
 		if got := FrontmatterTipo(tt.in); got != tt.want {
@@ -50,7 +50,7 @@ func TestNormalizeNoteTipo(t *testing.T) {
 		{"md", "nota"},
 		{"capture", "captura"},
 		{"article", "artigo"},
-		{"weekly", "semanal"},
+		{"calc", "calculo"},
 		{"attachment", "anexo"},
 		{"archive", "arquivo"},
 		{"image", "imagem"},
@@ -73,7 +73,7 @@ func TestNormalizeNoteTipoIdempotente(t *testing.T) {
 		NoteTypeMarkdown, NoteTypeDrawing, NoteTypeMindmap, NoteTypeTabulator,
 		NoteTypePDF, NoteTypeEPUB, NoteTypeAttachment, NoteTypeArchive,
 		NoteTypeImage, NoteTypeYoutube, NoteTypeArticle, NoteTypeCapture,
-		NoteTypeSemanal,
+		NoteTypeCalculo,
 	}
 	for _, nt := range tipos {
 		v := FrontmatterTipo(nt)

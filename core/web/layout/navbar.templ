@@ -82,9 +82,9 @@ templ Navbar() {
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
                             @icons.Icon(icons.GetIcon("nota"), "w-4 h-4 " + icons.GetColor("nota")) <span>+ Nota</span>
                         </a>
-                        <a id="nav-semana" href="/semana" title="Nota da semana" @click="open = false"
+                        <a id="nav-calculo" href="/calculo" title="Nota de cálculo" @click="open = false"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
-                            @icons.Icon(icons.GetIcon("semanal"), "w-4 h-4 " + icons.GetColor("semanal")) <span>+ Semana</span>
+                            @icons.Icon(icons.GetIcon("calculo"), "w-4 h-4 " + icons.GetColor("calculo")) <span>+ Cálculo</span>
                         </a>
                         <a href="/drawing"
                             class="flex items-center gap-2.5 px-4 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">
@@ -212,10 +212,10 @@ templ Navbar() {
                         @icons.Icon(icons.GetIcon("tabulator"), "w-4 h-4 " + icons.GetColor("tabulator"))
                         <span class="text-[11px] font-semibold text-lime-400/90">+ Tabulator</span>
                     </a>
-                    <a href="/semana" id="mobile-criar-semana-link" @click="mobileMenuOpen = false"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-teal-400 transition-all active:scale-[0.98]">
-                        @icons.Icon(icons.GetIcon("semanal"), "w-4 h-4 " + icons.GetColor("semanal"))
-                        <span class="text-[11px] font-semibold text-teal-400">+ Semana</span>
+                    <a href="/calculo" id="mobile-criar-calculo-link" @click="mobileMenuOpen = false"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 text-orange-400 transition-all active:scale-[0.98]">
+                        @icons.Icon(icons.GetIcon("calculo"), "w-4 h-4 " + icons.GetColor("calculo"))
+                        <span class="text-[11px] font-semibold text-orange-400">+ Cálculo</span>
                     </a>
                 </div>
             </div>

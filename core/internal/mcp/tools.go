@@ -159,7 +159,7 @@ func (s *Server) getNote(_ context.Context, _ *sdk.CallToolRequest, in getNoteIn
 // ── list_notes ───────────────────────────────────────────────────────────
 
 type listInput struct {
-	Tipo    string `json:"tipo,omitempty" jsonschema:"filtra pelo tipo do frontmatter: nota, desenho, mapa_mental, tabulator, semanal, pdf, anexo, artigo, captura"`
+	Tipo    string `json:"tipo,omitempty" jsonschema:"filtra pelo tipo do frontmatter: nota, desenho, mapa_mental, tabulator, calculo, pdf, anexo, artigo, captura"`
 	Tag     string `json:"tag,omitempty" jsonschema:"filtra por uma tag exata (sem #)"`
 	Ordenar string `json:"ordenar,omitempty" jsonschema:"recentes (padrão), antigas ou nome"`
 	Limit   int    `json:"limit,omitempty" jsonschema:"máximo de notas (padrão 50, máximo 200)"`

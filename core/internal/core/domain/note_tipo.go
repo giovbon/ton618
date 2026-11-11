@@ -49,8 +49,8 @@ func NormalizeNoteTipo(s string) string {
 		return "captura"
 	case "article":
 		return "artigo"
-	case "semana", "weekly":
-		return "semanal"
+	case "calc", "cálculo", "calculation":
+		return "calculo"
 	case "attachment":
 		return "anexo"
 	case "archive":
@@ -73,8 +73,8 @@ func NormalizeNoteTipo(s string) string {
 		return "artigo"
 	case "capturas":
 		return "captura"
-	case "semanais":
-		return "semanal"
+	case "calculos":
+		return "calculo"
 	}
 	return v
 }
@@ -108,8 +108,8 @@ func NoteTipoLabel(v string) string {
 		return "Artigo"
 	case "captura":
 		return "Captura"
-	case "semanal":
-		return "Semanal"
+	case "calculo":
+		return "Cálculo"
 	}
 	return v
 }

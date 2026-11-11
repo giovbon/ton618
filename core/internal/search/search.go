@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"math"
 	"regexp"
@@ -21,9 +20,9 @@ type SearchHit struct {
 	FinalScore   float64
 	ScoreDetails map[string]float64
 	Highlight    map[string][]string
-	// HasOriginalTerm indica se o documento contém um termo ORIGINAL da query
-	// (não só um sinônimo). Governa a ordenação: docs com o termo exato sempre
-	// vêm antes dos que casam apenas via expansão de sinônimos.
+	// HasOriginalTerm indica se o documento contém um termo ORIGINAL da query.
+	// Governa a ordenação: docs com o termo exato sempre vêm antes dos que
+	// casaram apenas pelo fallback fuzzy (LIKE).
 	HasOriginalTerm bool
 }
 
@@ -82,325 +81,6 @@ var stopwords = map[string]bool{
 	"e": true, "the": true, "and": true, "or": true, "of": true, "to": true, "in": true,
 }
 
-// synonyms contém sinônimos PT-BR em forma SEM acento e minúscula (casa com o
-// tokenizer unicode61 do FTS5 e com o removeAccents do fallback LIKE). Expansão
-// é aplicada SOMENTE a consultas de 1 termo de conteúdo (ver buildFTSQuery): em
-// multi-termo cada palavra é unida por AND e expandir todas geraria o produto
-// cartesiano dos sinônimos, despencando a precisão.
-var synonyms = map[string][]string{
-	"casa":       {"residencia", "moradia", "lar", "domicilio"},
-	"carro":      {"automovel", "veiculo", "auto"},
-	"automovel":  {"carro", "veiculo"},
-	"veiculo":    {"carro", "automovel"},
-	"trabalho":   {"emprego", "servico", "ocupacao", "labuta"},
-	"emprego":    {"trabalho", "servico", "ocupacao"},
-	"livro":      {"obra", "volume"},
-	"escola":     {"colegio"},
-	"pessoa":     {"individuo", "ser", "gente"},
-	"dinheiro":   {"grana", "verba", "capital"},
-	"comida":     {"alimento", "refeicao"},
-	"problema":   {"questao", "obstaculo", "dificuldade"},
-	"questao":    {"problema", "pergunta", "dificuldade"},
-	"ideia":      {"conceito", "nocao"},
-	"foto":       {"fotografia", "imagem"},
-	"imagem":     {"foto", "figura"},
-	"comeco":     {"inicio", "principio"},
-	"inicio":     {"comeco", "principio"},
-	"computador": {"pc", "maquina"},
-	"celular":    {"smartphone", "telefone"},
-	"telefone":   {"celular"},
-	"teste":      {"prova", "ensaio"},
-	"nota":       {"anotacao", "registro", "apontamento"},
-	"anotacao":   {"nota", "registro"},
-	"erro":       {"falha", "bug", "defeito"},
-	"falha":      {"erro", "defeito"},
-	"resposta":   {"solucao", "retorno"},
-	"pergunta":   {"questao", "duvida"},
-	"duvida":     {"pergunta", "incerteza"},
-	"importante": {"relevante", "essencial"},
-	"relevante":  {"importante", "essencial"},
-	"rapido":     {"veloz"},
-	"facil":      {"simples"},
-	"dificil":    {"complicado"},
-	"grande":     {"enorme", "vasto"},
-	"pequeno":    {"diminuto", "reduzido"},
-	"aprender":   {"estudar", "absorver"},
-	"estudar":    {"aprender"},
-	"escrever":   {"anotar", "redigir"},
-	"buscar":     {"procurar", "pesquisar"},
-	"pesquisar":  {"buscar", "procurar"},
-	"procurar":   {"buscar", "pesquisar"},
-	"encontrar":  {"achar", "localizar"},
-	"achar":      {"encontrar", "localizar"},
-	"comprar":    {"adquirir"},
-	"usar":       {"utilizar", "empregar"},
-	"utilizar":   {"usar", "empregar"},
-	"mostrar":    {"exibir", "apresentar"},
-	"criar":      {"produzir", "desenvolver"},
-	"fazer":      {"realizar", "executar"},
-	"dar":        {"entregar", "fornecer"},
-	"receber":    {"obter"},
-	"ter":        {"possuir"},
-	"possuir":    {"ter"},
-	"saber":      {"conhecer"},
-	"conhecer":   {"saber", "dominar"},
-	"pensar":     {"refletir"},
-	"falar":      {"dizer", "comentar"},
-	"dizer":      {"falar"},
-	"ver":        {"olhar", "observar"},
-	"olhar":      {"ver", "observar"},
-	"ouvir":      {"escutar"},
-	"escutar":    {"ouvir"},
-	"lembrar":    {"recordar", "rememorar"},
-	"recordar":   {"lembrar", "rememorar"},
-	"precisao":   {"exatidao"},
-	"exatidao":   {"precisao"},
-	"rapidez":    {"velocidade"},
-	"qualidade":  {"excelencia"},
-	"saude":      {"bem-estar", "bemestar"},
-	"feliz":      {"contente", "alegre"},
-	"triste":     {"melancolico"},
-	"bom":        {"otimo", "excelente"},
-	"ruim":       {"pessimo"},
-	"lugar":      {"local", "espaco"},
-	"local":      {"lugar", "espaco"},
-	"tempo":      {"periodo", "momento"},
-	"momento":    {"instante"},
-	"mundo":      {"globo"},
-	"pais":       {"nacao"},
-	"cidade":     {"municipio"},
-	"noticia":    {"novidade", "reportagem"},
-	"reportagem": {"noticia", "materia"},
-
-	// ── Nomes / conceitos ──
-	"estado":       {"condicao", "situacao", "circunstancia"},
-	"forma":        {"modo", "maneira", "jeito"},
-	"metodo":       {"tecnica", "procedimento", "processo"},
-	"conhecimento": {"saber", "erudicao", "sabedoria"},
-	"exemplo":      {"caso", "modelo", "instancia"},
-	"resultado":    {"consequencia", "desfecho", "efeito"},
-	"causa":        {"motivo", "razao", "origem"},
-	"motivo":       {"causa", "razao", "justificativa"},
-	"razao":        {"motivo", "causa", "justificativa"},
-	"meta":         {"objetivo", "alvo", "proposito"},
-	"objetivo":     {"meta", "finalidade", "proposito"},
-	"plano":        {"projeto", "esquema", "estrategia"},
-	"projeto":      {"plano", "programa", "iniciativa"},
-	"processo":     {"procedimento", "fluxo", "metodo"},
-	"ferramenta":   {"instrumento", "utensilio", "recurso"},
-	"texto":        {"conteudo", "escrito", "documento"},
-	"documento":    {"arquivo", "escrito", "registro"},
-	"arquivo":      {"documento", "ficheiro", "pasta"},
-	"resumo":       {"sumario", "sintese", "sinopse"},
-	"capitulo":     {"secao", "parte", "divisao"},
-	"secao":        {"parte", "divisao", "capitulo"},
-	"lista":        {"relacao", "enumeracao", "elenco"},
-	"tabela":       {"quadro", "matriz"},
-	"diagrama":     {"esquema", "grafico", "mapa"},
-	"mapa":         {"diagrama", "grafico"},
-	"grafico":      {"diagrama", "carta"},
-	"video":        {"filmagem", "gravacao"},
-	"audio":        {"som", "gravacao"},
-	"musica":       {"cancao", "melodia", "som"},
-	"cancao":       {"musica", "melodia"},
-	"artigo":       {"texto", "materia", "ensaio"},
-	"ensaio":       {"artigo", "teste", "experimento"},
-	"pesquisa":     {"estudo", "investigacao", "levantamento"},
-	"estudo":       {"pesquisa", "investigacao", "aprendizado"},
-	"investigacao": {"pesquisa", "apuracao"},
-	"ambiente":     {"meio", "ecossistema", "entorno"},
-	"meio":         {"ambiente", "ecossistema"},
-	"historia":     {"narrativa", "cronica", "relato"},
-	"relato":       {"historia", "narrativa", "descricao"},
-	"descricao":    {"detalhe", "exposicao", "relato"},
-	"detalhe":      {"pormenor", "particularidade"},
-	"parte":        {"porcao", "elemento", "pedaco"},
-	"pedaco":       {"parte", "fragmento", "porcao"},
-	"elemento":     {"componente", "item", "parte"},
-	"item":         {"elemento", "artigo", "ponto"},
-	"ponto":        {"item", "assunto", "aspecto"},
-	"topico":       {"assunto", "tema", "ponto"},
-	"assunto":      {"tema", "topico", "materia"},
-	"tema":         {"assunto", "topico", "motivo"},
-	"materia":      {"assunto", "conteudo", "disciplina"},
-	"foco":         {"centro", "destaque"},
-	"destaque":     {"realce", "enfase"},
-	"enfase":       {"destaque", "realce"},
-	"valor":        {"preco", "custo", "importancia"},
-	"custo":        {"preco", "despesa", "gasto"},
-	"preco":        {"valor", "custo", "tarifa"},
-	"gasto":        {"despesa", "custo"},
-	"receita":      {"renda", "ganho", "lucro"},
-	"lucro":        {"ganho", "beneficio"},
-	"ganho":        {"lucro", "receita", "rendimento"},
-	"rendimento":   {"ganho", "desempenho", "producao"},
-	"desempenho":   {"rendimento", "resultado", "performance"},
-	"quantidade":   {"volume", "numero", "grandeza"},
-	"numero":       {"quantidade", "cifra", "contagem"},
-	"familia":      {"parentes", "nucleo familiar"},
-	"amigo":        {"companheiro", "colega", "camarada"},
-
-	// ── Verbos ──
-	"chegar":      {"alcancar", "atingir"},
-	"alcancar":    {"atingir", "conseguir", "obter"},
-	"atingir":     {"alcancar", "conseguir", "obter"},
-	"precisar":    {"necessitar", "requerer"},
-	"necessitar":  {"precisar", "requerer"},
-	"ajudar":      {"auxiliar", "colaborar", "apoiar"},
-	"auxiliar":    {"ajudar", "colaborar", "apoiar"},
-	"apoiar":      {"ajudar", "sustentar", "colaborar"},
-	"colaborar":   {"ajudar", "cooperar"},
-	"tentar":      {"experimentar", "ensaiar", "buscar"},
-	"ganhar":      {"obter", "conseguir", "vencer"},
-	"conseguir":   {"obter", "alcancar", "lograr"},
-	"obter":       {"conseguir", "alcancar", "adquirir"},
-	"ler":         {"estudar", "percorrer"},
-	"ensinar":     {"instruir", "educar", "lecionar"},
-	"instruir":    {"ensinar", "educar"},
-	"mudar":       {"alterar", "modificar", "transformar"},
-	"alterar":     {"mudar", "modificar"},
-	"modificar":   {"mudar", "alterar", "transformar"},
-	"transformar": {"mudar", "converter"},
-	"melhorar":    {"aprimorar", "aperfeicoar"},
-	"aprimorar":   {"melhorar", "aperfeicoar"},
-	"piorar":      {"degradar", "declinar"},
-	"aumentar":    {"crescer", "ampliar", "elevar"},
-	"crescer":     {"aumentar", "ampliar"},
-	"reduzir":     {"diminuir", "cortar", "encurtar"},
-	"diminuir":    {"reduzir", "baixar"},
-	"comecar":     {"iniciar", "principiar"},
-	"iniciar":     {"comecar", "principiar"},
-	"terminar":    {"finalizar", "concluir", "acabar"},
-	"finalizar":   {"terminar", "concluir"},
-	"concluir":    {"finalizar", "terminar", "encerrar"},
-	"parar":       {"cessar", "interromper"},
-	"continuar":   {"prosseguir", "seguir"},
-	"seguir":      {"continuar", "acompanhar"},
-	"escolher":    {"selecionar", "optar", "preferir"},
-	"selecionar":  {"escolher", "optar"},
-	"optar":       {"escolher", "selecionar"},
-	"preferir":    {"escolher", "optar"},
-	"decidir":     {"resolver", "determinar", "definir"},
-	"resolver":    {"solucionar", "decidir"},
-	"definir":     {"especificar", "determinar"},
-	"explicar":    {"esclarecer", "detalhar", "descrever"},
-	"esclarecer":  {"explicar", "elucidar"},
-	"entender":    {"compreender", "perceber"},
-	"compreender": {"entender", "perceber"},
-	"perceber":    {"notar", "observar", "entender"},
-	"notar":       {"perceber", "observar"},
-	"esquecer":    {"ignorar", "olvidar"},
-
-	// ── Adjetivos ──
-	"novo":         {"recente", "moderno", "inedito"},
-	"antigo":       {"velho", "passado", "historico"},
-	"velho":        {"antigo", "idoso"},
-	"util":         {"proveitoso", "aproveitavel", "valioso"},
-	"necessario":   {"preciso", "essencial", "indispensavel"},
-	"essencial":    {"fundamental", "indispensavel", "necessario"},
-	"fundamental":  {"essencial", "basico", "principal"},
-	"principal":    {"fundamental", "primario", "basico"},
-	"completo":     {"integral", "total", "inteiro"},
-	"total":        {"completo", "integral"},
-	"correto":      {"certo", "exato", "adequado"},
-	"verdadeiro":   {"autentico", "real"},
-	"real":         {"verdadeiro", "concreto", "atual"},
-	"possivel":     {"viavel", "potencial"},
-	"viavel":       {"possivel", "praticavel"},
-	"provavel":     {"possivel", "plausivel"},
-	"igual":        {"equivalente", "identico", "mesmo"},
-	"diferente":    {"distinto", "variado", "diverso"},
-	"diverso":      {"variado", "diferente"},
-	"similar":      {"parecido", "semelhante", "analogo"},
-	"semelhante":   {"parecido", "similar", "analogo"},
-	"parecido":     {"semelhante", "similar"},
-	"unico":        {"singular", "exclusivo", "so"},
-	"singular":     {"unico", "particular", "inusitado"},
-	"particular":   {"especifico", "singular", "especial"},
-	"especial":     {"particular", "especifico", "diferenciado"},
-	"especifico":   {"particular", "exato", "definido"},
-	"geral":        {"global", "amplo", "comum"},
-	"global":       {"geral", "amplo", "total"},
-	"comum":        {"usual", "geral", "corriqueiro"},
-	"usual":        {"comum", "habitual", "normal"},
-	"normal":       {"comum", "usual", "padrao"},
-	"incomum":      {"raro", "inusual", "diferente"},
-	"raro":         {"incomum", "infrequente"},
-	"frequente":    {"comum", "usual", "recorrente"},
-	"continuo":     {"constante", "ininterrupto", "seguido"},
-	"claro":        {"nitido", "evidente", "obvio", "luminoso"},
-	"evidente":     {"claro", "obvio", "nitido"},
-	"obvio":        {"evidente", "claro", "nitido"},
-	"simples":      {"facil", "basico", "descomplicado"},
-	"complexo":     {"complicado", "intrincado", "elaborado"},
-	"complicado":   {"complexo", "dificil"},
-	"interessante": {"atrativo", "envolvente", "curioso"},
-	"curioso":      {"interessante", "intrigante"},
-}
-
-// normalizeSynonym normaliza um termo/sinônimo para a forma de lookup:
-// minúsculas e sem acento (casa com o tokenizer unicode61 do FTS5 e com o
-// removeAccents do fallback LIKE). É o mesmo formato das chaves/valores do mapa
-// embarcado e das regras salvas na aba "Sinônimos".
-func normalizeSynonym(s string) string {
-	return removeAccents(strings.ToLower(strings.TrimSpace(s)))
-}
-
-// synonymsFor devolve os sinônimos (sem acento) de um termo de busca, ou nil se
-// o termo não tiver entrada no mapa embarcado. Normaliza o termo para o lookup.
-func synonymsFor(term string) []string {
-	return synonyms[normalizeSynonym(term)]
-}
-
-// UserSynonymMap converte as regras salvas na aba "Sinônimos" (da tabela
-// settings) em um mapa termo→sinônimos já normalizado. Descartada a si mesmo
-// como sinônimo e entradas com termo vazio ou sem sinônimos.
-func UserSynonymMap(rules []domain.SynonymRule) map[string][]string {
-	out := make(map[string][]string)
-	for _, r := range rules {
-		t := normalizeSynonym(r.Termo)
-		if t == "" {
-			continue
-		}
-		var syns []string
-		for _, s := range r.Sinonimos {
-			ns := normalizeSynonym(s)
-			if ns != "" && ns != t {
-				syns = append(syns, ns)
-			}
-		}
-		if len(syns) > 0 {
-			out[t] = syns
-		}
-	}
-	return out
-}
-
-// loadSynonymLookup monta a função de expansão de sinônimos usada na busca:
-// primeiro consulta o mapa configurado pelo usuário (settings "synonyms_config")
-// e, na falta de entrada, cai para o mapa embarcado padrão. Assim o usuário pode
-// adicionar/sobrescrever sinônimos sem perder o conjunto básico embarcado.
-func loadSynonymLookup(store *db.Store) func(string) []string {
-	var user map[string][]string
-	if store != nil {
-		if raw, err := store.GetSetting("synonyms_config"); err == nil && raw != "" {
-			var rules []domain.SynonymRule
-			if json.Unmarshal([]byte(raw), &rules) == nil {
-				user = UserSynonymMap(rules)
-			}
-		}
-	}
-	return func(term string) []string {
-		t := normalizeSynonym(term)
-		if user != nil {
-			if syns, ok := user[t]; ok {
-				return syns
-			}
-		}
-		return synonyms[t]
-	}
-}
-
 func Search(ctx context.Context, store *db.Store, rawQuery string, from, size int, getBacklinkCount func(string) int, getSynapticWeight func(string) float64) (*SearchResults, error) {
 	if rawQuery == "" || rawQuery == "*" {
 		return listAll(store, from, size)
@@ -411,7 +91,7 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 	noteTipos, queryTags, remainingQuery := pq.noteTipos, pq.tags, pq.remaining
 
 	// 1. Try FTS5 first
-	ftsQuery := buildFTSQueryWithParsed(pq, loadSynonymLookup(store))
+	ftsQuery := buildFTSQueryWithParsed(pq)
 	// Se a busca textual é vazia mas temos tags ou filtro de tipo, o FTS já
 	// filtra por eles; ampliamos o pool de candidatos para re-ranking, mas de
 	// forma limitada (evita materializar o corpus inteiro — ver
@@ -525,7 +205,7 @@ func Search(ctx context.Context, store *db.Store, rawQuery string, from, size in
 
 	// 4. Sort by original-term presence first, then by final score.
 	// Docs que contêm o termo ORIGINAL da busca vêm sempre antes dos que casam
-	// apenas via sinônimo (expansão), independentemente do BM25. Dentro de cada
+	// apenas pelo fallback fuzzy, independentemente do BM25. Dentro de cada
 	// grupo, a ordem segue o FinalScore e, no empate, a recência.
 	sort.Slice(hits, func(i, j int) bool {
 		if hits[i].HasOriginalTerm != hits[j].HasOriginalTerm {
@@ -565,13 +245,11 @@ func listAll(store *db.Store, from, size int) (*SearchResults, error) {
 }
 
 // buildFTSQuery converte query do usuário para sintaxe FTS5 com pesos por coluna.
-// Pesos: tags 50x, arquivo 20x, secao 10x, texto 1x. Usa o mapa embarcado padrão.
+// Pesos: tags 50x, arquivo 20x, secao 10x, texto 1x.
 func buildFTSQuery(raw string) string {
-	return buildFTSQueryWithSynonyms(raw, synonymsFor)
+	return buildFTSQueryWithParsed(parseQuery(raw))
 }
 
-// buildFTSQueryWithSynonyms é buildFTSQuery com uma função de expansão de
-// sinônimos fornecida (embarcada ou configurada pelo usuário).
 // columnClause monta o OR entre as colunas indexadas para um termo FTS5 já
 // sanitizado (ex.: "foo*" ou "\"frase exata\""). O conjunto de colunas é o
 // mesmo em toda a construção da query; centralizar evita cópias divergentes.
@@ -601,11 +279,7 @@ func parseQuery(raw string) parsedQuery {
 	}
 }
 
-func buildFTSQueryWithSynonyms(raw string, lookup func(string) []string) string {
-	return buildFTSQueryWithParsed(parseQuery(raw), lookup)
-}
-
-func buildFTSQueryWithParsed(p parsedQuery, lookup func(string) []string) string {
+func buildFTSQueryWithParsed(p parsedQuery) string {
 	if strings.TrimSpace(p.raw) == "" {
 		return ""
 	}
@@ -673,43 +347,19 @@ func buildFTSQueryWithParsed(p parsedQuery, lookup func(string) []string) string
 		// Process remaining words
 		words := strings.Fields(remainingCleaned)
 
-		// Reúne as palavras de conteúdo (não stopwords). A expansão por sinônimos
-		// é aplicada SOMENTE quando há UMA única palavra de conteúdo: com uma
-		// palavra é jogo de recall puro (o sentido não depende de combinação). Em
-		// consultas de várias palavras cada termo é unido por AND e expandir todos
-		// dispararia o produto cartesiano dos sinônimos — precisão despenca.
-		var contentWords []string
+		// Process remaining words. Cada palavra vira um prefixo de busca unido
+		// por AND entre as colunas indexadas.
 		for _, w := range words {
 			w = sanitizeFTS5Term(w)
 			if w == "" || stopwords[strings.ToLower(w)] {
 				continue
 			}
-			contentWords = append(contentWords, strings.ToLower(w))
-		}
-		expandSynonyms := len(contentWords) == 1
-
-		for _, wLower := range contentWords {
-			var variants []string
-			if expandSynonyms {
-				variants = lookup(wLower)
+			wLower := strings.ToLower(w)
+			wStar := wLower
+			if len(wStar) > 2 {
+				wStar += "*"
 			}
-			if len(variants) > 0 {
-				var orParts []string
-				for _, v := range append([]string{wLower}, variants...) {
-					tv := v
-					if len(tv) > 2 {
-						tv += "*"
-					}
-					orParts = append(orParts, columnClause(tv))
-				}
-				parts = append(parts, "("+strings.Join(orParts, " OR ")+")")
-			} else {
-				wStar := wLower
-				if len(wStar) > 2 {
-					wStar += "*"
-				}
-				parts = append(parts, columnClause(wStar))
-			}
+			parts = append(parts, columnClause(wStar))
 		}
 	}
 

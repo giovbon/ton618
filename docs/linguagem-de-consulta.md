@@ -326,7 +326,7 @@ Variáveis disponíveis por tipo:
 > **Abrir** da tabela de notas — por isso o campo se chama `n.interacao` e não `n.abertura`.
 
 Valores de `n.classe` (espelham o tipo detectado na varredura do acervo — SSOT dos ícones, §6.9):
-`nota` (Markdown), `desenho`, `markmap`, `youtube`, `artigo`, `captura`, `semanal`, `pdf`, `epub`,
+`nota` (Markdown), `desenho`, `markmap`, `youtube`, `artigo`, `captura`, `calculo`, `pdf`, `epub`,
 `anexo`, `imagem`, `arquivo`.
 
 **Campos de `t` (tarefa):**

@@ -34,7 +34,7 @@ protocolo JSON-RPC; logs vão para `stderr`.
 
 | ferramenta | para quê |
 |---|---|
-| `search_notes` | busca global (FTS5, sinônimos, acentos) com filtros `tags:` e `tipo:` |
+| `search_notes` | busca global (FTS5, acentos) com filtros `tags:` e `tipo:` |
 | `get_note` | conteúdo completo de uma nota (com título, tipo, tags, mtime; pagina com `offset`/`max_chars`) |
 | `list_notes` | metadados de todas as notas, filtrando por `tipo` e `tag` |
 | `query_notes` | executa a [linguagem de consulta](linguagem-de-consulta.md) (`tipo:`, `texto:`, `onde:`, …) |

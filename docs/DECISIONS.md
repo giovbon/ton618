@@ -2359,3 +2359,73 @@ raias, sobreposição, largura mínima) e de integração do template/JSON. Veri
 (Playwright) em desktop e mobile: barras, tooltip, edição por clique, zoom, ajuste, modal e
 re-render após criar/excluir. `templ generate` (v0.3.1070), `go test`, `tsc --noEmit`, `node
 build.js` e os 96 testes JS verdes.
+
+---
+
+## 27. Remoção da nota semanal e dos sinônimos; novo tipo "nota de cálculo" (10/11/2026)
+
+**Problema:** o tipo `semanal` era um caso especial que só existia para gerar/reabrir
+`notes/AAAA-Snn.md` a partir do nome do arquivo — sem tag, sem frontmatter e com uma seção inteira
+de ajuda dedicada. Os sinônimos eram um mapa embarcado gigante em `internal/search` somado a uma
+configuração de usuário (`/api/settings/synonyms` + aba **Sinônimos**), com regras de expansão que
+só valiam para consultas de uma palavra. Nenhum dos dois era usado no restante do produto; os dois
+aumentavam a superfície de manutenção da busca e do editor.
+
+**Decisão:**
+
+- **Nota semanal removida por completo.** Saíram `NoteTypeSemanal`, `WeeklyNoteFilename`,
+  `IsWeeklyNoteFilename`, `WeeklyNoteEmptyContent`, a detecção por nome, o atalho `/semana`
+  (desktop e mobile), o handler `handlers_weekly.go`, a rota e os testes. Notas `AAAA-Snn.md`
+  existentes **não são apagadas nem migradas**: viram notas markdown comuns (o campo `tipo:` já
+  gravado continua no frontmatter, mas não há mais detecção automática pelo nome).
+- **Sinônimos removidos por completo.** Saíram o mapa embarcado, `UserSynonymMap`,
+  `loadSynonymLookup`, a expansão por OR em `buildFTSQuery`, `SynonymRule`, a aba **Sinônimos**,
+  as rotas `GET|POST /api/settings/synonyms`, o componente Alpine `synonymConfig` e os ícones
+  `shuffle`/`sinonimos`. A busca continua idêntica para o usuário, mas sem expansão: cada palavra
+  vira um prefixo nas colunas `tags`, `arquivo`, `secao` e `texto`. `HasOriginalTerm` mantém o
+  desempate entre termo exato e fallback fuzzy (LIKE), que antes também separava o termo original
+  do sinônimo.
+- **Novo tipo `calculo` ("nota de cálculo").** É uma nota markdown comum que nasce com a tag
+  canônica `calculo` e um bloco ` ```calc ` vazio — o mesmo nó `calcBlock` que o comando
+  `/calculator` insere no editor. O motor de cálculo não foi duplicado: os resultados continuam
+  efêmeros (decorations do ProseMirror) e o markdown guarda apenas as expressões. O tipo dá
+  ícone (`calculator`, laranja `#F97316`), rótulo **Cálculo** e o atalho **Criar → + Cálculo**
+  (`GET /calculo`), que sempre cria uma nota nova (`notes/calculo-<cuid2>.md`).
+- **Detecção e vocabulário.** `DetectNoteType` reconhece `calculo`, `cálculo`, `calc` e
+  `calculation`; `NormalizeNoteTipo` mapeia `calc`, `cálculo`, `calculation` e `calculos`;
+  `FrontmatterTipo(NoteTypeCalculo)` grava `calculo`. `DetectNoteTypeFromContent` aceita
+  `type: calculo`/`tipo: calculo`/`tipo: cálculo` no frontmatter como fallback para notas antigas
+  sem a tag persistida. A tag `calculo` entra em `InternalTypeTags` (não aparece como chip para o
+  usuário). O tipo abre em `/editor` e participa do filtro `tipo:calculo` da busca e do Acervo.
+- **Persistência da tag no nascimento.** `HandleCalculo` chama `SetFileTags` **antes** de
+  `Notes.Save`, porque `ensureNoteTipoField` lê as tags persistidas para gravar `tipo:` já na
+  primeira gravação. O conteúdo inicial (`CalculoNoteEmptyContent`) também traz a tag no
+  frontmatter, então o índice a preserva.
+
+### 27.1 Avaliação do editor do Basalt (não implementado)
+
+O editor do `basalt/` **não é um substituto direto** do TipTap atual. Ele é composto por
+`<textarea id="note-editor">` + overlay de syntax highlight (`#syntax-overlay`) + preview
+`marked`/DOMPurify, com autosave/outbox offline próprio. Portanto:
+
+- o Basalt já resolve bem o que é **texto markdown**: wikilinks, blocos de consulta
+  (`basalt-query`), Mermaid, markmap, frontmatter e mídia incorporada têm renderizador no preview;
+- mas ele não tem o modelo de nós do ProseMirror que sustenta a experiência atual do TON-618:
+  WYSIWYG, menus `/` e de seleção, tabelas editáveis, normalização de colagem, upload de imagem
+  inline, autocomplete de wikilink e, principalmente, o `calcBlock` com resultados calculados em
+  decorações ao vivo;
+- trocar o TipTap pelo textarea do Basalt exigiria reimplementar o `calcBlock` no preview (ou
+  aceitar a perda dos resultados na edição), refazer a integração de salvar/renomear/backlinks e
+  abrir mão do editor rico em troca de um editor de texto com preview;
+- a avaliação é **apenas de viabilidade**; nenhum código do Basalt foi incorporado. A decisão é
+  manter o TipTap e usar o Basalt como referência de autosave/outbox offline, não como editor
+  substituto.
+
+**Regressão:** testes Go cobrem a criação da nota de cálculo (redirect, tag, frontmatter,
+bloco `calc`, tipo detectado), a criação de notas distintas por acesso, a preservação da edição e
+o fallback por frontmatter; `data_test.go` e `note_tipo_test.go` cobrem tag canônica, aliases e
+normalização; `icons` cobre o ícone `calculator` nos dois renderizadores e a paridade de nomes;
+`search` cobre a query FTS sem expansão de sinônimos. `gofmt`, `go vet`, `go test ./...`,
+`templ generate` (v0.3.1070), `tsc --noEmit` e `node build.js` verdes.
+⚠️ Reiniciar o servidor: `navbar_templ.go`, `settings_modal_templ.go`, `icons_templ.go` e os
+bundles `static/database.js`/`static/app.css` mudaram.

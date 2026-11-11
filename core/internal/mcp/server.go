@@ -31,14 +31,14 @@ const serverInstructions = `Servidor de LEITURA do acervo pessoal TON-618 (notas
   completo), list_notes (metadados), query_notes (linguagem de consulta) e
   backlinks (links de entrada/saída).
 - search_notes entende texto livre e os filtros da busca do app:
-  tags:tag, tipo:mapa_mental, tipo:desenho, tipo:tabulator, tipo:semanal, etc.
+  tags:tag, tipo:mapa_mental, tipo:desenho, tipo:tabulator, tipo:calculo, etc.
   Vários termos são combinados; use aspas para uma expressão.
 - query_notes recebe o YAML de um bloco ` + "```consulta" + `:
   tipo: notas | tarefas | hierarquia; filtros texto:, tags:, sem-tags:, pasta:,
   onde: (expressão CEL), ordenar: campo[:asc|desc], limite:, colunas:.
   É a mesma linguagem documentada em docs/linguagem-de-consulta.md.
 - O campo tipo: do frontmatter usa o vocabulário PT: nota, desenho, mapa_mental,
-  tabulator, semanal, pdf, anexo, artigo, captura. A hierarquia é declarada em
+  tabulator, calculo, pdf, anexo, artigo, captura. A hierarquia é declarada em
   pai: (nome ou [[wikilink]]).
 - O índice FTS não indexa o CORPO de desenhos, mapas mentais e tabelas
   Tabulator. Para esses tipos, encontre a nota por título/tag e leia com
