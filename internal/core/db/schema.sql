@@ -1,0 +1,91 @@
+CREATE TABLE IF NOT EXISTS documents (
+    id          TEXT PRIMARY KEY,
+    tipo        TEXT DEFAULT '',
+    arquivo     TEXT DEFAULT '',
+    secao       TEXT DEFAULT '',
+    texto       TEXT DEFAULT '',
+    tags        TEXT DEFAULT '',
+    pagina      INTEGER DEFAULT 0,
+    ordem       INTEGER DEFAULT 0,
+    timestamp   TEXT DEFAULT '',
+    created_at  TEXT DEFAULT '',
+    hash        TEXT DEFAULT '',
+    note_type   TEXT DEFAULT ''
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
+    doc_id,
+    tipo,
+    arquivo,
+    secao,
+    texto,
+    tags,
+    note_type,
+    tokenize='unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS popularity (
+    arquivo TEXT PRIMARY KEY,
+    count   INTEGER DEFAULT 1,
+    weight REAL DEFAULT 1.0,
+    last_interacted_at TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+    arquivo TEXT NOT NULL,
+    tag     TEXT NOT NULL,
+    PRIMARY KEY (arquivo, tag)
+);
+
+CREATE TABLE IF NOT EXISTS links (
+    from_file TEXT NOT NULL,
+    to_file   TEXT NOT NULL,
+    PRIMARY KEY (from_file, to_file)
+);
+
+CREATE TABLE IF NOT EXISTS file_mods (
+    arquivo TEXT PRIMARY KEY,
+    mtime   TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+    filename  TEXT PRIMARY KEY,
+    mtime     TEXT DEFAULT '',
+    content   TEXT DEFAULT '',
+    keywords TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_arquivo ON documents(arquivo);
+CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
+CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
+CREATE INDEX IF NOT EXISTS idx_links_to_file ON links(to_file);
+CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+
+CREATE TABLE IF NOT EXISTS day_activities (
+    id TEXT PRIMARY KEY,
+    day TEXT DEFAULT '',
+    start_time TEXT DEFAULT '',
+    end_time TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_day_activities_day ON day_activities(day);
+
+CREATE TABLE IF NOT EXISTS day_activity_seeds (
+    day TEXT PRIMARY KEY,
+    source_day TEXT DEFAULT '',
+    copied INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS notifications_log (
+    id TEXT PRIMARY KEY,
+    type TEXT,
+    sent_at TEXT
+);

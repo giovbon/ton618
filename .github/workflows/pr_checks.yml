@@ -92,7 +92,7 @@ jobs:
         #
         # ⚠️ Precisa vir ANTES dos testes unitários: os bundles de `static/` são
         # artefatos de build (gitignored) e há guardas que leem
-        # `static/editor-init.js` e `static/js/app.js` (ex.: query-panel/todos-badge).
+        # `static/editor-init.js` e `static/js/app.js` (ex.: guards de bundle).
         # Num checkout limpo eles não existem até este passo rodar.
         working-directory: ./core/web
         run: node build.js --dev
