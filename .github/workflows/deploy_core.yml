@@ -71,14 +71,14 @@ jobs:
         run: go vet ./...
 
       - name: 🟢 Instalar deps do web
-        working-directory: ./web
+        working-directory: web
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
           NODE_OPTIONS: "--no-network-family-autoselection"
         run: npm ci --legacy-peer-deps
 
       - name: 🧪 Typecheck do frontend (tsc --noEmit)
-        working-directory: ./web
+        working-directory: web
         run: npm run typecheck
 
   bump-version:
@@ -211,7 +211,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: 🧪 Rodar testes unitários e Build JS
-        working-directory: ./web
+        working-directory: web
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
           NODE_OPTIONS: "--no-network-family-autoselection"
@@ -256,7 +256,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./core/Dockerfile
+          file: ./Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: ${{ steps.imagetags.outputs.tags }}
           push: true
@@ -272,5 +272,5 @@ jobs:
           echo "| **Imagem** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tag** | \`${{ needs.bump-version.outputs.tag || 'latest (sem release)' }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Bump** | \`${{ needs.bump-version.outputs.bump }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} \vert{}" >> $GITHUB_STEP_SUMMARY
-          echo "| **Modo** | ${{ steps.platforms.outputs.mode }} \vert{}" >> $GITHUB_STEP_SUMMARY
+          echo "| **Plataformas** | ${{ steps.platforms.outputs.platforms }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Modo** | ${{ steps.platforms.outputs.mode }} |" >> $GITHUB_STEP_SUMMARY
