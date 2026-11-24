@@ -1,0 +1,151 @@
+/* ── Tema compartilhado das tabelas Tabulator do TON-618 ──────────────────
+   Fonte ÚNICA do visual das duas tabelas Tabulator do app: a nota Tabulator
+   (/tabulator) e a administração de notas (/database). Aplicado pela classe
+   `.ton-tabulator` no container — que é a PRÓPRIA raiz da tabela (o Tabulator
+   aplica `.tabulator` no elemento do container; ver DECISIONS §14.6 e §14.8).
+   Paleta zinc do app (fundo #09090b) com contraste reforçado: cabeçalho
+   destacado, zebra sutil, separadores visíveis e foco/ordenação em esmeralda.
+   Ajustes de LAYOUT (padding das células, largura total, árvore de hierarquia)
+   ficam em cada página — aqui só o desenho e as cores. */
+
+    /* O Tabulator aplica a classe .tabulator NO PRÓPRIO container, então
+       .ton-tabulator É a raiz da tabela — por isso os seletores abaixo não
+       repetem ".tabulator" (um descendente .tabulator nunca existe). */
+    .ton-tabulator.tabulator {
+        border: none !important;
+        background-color: transparent !important;
+        font-size: 13px;
+    }
+    .ton-tabulator .tabulator-tableholder {
+        background-color: transparent !important;
+    }
+    /* ── Cabeçalho ── */
+    .ton-tabulator .tabulator-header {
+        background-color: #1b1b20 !important;
+        border-bottom: 2px solid #3f3f46 !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col {
+        background-color: #1b1b20 !important;
+        border-right: 1px solid #33333a !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-col-title {
+        color: #e4e4e7 !important;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+    }
+    /* Coluna ordenada: cabeçalho e seta em destaque. */
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="ascending"],
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="descending"] {
+        background-color: #26262e !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="ascending"] .tabulator-col-title,
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="descending"] .tabulator-col-title {
+        color: #34d399 !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
+        border-bottom-color: #52525b !important;
+        border-top-color: #52525b !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="ascending"] .tabulator-arrow {
+        border-bottom-color: #34d399 !important;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col[aria-sort="descending"] .tabulator-arrow {
+        border-top-color: #34d399 !important;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .ton-tabulator .tabulator-header .tabulator-col.tabulator-sortable.tabulator-col-sorter-element:hover {
+            background-color: #2c2c35 !important;
+        }
+    }
+    /* ── Linhas e células ── */
+    .ton-tabulator .tabulator-tableholder .tabulator-table {
+        background-color: transparent !important;
+        color: #e4e4e7 !important;
+    }
+    .ton-tabulator .tabulator-row {
+        background-color: #121215 !important;
+        border-bottom: 1px solid #232329 !important;
+        color: #e4e4e7 !important;
+    }
+    .ton-tabulator .tabulator-row.tabulator-row-even {
+        background-color: #18181d !important;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .ton-tabulator .tabulator-row.tabulator-selectable:hover {
+            background-color: #24242c !important;
+        }
+    }
+    .ton-tabulator .tabulator-row .tabulator-cell {
+        border-right: 1px solid #26262c !important;
+        padding: 6px 8px;
+    }
+    /* Célula em edição: borda e anel em esmeralda. */
+    .ton-tabulator .tabulator-row .tabulator-cell.tabulator-editing {
+        background-color: #0b0b0e !important;
+        border: 1px solid #10b981 !important;
+        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.25);
+        padding: 5px 7px;
+    }
+    .ton-tabulator .tabulator-row .tabulator-cell.tabulator-editing input,
+    .ton-tabulator .tabulator-row .tabulator-cell.tabulator-editing select {
+        background: transparent !important;
+        color: #f4f4f5 !important;
+        font-size: 13px;
+        outline: none !important;
+    }
+    /* Placeholder (tabela sem registros). */
+    .ton-tabulator .tabulator-placeholder .tabulator-placeholder-contents {
+        color: #71717a !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+    }
+    /* ── Filtro por coluna (input no cabeçalho) ── */
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-header-filter input {
+        background-color: #0f0f12 !important;
+        border: 1px solid #3f3f46 !important;
+        border-radius: 5px;
+        color: #e4e4e7 !important;
+        font-size: 11px;
+        padding: 3px 7px;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-header-filter input::placeholder {
+        color: #52525b;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-header-filter input:focus {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+        outline: none;
+    }
+    /* ── Ícone ⋮ do menu do cabeçalho ── */
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-header-popup-button {
+        color: #52525b !important;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .ton-tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-header-popup-button:hover {
+        color: #34d399 !important;
+        opacity: 1 !important;
+    }
+    /* ── Barra de rolagem ── */
+    .ton-tabulator .tabulator-tableholder {
+        scrollbar-color: #3f3f46 #111113;
+        scrollbar-width: thin;
+    }
+    .ton-tabulator .tabulator-tableholder::-webkit-scrollbar {
+        height: 10px;
+        width: 10px;
+    }
+    .ton-tabulator .tabulator-tableholder::-webkit-scrollbar-track {
+        background: #111113;
+    }
+    .ton-tabulator .tabulator-tableholder::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 6px;
+    }
+    .ton-tabulator .tabulator-tableholder::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+    }

@@ -1,0 +1,577 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+
+// --- Mock Browser Environment ---
+global.window = {};
+global.localStorage = {
+  store: {},
+  getItem(key) { return this.store[key] || null; },
+  setItem(key, value) { this.store[key] = value.toString(); },
+  clear() { this.store = {}; }
+};
+global.FormData = class FormData {
+  constructor() { this.data = new Map(); }
+  append(k, v) { this.data.set(k, v); }
+};
+global.document = {
+  getElementById: () => null,
+  addEventListener: () => {},
+  activeElement: null
+};
+
+let fetchCalls = [];
+global.fetch = async (url, options) => {
+  fetchCalls.push({ url, options });
+  return { ok: true, status: 200, json: async () => ({ ok: true }) };
+};
+
+// crypto mock for generateHash
+global.crypto = {
+  subtle: {
+    digest: async (algo, data) => {
+      // Return a dummy ArrayBuffer of 32 bytes (SHA-256 size)
+      return new Uint8Array(32).fill(42).buffer;
+    }
+  }
+};
+global.TextEncoder = class TextEncoder {
+  encode(text) { return new Uint8Array(Buffer.from(text)); }
+};
+
+// Load the file content
+const scriptPath = path.join(__dirname, '..', 'static', 'editor-common.js');
+const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+
+// Evaluate the script in this context
+eval(scriptContent);
+
+const EditorCommon = global.window.EditorCommon;
+
+test('EditorCommon is loaded', (t) => {
+  assert.ok(EditorCommon);
+  assert.strictEqual(typeof EditorCommon.generateHash, 'function');
+});
+
+test('getAuthHeaders handles tokens', (t) => {
+  global.localStorage.clear();
+  
+  // No token
+  assert.deepStrictEqual(EditorCommon.getAuthHeaders(), {});
+
+  // With token without basic
+  global.localStorage.setItem('ton_auth', 'mysecrettoken');
+  assert.deepStrictEqual(EditorCommon.getAuthHeaders(), {
+    'Authorization': 'Basic mysecrettoken'
+  });
+
+  // With token with basic
+  global.localStorage.setItem('ton_auth', 'Basic othertoken');
+  assert.deepStrictEqual(EditorCommon.getAuthHeaders(), {
+    'Authorization': 'Basic othertoken'
+  });
+});
+
+test('generateHash generates consistent length hash', async (t) => {
+  const hash = await EditorCommon.generateHash('test data');
+  assert.strictEqual(typeof hash, 'string');
+  assert.strictEqual(hash.length, 64); // 32 bytes * 2 hex chars
+});
+
+test('httpSaveNote makes correct fetch call', async (t) => {
+  fetchCalls = [];
+  global.localStorage.setItem('ton_auth', 'test');
+  
+  await EditorCommon.httpSaveNote('notes/test.md', 'content', 'tag1,tag2', true);
+  
+  assert.strictEqual(fetchCalls.length, 1);
+  assert.strictEqual(fetchCalls[0].url, '/api/note/save');
+  assert.strictEqual(fetchCalls[0].options.method, 'POST');
+  assert.strictEqual(fetchCalls[0].options.headers['Authorization'], 'Basic test');
+  assert.ok(fetchCalls[0].options.body instanceof global.FormData);
+  assert.strictEqual(fetchCalls[0].options.body.data.get('filename'), 'notes/test.md');
+  assert.strictEqual(fetchCalls[0].options.body.data.get('silent'), 'true');
+});
+
+test('setStatus updates DOM element correctly', (t) => {
+  const el = { textContent: '', className: '' };
+  
+  EditorCommon.setStatus(el, 'saved');
+  assert.strictEqual(el.textContent, '\u2713');
+  assert.ok(el.className.includes('emerald'));
+
+  EditorCommon.setStatus(el, 'saving');
+  assert.strictEqual(el.textContent, '\u27F3');
+  assert.ok(el.className.includes('sky'));
+
+  EditorCommon.setStatus(el, 'dirty');
+  assert.strictEqual(el.textContent, '\u25CF');
+  assert.ok(el.className.includes('amber'));
+});
+
+// ── Paste: markdown vs HTML ──
+
+test('shouldPasteAsMarkdown: texto puro com markdown', (t) => {
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('**negrito**', ''), true);
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('# Titulo', ''), true);
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('- item', ''), true);
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('[x](http://a.com)', ''), true);
+});
+
+test('shouldPasteAsMarkdown: texto puro sem markdown', (t) => {
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('texto simples', ''), false);
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('', ''), false);
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown('', '<p>so html</p>'), false);
+});
+
+test('shouldPasteAsMarkdown: HTML de fachada (sem formatacao real) usa markdown', (t) => {
+  // Caso do bug: editores de codigo / PDFs / paineis de IA colocam o MESMO texto
+  // em text/html, embrulhado em div/p, com os asteriscos crus.
+  const text = '**Importante**: veja o *trecho* abaixo';
+  const flatHtml = '<div>**Importante**: veja o *trecho* abaixo</div>';
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown(text, flatHtml), true);
+
+  const pWrapped = '<p><span style="font-family: monospace">**Importante**</span></p>';
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown(text, pWrapped), true);
+
+  assert.strictEqual(EditorCommon.htmlHasRealFormatting(flatHtml), false);
+  assert.strictEqual(EditorCommon.htmlHasRealFormatting('<div><p>x<br></p></div>'), false);
+});
+
+test('shouldPasteAsMarkdown: HTML com formatacao real tem prioridade', (t) => {
+  const text = '**Importante**: veja o trecho';
+  const richHtml = '<p><strong>Importante</strong>: veja o trecho</p>';
+  assert.strictEqual(EditorCommon.shouldPasteAsMarkdown(text, richHtml), false);
+
+  // Qualquer tag que carregue semantica visual deve manter o HTML como fonte.
+  ['<h1>t</h1>', '<ul><li>x</li></ul>', '<blockquote>c</blockquote>', '<code>x</code>',
+   '<table><tr><td>c</td></tr></table>', '<a href="http://a.com">l</a>', '<img src="a.png">',
+   '<em>it</em>', '<u>u</u>', '<del>d</del>'].forEach((html) => {
+    assert.strictEqual(EditorCommon.htmlHasRealFormatting(html), true, html);
+    assert.strictEqual(EditorCommon.shouldPasteAsMarkdown(text, html), false, html);
+  });
+});
+
+test('textHasMarkdownSyntax reconhece marcadores', (t) => {
+  assert.strictEqual(EditorCommon.textHasMarkdownSyntax('2 * 3 = 6'), true);
+  assert.strictEqual(EditorCommon.textHasMarkdownSyntax('texto'), false);
+  assert.strictEqual(EditorCommon.textHasMarkdownSyntax('linha\n- item'), true);
+});
+
+// ── normalizePastedHtml: espaço morto do clipboard ──
+
+test('normalizePastedHtml remove blocos vazios', (t) => {
+  // Causa clássica das "linhas em branco gigantes" ao colar.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><p></p><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><p><br></p><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><p>   </p><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><p>&nbsp;</p><p>b</p>'), '<p>a</p><p>b</p>');
+  // Caso de chats/painéis: separação feita com <div> vazio.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<div>a</div><div></div><div>b</div>'), '<div>a</div><div>b</div>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<div>a</div><div><br></div><div>b</div>'), '<div>a</div><div>b</div>');
+  // Bloco vazio aninhado (o de dentro esvazia o de fora).
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<div><p></p></div><p>x</p>'), '<p>x</p>');
+});
+
+test('normalizePastedHtml colapsa quebras duplas', (t) => {
+  // <br><br> = uma linha em branco inteira no editor.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a<br><br>b</p>'), '<p>a<br>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a<br/><br/><br/>b</p>'), '<p>a<br>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a<br>&nbsp;<br>b</p>'), '<p>a<br>b</p>');
+  // Quebra simples é preservada.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a<br>b</p>'), '<p>a<br>b</p>');
+});
+
+test('normalizePastedHtml remove inline vazio (span com nbsp/espaço)', (t) => {
+  // Padrão muito comum em painéis de IA/chat: o bloco "vazio" tem um span dentro.
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<p>a</p><p><span>&nbsp;</span></p><p>b</p>'),
+    '<p>a</p><p>b</p>'
+  );
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<p>a</p><p><span style="color:red"></span></p><p>b</p>'),
+    '<p>a</p><p>b</p>'
+  );
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<div>a</div><div><font> </font></div><div>b</div>'),
+    '<div>a</div><div>b</div>'
+  );
+  // Span com conteúdo NÃO é removido.
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<p><span>texto</span></p>'),
+    '<p><span>texto</span></p>'
+  );
+});
+
+test('normalizePastedHtml remove brs órfãos nas bordas e entre blocos', (t) => {
+  // <br> solto entre blocos (separador de parágrafo de vários apps).
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><br><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p><br><br><br><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a</p>&nbsp;<p>b</p>'), '<p>a</p><p>b</p>');
+  // <br> no fim ou no começo de um parágrafo (virava linha extra).
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>a<br></p><p>b</p>'), '<p>a</p><p>b</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p><br>a</p><p>b</p>'), '<p>a</p><p>b</p>');
+  // Quebra NO MEIO do parágrafo é intencional e fica.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>l1<br>l2</p>'), '<p>l1<br>l2</p>');
+});
+
+test('normalizePastedHtml aperta listas loose', (t) => {
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<ol><li><p>a</p></li><li><p>b</p></li></ol>'),
+    '<ol><li>a</li><li>b</li></ol>'
+  );
+  // Item com 2+ parágrafos é preservado (não é wrapper redundante).
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<li><p>a</p><p>b</p></li>'),
+    '<li><p>a</p><p>b</p></li>'
+  );
+  // Item vazio some.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<ul><li></li><li>x</li></ul>'), '<ul><li>x</li></ul>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<ul><li><p></p></li><li>x</li></ul>'), '<ul><li>x</li></ul>');
+});
+
+test('normalizePastedHtml preserva conteúdo e remove script/style', (t) => {
+  // Conteúdo normal passa intacto (garantia de não regressão).
+  const normal = '<p><strong>Importante</strong>: veja <code>AGENTS.md</code></p><ul><li>a</li></ul>';
+  assert.strictEqual(EditorCommon.normalizePastedHtml(normal), normal);
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>texto</p>'), '<p>texto</p>');
+  // Nunca traz script/style para dentro da nota.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<style>p{color:red}</style><p>ok</p>'), '<p>ok</p>');
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<p>ok</p><script>alert(1)</script>'), '<p>ok</p>');
+  // Código com marcações HTML escapadas não é tocado.
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<pre><code>&lt;br&gt;&lt;br&gt;</code></pre>'),
+    '<pre><code>&lt;br&gt;&lt;br&gt;</code></pre>'
+  );
+  // Whitespace de <pre> é significativo: não pode ser achatado.
+  assert.strictEqual(EditorCommon.normalizePastedHtml('<pre>  x  </pre>'), '<pre>  x  </pre>');
+  // Célula de tabela vazia é ESTRUTURA, não espaço morto.
+  assert.strictEqual(
+    EditorCommon.normalizePastedHtml('<table><tr><td></td><td>x</td></tr></table>'),
+    '<table><tr><td></td><td>x</td></tr></table>'
+  );
+  assert.strictEqual(EditorCommon.normalizePastedHtml(''), '');
+});
+
+test('normalizePastedHtml no cenário real de painel de IA', (t) => {
+  // Payload representativo do que um painel de IA coloca no clipboard:
+  // HTML com formatação real + blocos vazios de separação + lista loose.
+  const colado =
+    '<div><p>Esse erro significa que o Node.js <strong>não encontrou</strong> ' +
+    '<code>yargs</code>.</p><div><br></div><p>Isso acontece por:</p>' +
+    '<ol><li><p>Dependências não instaladas.</p></li><li><p><span>&nbsp;</span></p></li>' +
+    '<li><p>Pasta <code>node_modules</code> corrompida.</p></li></ol><p><br></p></div>';
+
+  const esperado =
+    '<div><p>Esse erro significa que o Node.js <strong>não encontrou</strong> ' +
+    '<code>yargs</code>.</p><p>Isso acontece por:</p>' +
+    '<ol><li>Dependências não instaladas.</li>' +
+    '<li>Pasta <code>node_modules</code> corrompida.</li></ol></div>';
+
+  assert.strictEqual(EditorCommon.normalizePastedHtml(colado), esperado);
+  // Nenhuma linha em branco sobrou.
+  assert.ok(!/<p>\s*<\/p>|<p><br\s*\/?><\/p>|<div><br\s*\/?><\/div>/.test(EditorCommon.normalizePastedHtml(colado)));
+});
+
+// ── Rename sem recarregar a página ──
+
+test('renameChangesEditor só bloqueia quando muda de editor', (t) => {
+  // Nome comum no editor markdown → pode aplicar na página (sem reload).
+  assert.strictEqual(EditorCommon.renameChangesEditor('minha-nota', '/editor'), false);
+  assert.strictEqual(EditorCommon.renameChangesEditor('notes/minha-nota.md', '/editor'), false);
+  assert.strictEqual(EditorCommon.renameChangesEditor('2026-S38', '/editor'), false);
+  // Nome que joga para outro editor → precisa do servidor (reload).
+  assert.strictEqual(EditorCommon.renameChangesEditor('meu-desenho', '/editor'), true);
+  assert.strictEqual(EditorCommon.renameChangesEditor('notes/xyz-drawing.md', '/editor'), true);
+  assert.strictEqual(EditorCommon.renameChangesEditor('mapa-mindmap', '/editor'), true);
+  assert.strictEqual(EditorCommon.renameChangesEditor('diagrama-markmap', '/editor'), true);
+  // Já estou no editor especializado → não muda nada, segue sem reload.
+  assert.strictEqual(EditorCommon.renameChangesEditor('meu-desenho', '/drawing'), false);
+  assert.strictEqual(EditorCommon.renameChangesEditor('meu-mindmap', '/mindmap'), false);
+  // Case-insensitive e prefixo notes/.
+  assert.strictEqual(EditorCommon.renameChangesEditor('Notes/MEU-DESENHO.md', '/editor'), true);
+  assert.strictEqual(EditorCommon.renameChangesEditor('', '/editor'), false);
+});
+
+test('applyRenameToUI atualiza URL, título, input e sidebar sem reload', (t) => {
+  // Ambiente mínimo: histórico e body falsos (a função é defensiva por design).
+  const chamadas = { replaceState: [], eventos: [] };
+  global.window.location = { pathname: '/editor' };
+  global.window.history = {
+    replaceState: (a, b, url) => chamadas.replaceState.push(url),
+  };
+  global.document.title = 'Editor - nota-antiga.md';
+  global.document.body = {
+    dispatchEvent: (ev) => chamadas.eventos.push(ev.type),
+  };
+
+  const input = { value: 'nota-antiga', dataset: { filename: 'notes/nota-antiga.md' } };
+
+  const retorno = EditorCommon.applyRenameToUI({
+    newName: 'nota-nova',
+    filenameInput: input,
+    base: '/editor',
+  });
+
+  // URL trocada sem reload (replaceState, não pushState → histórico limpo).
+  assert.strictEqual(retorno, 'notes/nota-nova.md');
+  assert.strictEqual(chamadas.replaceState.length, 1);
+  assert.strictEqual(chamadas.replaceState[0], '/editor?file=notes%2Fnota-nova.md');
+
+  // Input: value exibido e data-filename (fonte de salvar/excluir/duplicar).
+  assert.strictEqual(input.value, 'nota-nova');
+  assert.strictEqual(input.dataset.filename, 'notes/nota-nova.md');
+
+  // Título da aba: mantém o prefixo do editor atual.
+  assert.strictEqual(global.document.title, 'Editor - nota-nova');
+
+  // Sidebar (HTMX) recarregada pelo evento existente.
+  assert.deepStrictEqual(chamadas.eventos, ['reload-sidebar']);
+
+  // Prefixo preservado de outros editores (ex: Desenho).
+  global.document.title = 'Desenho - desenho-antigo';
+  EditorCommon.applyRenameToUI({ newName: 'desenho-novo', filenameInput: input, base: '/drawing' });
+  assert.strictEqual(global.document.title, 'Desenho - desenho-novo');
+
+  delete global.window.history;
+  delete global.document.body;
+  delete global.window.location;
+});
+
+test('applyRenameToUI não quebra em ambiente sem DOM/history', (t) => {
+  // Defensivo: sem history/body o rename ainda devolve o filename normalizado.
+  const input = { value: '', dataset: {} };
+  const nome = EditorCommon.applyRenameToUI({ newName: 'sem-dom', filenameInput: input });
+  assert.strictEqual(nome, 'notes/sem-dom.md');
+  assert.strictEqual(input.value, 'sem-dom');
+  assert.strictEqual(input.dataset.filename, 'notes/sem-dom.md');
+});
+
+
+// ── stripNbspParagraphs: lixo do placeholder de parágrafo vazio ──
+
+test('stripNbspParagraphs remove parágrafos de placeholder e preserva o resto', (t) => {
+  const md = [
+    '# Título',
+    '',
+    '&nbsp;',
+    'texto normal',
+    '\\&nbsp;',
+    '\u00a0',
+    '  &nbsp;  ',
+    '',
+    '- item',
+  ].join('\n');
+
+  const out = EditorCommon.stripNbspParagraphs(md);
+
+  // Nenhuma das três formas do placeholder sobrevive.
+  assert.ok(!/&nbsp;/i.test(out), 'não deveria sobrar &nbsp;: ' + JSON.stringify(out));
+  assert.ok(out.indexOf('\u00a0') === -1, 'não deveria sobrar U+00A0');
+
+  // O conteúdo real continua intacto.
+  assert.ok(out.includes('# Título'));
+  assert.ok(out.includes('texto normal'));
+  assert.ok(out.includes('- item'));
+});
+
+test('stripNbspParagraphs preserva &nbsp; no meio de uma frase', (t) => {
+  // Uso legítimo (evitar quebra de linha) não é afetado pela limpeza.
+  const md = 'Rua Amazonas&nbsp;123, centro';
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(md), md);
+});
+
+test('stripNbspParagraphs tolera entrada vazia/nula', (t) => {
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(''), '');
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(null), null);
+  assert.strictEqual(EditorCommon.stripNbspParagraphs(undefined), undefined);
+});
+
+// ── downloadMarkdown: botão de baixar o .md exato da nota ──
+
+test('downloadMarkdown baixa o conteúdo exato com o basename do arquivo', async (t) => {
+  const OrigBlob = global.Blob;
+  const OrigURL = global.URL;
+  const cap = { blobs: [], anchors: [], revoked: [], appended: 0, removed: 0 };
+
+  global.Blob = class Blob {
+    constructor(parts, opts) {
+      this.content = parts.join('');
+      this.type = (opts && opts.type) || '';
+      cap.blobs.push(this);
+    }
+  };
+  global.URL = {
+    createObjectURL: () => 'blob:fake-nota',
+    revokeObjectURL: (u) => cap.revoked.push(u),
+  };
+  global.document.createElement = (tag) => {
+    const a = {
+      tagName: tag,
+      style: {},
+      clicked: false,
+      click() { this.clicked = true; },
+    };
+    cap.anchors.push(a);
+    return a;
+  };
+  global.document.body = {
+    appendChild: () => { cap.appended++; },
+    removeChild: () => { cap.removed++; },
+  };
+
+  try {
+    const conteudo = '---\ntipo: nota\ntags: [a, b]\n---\n# Título\n\n[[outra-nota]]';
+    const nome = EditorCommon.downloadMarkdown('notes/minha nota.md', conteudo);
+
+    // Só o basename vai para o disco do usuário (sem o prefixo notes/).
+    assert.strictEqual(nome, 'minha nota.md');
+
+    // O conteúdo é passado intacto, com MIME de markdown.
+    assert.strictEqual(cap.blobs[0].content, conteudo);
+    assert.strictEqual(cap.blobs[0].type, 'text/markdown;charset=utf-8');
+
+    const a = cap.anchors[0];
+    assert.strictEqual(a.download, 'minha nota.md');
+    assert.strictEqual(a.href, 'blob:fake-nota');
+    assert.strictEqual(a.clicked, true);
+    assert.strictEqual(cap.appended, 1);
+    assert.strictEqual(cap.removed, 1);
+
+    // Extensão ausente ganha .md; filename vazio cai no padrão.
+    assert.strictEqual(EditorCommon.downloadMarkdown('relatorio', 'x'), 'relatorio.md');
+    assert.strictEqual(EditorCommon.downloadMarkdown('', 'x'), 'nota.md');
+
+    // O blob é liberado depois do clique (sem vazar memória): um por download.
+    await new Promise((r) => setTimeout(r, 5));
+    assert.strictEqual(cap.revoked.length, 3);
+    assert.deepStrictEqual([...new Set(cap.revoked)], ['blob:fake-nota']);
+  } finally {
+    global.Blob = OrigBlob;
+    global.URL = OrigURL;
+    delete global.document.createElement;
+    delete global.document.body;
+  }
+});
+
+// ── downloadSvgPng: export do mapa mental renderizado como PNG ──
+
+test('svgPngScale: 2x por padrão, com piso de resolução e teto de pixels', (t) => {
+  // Padrão: já há resolução de sobra, mantém a ampliação 2x.
+  assert.strictEqual(EditorCommon.svgPngScale(1200, 900, {}), 2);
+
+  // Mapa pequeno: sobe a escala até o piso (1600px no maior lado).
+  const boost = EditorCommon.svgPngScale(396, 296, {});
+  assert.ok(boost > 2, 'a escala deve ser ampliada até o piso de resolução');
+  assert.ok(Math.abs(296 * boost - 1600) < 1e-6, 'maior lado atinge o piso');
+
+  // Teto: nenhum lado ultrapassa maxEdge.
+  const capped = EditorCommon.svgPngScale(6000, 4000, { scale: 10, maxEdge: 8192 });
+  assert.ok(Math.abs(6000 * capped - 8192) < 1e-6, 'lado maior bate no teto');
+  assert.ok(4000 * capped <= 8192, 'lado menor fica dentro do teto');
+
+  // Entrada inválida cai em 1 (nunca NaN/Infinity).
+  assert.strictEqual(EditorCommon.svgPngScale(0, 100, {}), 1);
+  assert.strictEqual(EditorCommon.svgPngScale(NaN, 100, {}), 1);
+});
+
+test('downloadSvgPng: viewBox do conteúdo, escala ampliada e nome .png', async (t) => {
+  const OrigBlob = global.Blob;
+  const OrigURL = global.URL;
+  const cap = {
+    clicked: 0, appended: 0, removed: 0,
+    blobs: [], blobTypes: [], canvases: [], drawn: [], dataUrl: null,
+  };
+
+  global.Blob = class Blob {
+    constructor(parts, opts) { this.content = parts.join(''); this.type = (opts && opts.type) || ''; cap.blobs.push(this); }
+  };
+  global.URL = { createObjectURL: () => 'blob:fake-png', revokeObjectURL: () => {} };
+  global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+  global.XMLSerializer = class { serializeToString(el) { return '<svg viewBox="' + el.attrs.viewBox + '"></svg>'; } };
+  global.Image = class {
+    set src(v) { cap.dataUrl = v; setTimeout(() => this.onload && this.onload(), 0); }
+    get src() { return cap.dataUrl; }
+  };
+
+  const clone = {
+    style: {},
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    firstChild: null,
+    insertBefore() { throw new Error('não deve haver inserção de estilo quando as fontes não são embutidas'); },
+  };
+  const svgEl = {
+    getBBox: () => ({ x: 10, y: 20, width: 300, height: 200 }),
+    cloneNode: () => clone,
+    querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ width: 0, height: 0 }),
+  };
+
+  global.document.createElement = (tag) => {
+    if (tag === 'canvas') {
+      const canvas = {
+        width: 0, height: 0,
+        getContext: () => ({
+          fillStyle: '',
+          fillRect: () => {},
+          drawImage: (img, x, y, w, h) => cap.drawn.push([w, h]),
+        }),
+        toBlob: (cb, type) => { cap.blobTypes.push(type); cb(new Blob(['png'], { type })); },
+      };
+      cap.canvases.push(canvas);
+      return canvas;
+    }
+    return {
+      style: {}, href: '', download: '',
+      click() { cap.clicked++; },
+    };
+  };
+  global.document.body = {
+    appendChild: () => { cap.appended++; },
+    removeChild: () => { cap.removed++; },
+  };
+
+  try {
+    const nome = await EditorCommon.downloadSvgPng(svgEl, { filename: 'notes/meu mapa.md' });
+
+    // Só o basename vira nome de arquivo, com extensão .png.
+    assert.strictEqual(nome, 'meu mapa.png');
+
+    // viewBox cobre o bbox + margem padrão de 48px em todos os lados.
+    assert.strictEqual(clone.attrs.viewBox, '-38 -28 396 296');
+    assert.strictEqual(clone.attrs.xmlns, 'http://www.w3.org/2000/svg');
+    // A raiz não pinta fundo: o canvas é que pinta (imagem isolada).
+    assert.strictEqual(clone.style.background, 'transparent');
+
+    // Escala ampliada até o piso de resolução, aplicada ao SVG e ao canvas.
+    const vbW = 396, vbH = 296;
+    const scale = EditorCommon.svgPngScale(vbW, vbH, {});
+    const outW = Math.round(vbW * scale), outH = Math.round(vbH * scale);
+    assert.strictEqual(clone.style.width, outW + 'px');
+    assert.strictEqual(clone.style.height, outH + 'px');
+    assert.strictEqual(cap.canvases[0].width, outW);
+    assert.strictEqual(cap.canvases[0].height, outH);
+    assert.deepStrictEqual(cap.drawn[0], [outW, outH]);
+
+    // PNG de verdade, servido via data URL → canvas → blob → link temporário.
+    assert.strictEqual(cap.blobTypes[0], 'image/png');
+    assert.ok(cap.dataUrl.startsWith('data:image/svg+xml;charset=utf-8,'), 'SVG serializado como data URL');
+    assert.strictEqual(cap.clicked, 1);
+    assert.strictEqual(cap.appended, 1);
+    assert.strictEqual(cap.removed, 1);
+  } finally {
+    global.Blob = OrigBlob;
+    global.URL = OrigURL;
+    delete global.requestAnimationFrame;
+    delete global.XMLSerializer;
+    delete global.Image;
+    delete global.document.createElement;
+    delete global.document.body;
+  }
+});
+
+test('downloadSvgPng sem SVG devolve null (não tenta renderizar)', async (t) => {
+  assert.strictEqual(await EditorCommon.downloadSvgPng(null, {}), null);
+});
