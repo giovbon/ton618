@@ -34,19 +34,16 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
-          cache-dependency-path: /go.sum
+          cache-dependency-path: go.sum
 
       - name: 🟢 Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: 'npm'
-          cache-dependency-path: |
-            /package-lock.json
-            /web/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: 🔨 Gerar templates Templ
-        working-directory: ./core
         run: |
           TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
           if [ -n "$TEMPL_REQ" ]; then
@@ -56,15 +53,12 @@ jobs:
           fi
 
       - name: 📦 go mod tidy (depois do templ generate)
-        working-directory: ./core
         run: go mod tidy
 
       - name: 🧪 Testes Go
-        working-directory: ./core
         run: go test ./...
 
       - name: 🎨 Verificar formatação (gofmt)
-        working-directory: ./core
         run: |
           UNFORMATTED="$(gofmt -l cmd internal)"
           if [ -n "$UNFORMATTED" ]; then
@@ -74,18 +68,17 @@ jobs:
           fi
 
       - name: 🩺 go vet
-        working-directory: ./core
         run: go vet ./...
 
       - name: 🟢 Instalar deps do web
-        working-directory: .//web
+        working-directory: ./web
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
           NODE_OPTIONS: "--no-network-family-autoselection"
         run: npm ci --legacy-peer-deps
 
       - name: 🧪 Typecheck do frontend (tsc --noEmit)
-        working-directory: .//web
+        working-directory: ./web
         run: npm run typecheck
 
   bump-version:
@@ -199,10 +192,9 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
-          cache-dependency-path: /go.sum
+          cache-dependency-path: go.sum
 
       - name: 🔨 Gerar templates Templ
-        working-directory: ./core
         run: |
           TEMPL_REQ="$(grep -E 'github.com/a-h/templ[[:space:]]' go.mod | awk '{print $2}' | head -n1 || true)"
           if [ -n "$TEMPL_REQ" ]; then
@@ -216,10 +208,10 @@ jobs:
         with:
           node-version: 24
           cache: 'npm'
-          cache-dependency-path: /web/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: 🧪 Rodar testes unitários e Build JS
-        working-directory: .//web
+        working-directory: ./web
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
           NODE_OPTIONS: "--no-network-family-autoselection"
@@ -263,8 +255,8 @@ jobs:
       - name: 🔨 Build e Push
         uses: docker/build-push-action@v7
         with:
-          context: ./core
-          file: .//Dockerfile
+          context: .
+          file: ./core/Dockerfile
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: ${{ steps.imagetags.outputs.tags }}
           push: true
