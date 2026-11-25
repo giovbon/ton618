@@ -179,7 +179,6 @@ func TestProcessFile_Attachment_NaoRemoveDocsExistentes(t *testing.T) {
 		Secao:   "📦 preservar.zip",
 		Texto:   "Arquivos: documento.txt",
 	})
-	store.IndexFTS("att-preservar", "attachment", filename, "📦 preservar.zip", "Arquivos: documento.txt", "")
 	store.SetFileMod(filename, time.Now().Format(time.RFC3339))
 
 	// ProcessFile com tipo attachment nao deve deletar o documento

@@ -15,10 +15,8 @@ import (
 
 	"ton618/core/internal/core/config"
 	"ton618/core/internal/core/db"
-	"ton618/core/internal/core/featureflags"
 	"ton618/core/internal/core/services"
 	"ton618/core/internal/core/staticver"
-	"ton618/core/internal/features/dayplan"
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/features/search"
 	"ton618/core/internal/features/system"
@@ -71,12 +69,6 @@ func main() {
 	sysCtx := system.NewHandlerContext(cfg, store, backupService, notesService)
 	notesCtx := notes.NewHandlerContext(cfg, store, notesService, backupService, captureService)
 	searchCtx := search.NewHandlerContext(cfg, store)
-	flagsManager := featureflags.NewManager(store)
-	dayplanCtx := dayplan.NewHandlerContext(cfg, store, flagsManager)
-	// Cópia automática da Rotina ao iniciar o dia: hoje recebe a agenda do mesmo
-	// dia da semana anterior. As rotas também chamam SeedToday, o que cobre a
-	// virada do dia com o servidor já em execução.
-	dayplanCtx.SeedToday()
 
 	go func() {
 		slog.Info("Sincronizando notas do banco de dados em segundo plano...")
@@ -92,7 +84,6 @@ func main() {
 	r.Use(middleware.Recovery)
 	r.Use(middleware.SecurityHeadersMiddleware)
 	r.Use(middleware.WithRequestContext) // propaga contexto HTTP para cancelamento de queries
-	r.Use(middleware.WithFeatureFlags(flagsManager))
 	r.Use(chimiddleware.Compress(5, "text/html", "text/css", "application/javascript", "image/svg+xml"))
 
 	// Rotas públicas (estáticos) e, em seguida, as rotas dinâmicas protegidas por
@@ -104,7 +95,7 @@ func main() {
 			return middleware.BasicAuthMiddleware(next, cfg.AuthUser, cfg.AuthPass)
 		})
 		r.Mount("/debug", chimiddleware.Profiler())
-		SetupRoutes(r, sysCtx, notesCtx, searchCtx, dayplanCtx)
+		SetupRoutes(r, sysCtx, notesCtx, searchCtx)
 	})
 
 	srv := &http.Server{

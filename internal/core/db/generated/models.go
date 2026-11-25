@@ -8,33 +8,6 @@ import (
 	"database/sql"
 )
 
-type DayActivity struct {
-	ID          string         `json:"id"`
-	Day         sql.NullString `json:"day"`
-	StartTime   sql.NullString `json:"start_time"`
-	EndTime     sql.NullString `json:"end_time"`
-	Description sql.NullString `json:"description"`
-	CreatedAt   sql.NullString `json:"created_at"`
-	UpdatedAt   sql.NullString `json:"updated_at"`
-}
-
-type DayActivitySeed struct {
-	Day       string         `json:"day"`
-	SourceDay sql.NullString `json:"source_day"`
-	Copied    sql.NullInt64  `json:"copied"`
-	CreatedAt sql.NullString `json:"created_at"`
-}
-
-type DocsFt struct {
-	DocID    string `json:"doc_id"`
-	Tipo     string `json:"tipo"`
-	Arquivo  string `json:"arquivo"`
-	Secao    string `json:"secao"`
-	Texto    string `json:"texto"`
-	Tags     string `json:"tags"`
-	NoteType string `json:"note_type"`
-}
-
 type Document struct {
 	ID        string         `json:"id"`
 	Tipo      sql.NullString `json:"tipo"`

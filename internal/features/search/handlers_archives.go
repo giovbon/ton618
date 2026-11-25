@@ -118,7 +118,6 @@ func (ctx *HandlerContext) HandleBulkDelete(w http.ResponseWriter, r *http.Reque
 		}
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
-		ctx.Store.DeleteFTSByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)
@@ -214,7 +213,6 @@ func (ctx *HandlerContext) HandleBulkArchive(w http.ResponseWriter, r *http.Requ
 		}
 
 		ctx.Store.DeleteDocumentsByFile(arquivo)
-		ctx.Store.DeleteFTSByFile(arquivo)
 		ctx.Store.DeleteFileMod(arquivo)
 		ctx.Store.ResetPopularity(arquivo)
 		ctx.Store.SetFileTags(arquivo, nil)
@@ -386,7 +384,6 @@ func (ctx *HandlerContext) HandleRestoreArchive(w http.ResponseWriter, r *http.R
 	}
 
 	ctx.Store.DeleteDocumentsByFile("archives/" + archiveName)
-	ctx.Store.DeleteFTSByFile("archives/" + archiveName)
 	ctx.Store.DeleteFileMod("archives/" + archiveName)
 	ctx.Store.SetFileTags("archives/"+archiveName, nil)
 	ctx.Store.ClearLinks("archives/" + archiveName)

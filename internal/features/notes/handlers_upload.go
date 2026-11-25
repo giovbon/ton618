@@ -104,7 +104,6 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 
 	// Limpa registros anteriores (segurança, caso haja colisão de nome)
 	ctx.Store.DeleteDocumentsByFile(filename)
-	ctx.Store.DeleteFTSByFile(filename)
 
 	doc := db.Document{
 		ID:        docID,
@@ -118,7 +117,6 @@ func (ctx *HandlerContext) HandleUploadAttachment(w http.ResponseWriter, r *http
 		Hash:      processor.CalculateHash("att", fileListStr, nil),
 	}
 	ctx.Store.InsertDocument(doc)
-	ctx.Store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 	// Salva o mtime em UTC (mesmo formato usado pelo watcher em
 	// processFileLocked). Formato local (ex: -03:00) misturado com UTC (Z)
 	// quebra a ordenação por string da sidebar/database.

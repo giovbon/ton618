@@ -26,52 +26,9 @@ type BacklinksResult struct {
 	Level2 []string
 }
 
-// SearchSnippet é um fragmento ADICIONAL da mesma nota que também casou na
-// busca (ex.: outra linha da planilha Tabulator, outra seção do markdown),
-// com o rótulo da seção e o HTML já destacado.
-type SearchSnippet struct {
-	Secao string
-	HTML  string
-}
-
-type SearchResultItem struct {
-	ID         string
-	Tipo       string
-	Arquivo    string
-	Secao      string
-	Snippet    string
-	Snippets   []SearchSnippet // demais trechos da mesma nota (além do principal)
-	ExtraCount int             // ocorrências restantes fora do teto de exibição
-	Tags       []string
-	RawTags    []string
-	Timestamp  string
-	Line       int
-}
-
 type ArchiveInfo struct {
 	Name      string
 	Modified  string
 	Size      int64
 	FileCount int
-}
-
-type SearchResultsData struct {
-	Query   string
-	Total   int
-	Results []SearchResultItem
-}
-
-// DayActivity represents one activity in the owner's daily routine (Rotina).
-//
-// O TON-618 é de uso pessoal: não existe coluna de usuário/dono — toda a tabela
-// pertence ao dono do cofre (a única credencial do BasicAuth). O guard de
-// schema em internal/core/db garante isso.
-type DayActivity struct {
-	ID          string `json:"id"`
-	Day         string `json:"date"` // YYYY-MM-DD
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
 }

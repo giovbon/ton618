@@ -13,17 +13,6 @@ CREATE TABLE IF NOT EXISTS documents (
     note_type   TEXT DEFAULT ''
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
-    doc_id,
-    tipo,
-    arquivo,
-    secao,
-    texto,
-    tags,
-    note_type,
-    tokenize='unicode61'
-);
-
 CREATE TABLE IF NOT EXISTS popularity (
     arquivo TEXT PRIMARY KEY,
     count   INTEGER DEFAULT 1,
@@ -60,24 +49,6 @@ CREATE INDEX IF NOT EXISTS idx_documents_secao ON documents(secao);
 CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
 CREATE INDEX IF NOT EXISTS idx_links_to_file ON links(to_file);
 CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
-
-CREATE TABLE IF NOT EXISTS day_activities (
-    id TEXT PRIMARY KEY,
-    day TEXT DEFAULT '',
-    start_time TEXT DEFAULT '',
-    end_time TEXT DEFAULT '',
-    description TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_day_activities_day ON day_activities(day);
-
-CREATE TABLE IF NOT EXISTS day_activity_seeds (
-    day TEXT PRIMARY KEY,
-    source_day TEXT DEFAULT '',
-    copied INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,

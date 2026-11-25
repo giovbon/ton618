@@ -93,18 +93,14 @@ rodando. Para copiar o banco com segurança, use o backup dentro do app ou `sqli
 
 A página inicial tem duas ferramentas de busca no topo e a lista de notas logo abaixo.
 
-### 2.1 As duas buscas
+### 2.1 Busca de Notas
 
 | Botão | Nome | O que faz |
 |---|---|---|
 | Lupa azul | **Busca de Notas** | Filtra pelo **nome do arquivo**. É instantânea e não olha o conteúdo. |
-| Lupa verde | **Busca Global** | Procura no **conteúdo** de todas as notas, com trechos destacados e agrupamento por nota. |
 
-A Busca de Notas ignora maiúsculas/minúsculas e faz correspondência parcial: digitar `proj` encontra
+A busca ignora maiúsculas/minúsculas e faz correspondência parcial: digitar `proj` encontra
 `projeto-ton618.md`. Os resultados carregam em páginas de 50, com rolagem infinita.
-
-A Busca Global é a mais poderosa. Ela entende frases entre aspas, filtros de tag e filtros de tipo —
-a sintaxe completa está na seção 5.2.
 
 ### 2.2 A lista de notas
 
@@ -216,7 +212,7 @@ para inserir. Os links são navegáveis: clicar abre a nota de destino; um link 
 leitor, e um link para PDF ou anexo baixa o arquivo.
 
 O **backlink** é o caminho inverso: quem aponta para esta nota. O botão de backlinks no topo do
-editor mostra a lista, e a busca global também usa a contagem de citações no ranking.
+editor mostra a lista.
 
 ### 3.6 Tipos de nota
 
@@ -227,8 +223,8 @@ editor mostra a lista, e a busca global também usa a contagem de citações no 
 | `mapa_mental` | Criar → + Markmap | Markmap | Não (só metadados) |
 | `tabulator` | Criar → + Tabulator | Planilha | Sim, linha a linha |
 | `calculo` | Criar → + Cálculo | Editor de texto (bloco `calc`) | Sim |
-| `pdf` | Captura → Upload PDF | Leitor do navegador | Só metadados |
-| `epub` | Captura → Upload EPUB | Leitor embutido | Só metadados |
+| `pdf` | Captura → Upload PDF | Leitor do navegador | Só metadados (texto extraível para nota) |
+| `epub` | Captura → Upload EPUB | Leitor embutido | Só metadados (texto extraível para nota) |
 | `anexo` | Captura → Upload Anexo | Download | Lista de arquivos do ZIP |
 | `imagem` | Editor (colar/enviar) | Visualização | Não |
 | `artigo` / `captura` | Captura → Web Capture | Editor de texto | Sim |
@@ -255,7 +251,7 @@ O TON-618 chama de **raiz** o primeiro segmento do caminho. As raízes conhecida
 | `archives/` | Arquivos mortos |
 | `datasets/` | Arquivos de células Tabulator (não entram na varredura) |
 
-Essas raízes aparecem na busca global (`tipo:`) e na coluna **Pasta** do Acervo.
+Essas raízes aparecem na coluna **Pasta** do Acervo.
 
 
 ---
@@ -392,8 +388,7 @@ Recursos:
 - escolher o tipo da coluna no menu `⋮` do cabeçalho: texto, número, data, sim/não ou arquivo;
 - em coluna do tipo arquivo, clicar na célula envia o arquivo para `docs/datasets/` e guarda o
   caminho na célula;
-- exportar CSV, duplicar e excluir a tabela;
-- o conteúdo é salvo automaticamente e **entra na busca global** (cada linha vira um trecho).
+- exportar CSV, duplicar e excluir a tabela.
 
 O Tabulator também aceita hierarquia (`pai:`) e aparece no Acervo como qualquer nota.
 
@@ -413,6 +408,23 @@ O leitor de EPUB tem sumário lateral, navegação por capítulo, barra de progr
 
 O anexo vira uma nota do tipo `anexo`: o ZIP fica em `attachments/` e a busca indexa o nome do
 pacote e a **lista de arquivos** enviados dentro dele. Para abrir, baixe o ZIP.
+
+#### Extrair o texto de um PDF/EPUB para uma nota
+
+PDFs e EPUBs são indexados apenas pelo nome de arquivo — o corpo do documento não entra na busca.
+Quando você quiser o texto pesquisável, peça a extração explicitamente:
+
+- no **Acervo**, a coluna de ações das linhas de PDF/EPUB mostra o botão **⤓** (extrair texto);
+- no **leitor de EPUB**, o botão **Extrair** no cabeçalho faz o mesmo.
+
+A extração cria (ou atualiza, se você repetir no mesmo documento) uma nota `notes/<nome>-texto.md`
+com a tag `texto-extraido`, o campo `fonte:` apontando para o arquivo original, o link para abrir
+o documento, e o texto dividido por capítulos (EPUB) ou páginas (PDF). O corpo dessa nota entra na
+busca normalmente.
+
+EPUB é lido nativamente. PDF usa o `pdftotext` (poppler-utils), já incluído na imagem Docker; em
+uma instalação local, instale `poppler-utils`. PDFs **escaneados** não têm texto — nesse caso é
+preciso OCR (não incluído).
 
 ### 4.10 Web Capture
 
@@ -571,39 +583,7 @@ Serve para achar uma nota quando você já sabe (ou quase sabe) o nome dela.
 - não olha o conteúdo;
 - resultados em páginas de 50, com rolagem infinita.
 
-### 5.2 Busca Global (por conteúdo)
-
-A Busca Global usa o índice FTS5 do SQLite. Ela entende:
-
-| Sintaxe | Efeito |
-|---|---|
-| `palavra` | Termo livre. Vários termos são combinados com **E** (todos precisam aparecer). |
-| `"frase exata"` | Procura a expressão naquela ordem. |
-| `'perto disto'` | Procura os termos na mesma seção/trecho (proximidade). |
-| `tags:livros` | Só notas com a tag `livros`. Pode repetir para exigir várias. |
-| `#livros` | Atalho de hashtag para a tag `livros`. |
-| `tipo:pdf` | Só notas do tipo indicado. |
-| `type:mapa_mental` | Mesma coisa; `type:` é alias. |
-| `tipo:pdf tipo:epub` | Vários tipos viram **OU** (PDF ou EPUB). |
-
-Detalhes que ajudam no dia a dia:
-
-- **Acentos:** a busca normaliza acentos; `filosofia` encontra `filosófia` e vice-versa.
-- **Palavras curtas:** termos de uma única letra não ajudam e são ignorados no destaque dos trechos;
-  palavras com mais de 2 letras casam também por prefixo (`proj` encontra `projeto`).
-- **Stopwords:** palavras como `de`, `a`, `o`, `com`, `para` são ignoradas.
-- **Tags e tipos** podem ser combinados com texto livre: `tipo:artigo foco` procura “foco” apenas
-  em artigos.
-- **Não existe operador de exclusão:** `-palavra` não exclui nada — o hífen é tratado como separador
-  e a palavra passa a ser **exigida** junto com as outras.
-
-Os resultados são agrupados por nota. Cada cartão mostra até **5 trechos** e indica quantas
-ocorrências existem além disso. O termo exato aparece em azul; variações por prefixo, em roxo.
-
-A busca global tem limite de **30 consultas por minuto**. O campo dispara 300 ms depois que você
-para de digitar.
-
-### 5.3 O Acervo (`/database`)
+### 5.2 O Acervo (`/database`)
 
 O Acervo é a visão de administração: uma tabela com **todas** as notas e arquivos. Use o ícone de
 acervo no topo ou a rota `/database`.
@@ -652,7 +632,6 @@ O botão ao lado da busca alterna entre dois modos:
 | **Arquivamento** | Filtra por tag, arquiva/exclui em massa e limpa imagens órfãs |
 | **Restaurar** | Lista pacotes de `archives/` e devolve as notas aos caminhos originais |
 | **Backup** | Baixa backup rápido, completo ou total; restaura um backup total |
-| **Rotina** | Liga/desliga o ícone e a página da rotina diária |
 | **Colunas** | Quais campos do frontmatter podem virar colunas no Acervo |
 
 ### 6.2 Os três backups
@@ -847,24 +826,12 @@ rode o binário já compilado (`./ton618`) ou use Docker.
 
 ### Criei uma nota e ela não aparece na busca
 
-A busca por nome é por arquivo; a global é por conteúdo indexado. Verifique:
+A busca filtra pelo nome do arquivo. Verifique:
 
 1. a nota foi salva? (indicador `saved`);
-2. você está no modo de busca certo? (lupa azul x verde);
-3. a nota é um desenho/mapa? O corpo desses tipos não é indexado — busque pelo título ou tag;
+2. o nome está digitado corretamente (correspondência parcial, ignora maiúsculas/minúsculas);
+3. a nota é um desenho/mapa? Aparece na lista pelo título e tag;
 4. a nota está arquivada? `archives/` não aparece na lista ativa.
-
-### A busca não encontra uma palavra que está na nota
-
-- A busca global casa por **prefixo**, não por lematização: `proj` encontra `projeto`, mas `correr`
-  pode não encontrar `corri`, porque o começo da palavra muda.
-- Para excluir termos, refine o texto ou combine os filtros disponíveis.
-
-### O `tipo:` da busca não encontra a nota
-
-Use o vocabulário canônico: `nota`, `desenho`, `mapa_mental`, `tabulator`, `calculo`, `pdf`,
-`epub`, `anexo`, `artigo`, `captura`, `imagem`, `arquivo`. Aliases como `markmap`, `mindmap`,
-`drawing` e `article` são normalizados, mas o valor gravado é o canônico.
 
 ### O Acervo mostra uma coluna “Parent” vazia e outra “Pai” preenchida
 
@@ -911,7 +878,6 @@ de portas no `docker-compose.yml`.
 |---|---|
 | **Acervo** | Conjunto de notas e arquivos, e também a página `/database` que os administra |
 | **Backlink** | Link de entrada: uma nota que aponta para a atual |
-| **FTS5** | Mecanismo de busca textual do SQLite usado pela busca global |
 | **Frontmatter** | Bloco YAML no topo da nota (`--- ... ---`) |
 | **Hierarquia** | Relação `pai:`/filhas entre notas |
 | **Nó** | Item de um mapa mental (Markmap) |

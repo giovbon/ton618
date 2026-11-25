@@ -38,11 +38,8 @@ func (s *Store) ReplaceFileIndexes(
 	default:
 	}
 
-	// 1. Documents & FTS
+	// 1. Documents
 	if _, err := tx.Exec("DELETE FROM documents WHERE arquivo = ?", filename); err != nil {
-		return err
-	}
-	if _, err := tx.Exec("DELETE FROM docs_fts WHERE arquivo = ?", filename); err != nil {
 		return err
 	}
 
@@ -55,14 +52,6 @@ func (s *Store) ReplaceFileIndexes(
 	}
 	defer docStmt.Close()
 
-	ftsStmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags, note_type) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-	defer ftsStmt.Close()
-
 	for _, doc := range docs {
 		tagsStr := SliceToTags(doc.Tags)
 		// note_type (campo `tipo:`): o processor informa o valor content-aware
@@ -74,11 +63,6 @@ func (s *Store) ReplaceFileIndexes(
 		if _, err := docStmt.Exec(
 			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr,
 			doc.Pagina, doc.Ordem, doc.Timestamp, doc.Created, doc.Hash, noteType,
-		); err != nil {
-			return err
-		}
-		if _, err := ftsStmt.Exec(
-			doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, tagsStr, noteType,
 		); err != nil {
 			return err
 		}
@@ -139,9 +123,6 @@ func (s *Store) DeleteAllFileRecords(filename string) error {
 	defer tx.Rollback()
 
 	if _, err := tx.Exec("DELETE FROM documents WHERE arquivo = ?", filename); err != nil {
-		return err
-	}
-	if _, err := tx.Exec("DELETE FROM docs_fts WHERE arquivo = ?", filename); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM links WHERE from_file = ?", filename); err != nil {

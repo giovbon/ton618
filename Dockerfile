@@ -72,7 +72,7 @@ RUN mkdir -p /app/fonts && \
 # ─── Estágio 3: Runtime ──────────────────────────────
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata poppler-utils
 
 # Copia as fontes baixadas do builder
 COPY --from=builder /app/fonts /usr/share/fonts/truetype/fira-sans

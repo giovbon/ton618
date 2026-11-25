@@ -36,7 +36,6 @@ var Config = map[string]IconSpec{
 	"calc":       {Icon: "calculator", Color: "#F97316"},
 
 	// ── NAVEGAÇÃO & HEADER ──
-	"rotina":    {Icon: "calendar-clock", Color: "text-sky-400"},
 	"tabulator": {Icon: "container", Color: "#10C809"},
 	"acervo":    {Icon: "database", Color: "#10C809"},
 	"captura":   {Icon: "link", Color: "text-zinc-400"},
@@ -81,7 +80,6 @@ var Config = map[string]IconSpec{
 	"settings-restaurar":    {Icon: "package", Color: "text-sky-400"},
 	"backup":                {Icon: "database", Color: "text-emerald-400"},
 	"settings-backup":       {Icon: "database", Color: "text-emerald-400"},
-	"settings-rotina":       {Icon: "calendar-clock", Color: "text-cyan-400"},
 	"colunas":               {Icon: "columns", Color: "text-sky-400"},
 	"settings-colunas":      {Icon: "columns", Color: "text-sky-400"},
 	"semantica":             {Icon: "sparkles", Color: "text-violet-400"},

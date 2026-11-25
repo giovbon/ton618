@@ -1,22 +1,15 @@
 package main
 
 import (
-	"time"
-
 	"github.com/go-chi/chi/v5"
 
-	"ton618/core/internal/features/dayplan"
 	"ton618/core/internal/features/notes"
 	"ton618/core/internal/features/search"
 	"ton618/core/internal/features/system"
-	"ton618/core/internal/middleware"
 )
 
 // SetupRoutes registra todas as rotas no chi.Router.
-func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, searchCtx *search.HandlerContext, dayplanCtx *dayplan.HandlerContext) {
-	// Rate limiters para endpoints pesados
-	searchLimiter := middleware.NewRateLimiter(30, time.Minute)
-
+func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.HandlerContext, searchCtx *search.HandlerContext) {
 	// Páginas HTML (server-side rendered) - SYSTEM
 	mux.Get("/", sysCtx.HandleIndex)
 	mux.Get("/database", sysCtx.HandleDatabasePage)
@@ -53,6 +46,7 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	mux.Post("/api/upload-image", notesCtx.HandleUploadImage)
 	mux.Post("/api/cleanup-images", notesCtx.HandleCleanupImages)
 	mux.Post("/api/upload-attachment", notesCtx.HandleUploadAttachment)
+	mux.Post("/api/extract-text", notesCtx.HandleExtractText)
 
 	mux.Post("/api/capture", notesCtx.HandleCapture)
 	mux.Get("/api/tags", sysCtx.HandleGetTags)
@@ -70,17 +64,4 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	// Backup TOTAL: exporta banco + arquivos e pode ser restaurado por /api/restore.
 	mux.Get("/api/backup/total", notesCtx.HandleFullBackup)
 	mux.Post("/api/restore", notesCtx.HandleRestore)
-
-	// SEARCH (Global Search e Stopwords)
-	mux.With(searchLimiter.Middleware).Post("/search", searchCtx.HandleSearch)
-	mux.With(searchLimiter.Middleware).Get("/search", searchCtx.HandleSearch)
-
-	// ROTINA (atividades do dia, uso pessoal)
-	mux.Get("/rotina", dayplanCtx.HandleRotinaPage)
-	mux.Get("/api/rotina/schedule", dayplanCtx.HandleRotinaSchedule)
-	mux.Post("/api/rotina/create", dayplanCtx.HandleCreateDayActivity)
-	mux.Post("/api/rotina/update", dayplanCtx.HandleUpdateDayActivity)
-	mux.Delete("/api/rotina/delete", dayplanCtx.HandleDeleteDayActivity)
-	mux.Get("/api/settings/rotina", dayplanCtx.HandleGetRotinaSetting)
-	mux.Post("/api/settings/rotina", dayplanCtx.HandlePostRotinaSetting)
 }

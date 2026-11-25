@@ -30,11 +30,6 @@ type Store struct {
 	// permite, ex: salvar uma nota (WriteMu) em paralelo com um save de
 	// configuração (settingsMu).
 	settingsMu sync.Mutex
-	// dayPlanMu protege a tabela day_activities (Rotina), outro domínio
-	// independente do núcleo: criar/editar/excluir uma atividade nunca participa
-	// das transações de notas/FTS, então não bloqueia nem é bloqueado pelo
-	// WriteMu.
-	dayPlanMu sync.Mutex
 
 	// cancelMu + queryPending registram os cancel() dos contextos criados por
 	// queryCtx(). O go vet (lostcancel) exige que o cancel não seja descartado;
@@ -160,17 +155,6 @@ func initSchema(database *sql.DB) error {
 	`
 
 	schema += `
-	CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
-		doc_id,
-		tipo,
-		arquivo,
-		secao,
-		texto,
-		tags,
-		note_type,
-		tokenize='unicode61'
-	);
-
 	CREATE TABLE IF NOT EXISTS popularity (
 		arquivo TEXT PRIMARY KEY,
 		count   INTEGER DEFAULT 1
@@ -215,24 +199,6 @@ func initSchema(database *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_documents_timestamp ON documents(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_links_to_file ON links(to_file);
 	CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
-
-	CREATE TABLE IF NOT EXISTS day_activities (
-		id TEXT PRIMARY KEY,
-		day TEXT DEFAULT '',
-		start_time TEXT DEFAULT '',
-		end_time TEXT DEFAULT '',
-		description TEXT DEFAULT '',
-		created_at TEXT DEFAULT '',
-		updated_at TEXT DEFAULT ''
-	);
-	CREATE INDEX IF NOT EXISTS idx_day_activities_day ON day_activities(day);
-
-	CREATE TABLE IF NOT EXISTS day_activity_seeds (
-		day TEXT PRIMARY KEY,
-		source_day TEXT DEFAULT '',
-		copied INTEGER DEFAULT 0,
-		created_at TEXT DEFAULT ''
-	);
 
 	CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
@@ -309,40 +275,10 @@ func migrate(database *sql.DB) {
 	// (vec0) e `note_chunks`. O recurso de embeddings foi removido do app — ver
 	// migração v23 (limpeza) e DECISIONS §7.
 
-	// v9: recria tabela virtual fts5 para incluir texto_stemmed e limpa file_mods para forçar reindexação completa
-	if !isApplied(9) {
-		database.Exec("DROP TABLE IF EXISTS docs_fts")
-		database.Exec(`
-		CREATE VIRTUAL TABLE docs_fts USING fts5(
-			doc_id,
-			tipo,
-			arquivo,
-			secao,
-			texto,
-			tags,
-			texto_stemmed,
-			tokenize='unicode61'
-		)`)
-		database.Exec("DELETE FROM file_mods")
-		markApplied(9)
-	}
-
-	// v9b: recria tabela fts5 sem texto_stemmed (lematização removida)
-	if !isApplied(22) {
-		database.Exec("DROP TABLE IF EXISTS docs_fts")
-		database.Exec(`
-		CREATE VIRTUAL TABLE docs_fts USING fts5(
-			doc_id,
-			tipo,
-			arquivo,
-			secao,
-			texto,
-			tags,
-			tokenize='unicode61'
-		)`)
-		database.Exec("DELETE FROM file_mods")
-		markApplied(22)
-	}
+	// v9 e v22 (REMOVIDAS em 25/11/2026): recriavam o índice FTS5 (docs_fts).
+	// A busca por conteúdo foi removida do app — a busca agora é só por título
+	// (arquivo), servida pela lista de notas da sidebar. A migração v25 derruba
+	// o índice legado em bancos antigos.
 
 	// v23: remove o índice semântico (note_chunks + vec0 note_embeddings) e as
 	// configurações órfãs do recurso de IA — o "modo Perguntar", a síntese via
@@ -361,30 +297,27 @@ func migrate(database *sql.DB) {
 		markApplied(23)
 	}
 
-	// v24: campo `tipo:` — coluna note_type em documents e docs_fts, usada pelo
-	// filtro `tipo:` da busca global e do Acervo (vocabulário PT snake_case:
-	// mapa_mental, anexo, nota, ...). A tabela virtual FTS5 não aceita ALTER
-	// TABLE ADD COLUMN: docs_fts é dropada e recriada com a coluna nova. O
-	// DELETE FROM file_mods força a reindexação completa de arquivos (notas
-	// também são reindexadas: SyncDatabaseWithContext reprocessa as que estão
-	// sem file_mods) — é o que preenche note_type em todas as linhas; junto,
-	// EnsureNoteTypeField faz o backfill do frontmatter das notas.
+	// v24: campo `tipo:` — coluna note_type em documents, usada pelo filtro
+	// `tipo:` do Acervo (vocabulário PT snake_case: mapa_mental, anexo, nota,
+	// ...). O DELETE FROM file_mods força a reindexação completa de arquivos
+	// (notas também são reindexadas: SyncDatabaseWithContext reprocessa as que
+	// estão sem file_mods) — é o que preenche note_type em todas as linhas;
+	// junto, EnsureNoteTypeField faz o backfill do frontmatter das notas.
 	if !isApplied(24) {
 		database.Exec("ALTER TABLE documents ADD COLUMN note_type TEXT DEFAULT ''")
-		database.Exec("DROP TABLE IF EXISTS docs_fts")
-		database.Exec(`
-		CREATE VIRTUAL TABLE docs_fts USING fts5(
-			doc_id,
-			tipo,
-			arquivo,
-			secao,
-			texto,
-			tags,
-			note_type,
-			tokenize='unicode61'
-		)`)
 		database.Exec("DELETE FROM file_mods")
 		markApplied(24)
+	}
+
+	// v25: remove a busca por conteúdo (índice FTS5 docs_fts) e a Rotina
+	// (day_activities + day_activity_seeds) — ambas as funcionalidades foram
+	// removidas do app em 25/11/2026. As configurações órfãs saem junto.
+	if !isApplied(25) {
+		database.Exec("DROP TABLE IF EXISTS docs_fts")
+		database.Exec("DROP TABLE IF EXISTS day_activities")
+		database.Exec("DROP TABLE IF EXISTS day_activity_seeds")
+		database.Exec("DELETE FROM settings WHERE key IN ('rotina_enabled', 'rotina_timeline_native')")
+		markApplied(25)
 	}
 }
 

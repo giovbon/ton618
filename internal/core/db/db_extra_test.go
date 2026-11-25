@@ -209,41 +209,6 @@ func TestAddLink_Duplicado(t *testing.T) {
 	}
 }
 
-func TestSearchFTS_SemResultados(t *testing.T) {
-	s := newTestStore(t)
-	_, total, err := s.SearchFTS("inexistente", 0, 10)
-	if err != nil {
-		t.Fatalf("SearchFTS: %v", err)
-	}
-	if total != 0 {
-		t.Errorf("esperado 0 resultados, got %d", total)
-	}
-}
-
-func TestSearchFTSLike_Resultado(t *testing.T) {
-	s := newTestStore(t)
-	s.InsertDocument(Document{ID: "doc-like", Arquivo: "notes/like.md", Secao: "Geral", Texto: "palavra_chave especial"})
-	s.IndexFTS("doc-like", "md", "notes/like.md", "Geral", "palavra_chave especial", "")
-	results, total, err := s.SearchFTSLike("especial", 0, 10)
-	if err != nil {
-		t.Fatalf("SearchFTSLike: %v", err)
-	}
-	if total != 1 {
-		t.Errorf("esperado 1, got %d", total)
-	}
-	if len(results) > 0 && results[0].DocID != "doc-like" {
-		t.Errorf("doc_id errado: %q", results[0].DocID)
-	}
-}
-
-func TestSearchFTSLike_SemResultados(t *testing.T) {
-	s := newTestStore(t)
-	_, total, _ := s.SearchFTSLike("zzzzzz", 0, 10)
-	if total != 0 {
-		t.Errorf("esperado 0, got %d", total)
-	}
-}
-
 func TestSaveNote_ContentVazio(t *testing.T) {
 	s := newTestStore(t)
 	s.SaveNote("notes/vazio.md", "", time.Now().UTC().Format(time.RFC3339))
@@ -303,11 +268,6 @@ func TestDeleteAllFileRecords(t *testing.T) {
 		t.Fatalf("setup documents: %v", err)
 	}
 
-	_, err = s.DB.Exec("INSERT INTO docs_fts (doc_id, tipo, arquivo, secao, texto, tags) VALUES ('doc-test-1', 'md', ?, 'Geral', 'texto', '')", filename)
-	if err != nil {
-		t.Fatalf("setup docs_fts: %v", err)
-	}
-
 	_, err = s.DB.Exec("INSERT INTO links (from_file, to_file) VALUES (?, 'notes/outro.md')", filename)
 	if err != nil {
 		t.Fatalf("setup links: %v", err)
@@ -343,7 +303,6 @@ func TestDeleteAllFileRecords(t *testing.T) {
 
 	checkCount("SELECT COUNT(*) FROM notes WHERE filename = ?", filename, 1)
 	checkCount("SELECT COUNT(*) FROM documents WHERE arquivo = ?", filename, 1)
-	checkCount("SELECT COUNT(*) FROM docs_fts WHERE arquivo = ?", filename, 1)
 	checkCount("SELECT COUNT(*) FROM links WHERE from_file = ?", filename, 1)
 	checkCount("SELECT COUNT(*) FROM tags WHERE arquivo = ?", filename, 1)
 	checkCount("SELECT COUNT(*) FROM file_mods WHERE arquivo = ?", filename, 1)
@@ -358,7 +317,6 @@ func TestDeleteAllFileRecords(t *testing.T) {
 	// 4. Verificar se TODOS os registros foram removidos
 	checkCount("SELECT COUNT(*) FROM notes WHERE filename = ?", filename, 0)
 	checkCount("SELECT COUNT(*) FROM documents WHERE arquivo = ?", filename, 0)
-	checkCount("SELECT COUNT(*) FROM docs_fts WHERE arquivo = ?", filename, 0)
 	checkCount("SELECT COUNT(*) FROM links WHERE from_file = ?", filename, 0)
 	checkCount("SELECT COUNT(*) FROM tags WHERE arquivo = ?", filename, 0)
 	checkCount("SELECT COUNT(*) FROM file_mods WHERE arquivo = ?", filename, 0)

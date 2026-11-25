@@ -72,7 +72,8 @@ interface Window {
   // database.js — helpers puros expostos para testes unitários
   DatabaseUtils: {
     tagsFormatter: (cell: { getValue: () => any }) => string;
-    actionsFormatter: () => string;
+    actionsFormatter: (cell?: { getRow: () => { getData: () => any } }) => string;
+    isExtractableRow: (data: any) => boolean;
   };
 
   // Editor helpers (editor-common.js)

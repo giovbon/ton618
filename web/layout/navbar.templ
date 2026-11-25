@@ -1,16 +1,8 @@
 package layout
 
 import "ton618/core/internal/ui/icons"
-import "ton618/core/internal/core/featureflags"
 
 templ Navbar() {
-    {{
-        flags := featureflags.FromContext(ctx)
-        rotinaStyle := ""
-        if !flags.Rotina {
-            rotinaStyle = "display:none"
-        }
-    }}
     <nav x-data="{ mobileMenuOpen: false }" class="border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-xs sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between">
             <div class="flex flex-col shrink-0 items-start">
@@ -132,10 +124,6 @@ templ Navbar() {
                 </div>
 
                 <!-- Nav links — icon + label only for key destinations -->
-                <a id="nav-rotina" href="/rotina" data-nav-rotina style={ rotinaStyle }
-                    class="flex items-center gap-1.5 text-zinc-400 hover:text-sky-400 transition-colors" title="Rotina">
-                    @icons.Icon(icons.GetIcon("rotina"), "w-4 h-4 " + icons.GetColor("rotina")) Rotina
-                </a>
                 <a id="nav-database" href="/database"
                     class="flex items-center gap-1.5 text-zinc-400 hover:text-emerald-400 transition-colors" title="Acervo">
                     @icons.Icon(icons.GetIcon("acervo"), "w-4 h-4 " + icons.GetColor("acervo")) Acervo
@@ -232,12 +220,6 @@ templ Navbar() {
             <div>
                 <div class="text-[10px] font-black tracking-wider text-zinc-500 uppercase mb-1">Navegação</div>
                 <div class="space-y-0.5 bg-zinc-900/20 border border-zinc-800/60 rounded-xl p-1">
-                    <a id="mobile-nav-rotina" href="/rotina" data-nav-rotina style={ rotinaStyle } @click="mobileMenuOpen = false"
-                        class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-900/50 transition-colors">
-                        @icons.Icon(icons.GetIcon("rotina"), "w-4 h-4 " + icons.GetColor("rotina"))
-                        <span class="text-[11px] font-bold tracking-wider">ROTINA</span>
-                    </a>
-                    
                     <!-- Acervo: fora do menu mobile de propósito — a tabela
                          (árvore + várias colunas) não é utilizável numa tela de
                          celular. O acesso continua no menu do desktop
@@ -269,12 +251,7 @@ templ Navbar() {
     <script>
         (function() {
             const path = window.location.pathname;
-            if (path === '/rotina') {
-                const nav = document.getElementById('nav-rotina');
-                if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-400 flex items-center gap-1.5 transition-all';
-                const mNav = document.getElementById('mobile-nav-rotina');
-                if (mNav) mNav.className = 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sky-400 bg-sky-950/40 border border-sky-500/20 transition-colors';
-            } else if (path === '/database') {
+            if (path === '/database') {
                 // Só o item do desktop: o Acervo saiu do menu mobile de propósito.
                 const nav = document.getElementById('nav-database');
                 if (nav) nav.className = 'px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 transition-all';

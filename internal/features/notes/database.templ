@@ -158,6 +158,25 @@ templ databaseContent() {
         background: rgba(127, 29, 29, 0.25);
         color: #f87171;
     }
+    /* ── Botão de extrair texto (só em PDF/EPUB) ── */
+    #notes-table .db-extract-btn {
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        color: #71717a;
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        padding: 0 5px;
+    }
+    #notes-table .db-extract-btn:hover {
+        background: rgba(8, 47, 73, 0.5);
+        color: #38bdf8;
+    }
+    #notes-table .db-extract-btn:disabled {
+        opacity: 0.5;
+        cursor: wait;
+    }
     /* ── Hierarquia de notas (módulo Data Tree) ──
        Controle padrão do Tabulator, recolorido para o dark mode do TON-618.
        ⚠️ Não use dataTreeExpandElement/CollapseElement: o Tabulator substitui o

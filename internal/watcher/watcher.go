@@ -177,7 +177,6 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 	// Remove old docs for this file
 	store.DeleteDocumentsByFile(filename)
-	store.DeleteFTSByFile(filename)
 
 	docs, links, fileTags := processFileByType(ev, tipo, filename)
 	insertDocuments(store, docs)
@@ -202,7 +201,6 @@ func processFileLocked(store *db.Store, ev FileEvent) error {
 
 func removeFileFromIndex(store *db.Store, filename string) {
 	store.DeleteDocumentsByFile(filename)
-	store.DeleteFTSByFile(filename)
 	store.DeleteFileMod(filename)
 	store.ResetPopularity(filename)
 	store.SetFileTags(filename, nil) // limpa tags
@@ -240,7 +238,6 @@ func handleAttachmentEvent(store *db.Store, filename string, ev FileEvent) {
 		Hash:      processor.CalculateHash("att", basename, nil),
 	}
 	store.InsertDocument(doc)
-	store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, "")
 	slog.Info("Documento de anexo recriado pelo watcher", "file", filename)
 }
 
@@ -278,9 +275,6 @@ func insertDocuments(store *db.Store, docs []processor.Document) {
 		if err := store.InsertDocument(dbDoc); err != nil {
 			slog.Error("insert doc", "id", doc.ID, "error", err)
 			continue
-		}
-		if err := store.IndexFTS(doc.ID, doc.Tipo, doc.Arquivo, doc.Secao, doc.Texto, db.SliceToTags(doc.Tags)); err != nil {
-			slog.Error("index fts", "id", doc.ID, "error", err)
 		}
 	}
 }

@@ -564,7 +564,6 @@ func TestNoteService_ReindexAposProcessFile(t *testing.T) {
 
 	// Apaga documentos para simular que o watcher vai reindexar
 	store.DeleteDocumentsByFile("notes/via-watcher.md")
-	store.DeleteFTSByFile("notes/via-watcher.md")
 
 	// Reindex via Save novamente
 	svc.Save("via-watcher", "# Teste\n\nconteudo atualizado", nil)

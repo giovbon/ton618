@@ -320,6 +320,13 @@ templ EpubReader(file string) {
             </svg>
             <span>Baixar</span>
         </a>
+        <button id="extract-btn" class="header-btn" title="Extrair todo o texto para uma nota">
+            <svg style="width:16px;height:16px;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4h7l5 5v11H7z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6M9 16h6"/>
+            </svg>
+            <span>Extrair</span>
+        </button>
         <button id="toc-btn" class="header-btn" title="Sumário">
             <svg style="width:16px;height:16px;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/>
@@ -365,6 +372,34 @@ templ EpubReader(file string) {
         document.getElementById("toc-btn").addEventListener("click", openSidebar);
         document.getElementById("close-sidebar-btn").addEventListener("click", closeSidebar);
         overlay.addEventListener("click", closeSidebar);
+
+        // ── Extrair texto para nota ───────────────────────────────
+        // Ação explícita: manda o caminho do EPUB para o backend, que extrai o
+        // texto de todos os capítulos e cria (ou atualiza) a nota com link
+        // para este leitor.
+        const extractBtn = document.getElementById("extract-btn");
+        extractBtn.addEventListener("click", async () => {
+            const original = extractBtn.innerHTML;
+            extractBtn.disabled = true;
+            extractBtn.innerHTML = "<span>Extraindo...</span>";
+            try {
+                const fd = new FormData();
+                fd.append("file", fileName);
+                const resp = await fetch("/api/extract-text", { method: "POST", body: fd });
+                if (!resp.ok) throw new Error((await resp.text()) || resp.statusText);
+                const res = await resp.json();
+                const noteName = String(res.note || "").replace(/^notes\//, "").replace(/\.md$/, "");
+                const msg = 'Nota criada: "' + noteName + '"' + (res.truncated ? " (texto truncado)" : "");
+                if (window.confirm(msg + "\n\nAbrir agora?")) {
+                    window.location.href = res.url;
+                }
+            } catch (err) {
+                alert("Erro ao extrair texto: " + (err && err.message ? err.message : err));
+            } finally {
+                extractBtn.disabled = false;
+                extractBtn.innerHTML = original;
+            }
+        });
 
         // ── Status overlay ────────────────────────────────────────
         const statusOverlay = document.getElementById("status-overlay");

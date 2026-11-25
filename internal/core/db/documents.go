@@ -7,6 +7,11 @@ import (
 	"ton618/core/internal/core/domain"
 )
 
+// documentsCountCap limita o COUNT(*) da listagem paginada de documentos.
+// Sem teto, o SQLite precisa visitar todas as linhas só para contar; com o
+// teto, a contagem é exata para bases pequenas e para cedo em bases grandes.
+const documentsCountCap = 1000
+
 // Document represents a single document/chunk stored in the database.
 type Document struct {
 	ID        string
@@ -194,12 +199,12 @@ func (s *Store) GetAllDocuments() ([]Document, error) {
 
 // GetDocumentsPaginated returns a page of documents, along with the total count.
 func (s *Store) GetDocumentsPaginated(from, size int) ([]Document, int, error) {
-	// Teto no count (ver ftsCountCap): evita varrer todos os documents só para
-	// exibir "~total" ao abrir a página de busca.
+	// Teto no count (ver documentsCountCap): evita varrer todos os documents
+	// só para exibir "~total" ao abrir a página de busca.
 	var total int64
 	if err := s.DB.QueryRowContext(s.queryCtx(),
 		`SELECT COUNT(*) FROM (SELECT 1 FROM documents WHERE tags NOT LIKE '%drawing%' LIMIT ?)`,
-		ftsCountCap,
+		documentsCountCap,
 	).Scan(&total); err != nil {
 		return nil, 0, err
 	}

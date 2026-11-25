@@ -67,16 +67,34 @@
         return html;
     };
 
-    // ── Formatter da coluna nativa de excluir registro ──
-    // Mesmo botão "×" da nota Tabulator — mas no Acervo o clique exclui a
-    // NOTA/arquivo da linha (não uma linha de planilha). Ver deleteRowNote.
-    var actionsFormatter = function () {
-        return '<button type="button" class="db-del-btn" title="Excluir registro">&times;</button>';
+    // ── Formatter da coluna nativa de ações ──
+    // "×" exclui a NOTA/arquivo da linha (não uma linha de planilha). Ver
+    // deleteRowNote. PDFs e EPUBs ganham também o "⤓" de extrair texto para
+    // uma nota — a extração é sempre explícita (ver extractRowText).
+    var EXTRACTABLE_EXT_RE = /\.(pdf|epub)$/i;
+    var isExtractableRow = function (data) {
+        if (!data) return false;
+        if (data.type === "pdf" || data.type === "epub") return true;
+        return !!data.arquivo && EXTRACTABLE_EXT_RE.test(data.arquivo);
+    };
+
+    var actionsFormatter = function (cell) {
+        var html = "";
+        var data = cell && cell.getRow ? cell.getRow().getData() : null;
+        if (isExtractableRow(data)) {
+            html += '<button type="button" class="db-extract-btn" title="Extrair texto para uma nota">&#8615;</button>';
+        }
+        html += '<button type="button" class="db-del-btn" title="Excluir registro">&times;</button>';
+        return html;
     };
 
     // Seam de teste: os formatters são puros (recebem a célula e devolvem HTML)
     // e não dependem do DOM/Tabulator. Expostos para os testes unitários.
-    window.DatabaseUtils = { tagsFormatter: tagsFormatter, actionsFormatter: actionsFormatter };
+    window.DatabaseUtils = {
+        tagsFormatter: tagsFormatter,
+        actionsFormatter: actionsFormatter,
+        isExtractableRow: isExtractableRow,
+    };
 
     // ── Ícone fallback ──
     // O ícone real (SVG) já vem pronto do servidor no campo _icon de cada linha
@@ -696,9 +714,9 @@
                         c.minWidth = 240;
                     }
 
-                    // Coluna nativa de excluir registro: sempre visível (não é
-                    // controlável pelo seletor de colunas) e sem editor. O
-                    // clique no "×" exclui a nota/arquivo da linha.
+                    // Coluna nativa de ações: sempre visível (não é controlável
+                    // pelo seletor de colunas) e sem editor. O "×" exclui a
+                    // nota/arquivo; o "⤓" (só em PDF/EPUB) extrai o texto.
                     if (c.field === "_actions") {
                         c.visible = true;
                         c.formatter = actionsFormatter;
@@ -706,6 +724,8 @@
                             var target = e.target;
                             if (target && target.classList && target.classList.contains("db-del-btn")) {
                                 deleteRowNote(cell.getRow());
+                            } else if (target && target.classList && target.classList.contains("db-extract-btn")) {
+                                extractRowText(cell.getRow(), target);
                             }
                         };
                         return c;
@@ -860,6 +880,7 @@
                     var target = /** @type {HTMLElement} */ (e.target);
                     if (target.closest(".tabulator-data-tree-control")) return; // expandir/recolher
                     if (target.closest(".db-del-btn")) return; // excluir registro
+                    if (target.closest(".db-extract-btn")) return; // extrair texto
                     if (target.closest("a")) return; // defensivo: qualquer link presente na linha
 
                     var data = row.getData();
@@ -1080,6 +1101,55 @@
             })
             .catch(function (err) {
                 alert("Erro ao excluir nota: " + (err && err.message ? err.message : err));
+            });
+    }
+
+    // ── Extrair texto de PDF/EPUB para uma nota ──
+    // Ação explícita (botão "⤓" na coluna nativa): o backend lê o documento,
+    // extrai o texto e grava (ou atualiza) a nota com link para o original.
+    // Reextrair o MESMO arquivo sobrescreve a nota anterior.
+    function extractRowText(row, btn) {
+        var data = row && row.getData ? row.getData() : null;
+        var arquivo = data && data.arquivo;
+        if (!arquivo) return;
+
+        var original = btn ? btn.innerHTML : "";
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = "&hellip;";
+        }
+
+        var fd = new FormData();
+        fd.append("file", arquivo);
+
+        fetch("/api/extract-text", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
+            .then(async function (r) {
+                if (!r.ok) {
+                    var detalhe = await r.text();
+                    throw new Error(detalhe || r.statusText);
+                }
+                return r.json();
+            })
+            .then(function (res) {
+                try {
+                    if (document.body) document.body.dispatchEvent(new Event("reload-sidebar"));
+                } catch (e) { }
+                reloadTable();
+
+                var msg = 'Nota criada: "' + EditorCommon.getDisplayName(res.note) + '"';
+                if (res.truncated) msg += " (texto truncado)";
+                if (window.confirm(msg + "\n\nAbrir agora?")) {
+                    window.location.href = res.url;
+                }
+            })
+            .catch(function (err) {
+                alert("Erro ao extrair texto: " + (err && err.message ? err.message : err));
+            })
+            .finally(function () {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }
             });
     }
 
