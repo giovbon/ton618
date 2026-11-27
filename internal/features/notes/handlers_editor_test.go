@@ -135,5 +135,3 @@ func TestHandleDrawing_NotaNormalRedireciona(t *testing.T) {
 		t.Errorf("esperado redirect para /editor, got %q", loc)
 	}
 }
-
-
