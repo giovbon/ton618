@@ -103,6 +103,14 @@ templ SidebarNoteItem(n domain.NoteItem, query string) {
             </span>
         }
         
+        if isExtractableItem(n) {
+            <button type="button"
+                data-file={ n.Arquivo }
+                class="sidebar-extract-btn text-zinc-500 hover:text-sky-400 transition-colors shrink-0 p-1 rounded-md hover:bg-zinc-900/60"
+                title="Extrair texto para uma nota">
+                @icons.Icon("download", "w-3.5 h-3.5")
+            </button>
+        }
         <button type="button" 
             data-oldname={ n.Arquivo }
             data-currenttitle={ filename }
@@ -167,6 +175,20 @@ func getDisplayType(n domain.NoteItem) string {
         return n.Type
     }
     return string(domain.DetectNoteType(n.Tags, n.Arquivo))
+}
+
+// isExtractableItem indica se a linha da lista de Notas é um documento do qual
+// dá para extrair texto (PDF/EPUB). Espelha a validação do backend (só pdfs/ e
+// epubs/): a extração é sempre explícita.
+func isExtractableItem(n domain.NoteItem) bool {
+    lower := strings.ToLower(n.Arquivo)
+    if strings.HasPrefix(lower, domain.PDFPrefix) {
+        return strings.HasSuffix(lower, ".pdf")
+    }
+    if strings.HasPrefix(lower, domain.EPUBPrefix) {
+        return strings.HasSuffix(lower, ".epub")
+    }
+    return false
 }
 
 func getVisibleTags(tags []string) []string {

@@ -107,7 +107,7 @@ A busca ignora maiúsculas/minúsculas e faz correspondência parcial: digitar `
 Abaixo da busca aparece a lista de notas, ordenada da mais recente para a mais antiga. Cada linha
 mostra:
 
-- o **ícone do tipo** (nota, desenho, mapa mental, Tabulator, PDF, EPUB, anexo, captura etc.);
+- o **ícone do tipo** (nota, desenho, Tabulator, PDF, EPUB, anexo, captura etc.);
 - o **nome de exibição** (sem a extensão e sem o prefixo `notes/`);
 - as **tags** visíveis (as tags internas de tipo são ocultadas);
 - um **contador de filhas** quando a nota é mãe de outras;
@@ -150,7 +150,7 @@ O app grava e normaliza alguns campos:
 |---|---|
 | `title` / `titulo` | Título amigável; atualizado no rename |
 | `tags` | Lista de tags (aceita `[a, b]` ou lista em bloco) |
-| `tipo` / `type` | Tipo canônico da nota (`nota`, `desenho`, `mapa_mental`, `tabulator`, `calculo`, `pdf`, `anexo`, `artigo`, `captura`) |
+| `tipo` / `type` | Tipo canônico da nota (`nota`, `desenho`, `tabulator`, `calculo`, `pdf`, `anexo`, `artigo`, `captura`) |
 | `pai` / `parent` | Nota-mãe na hierarquia (`parent` é aceito por compatibilidade, mas o app grava `pai`) |
 
 Campos personalizados que você inventar (`autor:`, `status:`, `fonte:`) também são indexados e
@@ -167,8 +167,7 @@ Há duas formas de dar uma tag a uma nota:
 2. **No corpo:** escrevendo `#livros` em qualquer lugar do texto.
 
 As duas entram no índice e aparecem como chips na lista. A comparação ignora maiúsculas e acentos
-na busca (`tags:saude` encontra `saúde`). Tags internas de editor (`drawing`, `markmap`, `mindmap`,
-`tabulator`) não aparecem para o usuário.
+na busca (`tags:saude` encontra `saúde`). Tags internas de editor (`drawing`, `tabulator`) não aparecem para o usuário.
 
 Tags são a forma mais rápida de recortar o acervo: use poucas e consistentes. Uma tag nova só para
 cada nota não ajuda em nada.
@@ -220,7 +219,6 @@ editor mostra a lista.
 |---|---|---|---|
 | `nota` | Criar → + Nota | Editor de texto | Sim |
 | `desenho` | Criar → + Desenho | Excalidraw | Não (só metadados) |
-| `mapa_mental` | Criar → + Markmap | Markmap | Não (só metadados) |
 | `tabulator` | Criar → + Tabulator | Planilha | Sim, linha a linha |
 | `calculo` | Criar → + Cálculo | Editor de texto (bloco `calc`) | Sim |
 | `pdf` | Captura → Upload PDF | Leitor do navegador | Só metadados (texto extraível para nota) |
@@ -234,7 +232,7 @@ O tipo pode ser declarado no frontmatter (`tipo: desenho`) ou herdado do caminho
 A detecção também reconhece formatos legados no conteúdo, mas o caminho recomendado é deixar o app
 gravar o `tipo:`.
 
-> **Importante:** o índice de busca não lê o corpo de desenhos e mapas mentais. Para encontrá-los,
+> **Importante:** o índice de busca não lê o corpo de desenhos. Para encontrá-los,
 > busque pelo título ou pela tag e abra a nota. Já o Tabulator é indexado célula a célula.
 
 ### 3.7 O acervo e suas raízes
@@ -268,7 +266,6 @@ Para criar os outros tipos, use o mesmo menu:
 
 - **+ Cálculo** — nota com um bloco ` ```calc ` pronto para contas;
 - **+ Desenho** — tela do Excalidraw;
-- **+ Markmap** — mapa mental a partir de títulos markdown;
 - **+ Tabulator** — planilha de dados.
 
 ### 4.2 Escrever e formatar
@@ -349,35 +346,7 @@ Na barra do título, ao lado de **duplicar**, há dois downloads do desenho atua
 padrão do Excalidraw). Os dois usam o estado que está no editor, inclusive alterações ainda não
 salvas.
 
-### 4.7 Markmap (mapa mental)
-
-**Criar → + Markmap** abre um editor de markdown à esquerda e o mapa à direita. Os títulos viram
-nós:
-
-```markdown
-# Projeto
-
-
-## Arquitetura
-
-### Busca
-
-
-## Diário
-```
-
-O mapa é gerado a partir dessa estrutura. Você pode configurar opções no frontmatter:
-
-```yaml
-markmap:
-  maxWidth: 400
-  colorFreezeLevel: 2
-```
-
-O zoom e a posição ficam guardados no navegador. Assim como o desenho, o corpo do mapa não entra
-no índice de busca.
-
-### 4.8 Tabulator (planilha)
+### 4.7 Tabulator (planilha)
 
 **Criar → + Tabulator** cria uma nota-planilha. Ela é diferente da página **Acervo** (`/database`):
 o Tabulator é para você **inserir e manter dados**; o Acervo é para **administrar as notas**.
@@ -392,7 +361,7 @@ Recursos:
 
 O Tabulator também aceita hierarquia (`pai:`) e aparece no Acervo como qualquer nota.
 
-### 4.9 PDFs, EPUBs, anexos e imagens
+### 4.8 PDFs, EPUBs, anexos e imagens
 
 Use **Captura** no topo:
 
@@ -414,7 +383,7 @@ pacote e a **lista de arquivos** enviados dentro dele. Para abrir, baixe o ZIP.
 PDFs e EPUBs são indexados apenas pelo nome de arquivo — o corpo do documento não entra na busca.
 Quando você quiser o texto pesquisável, peça a extração explicitamente:
 
-- no **Acervo**, a coluna de ações das linhas de PDF/EPUB mostra o botão **⤓** (extrair texto);
+- na lista de **Notas** (busca), as linhas de PDF/EPUB mostram o botão **⤓** ao lado de editar/excluir;
 - no **leitor de EPUB**, o botão **Extrair** no cabeçalho faz o mesmo.
 
 A extração cria (ou atualiza, se você repetir no mesmo documento) uma nota `notes/<nome>-texto.md`
@@ -426,7 +395,7 @@ EPUB é lido nativamente. PDF usa o `pdftotext` (poppler-utils), já incluído n
 uma instalação local, instale `poppler-utils`. PDFs **escaneados** não têm texto — nesse caso é
 preciso OCR (não incluído).
 
-### 4.10 Web Capture
+### 4.9 Web Capture
 
 **Captura → Web Capture** pede uma URL e cria uma nota com:
 
@@ -440,7 +409,7 @@ Artigos passam por um extrator de conteúdo (readability), que remove menus, an�
 laterais. Páginas com paywall, bloqueio de robô ou conteúdo muito curto podem falhar — nesse caso,
 o app mostra o erro em vez de criar uma nota vazia.
 
-### 4.11 Arquivar, restaurar e excluir em massa
+### 4.10 Arquivar, restaurar e excluir em massa
 
 Abra **Configurações → Arquivamento**:
 
@@ -458,7 +427,7 @@ pacote e restaure: as notas voltam aos caminhos de origem e reaparecem nas busca
 O botão **Limpar imagens órfãs** remove de `docs/images/` as imagens que não são mais referenciadas
 por nenhuma nota.
 
-### 4.12 Calculadora de expressões
+### 4.11 Calculadora de expressões
 
 `/` → **Calculadora** (ou digite `/calc`) insere um bloco de cálculo — um bloco ` ```calc `
 com uma expressão por linha. O resultado aparece **à direita, na mesma linha da expressão** e
@@ -607,7 +576,7 @@ A busca do Acervo é **local** (roda no navegador, sobre a tabela já carregada)
 |---|---|---|
 | `titulo:` | `titulo:projeto` | Correspondência parcial no título |
 | `arquivo:` | `arquivo:notes/2026` | Caminho do arquivo |
-| `tipo:` / `type:` | `tipo:pdf` | Normaliza aliases (`markmap` → `mapa_mental`) |
+| `tipo:` / `type:` | `tipo:pdf` | Normaliza aliases (`calculo` → `cálculo`, `anexo` → `arquivo`) |
 | `tags:` | `tags:livros,filosofia` | Qualquer uma das tags listadas |
 | `mtime:` / `data:` | `mtime:2026-10` | Correspondência parcial na data de modificação |
 | termo livre | `arquitetura` | Procura em qualquer campo visível |
@@ -880,7 +849,6 @@ de portas no `docker-compose.yml`.
 | **Backlink** | Link de entrada: uma nota que aponta para a atual |
 | **Frontmatter** | Bloco YAML no topo da nota (`--- ... ---`) |
 | **Hierarquia** | Relação `pai:`/filhas entre notas |
-| **Nó** | Item de um mapa mental (Markmap) |
 | **Raiz** | Primeiro segmento do caminho (`notes/`, `pdfs/`, `epubs/`…) |
 | **Tabulator** | Tipo de nota que é uma planilha de dados |
 | **Tag** | Etiqueta no frontmatter ou `#tag` no corpo |

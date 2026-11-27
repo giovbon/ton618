@@ -502,7 +502,10 @@ import { initHierarchy } from './editor-hierarchy.js';
                 // Shift+colar = texto puro (convenção do navegador): deixa o
                 // ProseMirror inserir o texto cru, sem interpretar nada.
                 if (event.shiftKey) return false;
-                if (!editor || editor.isActive("codeBlock")) return false;
+                // codeBlock e calcBlock têm tratamento próprio/literal: não
+                // converta o texto colado como markdown (em cálculo, `*` é
+                // multiplicação e não pode virar itálico).
+                if (!editor || editor.isActive("codeBlock") || editor.isActive("calcBlock")) return false;
 
                 // A decisão fica no EditorCommon (testável em node): só converte o
                 // texto puro quando ele tem markdown E o HTML não tem formatação

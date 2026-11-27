@@ -9,7 +9,7 @@ import (
 )
 
 // HandleEditor é o handler principal que renderiza o editor de markdown.
-// Para notas de tipos especiais (drawing, mindmap), redireciona para o editor correto.
+// Para notas de tipos especiais (drawing, tabulator), redireciona para o editor correto.
 func (ctx *HandlerContext) HandleEditor(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("file")
 	if filename == "" {

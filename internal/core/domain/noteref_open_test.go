@@ -40,7 +40,6 @@ func TestNoteRef_OpenURL(t *testing.T) {
 func TestNoteRef_OpenURLSegueNoteOpenTarget(t *testing.T) {
 	caminhos := []string{
 		"notes/a.md",
-		"notes/mindmap-ideias.md",
 		"pdfs/manual.pdf",
 		"pdfs/sub/outro.pdf",
 		"epubs/livro.epub",

@@ -13,14 +13,38 @@
 // calc-engine.js e é coberta por tests/calc-engine.unit.cjs.
 
 import { Node } from "@tiptap/core";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { evaluateBlock, formatResult } from "./calc-engine.js";
 
 var calcPluginKey = new PluginKey("calcResults");
+var calcLiteralInputKey = new PluginKey("calcLiteralInput");
 
 // Cache por objeto `doc`: só recalcula quando o documento muda.
 var resultsCache = new WeakMap();
+
+/** Verdadeiro se a posição resolvida está dentro de um calcBlock. */
+function isInCalcBlock($pos) {
+    for (var d = $pos.depth; d > 0; d--) {
+        if ($pos.node(d).type.name === "calcBlock") return true;
+    }
+    return false;
+}
+
+/**
+ * Texto puro → Slice com uma <p> por linha, SEM passar pelo parser de markdown.
+ * Usado ao colar dentro do bloco de cálculo: `2*3*4` precisa continuar sendo
+ * operadores, não virar <em>3</em>.
+ */
+function literalCalcSlice(text, $context) {
+    var schema = $context.doc.type.schema;
+    var lines = text.replace(/\r\n?/g, "\n").split("\n");
+    var nodes = lines.map(function (line) {
+        return schema.nodes.paragraph.create(null, line ? schema.text(line) : null);
+    });
+    return Slice.maxOpen(Fragment.fromArray(nodes));
+}
 
 /** @param {{ error?: string, value?: number }} result */
 function resultWidget(result) {
@@ -88,6 +112,9 @@ export var CalcBlock = Node.create({
     group: "block",
     content: "paragraph+",
     defining: true,
+    // Plugins deste nó precisam rodar ANTES das input rules do StarterKit
+    // (bold/italic): dentro do bloco, `*` é multiplicação, não markdown.
+    priority: 1000,
 
     parseHTML: function () {
         return [
@@ -155,6 +182,23 @@ export var CalcBlock = Node.create({
 
     addProseMirrorPlugins: function () {
         return [
+            // Digitação/colagem literais dentro do bloco de cálculo: sem input
+            // rules de markdown (`* 3 *` virava itálico e apagava os `*`) e sem
+            // o parser de markdown da área de transferência.
+            new Plugin({
+                key: calcLiteralInputKey,
+                props: {
+                    handleTextInput: function (view, from, to, text) {
+                        if (!isInCalcBlock(view.state.selection.$from)) return false;
+                        view.dispatch(view.state.tr.insertText(text, from, to));
+                        return true;
+                    },
+                    clipboardTextParser: function (text, $context) {
+                        if (!isInCalcBlock($context)) return null;
+                        return literalCalcSlice(text, $context);
+                    },
+                },
+            }),
             new Plugin({
                 key: calcPluginKey,
                 props: {

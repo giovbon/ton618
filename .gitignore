@@ -63,7 +63,6 @@ web/static/editor.js
 web/static/editor.js.gz
 web/static/editor-init.js
 web/static/js/app.js
-web/static/mindmap.js
 web/static/tabulator-note.js
 
 # Byproducts de compressão do build (web/build.js gera .gz/.br para cada arquivo

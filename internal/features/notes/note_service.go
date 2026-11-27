@@ -22,7 +22,7 @@ import (
 type fileOps interface {
 	DeleteAllFileRecords(filename string) error
 	GetFilesModsAndTags() ([]db.FileModTag, error)
-	GetNotesNeedingMarkmapTag() ([]string, error)
+	GetNotesNeedingDrawingTag() ([]string, error)
 	ReplaceFileIndexes(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, modTime time.Time) error
 	GetAllFileMetadata() (map[string]map[string]string, error)
 	SetFileMetadata(arquivo, key, value string) error
@@ -175,7 +175,7 @@ func (s *NoteService) Rename(oldName, newName string) error {
 		base := parts[len(parts)-1]
 		newTitle := strings.TrimSuffix(base, ".md")
 
-		// Preserva tags de tipo interno no frontmatter da nota (ex: drawing, mindmap)
+		// Preserva tags de tipo interno no frontmatter da nota (ex: drawing)
 		for _, tag := range oldTags {
 			if domain.InternalTypeTags[strings.ToLower(tag)] {
 				if newContent, err := UpdateFrontmatterProperty(content, "type", strings.ToLower(tag)); err == nil {
@@ -509,10 +509,10 @@ func (s *NoteService) SyncDatabaseWithContext(ctx context.Context) error {
 		return err
 	}
 
-	// Identifica markmaps legados através de query otimizada (apenas IDs)
-	legacyMarkmaps, _ := s.store.GetNotesNeedingMarkmapTag()
+	// Identifica desenhos legados através de query otimizada (apenas IDs)
+	legacyDrawings, _ := s.store.GetNotesNeedingDrawingTag()
 	legacyMap := make(map[string]bool)
-	for _, name := range legacyMarkmaps {
+	for _, name := range legacyDrawings {
 		legacyMap[name] = true
 	}
 
@@ -590,7 +590,7 @@ func (s *NoteService) EnsureNoteTypeField(ctx context.Context) error {
 
 // EnsureTypeTags garante que a tag canônica de tipo esteja persistida na tabela
 // tags para notas cujo tipo é derivável apenas do conteúdo (ex: frontmatter
-// "type: markmap" sem a tag "markmap"). Isso torna o tipo (e portanto o ícone)
+// "type: drawing" sem a tag "drawing"). Isso torna o tipo (e portanto o ícone)
 // determinístico em toda a aplicação, pois DetectNoteType só depende de tags +
 // caminho + nome — nunca do conteúdo.
 func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
@@ -638,7 +638,6 @@ func (s *NoteService) EnsureTypeTags(ctx context.Context) error {
 func isTypeTaggedNoteType(t domain.NoteType) bool {
 	switch t {
 	case domain.NoteTypeDrawing,
-		domain.NoteTypeMindmap,
 		domain.NoteTypeTabulator,
 		domain.NoteTypeYoutube, domain.NoteTypeArticle, domain.NoteTypeCapture,
 		domain.NoteTypeCalculo,
@@ -673,7 +672,7 @@ func (s *NoteService) GetBacklinks(filename string) (*domain.BacklinksResult, er
 // ── privado ──
 
 // ensureNoteTipoField garante o campo `tipo:` no frontmatter da nota, no
-// vocabulário PT snake_case (mapa_mental, anexo, nota, ...). O valor espelha
+// vocabulário PT snake_case (anexo, nota, ...). O valor espelha
 // DetectNoteType — a mesma detecção que decide ícone, rota e coluna do Acervo
 // — usando as tags persistidas (tabela tags) + conteúdo + caminho.
 //
@@ -711,7 +710,7 @@ func (s *NoteService) processAndSave(ctx context.Context, filename, content stri
 		return fmt.Errorf("processAndSave: conteúdo vazio para %s", filename)
 	}
 
-	// Campo `tipo:` (vocabulário PT snake_case: mapa_mental, anexo, nota, ...):
+	// Campo `tipo:` (vocabulário PT snake_case: anexo, nota, ...):
 	// garante o espelho da detecção de tipo no frontmatter ANTES do
 	// processamento, para que o valor também entre no índice (metaParts do 1º
 	// fragmento). Ponto único de TODO save — editor, rename, duplicação e

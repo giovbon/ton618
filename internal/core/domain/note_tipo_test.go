@@ -9,7 +9,6 @@ func TestFrontmatterTipo(t *testing.T) {
 	}{
 		{NoteTypeMarkdown, "nota"},
 		{NoteTypeDrawing, "desenho"},
-		{NoteTypeMindmap, "mapa_mental"}, // única divergência do valor interno
 		{NoteTypeTabulator, "tabulator"},
 		{NoteTypePDF, "pdf"},
 		{NoteTypeEPUB, "epub"},
@@ -35,16 +34,12 @@ func TestNormalizeNoteTipo(t *testing.T) {
 	}{
 		// canônicos passam direto
 		{"nota", "nota"},
-		{"mapa_mental", "mapa_mental"},
 		{"anexo", "anexo"},
 		{"tabulator", "tabulator"},
 		// normalização básica
 		{"  Nota  ", "nota"},
-		{"Mapa Mental", "mapa_mental"},
-		{"mapa-mental", "mapa_mental"},
+		{"Nota Com Espaço", "nota_com_espaço"},
 		// aliases históricos
-		{"markmap", "mapa_mental"},
-		{"mindmap", "mapa_mental"},
 		{"drawing", "desenho"},
 		{"markdown", "nota"},
 		{"md", "nota"},
@@ -59,6 +54,9 @@ func TestNormalizeNoteTipo(t *testing.T) {
 		{"epubs", "epub"},
 		// valor desconhecido: só normaliza (não casa nada, mas não quebra)
 		{"qualquer_coisa", "qualquer_coisa"},
+		// markmap/mindmap já não são aliases válidos (tipo removido)
+		{"markmap", "markmap"},
+		{"mindmap", "mindmap"},
 	}
 	for _, tt := range tests {
 		if got := NormalizeNoteTipo(tt.in); got != tt.want {
@@ -70,7 +68,7 @@ func TestNormalizeNoteTipo(t *testing.T) {
 // Roundtrip: todo valor canônico passa por Normalize sem mudar.
 func TestNormalizeNoteTipoIdempotente(t *testing.T) {
 	tipos := []NoteType{
-		NoteTypeMarkdown, NoteTypeDrawing, NoteTypeMindmap, NoteTypeTabulator,
+		NoteTypeMarkdown, NoteTypeDrawing, NoteTypeTabulator,
 		NoteTypePDF, NoteTypeEPUB, NoteTypeAttachment, NoteTypeArchive,
 		NoteTypeImage, NoteTypeYoutube, NoteTypeArticle, NoteTypeCapture,
 		NoteTypeCalculo,

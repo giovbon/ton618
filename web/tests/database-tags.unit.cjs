@@ -43,5 +43,5 @@ test('tagsFormatter escapa &, aspas e fecha o span corretamente', () => {
 
 test('tagsFormatter ignora tags técnicas e vazias', () => {
   assert.strictEqual(formatTags({ getValue: () => '' }), '');
-  assert.strictEqual(formatTags({ getValue: () => 'drawing,mindmap,markmap' }), '');
+  assert.strictEqual(formatTags({ getValue: () => 'drawing' }), '');
 });

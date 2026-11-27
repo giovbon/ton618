@@ -39,8 +39,6 @@ func TestDetectNoteType(t *testing.T) {
 	}{
 		{name: "Explicit tag drawing", tags: []string{"drawing"}, arquivo: "notes/x.md", expected: NoteTypeDrawing},
 		{name: "Explicit tag desenho", tags: []string{"desenho"}, arquivo: "notes/x.md", expected: NoteTypeDrawing},
-		{name: "Explicit tag markmap", tags: []string{"markmap"}, arquivo: "notes/x.md", expected: NoteTypeMindmap},
-		{name: "Explicit tag mindmap", tags: []string{"mindmap"}, arquivo: "notes/x.md", expected: NoteTypeMindmap},
 		{name: "Explicit tag youtube", tags: []string{"youtube"}, arquivo: "notes/x.md", expected: NoteTypeYoutube},
 		{name: "Explicit tag artigo", tags: []string{"artigo"}, arquivo: "notes/x.md", expected: NoteTypeArticle},
 		{name: "Explicit tag captura", tags: []string{"captura"}, arquivo: "notes/x.md", expected: NoteTypeCapture},
@@ -56,8 +54,6 @@ func TestDetectNoteType(t *testing.T) {
 		{name: "Image images/ prefix", tags: nil, arquivo: "images/img_172300000_foto.png", expected: NoteTypeImage},
 		{name: "Image images/ com nome arbitrário", tags: nil, arquivo: "images/qualquer-coisa.png", expected: NoteTypeImage},
 		{name: "Image jpeg extension", tags: nil, arquivo: "notes/foto.jpeg", expected: NoteTypeImage},
-		{name: "Filename mindmap", tags: nil, arquivo: "notes/mindmap-geral.md", expected: NoteTypeMindmap},
-		{name: "Filename markmap", tags: nil, arquivo: "notes/markmap-geral.md", expected: NoteTypeMindmap},
 		{name: "Filename drawing", tags: nil, arquivo: "notes/meu-desenho.md", expected: NoteTypeDrawing},
 		{name: "Normal markdown", tags: nil, arquivo: "notes/Calendário Acadêmico 2026-2.md", expected: NoteTypeMarkdown},
 	}
@@ -80,27 +76,6 @@ func TestDetectNoteTypeFromContent(t *testing.T) {
 		expected NoteType
 	}{
 		{
-			name:     "Frontmatter type: markmap",
-			tags:     nil,
-			content:  "---\ntype: markmap\n---\n# Meu Mapa\n- Tópico",
-			arquivo:  "notes/mapa.md",
-			expected: NoteTypeMindmap,
-		},
-		{
-			name:     "Frontmatter type: mindmap",
-			tags:     nil,
-			content:  "---\ntype: mindmap\n---\n# Mapa\n- Item",
-			arquivo:  "notes/mapa.md",
-			expected: NoteTypeMindmap,
-		},
-		{
-			name:     "Markdown code block ```markmap",
-			tags:     nil,
-			content:  "```markmap\n# Mapa\n- A\n- B\n```",
-			arquivo:  "notes/Diagrama.md",
-			expected: NoteTypeMindmap,
-		},
-		{
 			name:     "Frontmatter type: drawing",
 			tags:     nil,
 			content:  "---\ntype: drawing\n---\n{}",
@@ -109,10 +84,10 @@ func TestDetectNoteTypeFromContent(t *testing.T) {
 		},
 		{
 			name:     "Tag priority over content",
-			tags:     []string{"markmap"},
+			tags:     []string{"drawing"},
 			content:  "some random text",
 			arquivo:  "notes/mapa.md",
-			expected: NoteTypeMindmap,
+			expected: NoteTypeDrawing,
 		},
 		{
 			name:     "Normal markdown note",
@@ -142,7 +117,6 @@ func TestNoteOpenTarget(t *testing.T) {
 	}{
 		{name: "Markdown", noteType: NoteTypeMarkdown, arquivo: "notes/a.md", wantURL: "/editor?file=notes/a.md", wantBlank: false},
 		{name: "Drawing", noteType: NoteTypeDrawing, arquivo: "notes/d.md", wantURL: "/drawing?file=notes/d.md", wantBlank: false},
-		{name: "Mindmap", noteType: NoteTypeMindmap, arquivo: "notes/m.md", wantURL: "/mindmap?file=notes/m.md", wantBlank: false},
 		{name: "Cálculo", noteType: NoteTypeCalculo, arquivo: "notes/calculo-x.md", wantURL: "/editor?file=notes/calculo-x.md", wantBlank: false},
 		{name: "PDF", noteType: NoteTypePDF, arquivo: "pdfs/x.pdf", wantURL: "/file?name=pdfs/x.pdf", wantBlank: true},
 		{name: "Attachment", noteType: NoteTypeAttachment, arquivo: "attachments/x.zip", wantURL: "/file/download?name=attachments/x.zip", wantBlank: true},

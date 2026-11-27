@@ -839,7 +839,7 @@ func (q *Queries) GetNoteMtime(ctx context.Context, filename string) (sql.NullSt
 	return mtime, err
 }
 
-const getNotesNeedingMarkmapTag = `-- name: GetNotesNeedingMarkmapTag :many
+const getNotesNeedingDrawingTag = `-- name: GetNotesNeedingDrawingTag :many
 SELECT n.filename
 FROM notes n
 WHERE (
@@ -850,8 +850,8 @@ WHERE (
   )
 `
 
-func (q *Queries) GetNotesNeedingMarkmapTag(ctx context.Context) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, getNotesNeedingMarkmapTag)
+func (q *Queries) GetNotesNeedingDrawingTag(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getNotesNeedingDrawingTag)
 	if err != nil {
 		return nil, err
 	}

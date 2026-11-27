@@ -673,14 +673,13 @@
         // ── renameChangesEditor: o novo nome troca o EDITOR da nota? ──
         //
         // O backend escolhe a rota pelo NOME do arquivo (domain.DetectNoteType):
-        // nomes com "mindmap"/"markmap" abrem em /mindmap e com "drawing"/"desenho"
-        // em /drawing. Se o novo nome cai em OUTRO editor, quem tem que decidir é o
-        // servidor — mantemos o redirect. Em todos os outros casos o rename é
-        // aplicado na própria página, sem recarregar (ver applyRenameToUI).
+        // nomes com "drawing"/"desenho" abrem em /drawing. Se o novo nome cai em
+        // OUTRO editor, quem tem que decidir é o servidor — mantemos o redirect.
+        // Em todos os outros casos o rename é aplicado na própria página, sem
+        // recarregar (ver applyRenameToUI).
         renameChangesEditor: function (newName, currentBase) {
             var base = String(newName || "").replace(/^notes\//i, "").toLowerCase();
             var atual = String(currentBase || "/editor");
-            if (/(mindmap|markmap)/.test(base) && atual !== "/mindmap") return true;
             if (/(drawing|desenho)/.test(base) && atual !== "/drawing") return true;
             return false;
         },

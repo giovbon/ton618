@@ -169,9 +169,10 @@ func (s *Store) NoteExists(filename string) bool {
 	return count > 0
 }
 
-// GetNotesNeedingMarkmapTag retorna filenames de notas cujo conteúdo contém 'type: markmap' ou 'type: mindmap', mas que não possuem as tags correspondentes na tabela tags.
-func (s *Store) GetNotesNeedingMarkmapTag() ([]string, error) {
-	return s.Q.GetNotesNeedingMarkmapTag(s.queryCtx())
+// GetNotesNeedingDrawingTag retorna filenames de notas cujo conteúdo contém
+// marcadores de desenho, mas que ainda não possuem a tag correspondente.
+func (s *Store) GetNotesNeedingDrawingTag() ([]string, error) {
+	return s.Q.GetNotesNeedingDrawingTag(s.queryCtx())
 }
 
 // MigrateNotesFromDisk imports all .md files from the docs/notes/ directory into the database.

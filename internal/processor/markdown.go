@@ -29,8 +29,8 @@ type Document struct {
 	Hash      string
 	Tags      []string
 	// NoteType é o valor canônico do campo `tipo:` da nota de origem
-	// (vocabulário PT snake_case: mapa_mental, anexo, nota, ...). Alimenta a
-	// coluna note_type de documents/docs_fts, usada pelo filtro `tipo:` da
+	// (vocabulário PT snake_case: anexo, nota, ...). Alimenta a
+	// coluna note_type de documents, usada pelo filtro `tipo:` da
 	// busca global e do Acervo. Vazio = o indexador deriva de tags + caminho.
 	NoteType string
 }
@@ -64,7 +64,7 @@ func CalculateHash(secao, texto string, tags []string) string {
 // frontmatterTypeValue devolve o tipo declarado no frontmatter, aceitando a
 // chave canônica `tipo` (gravada pelo app) e a legada `type`, ambas já com
 // chaves minúsculas. O valor sai normalizado por domain.NormalizeNoteTipo
-// (Drawing → desenho, mindmap → mapa_mental, ...).
+// (Drawing → desenho, Markdown → nota, ...).
 func frontmatterTypeValue(fm map[string]interface{}) (string, bool) {
 	for _, key := range []string{"tipo", "type"} {
 		raw, ok := fm[key]
@@ -81,8 +81,8 @@ func frontmatterTypeValue(fm map[string]interface{}) (string, bool) {
 }
 
 // applyFrontmatterType aplica comportamentos específicos de tipo. Recebe o
-// valor JÁ normalizado por domain.NormalizeNoteTipo (desenho, mapa_mental,
-// tabulator, ...), não o texto cru do frontmatter.
+// valor JÁ normalizado por domain.NormalizeNoteTipo (desenho, tabulator, ...),
+// não o texto cru do frontmatter.
 // Retorna as fileTags atualizadas.
 func applyFrontmatterType(tipo string, text *string, metaParts *[]string, fileTags []string) []string {
 	// Tag canônica a garantir; tipos binários também limpam o texto
@@ -93,8 +93,6 @@ func applyFrontmatterType(tipo string, text *string, metaParts *[]string, fileTa
 	case "desenho":
 		canonicalTag = "drawing"
 		clearText = true
-	case "mapa_mental":
-		canonicalTag = "markmap"
 	case "tabulator":
 		// Nota Tabulator: o corpo (JSON da planilha) É indexado — ver
 		// ProcessMarkdownContent, que delega para ProcessTabulatorContent.
@@ -140,7 +138,7 @@ func ProcessMarkdownContent(content []byte, filename string, modTime time.Time, 
 	// Tipo da nota para a coluna note_type do índice (filtro `tipo:` da busca).
 	// Espelho de DetectNoteType com fallback de conteúdo: tags + caminho + nome
 	// já decidem a maioria; o conteúdo cobre os especiais que só têm o `type:`
-	// no frontmatter (drawing/markmap/tabulator sem tag persistida ainda).
+	// no frontmatter (drawing/tabulator sem tag persistida ainda).
 	noteTipo := domain.FrontmatterTipo(domain.DetectNoteTypeFromContent(fileTags, string(content), filename))
 
 	// Nota Tabulator: indexa o corpo JSON célula a célula (um fragmento por

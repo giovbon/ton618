@@ -158,6 +158,32 @@ test.describe('Calculadora /calculator', () => {
     );
   });
 
+  test('multiplicação com vários * na mesma linha não vira destaque markdown', async ({
+    page,
+  }) => {
+    await openEditorWithCalcBlock(page);
+
+    // Regressão: digitar `* 3 *` disparava a input rule de itálico do markdown
+    // e os asteriscos desapareciam da expressão, quebrando o cálculo.
+    await page.keyboard.type('2 * 3 * 4');
+    await expect(page.locator('.calc-result').first()).toHaveText('= 24');
+
+    // O texto literal tem de continuar no <p>: nada de <em>/<strong>.
+    const html = await page.locator('.calc-block p').first().innerHTML();
+    expect(html).toContain('2 * 3 * 4');
+    expect(html).not.toContain('<em>');
+    expect(html).not.toContain('<strong>');
+
+    // Colar texto puro também não pode passar pelo parser de markdown
+    // (6*7*8 viraria 6<em>7</em>8 e perderia os operadores).
+    await page.keyboard.press('Enter');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => navigator.clipboard.writeText('6*7*8'));
+    await page.keyboard.press('Control+V');
+    await expect(page.locator('.calc-result').nth(1)).toHaveText('= 336');
+    await expect(page.locator('.calc-block p').nth(1)).toContainText('6*7*8');
+  });
+
   test('salva só as expressões (```calc) e recalcula ao reabrir', async ({
     page,
   }) => {

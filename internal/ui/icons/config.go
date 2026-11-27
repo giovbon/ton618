@@ -20,8 +20,6 @@ var Config = map[string]IconSpec{
 	"markdown":   {Icon: "sticky-note", Color: "#F54927"},
 	"desenho":    {Icon: "pencil", Color: "#9C63F8"},
 	"drawing":    {Icon: "pencil", Color: "#9C63F8"},
-	"markmap":    {Icon: "chart-no-axes-gantt", Color: "#22C55E"},
-	"mindmap":    {Icon: "chart-no-axes-gantt", Color: "#22C55E"},
 	"pdf":        {Icon: "book-text", Color: "text-red-500"},
 	"epub":       {Icon: "book-open", Color: "#F5F227"},
 	"anexo":      {Icon: "package-plus", Color: "#0B61F4"},
@@ -61,7 +59,7 @@ var Config = map[string]IconSpec{
 	"duplicar": {Icon: "copy", Color: "text-zinc-500"},
 	"baixar":   {Icon: "download", Color: "text-zinc-500"},
 	"download": {Icon: "download", Color: "text-zinc-500"},
-	// Exportar o mapa mental renderizado como imagem (PNG).
+	// Exportar o desenho renderizado como imagem (PNG).
 	"baixar-imagem": {Icon: "image-down", Color: "text-zinc-500"},
 	"excluir":       {Icon: "trash", Color: "text-zinc-500"},
 	"delete":        {Icon: "trash", Color: "text-zinc-500"},

@@ -165,11 +165,11 @@ func (ctx *HandlerContext) extractNoteName(source string) (string, error) {
 
 // neutralizeTypeHeuristic remove do nome da nota as palavras que
 // domain.DetectNoteType usa como heurística de tipo pelo nome do arquivo.
-// Sem isso, um PDF chamado "Mindmap Guide.pdf" geraria a nota
-// "mindmap-guide-texto.md", que o resto da aplicação trataria como mapa
-// mental (editor/ícone errados) só por causa do nome.
+// Sem isso, um PDF chamado "Drawing Guide.pdf" geraria a nota
+// "drawing-guide-texto.md", que o resto da aplicação trataria como desenho
+// (editor/ícone errados) só por causa do nome.
 func neutralizeTypeHeuristic(slug string) string {
-	for _, word := range []string{"mindmap", "markmap", "drawing", "desenho"} {
+	for _, word := range []string{"drawing", "desenho"} {
 		slug = strings.ReplaceAll(slug, word, "doc")
 	}
 	return slug

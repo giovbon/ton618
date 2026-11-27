@@ -25,7 +25,7 @@ SELECT mtime FROM notes WHERE filename = ? LIMIT 1;
 -- name: NoteExists :one
 SELECT COUNT(*) FROM notes WHERE filename = ?;
 
--- name: GetNotesNeedingMarkmapTag :many
+-- name: GetNotesNeedingDrawingTag :many
 SELECT n.filename
 FROM notes n
 WHERE (

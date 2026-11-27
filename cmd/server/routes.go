@@ -25,7 +25,6 @@ func SetupRoutes(mux chi.Router, sysCtx *system.HandlerContext, notesCtx *notes.
 	// NOTES (Editor e Arquivos)
 	mux.Get("/editor", notesCtx.HandleEditor)
 	mux.Get("/drawing", notesCtx.HandleDrawing)
-	mux.Get("/mindmap", notesCtx.HandleMindmap)
 	mux.Get("/tabulator", notesCtx.HandleTabulator)
 	mux.Get("/calculo", notesCtx.HandleCalculo)
 

@@ -105,7 +105,7 @@ func (ctx *HandlerContext) HandleGetDatabaseData(w http.ResponseWriter, r *http.
 			}
 
 			// Coluna "Tipo" no vocabulário do campo `tipo:` do frontmatter
-			// (PT snake_case: mapa_mental, anexo, ...). Para notas com o campo
+			// (PT snake_case: anexo, nota, ...). Para notas com o campo
 			// já gravado o frontmatter é a fonte; para os demais (e para
 			// arquivos, que não têm frontmatter) vale a detecção por
 			// tags + caminho (n.Type).
@@ -262,13 +262,12 @@ func (ctx *HandlerContext) readAllowedColumns() (allowed map[string]bool, cfg bo
 
 // isDynamicColumnField decide se um campo é dinâmico — isto é, controlável
 // pela aba "Colunas". Campos embutidos/fixos (arquivo, titulo, tags, type,
-// mtime, pai) e campos de configuração interna (markmap) ficam de fora: nunca
-// são colunas dinâmicas, por construção. `tipo` (campo do frontmatter) é o
-// mesmo dado da coluna fixa "type" (Tipo) — também fica de fora, senão viraria
-// uma coluna duplicada.
+// mtime, pai) ficam de fora: nunca são colunas dinâmicas, por construção.
+// `tipo` (campo do frontmatter) é o mesmo dado da coluna fixa "type" (Tipo) —
+// também fica de fora, senão viraria uma coluna duplicada.
 func isDynamicColumnField(field string) bool {
 	switch strings.ToLower(field) {
-	case "arquivo", "titulo", "tags", "mtime", "type", "tipo", "pai", "parent", "markmap":
+	case "arquivo", "titulo", "tags", "mtime", "type", "tipo", "pai", "parent":
 		return false
 	}
 	return true

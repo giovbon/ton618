@@ -5,7 +5,7 @@ import "strings"
 // ── Campo `tipo:` do frontmatter ────────────────────────────────────────
 //
 // O campo `tipo:` persiste o tipo da nota em palavra única snake_case PT
-// (ex: mapa_mental, anexo, nota). É um espelho determinístico de
+// (ex: anexo, nota). É um espelho determinístico de
 // DetectNoteType (tags + caminho + nome): a fonte da verdade do tipo continua
 // sendo a detecção — o frontmatter existe para exibir o campo ao usuário e
 // viabilizar o filtro `tipo:` na busca global e no Acervo.
@@ -16,31 +16,23 @@ import "strings"
 //   - uma edição manual do valor é normalizada de volta na próxima detecção;
 //   - ARQUIVOS binários (pdf/anexo/arquivo/epub/imagem) não têm frontmatter
 //     (DECISIONS §6.24) — o filtro deles é derivado do caminho no indexador.
-//
-// O valor interno de NoteTypeMindmap continua "markmap" (rotas, tags, ícones);
-// só o vocabulário do frontmatter usa "mapa_mental".
 
 // FrontmatterTipo devolve o valor canônico do campo `tipo:` para um tipo de
-// nota. É a única divergência em relação ao valor interno de NoteType.
+// nota.
 func FrontmatterTipo(t NoteType) string {
-	if t == NoteTypeMindmap {
-		return "mapa_mental"
-	}
 	return string(t)
 }
 
 // NormalizeNoteTipo normaliza um valor de `tipo:` digitado pelo usuário
 // (sintaxe `tipo:x` da busca, filtro do Acervo) para o vocabulário canônico:
-// minúsculas, espaços/hífens → underscore e aliases históricos (markmap,
-// mindmap, drawing, ...). Valores desconhecidos são devolvidos apenas
+// minúsculas, espaços/hífens → underscore e aliases históricos (drawing, ...).
+// Valores desconhecidos são devolvidos apenas
 // normalizados — o filtro simplesmente não casa nada, sem erro.
 func NormalizeNoteTipo(s string) string {
 	v := strings.ToLower(strings.TrimSpace(s))
 	v = strings.ReplaceAll(v, " ", "_")
 	v = strings.ReplaceAll(v, "-", "_")
 	switch v {
-	case "mindmap", "markmap":
-		return "mapa_mental"
 	case "drawing":
 		return "desenho"
 	case "markdown", "md":
@@ -88,8 +80,6 @@ func NoteTipoLabel(v string) string {
 		return "Nota"
 	case "desenho":
 		return "Desenho"
-	case "mapa_mental":
-		return "Mapa mental"
 	case "tabulator":
 		return "Tabulator"
 	case "pdf":

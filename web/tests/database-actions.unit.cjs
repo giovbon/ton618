@@ -19,7 +19,7 @@ require(path.join(__dirname, '..', 'static', 'editor-common.js'));
 global.EditorCommon = global.window.EditorCommon;
 require(path.join(__dirname, '..', 'src', 'database.js'));
 
-const { actionsFormatter, isExtractableRow } = global.window.DatabaseUtils;
+const { actionsFormatter } = global.window.DatabaseUtils;
 
 // Célula mínima no formato que o Tabulator entrega ao formatter.
 function cellWith(data) {
@@ -36,31 +36,27 @@ test('actionsFormatter sem célula devolve só o botão nativo de excluir regist
   assert.ok(!html.includes('db-extract-btn'));
 });
 
-test('actionsFormatter em nota comum não mostra extração', () => {
+test('actionsFormatter em nota comum mostra apenas o excluir', () => {
   const html = actionsFormatter(cellWith({ arquivo: 'notes/ideia.md', type: 'nota' }));
 
   assert.ok(html.includes('db-del-btn'));
   assert.ok(!html.includes('db-extract-btn'));
 });
 
-test('actionsFormatter em PDF mostra extrair + excluir', () => {
+// A extração de texto saiu do Acervo: mesmo em PDF/EPUB a coluna de ações
+// mostra SOMENTE o "×". A extração agora é feita na lista de Notas.
+test('actionsFormatter em PDF mostra apenas o excluir', () => {
   const html = actionsFormatter(cellWith({ arquivo: 'pdfs/manual.pdf', type: 'pdf' }));
 
-  assert.ok(html.includes('class="db-extract-btn"'));
-  assert.ok(html.includes('title="Extrair texto para uma nota"'));
   assert.ok(html.includes('db-del-btn'));
+  assert.ok(!html.includes('db-extract-btn'));
+  assert.ok(!html.includes('&#8615;'));
 });
 
-test('actionsFormatter em EPUB mostra extrair + excluir', () => {
+test('actionsFormatter em EPUB mostra apenas o excluir', () => {
   const html = actionsFormatter(cellWith({ arquivo: 'epubs/livro.epub', type: 'epub' }));
 
-  assert.ok(html.includes('db-extract-btn'));
   assert.ok(html.includes('db-del-btn'));
-});
-
-test('isExtractableRow cai na extensão quando o tipo não veio', () => {
-  assert.equal(isExtractableRow({ arquivo: 'pdfs/x.PDF' }), true);
-  assert.equal(isExtractableRow({ arquivo: 'epubs/y.epub' }), true);
-  assert.equal(isExtractableRow({ arquivo: 'attachments/z.zip' }), false);
-  assert.equal(isExtractableRow(null), false);
+  assert.ok(!html.includes('db-extract-btn'));
+  assert.ok(!html.includes('&#8615;'));
 });

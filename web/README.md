@@ -10,7 +10,7 @@ npm run build
 
 O que o build faz:
 1. **Tailwind CSS**: compila `src/input.css` → `static/app.css` (minificado)
-2. **esbuild (IIFE)**: `src/editor.js`, `src/drawing.jsx`, `src/database.js`, `src/mindmap.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
+2. **esbuild (IIFE)**: `src/editor.js`, `src/drawing.jsx`, `src/database.js` → `static/*.js` (bundle + minify, IIFE para `<script>`)
 3. **Compressão**: Gera `.js.gz` (gzip) e `.js.br` (brotli) para cada `.js`/`.css`
 
 ## Ambientes

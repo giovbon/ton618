@@ -37,9 +37,6 @@ interface Window {
   // editor.js (TipTap)
   TipTapEditor: any;
 
-  // mindmap.js
-  initMindmap: (svgEl: SVGElement, initialMarkdown: string) => any;
-
   // tabulator-note.js — editor de nota Tabulator
   initTabulatorNote: (containerEl: HTMLElement | string, options: { initialData?: any; onChange?: Function; onFilter?: Function }) => {
     getData: () => any;
@@ -73,7 +70,6 @@ interface Window {
   DatabaseUtils: {
     tagsFormatter: (cell: { getValue: () => any }) => string;
     actionsFormatter: (cell?: { getRow: () => { getData: () => any } }) => string;
-    isExtractableRow: (data: any) => boolean;
   };
 
   // Editor helpers (editor-common.js)
@@ -87,7 +83,6 @@ interface Window {
 
 // ── Globals de terceiros ──
 interface Window {
-  markmap: any;
   hljs: any;
 }
 
@@ -134,7 +129,7 @@ declare namespace EditorCommon {
    */
   function svgPngScale(vbW: number, vbH: number, opts?: { scale?: number; minEdge?: number; maxEdge?: number }): number;
   /**
-   * Exporta um SVG (ex.: o mapa mental) como PNG em alta resolução, embutindo
+   * Exporta um SVG (ex.: o desenho) como PNG em alta resolução, embutindo
    * estilos computados e fontes. Devolve o nome do arquivo baixado.
    */
   function downloadSvgPng(svgEl: SVGElement, opts?: { filename?: string; background?: string; padding?: number; scale?: number; minEdge?: number; maxEdge?: number }): Promise<string | null>;

@@ -30,7 +30,7 @@ import (
 //	  "rows":    [{"c1": "Ana", "c2": 30}, ...]
 //	}
 //
-// Diferente de desenho/markmap (cujo corpo NÃO é indexado), as células de uma
+// Diferente de desenho (cujo corpo NÃO é indexado), as células de uma
 // nota Tabulator SÃO indexadas na busca global: cada linha vira um fragmento
 // (Document) com as células no formato "Título: valor", e a linha de cabeçalho
 // vira um fragmento com os nomes das colunas. Assim, buscar pelo conteúdo de uma

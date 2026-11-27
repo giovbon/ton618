@@ -90,30 +90,6 @@ func TestProcessMarkdown_Hashtags(t *testing.T) {
 	}
 }
 
-// TestProcessMarkdown_TypeMarkmapGaranteTagCanonica garante que o frontmatter
-// "type: markmap" (ou "type: mindmap") adiciona a tag canônica "markmap" às
-// tags do arquivo. Sem ela, o ícone da nota cai para "nota comum" na sidebar
-// (DetectNoteType depende de tags + caminho, nunca do conteúdo).
-func TestProcessMarkdown_TypeMarkmapGaranteTagCanonica(t *testing.T) {
-	now := time.Now()
-
-	for _, typeStr := range []string{"markmap", "mindmap"} {
-		content := "---\ntype: " + typeStr + "\n---\n# Titulo\n- Topico 1\n- Topico 2"
-		_, _, tags := ProcessMarkdownContent([]byte(content), "notes/meu-mapa.md", now, now)
-
-		found := false
-		for _, tag := range tags {
-			if tag == "markmap" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("type: %s — esperado tag canônica \"markmap\" nas tags, got %v", typeStr, tags)
-		}
-	}
-}
-
 // O tipo do frontmatter é normalizado uma única vez, aceitando `tipo:` (chave
 // canônica gravada pelo app) e `type:` (legado), em qualquer caixa. Antes,
 // `type: Drawing` não limpava o JSON do Excalidraw e `tipo: tabulator` não
@@ -133,7 +109,6 @@ func TestProcessMarkdownContent_FrontmatterTipoNormalizado(t *testing.T) {
 		{"tipo desenho", "tipo: desenho", `{"elements":[]}`, "drawing", false, false},
 		{"type TABULATOR", "type: TABULATOR", tabulatorSample, "tabulator", true, false},
 		{"tipo tabulator", "tipo: tabulator", tabulatorSample, "tabulator", true, false},
-		{"tipo mapa mental", "tipo: mapa mental", "# Titulo\n- Topico", "markmap", true, false},
 		{"tipo desconhecido", "tipo: foo", "conteudo comum", "", true, true},
 	}
 

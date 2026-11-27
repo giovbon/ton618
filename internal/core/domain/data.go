@@ -15,7 +15,6 @@ type NoteType string
 const (
 	NoteTypeMarkdown   NoteType = "nota"
 	NoteTypeDrawing    NoteType = "desenho"
-	NoteTypeMindmap    NoteType = "markmap"
 	NoteTypeYoutube    NoteType = "youtube"
 	NoteTypeArticle    NoteType = "artigo"
 	NoteTypeCapture    NoteType = "captura"
@@ -49,8 +48,6 @@ const CalculoNoteEmptyContent = "---\ntags: [" + CalculoTag + "]\n---\n\n```calc
 // que NÃO devem ser exibidas ao usuário na interface.
 var InternalTypeTags = map[string]bool{
 	"drawing":   true,
-	"markmap":   true,
-	"mindmap":   true,
 	"tabulator": true,
 	"calculo":   true,
 }
@@ -60,8 +57,6 @@ func (t NoteType) EditorRoute() string {
 	switch t {
 	case NoteTypeDrawing:
 		return "/drawing"
-	case NoteTypeMindmap:
-		return "/mindmap"
 	case NoteTypeTabulator:
 		return "/tabulator"
 	default:
@@ -84,8 +79,6 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 		switch strings.ToLower(strings.TrimSpace(t)) {
 		case "drawing", "desenho":
 			return NoteTypeDrawing
-		case "markmap", "mindmap":
-			return NoteTypeMindmap
 		case "youtube":
 			return NoteTypeYoutube
 		case "artigo", "article":
@@ -123,9 +116,6 @@ func DetectNoteType(tags []string, arquivo string) NoteType {
 
 	// 3. Nome de arquivo como heurística adicional
 	lowerFile := strings.ToLower(arquivo)
-	if strings.Contains(lowerFile, "mindmap") || strings.Contains(lowerFile, "markmap") {
-		return NoteTypeMindmap
-	}
 	if strings.Contains(lowerFile, "drawing") || strings.Contains(lowerFile, "desenho") {
 		return NoteTypeDrawing
 	}
@@ -151,11 +141,6 @@ func DetectNoteTypeFromContent(tags []string, content, arquivo string) NoteType 
 		if strings.Contains(lowerContent, "type: drawing") || strings.Contains(lowerContent, "type: desenho") {
 			return NoteTypeDrawing
 		}
-		if strings.Contains(lowerContent, "type: markmap") || strings.Contains(lowerContent, "type: mindmap") ||
-			strings.Contains(lowerContent, "```markmap") || strings.Contains(lowerContent, "# markmap") ||
-			strings.Contains(lowerContent, "# mindmap") {
-			return NoteTypeMindmap
-		}
 		if strings.Contains(lowerContent, "type: tabulator") {
 			return NoteTypeTabulator
 		}
@@ -176,8 +161,6 @@ func NoteTypeCanonicalTag(t NoteType) string {
 	switch t {
 	case NoteTypeDrawing:
 		return "drawing"
-	case NoteTypeMindmap:
-		return "markmap"
 	case NoteTypeYoutube:
 		return "youtube"
 	case NoteTypeArticle:

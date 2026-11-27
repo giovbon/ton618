@@ -298,8 +298,8 @@ func migrate(database *sql.DB) {
 	}
 
 	// v24: campo `tipo:` — coluna note_type em documents, usada pelo filtro
-	// `tipo:` do Acervo (vocabulário PT snake_case: mapa_mental, anexo, nota,
-	// ...). O DELETE FROM file_mods força a reindexação completa de arquivos
+	// `tipo:` do Acervo (vocabulário PT snake_case: anexo, nota, ...).
+	// O DELETE FROM file_mods força a reindexação completa de arquivos
 	// (notas também são reindexadas: SyncDatabaseWithContext reprocessa as que
 	// estão sem file_mods) — é o que preenche note_type em todas as linhas;
 	// junto, EnsureNoteTypeField faz o backfill do frontmatter das notas.
@@ -318,6 +318,15 @@ func migrate(database *sql.DB) {
 		database.Exec("DROP TABLE IF EXISTS day_activity_seeds")
 		database.Exec("DELETE FROM settings WHERE key IN ('rotina_enabled', 'rotina_timeline_native')")
 		markApplied(25)
+	}
+
+	// v26: remove o tipo de nota Markmap (mapa mental) — o recurso foi removido
+	// em 27/11/2026. As tags internas do tipo deixam de existir e o note_type
+	// legado passa a "nota" (as notas continuam abrindo no editor markdown).
+	if !isApplied(26) {
+		database.Exec("DELETE FROM tags WHERE tag IN ('markmap', 'mindmap')")
+		database.Exec("UPDATE documents SET note_type = 'nota' WHERE note_type = 'mapa_mental'")
+		markApplied(26)
 	}
 }
 

@@ -195,11 +195,11 @@ func TestExtractDocumentText_NomeOcupadoPorOutraOrigemGeraSufixo(t *testing.T) {
 	}
 }
 
-func TestExtractDocumentText_NomeNaoViraMapaMental(t *testing.T) {
+func TestExtractDocumentText_NomeNaoViraDesenho(t *testing.T) {
 	ctx := newTestContext(t)
-	writeTestEPUB(t, ctx.Cfg.DocsDir, "epubs/Mindmap Guide.epub", "Guia", [][2]string{{"c1.xhtml", "Cap"}})
+	writeTestEPUB(t, ctx.Cfg.DocsDir, "epubs/Drawing Guide.epub", "Guia", [][2]string{{"c1.xhtml", "Cap"}})
 
-	res, err := ctx.ExtractDocumentText(context.Background(), "epubs/Mindmap Guide.epub")
+	res, err := ctx.ExtractDocumentText(context.Background(), "epubs/Drawing Guide.epub")
 	if err != nil {
 		t.Fatalf("ExtractDocumentText: %v", err)
 	}

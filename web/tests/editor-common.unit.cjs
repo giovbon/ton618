@@ -284,11 +284,8 @@ test('renameChangesEditor só bloqueia quando muda de editor', (t) => {
   // Nome que joga para outro editor → precisa do servidor (reload).
   assert.strictEqual(EditorCommon.renameChangesEditor('meu-desenho', '/editor'), true);
   assert.strictEqual(EditorCommon.renameChangesEditor('notes/xyz-drawing.md', '/editor'), true);
-  assert.strictEqual(EditorCommon.renameChangesEditor('mapa-mindmap', '/editor'), true);
-  assert.strictEqual(EditorCommon.renameChangesEditor('diagrama-markmap', '/editor'), true);
   // Já estou no editor especializado → não muda nada, segue sem reload.
   assert.strictEqual(EditorCommon.renameChangesEditor('meu-desenho', '/drawing'), false);
-  assert.strictEqual(EditorCommon.renameChangesEditor('meu-mindmap', '/mindmap'), false);
   // Case-insensitive e prefixo notes/.
   assert.strictEqual(EditorCommon.renameChangesEditor('Notes/MEU-DESENHO.md', '/editor'), true);
   assert.strictEqual(EditorCommon.renameChangesEditor('', '/editor'), false);
@@ -455,7 +452,7 @@ test('downloadMarkdown baixa o conteúdo exato com o basename do arquivo', async
   }
 });
 
-// ── downloadSvgPng: export do mapa mental renderizado como PNG ──
+// ── downloadSvgPng: exporta SVG como PNG ──
 
 test('svgPngScale: 2x por padrão, com piso de resolução e teto de pixels', (t) => {
   // Padrão: já há resolução de sobra, mantém a ampliação 2x.

@@ -47,7 +47,7 @@ type Querier interface {
 	GetLinksByFiles(ctx context.Context, fromFiles []string) ([]string, error)
 	GetNote(ctx context.Context, filename string) (sql.NullString, error)
 	GetNoteMtime(ctx context.Context, filename string) (sql.NullString, error)
-	GetNotesNeedingMarkmapTag(ctx context.Context) ([]string, error)
+	GetNotesNeedingDrawingTag(ctx context.Context) ([]string, error)
 	GetPopularity(ctx context.Context, arquivo string) (sql.NullInt64, error)
 	GetSetting(ctx context.Context, key string) (sql.NullString, error)
 	GetSynapticWeight(ctx context.Context, arquivo string) (GetSynapticWeightRow, error)

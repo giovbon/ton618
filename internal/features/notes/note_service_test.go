@@ -18,7 +18,7 @@ import (
 type mockFileOps struct {
 	deleteAllFileRecordsFn      func(filename string) error
 	getFilesModsAndTagsFn       func() ([]db.FileModTag, error)
-	getNotesNeedingMarkmapTagFn func() ([]string, error)
+	getNotesNeedingDrawingTagFn func() ([]string, error)
 	replaceFileIndexesFn        func(ctx context.Context, filename string, docs []processor.Document, links []string, tags []string, modTime time.Time) error
 	getAllFileMetadataFn        func() (map[string]map[string]string, error)
 	setFileMetadataFn           func(arquivo, key, value string) error
@@ -36,9 +36,9 @@ func (m *mockFileOps) GetFilesModsAndTags() ([]db.FileModTag, error) {
 	}
 	return nil, nil
 }
-func (m *mockFileOps) GetNotesNeedingMarkmapTag() ([]string, error) {
-	if m.getNotesNeedingMarkmapTagFn != nil {
-		return m.getNotesNeedingMarkmapTagFn()
+func (m *mockFileOps) GetNotesNeedingDrawingTag() ([]string, error) {
+	if m.getNotesNeedingDrawingTagFn != nil {
+		return m.getNotesNeedingDrawingTagFn()
 	}
 	return nil, nil
 }
@@ -761,7 +761,7 @@ func TestNoteService_Save_CallsReplaceFileIndexes(t *testing.T) {
 func TestNoteService_SyncDatabase_ProcessesPendingNotes(t *testing.T) {
 	var processed string
 	fileOps := &mockFileOps{
-		getNotesNeedingMarkmapTagFn: func() ([]string, error) { return nil, nil },
+		getNotesNeedingDrawingTagFn: func() ([]string, error) { return nil, nil },
 		replaceFileIndexesFn: func(_ context.Context, filename string, _ []processor.Document, _ []string, _ []string, _ time.Time) error {
 			processed = filename
 			return nil
@@ -798,7 +798,6 @@ func TestNoteService_GetMany_DetectsNoteType(t *testing.T) {
 			return []db.FileModTag{
 				{Arquivo: "notes/drawing.md", Mtime: "", Tags: "drawing"},
 				{Arquivo: "pdfs/doc.pdf", Mtime: "", Tags: ""},
-				{Arquivo: "notes/mindmap.md", Mtime: "", Tags: "mindmap"},
 			}, nil
 		},
 	}
@@ -816,7 +815,6 @@ func TestNoteService_GetMany_DetectsNoteType(t *testing.T) {
 	}{
 		{"notes/drawing.md", "desenho"},
 		{"pdfs/doc.pdf", "pdf"},
-		{"notes/mindmap.md", "markmap"},
 	}
 
 	for _, tt := range tests {

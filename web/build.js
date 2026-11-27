@@ -44,7 +44,6 @@ await esbuild.build({
     "src/editor-init.js",
     "src/drawing.jsx",
     "src/database.js",
-    "src/mindmap.js",
     "src/tabulator-note.js"
   ],
   bundle: true,

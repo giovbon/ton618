@@ -45,7 +45,7 @@ func SliceToTags(tags []string) string {
 
 // DeriveNoteType calcula o valor da coluna note_type (vocabulário `tipo:` do
 // frontmatter) a partir de tags persistidas + caminho do arquivo — o mesmo
-// DetectNoteType do domínio, mapeado para o valor PT (mapa_mental, anexo, ...).
+// DetectNoteType do domínio, mapeado para o valor PT (anexo, nota, ...).
 // Usado quando o processor não informou Document.NoteType (uploads/watcher de
 // binários, onde o tipo é sempre derivável do caminho).
 func DeriveNoteType(tags, arquivo string) string {

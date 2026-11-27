@@ -15,7 +15,7 @@ import (
 )
 
 // HandleTabulator renderiza o editor em tela cheia de uma nota Tabulator
-// (planilha de inserção de dados). É o análogo do /drawing e /mindmap.
+// (planilha de inserção de dados). É o análogo do /drawing.
 func (ctx *HandlerContext) HandleTabulator(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	filename, redirected := ensureNoteFilename(w, r, "/tabulator")

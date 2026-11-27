@@ -177,7 +177,7 @@ if [ -f "$BASE_DIR/web/package.json" ]; then
     if [ ! -d "node_modules" ]; then
         web_deps_ok=0
     else
-        for dep in esbuild markmap-common markmap-lib markmap-view; do
+        for dep in esbuild; do
             if [ ! -d "node_modules/$dep" ]; then
                 web_deps_ok=0
                 break

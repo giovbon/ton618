@@ -264,6 +264,57 @@ function createNewNote() {
 // @ts-ignore
 window.createNewNote = createNewNote;
 
+// ── Extrair texto de PDF/EPUB na lista de Notas (busca/sidebar) ──
+// Mesma ação do "⤓" do Acervo (database.js), mas para as linhas renderizadas
+// pelo servidor (SidebarNoteItem). A extração é explícita: cria/atualiza uma
+// nota com o texto e o link para o documento original.
+document.addEventListener("click", function (e) {
+    var target = /** @type {HTMLElement} */ (e.target);
+    var btn = target && target.closest
+        ? /** @type {HTMLButtonElement | null} */ (target.closest(".sidebar-extract-btn"))
+        : null;
+    if (!btn) return;
+
+    var file = btn.getAttribute("data-file");
+    if (!file) return;
+
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "&hellip;";
+
+    var fd = new FormData();
+    fd.append("file", file);
+
+    fetch("/api/extract-text", { method: "POST", body: fd, headers: EditorCommon.getAuthHeaders() })
+        .then(async function (r) {
+            if (!r.ok) {
+                var detalhe = await r.text();
+                throw new Error(detalhe || r.statusText);
+            }
+            return r.json();
+        })
+        .then(function (res) {
+            // O header HX-Trigger do servidor não é processado por fetch:
+            // avisa a lista (HTMX) para recarregar e mostrar a nota extraída.
+            try {
+                if (document.body) document.body.dispatchEvent(new Event("reload-sidebar"));
+            } catch (e) { }
+
+            var msg = 'Nota criada: "' + EditorCommon.getDisplayName(res.note) + '"';
+            if (res.truncated) msg += " (texto truncado)";
+            if (window.confirm(msg + "\n\nAbrir agora?")) {
+                window.location.href = res.url;
+            }
+        })
+        .catch(function (err) {
+            alert("Erro ao extrair texto: " + (err && err.message ? err.message : err));
+        })
+        .finally(function () {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        });
+});
+
 // ── Auth Integration ──
 function logout() {
     localStorage.removeItem("ton_auth");

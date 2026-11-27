@@ -112,8 +112,8 @@
 
     // ── initTabulatorNote ────────────────────────────────────────────────
 
-    // Executado pelo template (drawing.js/mindmap.js seguem o mesmo padrão de
-    // expor a API de init em `window`).
+    // Executado pelo template (drawing.js segue o mesmo padrão de expor a API
+    // de init em `window`).
     window.initTabulatorNote = function (container, opts) {
         opts = opts || {};
         var data = opts.initialData || { columns: [], rows: [] };
